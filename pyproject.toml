@@ -1,9 +1,14 @@
 [tool.poetry]
 name = "pfeed"
 version = "0.0.1.dev1"
-description = "A Modern Data Pipeline for Algo-Trading, supporting getting both Real-Time and Historical Data."
+description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
+license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfeed@gmail.com>"]
 readme = "README.md"
+homepage = "https://pfund.ai"
+repository = "https://github.com/PFund-Software-Ltd/pfund"
+documentation = "https://pfund.ai/docs"
+keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data integration", "historical data", "live data", "streaming"]
 
 [tool.poetry.dependencies]
 python = "^3.10 <3.12"
@@ -20,14 +25,22 @@ pandas = "^2.2.0"
 ray = "^2.9.1"
 pyarrow = "^15.0.0"
 minio = "^7.2.3"
+click = "^8.1.7"
 
 [tool.poetry.group.dev]
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.4"
-ydata-profiling = "^4.6.4"
 pfund = {path = "../pfund", develop = true}
+ydata-profiling = "^4.6.4"
+pytest = "^7.4.4"
+sphinx = "^7.2.6"
+autodocsumm = {git = "https://github.com/Chilipp/autodocsumm.git"}
+sphinxcontrib-napoleon = "^0.7"
+pre-commit = "^3.6.0"
+bandit = "^1.7.7"
+ruff = "^0.1.15"
+pyright = "^1.1.349"
 
 [build-system]
 requires = ["poetry-core"]

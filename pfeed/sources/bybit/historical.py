@@ -6,6 +6,7 @@ from logging.handlers import QueueHandler, QueueListener
 
 import yaml
 from tqdm import tqdm
+from rich.console import Console
 
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.const.commons import SUPPORTED_DATA_TYPES
@@ -73,8 +74,7 @@ def run(
     use_minio: bool=True
 ):
     from pfund.exchanges.bybit.exchange import Exchange
-    from pfund.logging import set_up_loggers
-    from pfeed import cprint
+    from pfund.plogging import set_up_loggers
     
     env = 'LIVE'  # historical data is from LIVE env
     mode = 'historical'
@@ -84,7 +84,7 @@ def run(
     pdts = [pdt.upper() for pdt in pdts] if pdts else []
     set_up_loggers(log_path=f'{log_path}/{env}', config_path=CONFIG_PATH)
         
-    cprint(f'PFeed ({DATA_SOURCE} {env} server): getting {mode.upper()} data', style='bold yellow')
+    Console().print(f'PFeed ({DATA_SOURCE} {env} server): getting {mode.upper()} data', style='bold yellow')
     
     # load config if any
     if config := _load_config():

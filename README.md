@@ -29,40 +29,49 @@ It is designed to be used alongside [PFund](https://github.com/PFund-Software-Lt
 
 </details>
 
+
 ## Project Status
 **_Caution: PFeed is at a VERY EARLY stage, use it at your own risk._**
 
 PFeed is currently under active development, the framework design will be prioritized first over
-stability and scalability. \
+stability and scalability. 
+
 Please note that the available version is a *dev* version, not a *stable* one. \
 You are encouraged to play with the *dev* version, but only use it when a *stable* version is released.
+
 
 ## Mission
 Algo-trading has always been a complicated task due to the multitude of components and procedures involved. \
 Data collection and processing is probably the most mundane and yet critical part of it, as all results and findings 
-are derived from the data. \
-However, preparing this data for use is not quick and easy. For example, sometimes even when the data is available (e.g. [bybit data](https://public.bybit.com/trading/)), it is often in raw form and requires some cleaning. \
-PFeed's mission is to **_free traders from the tedious data work_** by providing cleaned data in a standard format that is ready for use, making it significantly faster for traders to get to the analysis and strategy development phase.
+are derived from the data.
+
+However, preparing this data for use is not quick and easy. For example, sometimes even when the data is available (e.g. [Bybit data](https://public.bybit.com/trading/)), it is often in raw form and requires some cleaning.
+
+> PFeed's mission is to **_free traders from the tedious data work_** by providing cleaned data in a standard format that is ready for use, making them significantly faster to get to the analysis and strategy development phase.
+
 
 ## Core Features
 - Unified approach to interact with different data sources 
 - ETL data pipline to transform raw data and store them in [MinIO](https://min.io/)
 - Using [Ray](https://github.com/ray-project/ray) to download data in parallel
 
+
 ## Installation
 ```bash
 poetry add pfeed
 ```
+
 
 ## Quick Start
 ```python
 # TODO
 ```
 
+
 ## Examples
-### Download Historical Data using Command Line
+### Download Historical Data on Command Line
 ```python
-python main.py -m historical -p BTC_USDT_PERP -s bybit --no-minio
+pfeed -m historical -p BTC_USDT_PERP -s bybit --no-minio
 ```
 
 ### Download Historical Data in Python
@@ -70,6 +79,7 @@ python main.py -m historical -p BTC_USDT_PERP -s bybit --no-minio
 from pfeed import bybit
 bybit.run_historical(pdts=['BTC_USDT_PERP'])
 ```
+
 
 ## Supported Data Sources
 | Data Source                                  | Historical Data | Historical Data Recording | Live/Paper Data | Live/Paper Data Recording |
@@ -86,6 +96,7 @@ bybit.run_historical(pdts=['BTC_USDT_PERP'])
 🔴 = todo \
 ⚪ = not applicable \
 \* = Paid/Non-Free data
+
 
 ## Related Projects
 - [PFund](https://github.com/PFund-Software-Ltd/pfund) — a complete algo-trading framework for TradFi, CeFi and DeFi with native support for machine learning models

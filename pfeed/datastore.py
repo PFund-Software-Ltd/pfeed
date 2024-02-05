@@ -7,8 +7,6 @@ from typing import Generator
 from minio import Minio, S3Error
 from minio.api import ObjectWriteResult
 
-from pfeed.const.paths import PROJ_NAME
-
 
 logger = logging.getLogger('minio')
 
@@ -16,7 +14,7 @@ logger = logging.getLogger('minio')
 # EXTEND, currently only consider using MinIO
 class Datastore:
     DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
-    BUCKET_NAME = PROJ_NAME + '-' + os.getenv('PFEED_ENV', 'DEV').lower()
+    BUCKET_NAME = 'pfeed' + '-' + os.getenv('PFEED_ENV', 'DEV').lower()
     
     def __init__(self, **kwargs):
         self.minio = Minio(

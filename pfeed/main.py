@@ -1,8 +1,5 @@
 import os
-import sys
-import logging
 import importlib
-from types import TracebackType
 from argparse import ArgumentParser
 
 
@@ -14,18 +11,7 @@ ALIASES = {
 }
 
 
-def _custom_excepthook(exception_class: type[BaseException], exception: BaseException, traceback: TracebackType):
-    '''Catches any uncaught exceptions and logs them'''
-    # sys.__excepthook__(exception_class, exception, traceback)
-    try:
-        raise exception
-    except:
-        logging.getLogger('pfeed').exception('Uncaught exception:')
-
-
 if __name__ == '__main__':
-    sys.excepthook = _custom_excepthook
-    
     parser = ArgumentParser()
     parser.add_argument('-e', '--env', choices=['PAPER', 'LIVE'], default='LIVE', required=False)
     parser.add_argument('--data-path', dest='data_path', default=str(DATA_PATH), required=False)

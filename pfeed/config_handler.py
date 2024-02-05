@@ -19,7 +19,7 @@ def _custom_excepthook(exception_class: type[BaseException], exception: BaseExce
 
 
 @dataclass
-class Config:
+class ConfigHandler:
     data_path: Path = DATA_PATH
     log_path: Path = LOG_PATH
     logging_config_file_path: Path = CONFIG_PATH / 'logging.yml'
@@ -50,7 +50,7 @@ def configure(
 ):
     logging_config_file_path = Path(logging_config_file_path)
     assert logging_config_file_path.is_file(), f'{logging_config_file_path=} is not a file'
-    return Config(
+    return ConfigHandler(
         data_path=Path(data_path),
         log_path=Path(log_path),
         logging_config_file_path=logging_config_file_path,

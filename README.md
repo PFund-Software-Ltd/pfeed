@@ -6,7 +6,7 @@
 
 PFeed (/piː fiːd/) is a data integration library tailored for algorithmic trading, 
 serving as an ETL (Extract, Transform, Load) data pipeline between raw data sources and traders,
-helping them in creating a data lake and/or a data warehouse for quantitative research locally.
+helping them in creating a local data lake/lakehouse/warehouse for quantitative research.
 
 PFeed allows traders to download historical, paper, and live data from various data sources, both free and paid,
 and stores them into a local data lake using [MinIO](https://min.io/), and/or into a data warehouse using [TimescaleDB](https://www.timescale.com/).

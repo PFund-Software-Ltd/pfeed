@@ -1,4 +1,4 @@
-from pfeed.config.config import configure
+from pfeed.config_handler import configure
 from pfeed.sources import bybit
 from pfeed.feeds import YahooFinanceFeed, BybitFeed
 

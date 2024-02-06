@@ -88,8 +88,8 @@ bybit.download(pdts=['BTC_USDT_PERP'])
 🟡 = in progress \
 🔴 = todo \
 ⚪ = not applicable \
-\* = Paid/Non-Free data
-get data = store it in memory for python to use
+\* = Paid/Non-Free data \
+get data = store it in memory for python to use \
 download data = store it in local machine for later research
 
 

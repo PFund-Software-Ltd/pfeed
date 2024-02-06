@@ -21,11 +21,13 @@ def get_x_days_before_in_UTC(x=0) -> str:
     return (datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=x)).strftime('%Y-%m-%d')
 
 
-def get_dates_in_between(start_date: str, end_date: str) -> list[str]:
-    start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-    end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+def get_dates_in_between(start_date: str | datetime.date, end_date: str | datetime.date) -> list[datetime.date]:
+    if type(start_date) is str:
+        start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+    if type(end_date) is str:
+        end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
     date_delta = end_date - start_date
-    return [str(start_date + datetime.timedelta(i)) for i in range(date_delta.days + 1)]
+    return [start_date + datetime.timedelta(i) for i in range(date_delta.days + 1)]
 
 
 def create_filename(pdt: str, date: str, file_extension: str) -> str:

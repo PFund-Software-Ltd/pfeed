@@ -25,9 +25,9 @@ class FilePath:
         self.data_type = self.dtype = data_type.lower()
         self.mode = mode
         self.pdt = pdt.lower()
-        self.date = date
+        self.date = str(date)
         self.file_extension = file_extension
-        self.filename = create_filename(pdt.upper(), date, file_extension)
+        self.filename = create_filename(pdt.upper(), self.date, file_extension)
         self.storage_Path = self.sPath = Path(self.env) / self.data_source / self.mode / self.dtype / pdt.upper() / self.filename
         self.storage_path = self.spath = str(self.storage_Path)
         self.file_Path = self.fPath = self.data_Path / self.storage_Path

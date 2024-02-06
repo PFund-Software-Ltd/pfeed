@@ -6,10 +6,10 @@
 
 PFeed (/piː fiːd/) is a data integration library tailored for algorithmic trading, 
 serving as an ETL (Extract, Transform, Load) data pipeline between raw data sources and traders,
-helping them in creating a local data lake/lakehouse/warehouse for quantitative research.
+helping them in creating a local data lake for quantitative research.
 
 PFeed allows traders to download historical, paper, and live data from various data sources, both free and paid,
-and stores them into a local data lake using [MinIO](https://min.io/), and/or into a data warehouse using [TimescaleDB](https://www.timescale.com/).
+and stores them into a local data lake using [MinIO](https://min.io/).
 
 It is designed to be used alongside [PFund](https://github.com/PFund-Software-Ltd/pfund) — a complete algo-trading framework for TradFi, CeFi and DeFi with native support for machine learning models, or as a standalone package.
 
@@ -71,13 +71,13 @@ poetry add pfeed
 ## Examples
 ### Download Historical Data on Command Line
 ```python
-pfeed -m historical -p BTC_USDT_PERP -s bybit --no-minio
+pfeed download -s bybit -p BTC_USDT_PERP --no-minio
 ```
 
 ### Download Historical Data in Python
 ```python
 from pfeed import bybit
-bybit.run_historical(pdts=['BTC_USDT_PERP'])
+bybit.download(pdts=['BTC_USDT_PERP'])
 ```
 
 

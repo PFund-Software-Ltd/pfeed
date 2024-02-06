@@ -8,6 +8,8 @@ from logging.handlers import QueueHandler, QueueListener
 from tqdm import tqdm
 from rich.console import Console
 
+from pfeed.const.paths import USER_CONFIG_FILE_PATH
+from pfeed.cli.commands.config import load_config
 from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
@@ -75,7 +77,8 @@ def download_historical_data(
     cprint(f'PFeed: getting historical data from {source}', style='bold yellow')
     
     if not config:
-        config = ConfigHandler()
+        config: dict = load_config(USER_CONFIG_FILE_PATH)
+        config = ConfigHandler(**config)
     set_up_loggers(f'{config.log_path}/{env}', config.logging_config_file_path, user_logging_config=config.logging_config)
     data_path = config.data_path
     

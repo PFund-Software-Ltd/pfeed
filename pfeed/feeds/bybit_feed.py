@@ -85,7 +85,11 @@ class BybitFeed(BaseFeed):
             df = pd.read_parquet(io.BytesIO(resampled_data))
             dfs.append(df)
         return pd.concat(dfs)
-                
+    
+    # TODO?: maybe useful if used as a standalone program, not useful at all if used with PFund
+    def get_real_time_data(self, env='LIVE'):
+        pass
+    
         
 if __name__ == '__main__':
     feed = BybitFeed()

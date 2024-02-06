@@ -1,6 +1,6 @@
 # TODO
-def stream_live_data(env='LIVE', is_download=False):
+def stream_real_time_data(env='LIVE', is_download=False):
     pass
 
 
-run = stream_live_data
+run = stream_real_time_data

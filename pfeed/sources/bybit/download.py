@@ -1,3 +1,4 @@
+"""Downloads Bybit historical data"""
 import os
 import logging
 import datetime
@@ -52,7 +53,7 @@ def resample_raw_data(category: str, pdt: str, date: str, raw_data: bytes) -> di
     }
 
 
-def run(
+def download_historical_data(
     pdts: list[str] | None=None, 
     dtypes: list[str] | None=None,
     ptypes: list[str] | None=None, 
@@ -146,3 +147,6 @@ def run(
                 ray.get(futures)
                 
     logger.warning(f'finished downloading historical data from {source} to {data_path} or MinIO if enabled')
+    
+    
+run = download_historical_data

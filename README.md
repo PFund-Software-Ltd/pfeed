@@ -21,9 +21,8 @@ It is designed to be used alongside [PFund](https://github.com/PFund-Software-Lt
 - [Core Features](#core-features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Examples](#examples)
-    - [Start Processing Historical Data](#start-processing-historical-data)
-    - [Start Streaming Live Data](#start-streaming-live-data)
+    - [Download Historical Data on Command Line](#download-historical-data-on-command-line)
+    - [Download Historical Data in Python](#download-historical-data-in-python)
 - [Supported Data Sources](#supported-data-sources)
 - [Related Projects](#related-projects)
 
@@ -63,14 +62,8 @@ poetry add pfeed
 
 
 ## Quick Start
-```python
-# TODO
-```
-
-
-## Examples
 ### Download Historical Data on Command Line
-```python
+```bash
 pfeed download -s bybit -p BTC_USDT_PERP --no-minio
 ```
 
@@ -82,20 +75,22 @@ bybit.download(pdts=['BTC_USDT_PERP'])
 
 
 ## Supported Data Sources
-| Data Source                                  | Historical Data | Historical Data Recording | Live/Paper Data | Live/Paper Data Recording |
-| -------------------------------------------- | --------------- | ------------------------- | --------------- | ------------------------- |
-| Yahoo Finance                                | 🟢              | ⚪                        | ⚪              | ⚪                        |
-| Bybit                                        | 🟢              | 🟢                        | 🟡              | 🔴                        |
-| *Interactive Brokers (IB)                    | 🔴              | ⚪                        | 🔴              | 🔴                        |
-| [*FirstRate Data](https://firstratedata.com) | 🔴              | 🔴                        | ⚪              | ⚪                        |
-| Binance                                      | 🔴              | 🔴                        | 🔴              | 🔴                        |
-| OKX                                          | 🔴              | 🔴                        | 🔴              | 🔴                        |
+| Data Source                                  | Get Historical Data | Download Historical Data | Get Live/Paper Data | Download Live/Paper Data |
+| -------------------------------------------- | ------------------- | ------------------------ | ------------------- | ------------------------ |
+| Yahoo Finance                                | 🟢                  | ⚪                       | ⚪                  | ⚪                       |
+| Bybit                                        | 🟢                  | 🟢                       | 🟡                  | 🔴                       |
+| *Interactive Brokers (IB)                    | 🔴                  | ⚪                       | 🔴                  | 🔴                       |
+| [*FirstRate Data](https://firstratedata.com) | 🔴                  | 🔴                       | ⚪                  | ⚪                       |
+| Binance                                      | 🔴                  | 🔴                       | 🔴                  | 🔴                       |
+| OKX                                          | 🔴                  | 🔴                       | 🔴                  | 🔴                       |
 
 🟢 = finished \
 🟡 = in progress \
 🔴 = todo \
 ⚪ = not applicable \
 \* = Paid/Non-Free data
+get data = store it in memory for python to use
+download data = store it in local machine for later research
 
 
 ## Related Projects

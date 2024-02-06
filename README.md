@@ -38,7 +38,7 @@ stability and scalability.
 Please note that the available version is a *dev* version, not a *stable* one. \
 You are encouraged to play with the *dev* version, but only use it when a *stable* version is released.
 
-> PFeed currently only supports [Bybit](https://bybit.com/) and Yahoo Finance for testing purpose.
+> PFeed for the time being only supports [Bybit](https://bybit.com/) and Yahoo Finance for testing purpose.
 
 ## Mission
 Algo-trading has always been a complicated task due to the multitude of components and procedures involved. \

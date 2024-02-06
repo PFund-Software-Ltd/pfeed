@@ -11,7 +11,7 @@ helping them in creating a local data lake for quantitative research.
 PFeed allows traders to download historical, paper, and live data from various data sources, both free and paid,
 and stores them into a local data lake using [MinIO](https://min.io/).
 
-It is designed to be used alongside [PFund](https://github.com/PFund-Software-Ltd/pfund) — a complete algo-trading framework for TradFi, CeFi and DeFi with native support for machine learning models, or as a standalone package.
+It is designed to be used alongside [PFund](https://github.com/PFund-Software-Ltd/pfund) — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading.
 
 <details>
 <summary>Table of Contents</summary>
@@ -94,4 +94,4 @@ download data = store it in local machine for later research
 
 
 ## Related Projects
-- [PFund](https://github.com/PFund-Software-Ltd/pfund) — a complete algo-trading framework for TradFi, CeFi and DeFi with native support for machine learning models
+- [PFund](https://github.com/PFund-Software-Ltd/pfund) — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading

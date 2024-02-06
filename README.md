@@ -81,7 +81,7 @@ bybit.download(pdts=['BTC_USDT_PERP'])
 | Yahoo Finance                                | 🟢                  | ⚪                       | ⚪                  | ⚪                       |
 | Bybit                                        | 🟢                  | 🟢                       | 🟡                  | 🔴                       |
 | *Interactive Brokers (IB)                    | 🔴                  | ⚪                       | 🔴                  | 🔴                       |
-| [*FirstRate Data](https://firstratedata.com) | 🔴                  | 🔴                       | ⚪                  | ⚪                       |
+| *[FirstRate Data](https://firstratedata.com) | 🔴                  | 🔴                       | ⚪                  | ⚪                       |
 | Binance                                      | 🔴                  | 🔴                       | 🔴                  | 🔴                       |
 | OKX                                          | 🔴                  | 🔴                       | 🔴                  | 🔴                       |
 
@@ -89,7 +89,7 @@ bybit.download(pdts=['BTC_USDT_PERP'])
 🟡 = in progress \
 🔴 = todo \
 ⚪ = not applicable \
-\* = Paid/Non-Free data \
+\* = paid data \
 get data = store it in memory for python to use \
 download data = store it in local machine for later research
 

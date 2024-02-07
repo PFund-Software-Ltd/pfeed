@@ -51,14 +51,23 @@ However, preparing this data for use is not quick and easy. For example, sometim
 
 
 ## Core Features
-- Unified approach to interact with different data sources 
-- ETL data pipline to transform raw data and store them in [MinIO](https://min.io/)
-- Using [Ray](https://github.com/ray-project/ray) to download data in parallel
+- [x] Unified approach for interacting with various data sources, obtaining historical and real-time data
+- [x] ETL data pipline for transforming raw data and storing it in [MinIO](https://min.io/) (optional)
+- [x] Utilizes [Ray](https://github.com/ray-project/ray) for parallel data downloading
+- [ ] Integrates with [Prefect](https://www.prefect.io) to control data flows
+- [ ] Listens to PFund's trade engine and adds trade history to a local database [Timescaledb](https://www.timescale.com/) (optional)
 
 
 ## Installation
+### Using [Poetry](https://python-poetry.org) (Recommended)
+> If you don't have poetry installed, please visit https://python-poetry.org/docs/
 ```bash
 poetry add pfeed
+```
+
+### Using Pip
+```bash
+pip install pfeed
 ```
 
 

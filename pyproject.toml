@@ -11,8 +11,8 @@ documentation = "https://pfund.ai/docs"
 keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "data warehouse", "data integration", "historical data", "live data", "data streaming"]
 
 [tool.poetry.dependencies]
-python = "^3.10 <3.12"
-pfund = "^0.0.1.dev1"
+python = "^3.10"
+pfund = "^0.0.1.dev2"
 python-dotenv = "^1.0.1"
 pyyaml = "^6.0.1"
 beautifulsoup4 = "^4.12.3"
@@ -36,7 +36,6 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 pfund = {path = "../pfund", develop = true}
-ydata-profiling = "^4.6.4"
 pytest = "^7.4.4"
 sphinx = "^7.2.6"
 autodocsumm = {git = "https://github.com/Chilipp/autodocsumm.git"}

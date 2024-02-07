@@ -18,7 +18,7 @@ class Datastore:
     
     def __init__(self, **kwargs):
         self.minio = Minio(
-            endpoint=os.getenv('MINIO_ENDPOINT'),
+            endpoint=os.getenv('MINIO_HOST')+':'+os.getenv('MINIO_PORT', '9000'),
             access_key=os.getenv('MINIO_ACCESS_KEY'),
             secret_key=os.getenv('MINIO_SECRET_KEY'),
             # turn off TLS, i.e. not using HTTPS

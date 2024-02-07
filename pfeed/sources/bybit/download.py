@@ -97,8 +97,8 @@ def download_historical_data(
     ray_tasks = defaultdict(list)
     
     cprint(f"Ray is {'enabled' if use_ray else 'disabled'}", style='bold')
-    if use_minio and os.getenv('MINIO_ENDPOINT') is None:
-        cprint('"MINIO_ENDPOINT" is not found in environment variables, disable MinIO', style='bold')
+    if use_minio and os.getenv('MINIO_HOST') is None:
+        cprint('"MINIO_HOST" is not found in environment variables, disable MinIO', style='bold')
         use_minio = False
     cprint(f"MinIO is {'enabled' if use_minio else 'disabled'}", style='bold')    
 

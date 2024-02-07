@@ -24,10 +24,12 @@ def save_config(config: ConfigHandler, config_file_path: str | Path):
         
 
 def remove_config(config_file_path: str | Path):
-    os.remove(config_file_path)
+    config_file_path = Path(config_file_path)
+    if config_file_path.is_file():
+        os.remove(config_file_path)
 
 
-@click.command()
+@click.group(invoke_without_command=True)
 @click.pass_context
 @click.option('--data-path', type=click.Path(), help='Set the data path')
 @click.option('--log-path', type=click.Path(), help='Set the log path')
@@ -37,17 +39,29 @@ def remove_config(config_file_path: str | Path):
 @click.option('--use-custom-excepthook', type=bool, help='If True, log uncaught exceptions to file')
 def config(ctx, **kwargs):
     """Configures pfeed settings."""
+    # if theres command invoked after config (e.g. pfeed config reset), skip this
+    if ctx.invoked_subcommand:
+        return
+    
     config: ConfigHandler = ctx.obj['config']
     
     # Filter out options that were not provided by the user
     provided_options = {k: v for k, v in kwargs.items() if v is not None}
+    
+    # prints out current config if no options are provided
     if not provided_options:
         click.echo(f"PFeed's config:\n{pformat(config.__dict__)}")
-        sys.exit(1)
+    else:
+        for option, value in provided_options.items():
+            setattr(config, option, value)
+            click.echo(f"{option} set to: {value}")
+        
+        save_config(config, USER_CONFIG_FILE_PATH)
+        click.echo(f"config saved to {USER_CONFIG_FILE_PATH}.")
 
-    for option, value in provided_options.items():
-        setattr(config, option, value)
-        click.echo(f"{option} set to: {value}")
-    
-    save_config(config, USER_CONFIG_FILE_PATH)
-    click.echo(f"config saved to {USER_CONFIG_FILE_PATH}.")
+
+@config.command()
+def reset():
+    """Resets the application configuration by removing the existing configuration file."""
+    remove_config(USER_CONFIG_FILE_PATH)
+    click.echo("Configuration successfully reset.")

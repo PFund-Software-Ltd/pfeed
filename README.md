@@ -72,15 +72,38 @@ pip install pfeed
 
 
 ## Quick Start
-### Download Historical Data on Command Line
+### Download Historical Data on the Command Line Interface (CLI)
 ```bash
+# download data
 pfeed download -s bybit -p BTC_USDT_PERP --no-minio
+
+# see where the downloaded data is:
+pfeed config
+
+# change where the data will be stored before downloading:
+pfeed config --data-path `your_path`
+
+# for more commands:
+pfeed --help
 ```
 
 ### Download Historical Data in Python
 ```python
 from pfeed import bybit
+
 bybit.download(pdts=['BTC_USDT_PERP'])
+```
+
+### Run PFeed's docker-compose.yml
+```bash
+# same as 'docker-compose', only difference is it has pointed to pfeed's docker-compose.yml file
+pfeed docker-compose [command]
+
+# e.g. start services
+pfeed docker-compose up -d
+
+# e.g. stop services
+pfeed docker-compose down
 ```
 
 

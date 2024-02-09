@@ -76,6 +76,9 @@ pip install pfeed
 # download data
 pfeed download -s bybit -p BTC_USDT_PERP
 
+# enable debug mode
+pfeed download -s bybit -p BTC_USDT_PERP --debug
+
 # list the current config:
 pfeed config --list
 

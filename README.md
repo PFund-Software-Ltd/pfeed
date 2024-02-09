@@ -74,7 +74,7 @@ pip install pfeed
 ### Download Historical Data on the Command Line Interface (CLI)
 ```bash
 # download data
-pfeed download -s bybit -p BTC_USDT_PERP --no-minio
+pfeed download -s bybit -p BTC_USDT_PERP
 
 # list the current config:
 pfeed config --list

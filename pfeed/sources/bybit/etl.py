@@ -1,5 +1,4 @@
 '''ETL = Extract, Transform, Load data'''
-import os
 import io
 import logging
 
@@ -21,18 +20,18 @@ def extract_data(
     pdt: str,
     date: str,
     dtype: Literal['raw', 'tick', 'second', 'minute', 'hour', 'daily'],
-    env: Literal['PAPER', 'LIVE']='LIVE',
     mode: Literal['historical', 'streaming']='historical',
     data_path: str=str(DATA_PATH),
 ) -> bytes:
     file_extension = '.csv.gz' if dtype == 'raw' else '.parquet.gz'
-    fp = FilePath(data_path, env, DATA_SOURCE, dtype, mode, pdt, date, file_extension)
-    if os.path.exists(fp.file_path):
+    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=data_path, file_extension=file_extension)
+    if fp.exists():
         with open(fp.file_path, 'rb') as f:
             data: bytes = f.read()
             logger.debug(f'read data from {fp.file_path}')
             return data
     else:
+        print(f'failed to find {fp.file_path}, trying to extract data from MinIO')
         datastore = Datastore()
         object_name = fp.storage_path
         data: bytes | None = datastore.get_object(object_name)
@@ -44,30 +43,24 @@ def extract_data(
 
 
 def load_data(
+    mode: Literal['historical', 'streaming'],
+    dtype: Literal['raw', 'tick', 'second', 'minute', 'hour', 'daily'],
     pdt: str,
     date: str,
-    dtype: Literal['raw', 'tick', 'second', 'minute', 'hour', 'daily'],
     data: bytes,
-    env: Literal['PAPER', 'LIVE']='LIVE',
-    mode: Literal['historical', 'streaming']='historical',
     data_path: str=str(DATA_PATH),
     use_minio=True,
     **kwargs
 ):  
-    if not os.path.exists(data_path):
-        os.makedirs(data_path)
-        print(f'created {data_path=}')
     file_extension = '.csv.gz' if dtype == 'raw' else '.parquet.gz'
-    fp = FilePath(data_path, env, DATA_SOURCE, dtype, mode, pdt, date, file_extension)
+    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=data_path, file_extension=file_extension)
     if use_minio:
         datastore = Datastore()
         object_name = fp.storage_path
         datastore.put_object(object_name, data, **kwargs)
         logger.debug(f'loaded data to object {object_name} {kwargs=}')
     else:
-        directory = os.path.dirname(fp.file_path)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
+        fp.parent.mkdir(parents=True, exist_ok=True)
         with open(fp.file_path, 'wb') as f:
             f.write(data)
             logger.debug(f'loaded data to {fp.file_path}')
@@ -96,8 +89,12 @@ def resample_data(data: bytes, resolution: str, is_tick=False, category='') -> b
                 return 'L'
             else:
                 return 'N'
-    # T means minute, refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
-    resolution = resolution.upper().replace('M', 'T')
+    # EXTEND:
+    # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
+    if 'm' in resolution:
+        resolution = resolution.replace('m', 'min')
+    elif 'd' in resolution:
+        resolution = resolution.replace('d', 'D')
     df = pd.read_parquet(io.BytesIO(data))
     if 'ts' in df.columns:
         assert category, 'category must be provided'
@@ -149,7 +146,7 @@ def resample_data(data: bytes, resolution: str, is_tick=False, category='') -> b
         resampled_df['num_sells'] = resampled_df['num_sells'].astype(int)
     else:
         resampled_df['first'] = (resampled_df['arg_high'] < resampled_df['arg_low']).map({True: 'H', False: 'L'})
-        resampled_df['first'].where(resampled_df['arg_high'] != resampled_df['arg_low'], other='N', inplace=True)
+        resampled_df['first'] = resampled_df['first'].where(resampled_df['arg_high'] != resampled_df['arg_low'], other='N')
         resampled_df.drop(columns=['arg_high', 'arg_low'], inplace=True)
     return resampled_df.to_parquet()
 

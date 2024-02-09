@@ -2,7 +2,7 @@ version: 1
 filename_format: '%Y-%m-%d_UTC%z'
 loggers:
   root:
-    level: 'DEBUG'
+    level: 'WARNING'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
   pfeed:

@@ -3,8 +3,7 @@ DATA_SOURCE = 'BYBIT'
 # SUPPORTED_PRODUCT_TYPES = ['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT']
 SUPPORTED_PRODUCT_TYPES = ['SPOT', 'PERP', 'IPERP']
 RAW_DATA_TYPE = 'tick'
-# do not need to be precise
-DATA_START_DATE = '2020-01-01'
+DATA_START_DATE = '2020-01-01'  # do not need to be precise
 DATA_SOURCE_URLS = {
     'linear': 'https://public.bybit.com/trading',
     'inverse': 'https://public.bybit.com/trading',

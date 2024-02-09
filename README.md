@@ -77,11 +77,11 @@ pip install pfeed
 # download data
 pfeed download -s bybit -p BTC_USDT_PERP --no-minio
 
-# see where the downloaded data is:
-pfeed config
+# list the current config:
+pfeed config --list
 
-# change where the data will be stored before downloading:
-pfeed config --data-path `your_path`
+# change the data storage location to your local project's 'data' folder:
+pfeed config --data-path ./data
 
 # for more commands:
 pfeed --help
@@ -108,7 +108,7 @@ pfeed docker-compose down
 
 
 ## Supported Data Sources
-| Data Source                                  | Get Historical Data | Download Historical Data | Get Live/Paper Data | Download Live/Paper Data |
+| Data Source                                  | Get Historical Data | Download Historical Data | Get Live/Paper Data | Stream Live/Paper Data |
 | -------------------------------------------- | ------------------- | ------------------------ | ------------------- | ------------------------ |
 | Yahoo Finance                                | 🟢                  | ⚪                       | ⚪                  | ⚪                       |
 | Bybit                                        | 🟢                  | 🟢                       | 🟡                  | 🔴                       |
@@ -124,6 +124,7 @@ pfeed docker-compose down
 \* = paid data \
 get data = store it in memory for python to use \
 download data = store it in local machine for later research
+stream data = listen to real-time data and store it optionally
 
 
 ## Related Projects

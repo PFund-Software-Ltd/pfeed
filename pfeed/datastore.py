@@ -1,5 +1,6 @@
 import os
 import io
+import requests
 import logging
 
 from typing import Generator
@@ -11,12 +12,39 @@ from minio.api import ObjectWriteResult
 logger = logging.getLogger('minio')
 
 
+def check_if_minio_running():
+    endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
+    if 'http' not in endpoint:
+        if 'localhost' in endpoint:
+            endpoint = f'http://{endpoint}'
+        else:
+            endpoint = f'https://{endpoint}'
+    try:
+        response = requests.get(f'{endpoint}/minio/health/live', timeout=3)
+        if response.status_code == 200:
+            print(f"MinIO is running on {endpoint}")
+            return True
+        else:
+            raise Exception(f"Unhandled response: {response.status_code=} {response.content} {response}")
+    except requests.exceptions.ReadTimeout:
+        print(f"MinIO is not running on {endpoint}")
+    return False
+
+
+def assert_access_key_and_secret_key_exists():
+    console_endpoint = os.getenv('MINIO_HOST')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
+    assert os.getenv('MINIO_ACCESS_KEY') and os.getenv('MINIO_SECRET_KEY'), \
+        f'MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,\nPlease create them using MinIO Console on {console_endpoint}.\n' \
+        'For details, please refer to https://min.io/docs/minio/container/administration/console/security-and-access.html'
+
+
 # EXTEND, currently only consider using MinIO
 class Datastore:
     DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
     BUCKET_NAME = 'pfeed' + '-' + os.getenv('PFEED_ENV', 'DEV').lower()
     
     def __init__(self, **kwargs):
+        assert_access_key_and_secret_key_exists()
         self.minio = Minio(
             endpoint=os.getenv('MINIO_HOST')+':'+os.getenv('MINIO_PORT', '9000'),
             access_key=os.getenv('MINIO_ACCESS_KEY'),

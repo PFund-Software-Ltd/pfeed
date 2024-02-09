@@ -1,5 +1,4 @@
 import os
-import sys
 import yaml
 from pathlib import Path
 from pprint import pformat
@@ -29,28 +28,39 @@ def remove_config(config_file_path: str | Path):
         os.remove(config_file_path)
 
 
-@click.group(invoke_without_command=True)
+@click.command()
 @click.pass_context
-@click.option('--data-path', type=click.Path(), help='Set the data path')
-@click.option('--log-path', type=click.Path(), help='Set the log path')
-@click.option('--logging-path', 'logging_config_file_path', type=click.Path(exists=True), help='Set the logging config file path')
+@click.option('--data-path', type=click.Path(resolve_path=True), help='Set the data path')
+@click.option('--log-path', type=click.Path(resolve_path=True), help='Set the log path')
+@click.option('--logging-file', 'logging_config_file_path', type=click.Path(resolve_path=True, exists=True), help='Set the logging config file path')
 @click.option('--logging-config', type=dict, help='Set the logging config')
 @click.option('--use-fork-process', type=bool, help='If True, multiprocessing.set_start_method("fork")')
 @click.option('--use-custom-excepthook', type=bool, help='If True, log uncaught exceptions to file')
+@click.option('--list', '-l', is_flag=True, is_eager=True, help='List all available options')
+@click.option('--reset', is_flag=True, is_eager=True, help='Reset the configuration to defaults') 
 def config(ctx, **kwargs):
     """Configures pfeed settings."""
-    # if theres command invoked after config (e.g. pfeed config reset), skip this
-    if ctx.invoked_subcommand:
-        return
-    
     config: ConfigHandler = ctx.obj['config']
     
     # Filter out options that were not provided by the user
-    provided_options = {k: v for k, v in kwargs.items() if v is not None}
+    provided_options = {k: v for k, v in kwargs.items() if v is not None and v is not False}
+    
+    if kwargs.get('list'):  # Check if --list was used
+        del provided_options['list']
+        assert not provided_options, "No options should be provided with --list"
+        click.echo(f"PFeed's config:\n{pformat(config.__dict__)}")
+        return
+
+    if kwargs.get('reset'): # Check if --reset was used
+        del provided_options['reset']
+        assert not provided_options, "No options should be provided with --reset"
+        remove_config(USER_CONFIG_FILE_PATH)
+        click.echo("Configuration successfully reset.")
+        return
     
     # prints out current config if no options are provided
     if not provided_options:
-        click.echo(f"PFeed's config:\n{pformat(config.__dict__)}")
+        raise click.UsageError("No options provided. Use --list to see all available options.")
     else:
         for option, value in provided_options.items():
             setattr(config, option, value)
@@ -58,10 +68,3 @@ def config(ctx, **kwargs):
         
         save_config(config, USER_CONFIG_FILE_PATH)
         click.echo(f"config saved to {USER_CONFIG_FILE_PATH}.")
-
-
-@config.command()
-def reset():
-    """Resets the application configuration by removing the existing configuration file."""
-    remove_config(USER_CONFIG_FILE_PATH)
-    click.echo("Configuration successfully reset.")

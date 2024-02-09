@@ -27,6 +27,8 @@ class ConfigHandler:
     use_custom_excepthook: bool = True
     
     def __post_init__(self):
+        self.logging_config = self.logging_config or {}
+        
         for path in [self.data_path]:
             if not os.path.exists(path):
                 os.makedirs(path)

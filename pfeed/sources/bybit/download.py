@@ -73,6 +73,7 @@ def download_historical_data(
     batch_size: int=8,
     use_ray: bool=True,
     use_minio: bool=True,
+    debug: bool=False,
     config: ConfigHandler | None=None,
 ):
     from pfund.exchanges.bybit.exchange import Exchange
@@ -87,6 +88,11 @@ def download_historical_data(
     if not config:
         config: dict = load_config(USER_CONFIG_FILE_PATH)
         config = ConfigHandler(**config)
+        
+    if debug:
+        if 'handlers' not in config.logging_config:
+            config.logging_config['handlers'] = {}
+        config.logging_config['handlers']['stream_handler'] = {'level': 'DEBUG'}
     set_up_loggers(f'{config.log_path}/{os.getenv("PFEED_ENV", "DEV")}', config.logging_config_file_path, user_logging_config=config.logging_config)
     data_path = config.data_path
     
@@ -120,14 +126,11 @@ def download_historical_data(
         product = exchange.create_product(*pdt.split('_'))
         category = product.category
         epdt = adapter(pdt, ref_key=category)
-        # HACK: add epdt to product for convenience
-        product.epdt = epdt
+        product.epdt = epdt  # HACK: add epdt to product for convenience
         efilenames = api.get_efilenames(category, epdt)
+        # check if the efilename created by the date exists in the efilenames (files on the data server)
+        dates = [date for date in dates if create_efilename(epdt, date, is_spot=product.is_spot()) in efilenames]
         for date in dates if use_ray else tqdm(dates, desc=f'Downloading {source} {pdt} historical data by date', colour='yellow'):
-            efilename = create_efilename(epdt, date, is_spot=product.is_spot())
-            if efilename not in efilenames:
-                # logger.debug(f'{efilename} does not exist in {source}')
-                continue
             if use_ray:
                 ray_tasks[pdt].append((product, date))
             else:

@@ -24,7 +24,8 @@ SUPPORTED_DOWNLOAD_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DOWNLOAD_DATA_SOURC
 @click.option('--batch-size', default=8, type=int, help='batch size for Ray tasks')  # REVIEW
 @click.option('--no-ray', is_flag=True)
 @click.option('--use-minio', is_flag=True)
-def download(ctx, env_file_path, source, pdts, dtypes, ptypes, start_date, end_date, batch_size, no_ray, use_minio):
+@click.option('--debug', is_flag=True)
+def download(ctx, env_file_path, source, pdts, dtypes, ptypes, start_date, end_date, batch_size, no_ray, use_minio, debug):
     if not env_file_path:
         env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=True)
         click.echo(f'.env file path is not specified, using env file in "{env_file_path}"')
@@ -47,5 +48,6 @@ def download(ctx, env_file_path, source, pdts, dtypes, ptypes, start_date, end_d
         batch_size=batch_size,
         use_ray=not no_ray,
         use_minio=use_minio,
+        debug=debug,
         config=ctx.obj['config'],
     )

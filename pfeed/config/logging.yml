@@ -33,7 +33,7 @@ handlers:
     kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}
   stream_handler:
     class: 'logging.StreamHandler'
-    level: 'DEBUG'
+    level: 'INFO'
     formatter: 'console'
 formatters:
   path:

@@ -60,7 +60,6 @@ However, preparing this data for use is not quick and easy. For example, sometim
 
 ## Installation
 ### Using [Poetry](https://python-poetry.org) (Recommended)
-> If you don't have poetry installed, please visit https://python-poetry.org/docs/
 ```bash
 poetry add pfeed
 ```

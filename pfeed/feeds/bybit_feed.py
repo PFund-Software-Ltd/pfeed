@@ -46,13 +46,12 @@ class BybitFeed(BaseFeed):
     ) -> pd.DataFrame:
         from pfund.exchanges.bybit.exchange import Exchange
         
-        env = 'LIVE'  # historical data is from LIVE env
-        exchange = Exchange(env)
+        source = DATA_SOURCE
+        exchange = Exchange(env='LIVE')
         adapter = exchange.adapter
         dtype = self._derive_dtype_from_resolution(resolution)
-        ptype = pdt.split('_')[-1]
-        is_spot = (ptype.upper() == 'SPOT')
-        category = exchange.categorize_product(ptype)
+        product = exchange.create_product(*pdt.split('_'))
+        category = product.category
         epdt = adapter(pdt, ref_key=category)
         efilenames = api.get_efilenames(category, epdt)
         
@@ -61,21 +60,18 @@ class BybitFeed(BaseFeed):
             end_date: str = end_date or (datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
         else:
             start_date, end_date = rollback_date_range(rollback_period)
-        dates: list[str] = get_dates_in_between(start_date, end_date)
+        dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         
         dfs = []
+        dates = [date for date in dates if create_efilename(epdt, date, is_spot=product.is_spot()) in efilenames]
         for date in dates:
-            data_str = f'{DATA_SOURCE} {pdt} {date}'
-            efilename = create_efilename(epdt, date, is_spot=is_spot)
-            if efilename not in efilenames:
-                print(f'{efilename} does not exist in {DATA_SOURCE}')
-                continue
-            if local_data := etl.extract_data(pdt, date, dtype, env=env, mode='historical', data_path=data_path):
+            data_str = f'{source} {pdt} {date}'
+            if local_data := etl.extract_data(pdt, date, dtype, mode='historical', data_path=data_path):
                 # e.g. local_data could be 1m data (period always = 1), but resampled_data could be 3m data
-                resampled_data: bytes = etl.resample_data(local_data, resolution, is_tick=True if dtype == 'tick' else False, category=category)
+                resampled_data: bytes = etl.resample_data(local_data, resolution, is_tick=(dtype == 'tick'), category=category)
                 print(f'loaded {data_str} local {dtype} data')
             else:
-                print(f'Downloading {data_str} data on the fly, please consider using {DATA_SOURCE.lower()}.run_historical(...) to pre-download data to your local computer first')
+                print(f'Downloading {data_str} data on the fly, please consider using {source.lower()}.run_historical(...) to pre-download data to your local computer first')
                 if raw_data := api.get_data(category, epdt, date):
                     tick_data: bytes = etl.clean_data(category, raw_data)
                     resampled_data: bytes = etl.resample_data(tick_data, resolution, is_tick=True, category=category)

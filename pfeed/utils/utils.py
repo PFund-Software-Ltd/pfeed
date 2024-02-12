@@ -42,7 +42,7 @@ def extract_date_from_filename(filename: str) -> str | None:
         return date
 
 
-def rollback_date_range(rollback_period: str) -> tuple[str, str]:
+def rollback_date_range(rollback_period: str) -> tuple[datetime.date, datetime.date]:
     '''Returns start_date and end_date based on the rollback_period (e.g. '1w', '1M').'''
     def _nextmonth(year, month):
         if month == 12:
@@ -76,4 +76,4 @@ def rollback_date_range(rollback_period: str) -> tuple[str, str]:
         raise ValueError(f"Unsupported {rollback_period=}")
     end_date = utcnow - datetime.timedelta(days=1)  # Previous day
     start_date = end_date - timedelta + datetime.timedelta(days=1)
-    return start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')
+    return start_date.date(), end_date.date()

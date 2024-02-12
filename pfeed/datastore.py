@@ -2,6 +2,7 @@ import os
 import io
 import requests
 import logging
+from requests.exceptions import RequestException, ReadTimeout
 
 from typing import Generator
 
@@ -26,13 +27,13 @@ def check_if_minio_running():
             return True
         else:
             raise Exception(f"Unhandled response: {response.status_code=} {response.content} {response}")
-    except requests.exceptions.ReadTimeout:
-        print(f"MinIO is not running on {endpoint}")
+    except (ReadTimeout, RequestException) as e:
+        print(f"MinIO is not running on {endpoint}: {e}")
     return False
 
 
 def assert_access_key_and_secret_key_exists():
-    console_endpoint = os.getenv('MINIO_HOST')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
+    console_endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
     assert os.getenv('MINIO_ACCESS_KEY') and os.getenv('MINIO_SECRET_KEY'), \
         f'MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,\nPlease create them using MinIO Console on {console_endpoint}.\n' \
         'For details, please refer to https://min.io/docs/minio/container/administration/console/security-and-access.html'
@@ -46,7 +47,7 @@ class Datastore:
     def __init__(self, **kwargs):
         assert_access_key_and_secret_key_exists()
         self.minio = Minio(
-            endpoint=os.getenv('MINIO_HOST')+':'+os.getenv('MINIO_PORT', '9000'),
+            endpoint=os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
             access_key=os.getenv('MINIO_ACCESS_KEY'),
             secret_key=os.getenv('MINIO_SECRET_KEY'),
             # turn off TLS, i.e. not using HTTPS

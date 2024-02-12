@@ -9,7 +9,7 @@ import pandas as pd
 
 from pfeed.const.paths import DATA_PATH
 from pfeed.sources.bybit.const import DATA_SOURCE, SELECTED_RAW_COLS, RENAMING_COLS, RAW_DATA_TIMESTAMP_UNITS
-from pfeed.datastore import Datastore
+from pfeed.datastore import Datastore, check_if_minio_running
 from pfeed.filepath import FilePath
 
 
@@ -22,7 +22,7 @@ def extract_data(
     dtype: Literal['raw', 'tick', 'second', 'minute', 'hour', 'daily'],
     mode: Literal['historical', 'streaming']='historical',
     data_path: str=str(DATA_PATH),
-) -> bytes:
+) -> bytes | None:
     file_extension = '.csv.gz' if dtype == 'raw' else '.parquet.gz'
     fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=data_path, file_extension=file_extension)
     if fp.exists():
@@ -32,14 +32,17 @@ def extract_data(
             return data
     else:
         print(f'failed to find {fp.file_path}, trying to extract data from MinIO')
-        datastore = Datastore()
-        object_name = fp.storage_path
-        data: bytes | None = datastore.get_object(object_name)
-        if data:
-            logger.debug(f'extracted data from MinIO object {object_name}')
+        if check_if_minio_running():
+            datastore = Datastore()
+            object_name = fp.storage_path
+            data: bytes | None = datastore.get_object(object_name)
+            if data:
+                logger.debug(f'extracted data from MinIO object {object_name}')
+            else:
+                logger.error(f'failed to extract data from MinIO object {object_name}')
+            return data
         else:
-            logger.error(f'failed to extract data from MinIO object {object_name}')
-        return data
+            return None
 
 
 def load_data(

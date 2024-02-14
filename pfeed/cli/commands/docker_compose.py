@@ -26,6 +26,7 @@ def docker_compose(ctx, env_file_path, docker_file_path):
     # write config's data path to environment variable if not set
     if not os.getenv('PFEED_DATA_PATH'):
         config = ctx.obj['config']
+        click.echo(f'PFEED_DATA_PATH is not set, using data path "{config.data_path}" in config')
         os.environ['PFEED_DATA_PATH'] = config.data_path
         
     if not docker_file_path:

@@ -153,7 +153,7 @@ def download_historical_data(
                 futures = [_run_task.remote(log_queue, *task) for task in batch]
                 ray.get(futures)
                 
-    logger.warning(f'finished downloading historical data from {source} to {data_path} or MinIO if enabled')
+    logger.warning(f'finished downloading {source} historical data to {data_path}')
     
     
 run = download_historical_data

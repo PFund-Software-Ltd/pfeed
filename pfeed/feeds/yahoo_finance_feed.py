@@ -4,6 +4,7 @@ import pandas as pd
 import yfinance as yf
 
 from pfeed.feeds.base_feed import BaseFeed
+from pfeed.config_handler import ConfigHandler
 
 
 __all__ = ['YahooFinanceFeed']
@@ -26,8 +27,8 @@ class YahooFinanceFeed(BaseFeed):
         'M': [1, 3],
     }
     
-    def __init__(self):
-        super().__init__('yahoo_finance')
+    def __init__(self, config: ConfigHandler | None=None):
+        super().__init__('yahoo_finance', config=config)
     
     def get_ticker(self, symbol):
         return yf.Ticker(symbol.upper())

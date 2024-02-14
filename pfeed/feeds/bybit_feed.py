@@ -3,11 +3,11 @@ import datetime
 
 import pandas as pd
 
+from pfeed.config_handler import ConfigHandler
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit import etl
 from pfeed.sources.bybit.const import DATA_SOURCE, create_efilename
-from pfeed.const.paths import DATA_PATH
 from pfeed.utils.utils import get_dates_in_between, rollback_date_range
 
 
@@ -15,8 +15,8 @@ __all__ = ['BybitFeed']
 
 
 class BybitFeed(BaseFeed):
-    def __init__(self):
-        super().__init__('bybit')
+    def __init__(self, config: ConfigHandler | None=None):
+        super().__init__('bybit', config=config)
     
     @staticmethod
     def _derive_dtype_from_resolution(resolution):
@@ -42,7 +42,6 @@ class BybitFeed(BaseFeed):
         resolution: str='1d',
         start_date: str=None,
         end_date: str=None,
-        data_path: str=str(DATA_PATH),
     ) -> pd.DataFrame:
         from pfund.exchanges.bybit.exchange import Exchange
         
@@ -66,7 +65,7 @@ class BybitFeed(BaseFeed):
         dates = [date for date in dates if create_efilename(epdt, date, is_spot=product.is_spot()) in efilenames]
         for date in dates:
             data_str = f'{source} {pdt} {date}'
-            if local_data := etl.extract_data(pdt, date, dtype, mode='historical', data_path=data_path):
+            if local_data := etl.extract_data(pdt, date, dtype, mode='historical', data_path=self.data_path):
                 # e.g. local_data could be 1m data (period always = 1), but resampled_data could be 3m data
                 resampled_data: bytes = etl.resample_data(local_data, resolution, is_tick=(dtype == 'tick'), category=category)
                 print(f'loaded {data_str} local {dtype} data')

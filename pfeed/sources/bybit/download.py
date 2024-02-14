@@ -9,7 +9,6 @@ from tqdm import tqdm
 from rich.console import Console
 
 from pfund.products.product_base import BaseProduct
-from pfeed.const.paths import USER_CONFIG_FILE_PATH
 from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes

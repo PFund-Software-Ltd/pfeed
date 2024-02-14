@@ -10,7 +10,6 @@ from rich.console import Console
 
 from pfund.products.product_base import BaseProduct
 from pfeed.const.paths import USER_CONFIG_FILE_PATH
-from pfeed.cli.commands.config import load_config
 from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
@@ -86,8 +85,7 @@ def download_historical_data(
     
     # configure
     if not config:
-        config: dict = load_config(USER_CONFIG_FILE_PATH)
-        config = ConfigHandler(**config)
+        config = ConfigHandler.load_config()
         
     if debug:
         if 'handlers' not in config.logging_config:

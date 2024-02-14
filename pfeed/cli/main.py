@@ -1,9 +1,8 @@
 import click
 
 from pfeed.config_handler import ConfigHandler
-from pfeed.const.paths import USER_CONFIG_FILE_PATH
 from pfeed.cli.commands.docker_compose import docker_compose
-from pfeed.cli.commands.config import config, load_config
+from pfeed.cli.commands.config import config
 from pfeed.cli.commands.download import download
 # from pfeed.cli.commands.stream import stream
 
@@ -14,8 +13,7 @@ from pfeed.cli.commands.download import download
 def pfeed_group(ctx):
     """PFeed's CLI"""
     ctx.ensure_object(dict)
-    config: dict = load_config(USER_CONFIG_FILE_PATH)
-    ctx.obj['config'] = ConfigHandler(**config)
+    ctx.obj['config'] = ConfigHandler.load_config()
 
 
 pfeed_group.add_command(docker_compose)

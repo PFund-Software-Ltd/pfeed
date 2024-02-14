@@ -5,7 +5,9 @@ import logging
 from types import TracebackType
 from dataclasses import dataclass
 
-from pfeed.const.paths import PROJ_NAME, PROJ_CONFIG_PATH, LOG_PATH, DATA_PATH
+import yaml
+
+from pfeed.const.paths import PROJ_NAME, PROJ_CONFIG_PATH, LOG_PATH, DATA_PATH, USER_CONFIG_FILE_PATH
 
 
 def _custom_excepthook(exception_class: type[BaseException], exception: BaseException, traceback: TracebackType):
@@ -25,6 +27,16 @@ class ConfigHandler:
     logging_config: dict | None = None
     use_fork_process: bool = True
     use_custom_excepthook: bool = True
+    
+    @classmethod
+    def load_config(cls):
+        config_file_path = USER_CONFIG_FILE_PATH
+        if config_file_path.is_file():
+            with open(config_file_path, 'r') as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+        return cls(**config)
     
     def __post_init__(self):
         self.logging_config = self.logging_config or {}

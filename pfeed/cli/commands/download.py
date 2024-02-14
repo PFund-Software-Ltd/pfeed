@@ -29,7 +29,8 @@ def download(ctx, env_file_path, source, pdts, dtypes, ptypes, start_date, end_d
     if not env_file_path:
         env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=True)
         click.echo(f'.env file path is not specified, using env file in "{env_file_path}"')
-    load_dotenv(env_file_path)
+    load_dotenv(env_file_path, override=True)
+    
     if source in ALIASES:
         source = ALIASES[source]
     pdts = [pdt.replace('-', '_') for pdt in pdts]

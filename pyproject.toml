@@ -17,14 +17,13 @@ python-dotenv = "^1.0.1"
 pyyaml = "^6.0.1"
 beautifulsoup4 = "^4.12.3"
 requests = "^2.31.0"
-orjson = "^3.9.12"
 rich = "^13.7.0"
-tqdm = "^4.66.1"
+tqdm = "^4.66.2"
 yfinance = "^0.2.36"
 pandas = "^2.2.0"
 ray = "^2.9.2"
 pyarrow = "^15.0.0"
-minio = "^7.2.3"
+minio = "^7.2.4"
 click = "^8.1.7"
 platformdirs = "^4.2.0"
 
@@ -37,13 +36,17 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 pfund = {path = "../pfund", develop = true}
 pytest = "^8.0.0"
-sphinx = "^7.2.6"
-autodocsumm = {git = "https://github.com/Chilipp/autodocsumm.git"}
-sphinxcontrib-napoleon = "^0.7"
 pre-commit = "^3.6.0"
 bandit = "^1.7.7"
 ruff = "^0.1.15"
 pyright = "^1.1.349"
+
+[tool.poetry.group.doc]
+optional = true
+
+[tool.poetry.group.doc.dependencies]
+jupyter-book = "^1.0.0"
+notebook = "^7.1.0"
 
 [build-system]
 requires = ["poetry-core"]

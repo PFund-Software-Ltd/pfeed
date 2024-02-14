@@ -31,7 +31,7 @@ def extract_data(
             logger.debug(f'read data from {fp.file_path}')
             return data
     else:
-        print(f'failed to find {fp.file_path}, trying to extract data from MinIO')
+        # print(f'failed to find {fp.file_path}, trying to extract data from MinIO')
         if check_if_minio_running():
             datastore = Datastore()
             object_name = fp.storage_path

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfeed"
-version = "0.0.1.dev3"
+version = "0.0.1.dev4"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfeed@gmail.com>"]
@@ -12,7 +12,7 @@ keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "dat
 
 [tool.poetry.dependencies]
 python = "^3.10 <3.12"
-pfund = "^0.0.1.dev2"
+pfund = "^0.0.1.dev4"
 python-dotenv = "^1.0.1"
 pyyaml = "^6.0.1"
 beautifulsoup4 = "^4.12.3"

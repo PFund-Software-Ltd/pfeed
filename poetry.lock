@@ -2507,7 +2507,7 @@ ptyprocess = ">=0.5"
 
 [[package]]
 name = "pfund"
-version = "0.0.1.dev3"
+version = "0.0.1.dev4"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 optional = false
 python-versions = "^3.10 <3.12"
@@ -2518,7 +2518,7 @@ develop = true
 click = "^8.1.7"
 orjson = "^3.9.14"
 pandas = "^2.2.0"
-pfeed = "^0.0.1.dev3"
+pfeed = "^0.0.1.dev4"
 platformdirs = "^4.2.0"
 psutil = "^5.9.8"
 python-telegram-bot = "^20.7"
@@ -4521,4 +4521,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10 <3.12"
-content-hash = "778291dcf99c806594faf6f266cb029b96b1b33f9282a9694d4b65d6d88b12aa"
+content-hash = "c66e5466f5b8fde71a9e1427c567abf0829684177d5a6be309e1ea7ca5c10056"

@@ -51,13 +51,13 @@ class BybitFeed(BaseFeed):
             if local_data := etl.extract_data(pdt, date, dtype, mode='historical', data_path=self.data_path):
                 # e.g. local_data could be 1m data (period always = 1), but resampled_data could be 3m data
                 resampled_data: bytes = etl.resample_data(local_data, resolution, is_tick=(dtype == 'tick'), category=category)
-                print(f'loaded {data_str} local {dtype} data')
+                self.logger.info(f'loaded {data_str} local {dtype} data')
             else:
-                print(f'Downloading {data_str} data on the fly, please consider using {source.lower()}.run_historical(...) to pre-download data to your local computer first')
+                self.logger.warning(f"Downloading {data_str} data on the fly, please consider using pfeed's {source.lower()}.download(...) to pre-download data to your local computer first")
                 if raw_data := api.get_data(category, epdt, date):
                     tick_data: bytes = etl.clean_data(category, raw_data)
                     resampled_data: bytes = etl.resample_data(tick_data, resolution, is_tick=True, category=category)
-                    print(f'resampled {data_str} data to {resolution=}')
+                    self.logger.debug(f'resampled {data_str} data to {resolution=}')
                 else:
                     raise Exception(f'failed to download {data_str} historical data')
             df = pd.read_parquet(io.BytesIO(resampled_data))

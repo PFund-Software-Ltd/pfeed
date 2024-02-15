@@ -1,4 +1,5 @@
 import os
+import logging
 
 from pfeed.config_handler import ConfigHandler
 
@@ -13,6 +14,7 @@ class BaseFeed:
         if not config:
             config = ConfigHandler.load_config()
         set_up_loggers(f'{config.log_path}/{os.getenv("PFEED_ENV", "DEV")}', config.logging_config_file_path, user_logging_config=config.logging_config)
+        self.logger = logging.getLogger(self.name.lower())
         self._config = config
         self.data_path = config.data_path
         

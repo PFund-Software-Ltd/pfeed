@@ -100,7 +100,7 @@ bybit.download(pdts=['BTC_USDT_PERP'])
 ### Run PFeed's docker-compose.yml
 ```bash
 # same as 'docker-compose', only difference is it has pointed to pfeed's docker-compose.yml file
-pfeed docker-compose [command]
+pfeed docker-compose [COMMAND]
 
 # e.g. start services
 pfeed docker-compose up -d

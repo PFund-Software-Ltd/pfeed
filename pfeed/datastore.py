@@ -23,7 +23,7 @@ def check_if_minio_running():
     try:
         response = requests.get(f'{endpoint}/minio/health/live', timeout=3)
         if response.status_code == 200:
-            print(f"MinIO is running on {endpoint}")
+            # print(f"MinIO is running on {endpoint}")
             return True
         else:
             raise Exception(f"Unhandled response: {response.status_code=} {response.content} {response}")

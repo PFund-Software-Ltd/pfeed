@@ -39,7 +39,7 @@ def extract_data(
             if data:
                 logger.debug(f'extracted data from MinIO object {object_name}')
             else:
-                logger.error(f'failed to extract data from MinIO object {object_name}')
+                logger.warning(f'failed to extract data from MinIO object {object_name}')
             return data
         else:
             return None
@@ -77,7 +77,7 @@ def clean_data(category: str, data: bytes) -> bytes:
     return df.to_parquet()
 
 
-def resample_data(data: bytes, resolution: str, is_tick=False, category='') -> bytes:
+def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, category='', to_parquet=True) -> bytes:
     '''
     Args:
         is_tick: if True, use tick data to resample data
@@ -98,7 +98,14 @@ def resample_data(data: bytes, resolution: str, is_tick=False, category='') -> b
         resolution = resolution.replace('m', 'min')
     elif 'd' in resolution:
         resolution = resolution.replace('d', 'D')
-    df = pd.read_parquet(io.BytesIO(data))
+    
+    if type(data) is bytes:
+        df = pd.read_parquet(io.BytesIO(data))
+    elif type(data) is pd.DataFrame:
+        df = data
+    else:
+        raise TypeError(f'invalid data type {type(data)}')
+    
     if 'ts' in df.columns:
         assert category, 'category must be provided'
         df.set_index('ts', inplace=True)
@@ -151,7 +158,10 @@ def resample_data(data: bytes, resolution: str, is_tick=False, category='') -> b
         resampled_df['first'] = (resampled_df['arg_high'] < resampled_df['arg_low']).map({True: 'H', False: 'L'})
         resampled_df['first'] = resampled_df['first'].where(resampled_df['arg_high'] != resampled_df['arg_low'], other='N')
         resampled_df.drop(columns=['arg_high', 'arg_low'], inplace=True)
-    return resampled_df.to_parquet()
+    if to_parquet:
+        return resampled_df.to_parquet()
+    else:
+        return resampled_df
 
 
 if __name__ == '__main__':

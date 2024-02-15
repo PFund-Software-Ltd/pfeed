@@ -33,6 +33,7 @@ class YahooFinanceFeed(BaseFeed):
     def get_ticker(self, symbol):
         return yf.Ticker(symbol.upper())
     
+    # TODO: should manipulate the input resolution and support e.g. '2d' resolution even it is not in the SUPPORTED_TIMEFRAMES_AND_PERIODS
     def get_historical_data(
         self, 
         symbol: str,
@@ -44,6 +45,9 @@ class YahooFinanceFeed(BaseFeed):
     ) -> pd.DataFrame:
         """Simple Wrapper of yfinance history().
         For the details of args and kwargs, please refer to https://github.com/ranaroussi/yfinance
+        
+        Args:
+            **kwargs: kwargs supported by `yfinance`
         """
         from pfund.datas.resolution import Resolution
         
@@ -79,6 +83,9 @@ class YahooFinanceFeed(BaseFeed):
         
         ticker = self.get_ticker(symbol)
         df = ticker.history(period=period, interval=interval, start=start_date, end=end_date, **kwargs)
+        
+        assert not df.empty, f'No data found for {symbol=}, {resolution=}, {rollback_period=}, {start_date=}, {end_date=}. SUPPORTED_TIMEFRAMES_AND_PERIODS={self.SUPPORTED_TIMEFRAMES_AND_PERIODS}'
+        
         df.rename_axis('ts', inplace=True)  # rename index 'Date' to 'ts'
         df.columns = df.columns.str.lower()
         # if there are spaces in column names, they will be turned into some weird names like "_10" 
@@ -88,10 +95,13 @@ class YahooFinanceFeed(BaseFeed):
         df.index = df.index.tz_convert('UTC')
         # convert to UTC and remove +hh:mm from YYYY-MM-DD hh:mm:ss+hh:mm
         df.index = df.index.tz_convert('UTC').tz_localize(None)
+        
+        df.insert(0, 'symbol', symbol)
+        df.insert(1, 'resolution', repr(resolution))
         return df
     
     
 if __name__ == '__main__':
     feed = YahooFinanceFeed()
-    df = feed.get_historical_data('TSLA')
+    df = feed.get_historical_data('TSLA', resolution='1d')
     print(df)

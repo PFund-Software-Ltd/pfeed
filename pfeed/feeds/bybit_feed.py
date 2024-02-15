@@ -18,23 +18,6 @@ class BybitFeed(BaseFeed):
     def __init__(self, config: ConfigHandler | None=None):
         super().__init__('bybit', config=config)
     
-    @staticmethod
-    def _derive_dtype_from_resolution(resolution):
-        from pfund.datas.resolution import Resolution
-        resolution = Resolution(resolution)
-        if resolution.is_tick():
-            return 'tick'
-        elif resolution.is_second():
-            return 'second'
-        elif resolution.is_minute():
-            return 'minute'
-        elif resolution.is_hour():
-            return 'hour'
-        elif resolution.is_day():
-            return 'daily'
-        else:
-            raise Exception(f'{resolution=} is not supported')
-    
     def get_historical_data(
         self,
         pdt: str,
@@ -79,7 +62,17 @@ class BybitFeed(BaseFeed):
                     raise Exception(f'failed to download {data_str} historical data')
             df = pd.read_parquet(io.BytesIO(resampled_data))
             dfs.append(df)
-        return pd.concat(dfs)
+        
+        df = pd.concat(dfs)
+        
+        # NOTE: Since the downloaded data is in daily units, we can't resample it to e.g. '2d' resolution
+        # using the above logic. Need to resample the aggregated daily data to resolution '2d':
+        if dtype == 'daily' and resolution != '1d':
+            df = etl.resample_data(df, resolution, is_tick=False, category=category, to_parquet=False)
+            
+        df.insert(0, 'product', pdt)
+        df.insert(1, 'resolution', resolution)
+        return df
     
     # TODO?: maybe useful if used as a standalone program, not useful at all if used with PFund
     def get_real_time_data(self, env='LIVE'):
@@ -88,5 +81,5 @@ class BybitFeed(BaseFeed):
         
 if __name__ == '__main__':
     feed = BybitFeed()
-    df = feed.get_historical_data('BCH_USDT_PERP', resolution='1d', rollback_period='2d')
+    df = feed.get_historical_data('BTC_USDT_PERP', resolution='1d', rollback_period='2d')
     print(df)

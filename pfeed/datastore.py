@@ -32,12 +32,12 @@ def check_if_minio_running():
     return False
 
 
-def assert_access_key_and_secret_key_exists():
-    console_endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
-    assert os.getenv('MINIO_ACCESS_KEY') and os.getenv('MINIO_SECRET_KEY'), \
-        f'MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,\nPlease create them using MinIO Console on {console_endpoint}.\n' \
-        'For details, please refer to https://min.io/docs/minio/container/administration/console/security-and-access.html'
-
+def check_if_minio_access_key_and_secret_key_provided():
+    if os.getenv('MINIO_ACCESS_KEY') and os.getenv('MINIO_SECRET_KEY'):
+        return True
+    else:
+        return False
+    
 
 # EXTEND, currently only consider using MinIO
 class Datastore:
@@ -45,7 +45,10 @@ class Datastore:
     BUCKET_NAME = 'pfeed' + '-' + os.getenv('PFEED_ENV', 'DEV').lower()
     
     def __init__(self, **kwargs):
-        assert_access_key_and_secret_key_exists()
+        if not check_if_minio_access_key_and_secret_key_provided():
+            console_endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
+            raise Exception(f'MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,\nPlease create them using MinIO Console on {console_endpoint}.\n' \
+                            'For details, please refer to https://min.io/docs/minio/container/administration/console/security-and-access.html')
         self.minio = Minio(
             endpoint=os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
             access_key=os.getenv('MINIO_ACCESS_KEY'),

@@ -70,7 +70,7 @@ def download_historical_data(
     end_date: datetime.date | None=None,
     batch_size: int=8,
     use_ray: bool=True,
-    use_minio: bool=True,
+    use_minio: bool=False,
     debug: bool=False,
     config: ConfigHandler | None=None,
 ):
@@ -151,8 +151,7 @@ def download_historical_data(
             for batch in tqdm(batches, desc=f'Downloading {source} {pdt} historical data by batch ({batch_size=})', colour='yellow'):
                 futures = [_run_task.remote(log_queue, *task) for task in batch]
                 ray.get(futures)
+        
+        ray.shutdown()  # without this will lead to segmentation fault
                 
     logger.warning(f'finished downloading {source} historical data to {data_path}')
-    
-    
-run = download_historical_data

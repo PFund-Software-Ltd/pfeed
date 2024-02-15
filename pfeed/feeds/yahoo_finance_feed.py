@@ -87,7 +87,7 @@ class YahooFinanceFeed(BaseFeed):
         # convert to UTC
         df.index = df.index.tz_convert('UTC')
         # convert to UTC and remove +hh:mm from YYYY-MM-DD hh:mm:ss+hh:mm
-        # df.index = df.index.tz_convert('UTC').tz_localize(None)
+        df.index = df.index.tz_convert('UTC').tz_localize(None)
         return df
     
     

@@ -9,7 +9,7 @@ import pandas as pd
 
 from pfeed.const.paths import DATA_PATH
 from pfeed.sources.bybit.const import DATA_SOURCE, SELECTED_RAW_COLS, RENAMING_COLS, RAW_DATA_TIMESTAMP_UNITS
-from pfeed.datastore import Datastore, check_if_minio_running
+from pfeed.datastore import Datastore, check_if_minio_running, check_if_minio_access_key_and_secret_key_provided
 from pfeed.filepath import FilePath
 
 
@@ -32,7 +32,7 @@ def extract_data(
             return data
     else:
         # print(f'failed to find {fp.file_path}, trying to extract data from MinIO')
-        if check_if_minio_running():
+        if check_if_minio_running() and check_if_minio_access_key_and_secret_key_provided():
             datastore = Datastore()
             object_name = fp.storage_path
             data: bytes | None = datastore.get_object(object_name)

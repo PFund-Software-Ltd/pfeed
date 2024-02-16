@@ -94,8 +94,17 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
                 return 'H'
             elif argmax > argmin:
                 return 'L'
-            else:
-                return 'N'
+        return np.nan
+    
+    def determine_first(row):
+        if row['arg_high'] < row['arg_low']:
+            return 'H'
+        elif row['arg_high'] > row['arg_low']:
+            return 'L'
+        else:
+            # If arg_high == arg_low, return the original value of 'first'
+            return row['first']
+        
     # EXTEND:
     # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
     if 'm' in resolution:
@@ -109,7 +118,9 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
         df = data
     else:
         raise TypeError(f'invalid data type {type(data)}')
-        
+    
+    assert not df.empty, 'data is empty'
+    
     if is_tick:
         df['num_buys'] = df['side'].map({1: 1, -1: np.nan})
         df['num_sells'] = df['side'].map({1: np.nan, -1: 1})
@@ -141,21 +152,25 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
             'arg_high': lambda series: series.argmax() if not series.empty else None,
             'arg_low': lambda series: series.argmin() if not series.empty else None,
         }
+        if 'first' in df.columns:
+            resample_logic['first'] = 'first'
+            
     resampled_df = (
         df
         .resample(resolution)
         .apply(resample_logic)
-        .dropna()
+        .dropna(subset=[col for col in df.columns if col != 'first'])
     )
+    
     if is_tick:
         resampled_df = resampled_df.droplevel(0, axis=1)
         # convert float to int
         resampled_df['num_buys'] = resampled_df['num_buys'].astype(int)
         resampled_df['num_sells'] = resampled_df['num_sells'].astype(int)
     else:
-        resampled_df['first'] = (resampled_df['arg_high'] < resampled_df['arg_low']).map({True: 'H', False: 'L'})
-        resampled_df['first'] = resampled_df['first'].where(resampled_df['arg_high'] != resampled_df['arg_low'], other='N')
+        resampled_df['first'] = resampled_df.apply(determine_first, axis=1)
         resampled_df.drop(columns=['arg_high', 'arg_low'], inplace=True)
+    
     if to_parquet:
         return resampled_df.to_parquet()
     else:
@@ -165,7 +180,7 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
 if __name__ == '__main__':
     pdt = 'BTC_USDT_PERP'
     date = '2024-02-14'
-    dtype = 'tick'
+    dtype = 'daily'
     data: bytes = extract_data(pdt, date, dtype)
     df = resample_data(data, '1d', is_tick=(dtype == 'tick'), to_parquet=False)
     print(df)

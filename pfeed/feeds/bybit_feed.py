@@ -9,6 +9,7 @@ from pfeed.sources.bybit import api
 from pfeed.sources.bybit import etl
 from pfeed.sources.bybit.const import DATA_SOURCE, create_efilename
 from pfeed.utils.utils import get_dates_in_between, rollback_date_range
+from pfund.exchanges.bybit.exchange import Exchange
 
 
 __all__ = ['BybitFeed']
@@ -26,16 +27,13 @@ class BybitFeed(BaseFeed):
         start_date: str=None,
         end_date: str=None,
     ) -> pd.DataFrame:
-        from pfund.exchanges.bybit.exchange import Exchange
-        
         source = DATA_SOURCE
         exchange = Exchange(env='LIVE')
-        adapter = exchange.adapter
+        # adapter = exchange.adapter
         dtype = self._derive_dtype_from_resolution(resolution)
         product = exchange.create_product(*pdt.split('_'))
-        category = product.category
-        epdt = adapter(pdt, ref_key=category)
-        efilenames = api.get_efilenames(category, epdt)
+        ptype = product.ptype
+        efilenames = api.get_efilenames(pdt)
         
         if start_date:
             # default for end_date is yesterday
@@ -45,18 +43,18 @@ class BybitFeed(BaseFeed):
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         
         dfs = []
-        dates = [date for date in dates if create_efilename(epdt, date, is_spot=product.is_spot()) in efilenames]
+        dates = [date for date in dates if create_efilename(pdt, date) in efilenames]
         for date in dates:
             data_str = f'{source} {pdt} {date}'
             if local_data := etl.extract_data(pdt, date, dtype, mode='historical', data_path=self.data_path):
                 # e.g. local_data could be 1m data (period always = 1), but resampled_data could be 3m data
-                resampled_data: bytes = etl.resample_data(local_data, resolution, is_tick=(dtype == 'tick'), category=category)
+                resampled_data: bytes = etl.resample_data(local_data, resolution, is_tick=(dtype == 'tick'))
                 self.logger.info(f'loaded {data_str} local {dtype} data')
             else:
                 self.logger.warning(f"Downloading {data_str} data on the fly, please consider using pfeed's {source.lower()}.download(...) to pre-download data to your local computer first")
-                if raw_data := api.get_data(category, epdt, date):
-                    tick_data: bytes = etl.clean_data(category, raw_data)
-                    resampled_data: bytes = etl.resample_data(tick_data, resolution, is_tick=True, category=category)
+                if raw_data := api.get_data(pdt, date):
+                    tick_data: bytes = etl.clean_data(ptype, raw_data)
+                    resampled_data: bytes = etl.resample_data(tick_data, resolution, is_tick=True)
                     self.logger.debug(f'resampled {data_str} data to {resolution=}')
                 else:
                     raise Exception(f'failed to download {data_str} historical data')
@@ -68,7 +66,7 @@ class BybitFeed(BaseFeed):
         # NOTE: Since the downloaded data is in daily units, we can't resample it to e.g. '2d' resolution
         # using the above logic. Need to resample the aggregated daily data to resolution '2d':
         if dtype == 'daily' and resolution != '1d':
-            df = etl.resample_data(df, resolution, is_tick=False, category=category, to_parquet=False)
+            df = etl.resample_data(df, resolution, is_tick=False, to_parquet=False)
             
         df.insert(0, 'product', pdt)
         df.insert(1, 'resolution', resolution)

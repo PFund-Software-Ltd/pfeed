@@ -1,13 +1,17 @@
+"""Metadata of bybit's data"""
+from pfund.exchanges.bybit.exchange import Exchange
+PTYPE_TO_CATEGORY = Exchange.PTYPE_TO_CATEGORY
+
 DATA_SOURCE = 'BYBIT'
-# EXTEND: support FUT and IFUT
-# SUPPORTED_PRODUCT_TYPES = ['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT']
-SUPPORTED_PRODUCT_TYPES = ['SPOT', 'PERP', 'IPERP']
+SUPPORTED_PRODUCT_TYPES = ['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT']
 RAW_DATA_TYPE = 'tick'
 DATA_START_DATE = '2020-01-01'  # do not need to be precise
 DATA_SOURCE_URLS = {
-    'linear': 'https://public.bybit.com/trading',
-    'inverse': 'https://public.bybit.com/trading',
-    'spot': 'https://public.bybit.com/spot',
+    'PERP': 'https://public.bybit.com/trading',
+    'FUT': 'https://public.bybit.com/trading',
+    'IPERP': 'https://public.bybit.com/trading',
+    'IFUT': 'https://public.bybit.com/trading',
+    'SPOT': 'https://public.bybit.com/spot',
 }
 DATA_NAMING_REGEX_PATTERNS = {
     'PERP': '(USDT\/|PERP\/)$',  # USDT perp or USDC perp;
@@ -18,23 +22,33 @@ DATA_NAMING_REGEX_PATTERNS = {
     'SPOT': '.*',
 }
 SELECTED_RAW_COLS = {
-    'linear': ['timestamp', 'side', 'size', 'price'],
-    'inverse': ['timestamp', 'side', 'size', 'price'],
-    'spot': ['timestamp', 'side', 'volume', 'price'],
+    'PERP': ['timestamp', 'side', 'size', 'price'],
+    'FUT': ['timestamp', 'side', 'size', 'price'],
+    'IPERP': ['timestamp', 'side', 'size', 'price'],
+    'IFUT': ['timestamp', 'side', 'size', 'price'],
+    'SPOT': ['timestamp', 'side', 'volume', 'price'],
 }
 RENAMING_COLS = {
-    'linear': {'timestamp': 'ts', 'size': 'volume'},
-    'inverse': {'timestamp': 'ts', 'size': 'volume'},
-    'spot': {'timestamp': 'ts'},
+    'PERP': {'timestamp': 'ts', 'size': 'volume'},
+    'FUT': {'timestamp': 'ts', 'size': 'volume'},
+    'IPERP': {'timestamp': 'ts', 'size': 'volume'},
+    'IFUT': {'timestamp': 'ts', 'size': 'volume'},
+    'SPOT': {'timestamp': 'ts'},
 }
 RAW_DATA_TIMESTAMP_UNITS = {
-    'linear': 's',
-    'inverse': 's',
-    'spot': 'ms'
+    'PERP': 's',
+    'FUT': 's',
+    'IPERP': 's',
+    'IFUT': 's',
+    'SPOT': 'ms'
 }
 
 
-def create_efilename(epdt, date, is_spot=False):
+def create_efilename(pdt: str, date: str):
+    adapter = Exchange(env='LIVE').adapter
+    ptype = pdt.split('_')[-1].upper()  # REVIEW: is this always the case?
+    epdt = adapter(pdt, ref_key=PTYPE_TO_CATEGORY[ptype])
+    is_spot = (ptype == 'SPOT')
     if is_spot:
         return f'{epdt}_{date}.csv.gz'
     else:

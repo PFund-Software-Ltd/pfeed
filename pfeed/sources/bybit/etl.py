@@ -69,15 +69,19 @@ def load_data(
             logger.debug(f'loaded data to {fp.file_path}')
 
 
-def clean_data(category: str, data: bytes) -> bytes:
+def clean_data(ptype: str, data: bytes) -> bytes:
     df = pd.read_csv(io.BytesIO(data), compression='gzip')
-    df = df.loc[:, SELECTED_RAW_COLS[category]]
+    df = df.loc[:, SELECTED_RAW_COLS[ptype]]
     df['side'] = df['side'].map({'Buy': 1, 'Sell': -1})
-    df = df.rename(columns=RENAMING_COLS[category])
+    df = df.rename(columns=RENAMING_COLS[ptype])
+    df.set_index('ts', inplace=True)
+    # NOTE: this may make the `ts` value inaccurate, 
+    # e.g. 1671580800.9906 -> 1671580800.990600192
+    df.index = pd.to_datetime(df.index, unit=RAW_DATA_TIMESTAMP_UNITS[ptype])
     return df.to_parquet()
 
 
-def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, category='', to_parquet=True) -> bytes:
+def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to_parquet=True) -> bytes:
     '''
     Args:
         is_tick: if True, use tick data to resample data
@@ -105,13 +109,7 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, ca
         df = data
     else:
         raise TypeError(f'invalid data type {type(data)}')
-    
-    if 'ts' in df.columns:
-        assert category, 'category must be provided'
-        df.set_index('ts', inplace=True)
-        # NOTE: this may make the `ts` value inaccurate, 
-        # e.g. 1671580800.9906 -> 1671580800.990600192
-        df.index = pd.to_datetime(df.index, unit=RAW_DATA_TIMESTAMP_UNITS[category])
+        
     if is_tick:
         df['num_buys'] = df['side'].map({1: 1, -1: np.nan})
         df['num_sells'] = df['side'].map({1: np.nan, -1: 1})
@@ -166,6 +164,8 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, ca
 
 if __name__ == '__main__':
     pdt = 'BTC_USDT_PERP'
-    date = '2023-11-02'
-    dtype = 'raw'
+    date = '2024-02-14'
+    dtype = 'tick'
     data: bytes = extract_data(pdt, date, dtype)
+    df = resample_data(data, '1d', is_tick=(dtype == 'tick'), to_parquet=False)
+    print(df)

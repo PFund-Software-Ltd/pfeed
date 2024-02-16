@@ -8,41 +8,44 @@ from logging.handlers import QueueHandler, QueueListener
 from tqdm import tqdm
 from rich.console import Console
 
-from pfund.products.product_base import BaseProduct
 from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
 from pfeed.const.commons import SUPPORTED_DATA_TYPES
-from pfeed.sources.bybit.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, create_efilename
+from pfeed.sources.bybit.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, PTYPE_TO_CATEGORY, create_efilename
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit import etl
 from pfeed.datastore import check_if_minio_running
+from pfund.products.product_base import BaseProduct
+from pfund.exchanges.bybit.exchange import Exchange
+from pfund.plogging import set_up_loggers
 
 
 logger = logging.getLogger(DATA_SOURCE.lower())
 cprint = Console().print
+exchange = Exchange(env='LIVE')
+adapter = exchange.adapter
 
 
 __all__ = ['download_historical_data']
 
 
-def create_pdts_using_ptypes(exchange, ptypes) -> list[str]:
-    adapter = exchange.adapter
+def create_pdts_using_ptypes(ptypes) -> list[str]:
     pdts = []
     for ptype in ptypes:
-        category = exchange.categorize_product_type(ptype)
-        epdts = api.get_epdts(category, ptype)
+        category = PTYPE_TO_CATEGORY(ptype)
+        epdts = api.get_epdts(ptype)
         # NOTE: if adapter(epdt, ref_key=category) == epdt, i.e. key is not found in pdt matching, meaning the product has been delisted
         pdts.extend([adapter(epdt, ref_key=category) for epdt in epdts if adapter(epdt, ref_key=category) != epdt])
     return pdts
 
 
 def run_etl(product: BaseProduct, date, dtypes, data_path, use_minio):
-    category, pdt, epdt = product.category, product.pdt, product.epdt
-    if raw_data := api.get_data(category, epdt, date):
+    ptype, pdt = product.ptype, product.pdt
+    if raw_data := api.get_data(pdt, date):
         # EXTEND: currently the transformations are fixed and not independent, maybe allow user to pass in custom transformation functions?
-        tick_data: bytes = etl.clean_data(category, raw_data)
-        second_data: bytes = etl.resample_data(tick_data, resolution='1s', is_tick=True, category=category)
+        tick_data: bytes = etl.clean_data(ptype, raw_data)
+        second_data: bytes = etl.resample_data(tick_data, resolution='1s', is_tick=True)
         minute_data: bytes = etl.resample_data(second_data, resolution='1m')
         hour_data: bytes = etl.resample_data(minute_data, resolution='1h')
         daily_data: bytes = etl.resample_data(hour_data, resolution='1d')
@@ -73,14 +76,9 @@ def download_historical_data(
     use_minio: bool=False,
     debug: bool=False,
     config: ConfigHandler | None=None,
-):
-    from pfund.exchanges.bybit.exchange import Exchange
-    from pfund.plogging import set_up_loggers
-    
+):    
     # setup
     source = DATA_SOURCE
-    exchange = Exchange(env='LIVE')
-    adapter = exchange.adapter
     
     # configure
     if not config:
@@ -102,7 +100,7 @@ def download_historical_data(
     ptypes = [ptype.upper() for ptype in ptypes] if ptypes else SUPPORTED_PRODUCT_TYPES[:]
     pdts = [pdt.replace('-', '_').upper() for pdt in pdts] if pdts else []
     if not pdts:
-        pdts = create_pdts_using_ptypes(exchange, ptypes)
+        pdts = create_pdts_using_ptypes(ptypes)
     
     # prepare dates
     start_date = start_date or datetime.datetime.strptime(DATA_START_DATE, '%Y-%m-%d').date()
@@ -121,12 +119,9 @@ def download_historical_data(
     cprint(f'PFeed: downloading historical data from {source}, {start_date=} {end_date=}', style='bold yellow')
     for pdt in pdts if use_ray else tqdm(pdts, desc=f'Downloading {source} historical data by product', colour='green'):
         product = exchange.create_product(*pdt.split('_'))
-        category = product.category
-        epdt = adapter(pdt, ref_key=category)
-        product.epdt = epdt  # HACK: add epdt to product for convenience
-        efilenames = api.get_efilenames(category, epdt)
+        efilenames = api.get_efilenames(pdt)
         # check if the efilename created by the date exists in the efilenames (files on the data server)
-        dates = [date for date in dates if create_efilename(epdt, date, is_spot=product.is_spot()) in efilenames]
+        dates = [date for date in dates if create_efilename(pdt, date) in efilenames]
         for date in dates if use_ray else tqdm(dates, desc=f'Downloading {source} {pdt} historical data by date', colour='yellow'):
             if use_ray:
                 ray_tasks[pdt].append((product, date))
@@ -155,3 +150,5 @@ def download_historical_data(
         ray.shutdown()  # without this will lead to segmentation fault
                 
     logger.warning(f'finished downloading {source} historical data to {data_path}')
+
+run = download_historical_data

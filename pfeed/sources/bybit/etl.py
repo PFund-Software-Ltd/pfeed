@@ -159,7 +159,6 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
         df
         .resample(resolution)
         .apply(resample_logic)
-        .dropna(subset=[col for col in df.columns if col != 'first'])
     )
     
     if is_tick:
@@ -170,6 +169,8 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
     else:
         resampled_df['first'] = resampled_df.apply(determine_first, axis=1)
         resampled_df.drop(columns=['arg_high', 'arg_low'], inplace=True)
+
+    resampled_df.dropna(subset=[col for col in resampled_df.columns if col != 'first'], inplace=True)
     
     if to_parquet:
         return resampled_df.to_parquet()

@@ -1,9 +1,11 @@
 # PFeed: Data Pipeline for Algo-Trading, Getting and Storing Real-Time and Historical Data Made Easy.
 
-[![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfeed/main/docs/images/jupyterbook.svg)](https://jupyterbook.org)
-[![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
+![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfeed?style=social)
+![PyPI downloads](https://img.shields.io/pypi/dm/pfeed?label=downloads)
 [![PyPI](https://img.shields.io/pypi/v/pfeed.svg)](https://pypi.org/project/pfeed)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfeed)
+[![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfeed/main/docs/images/jupyterbook.svg)](https://jupyterbook.org)
+[![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 
 PFeed (/piː fiːd/) is a data integration library tailored for algorithmic trading, 
 serving as an ETL (Extract, Transform, Load) data pipeline between raw data sources and traders,
@@ -111,14 +113,16 @@ pfeed docker-compose down
 
 
 ## Supported Data Sources
-| Data Source                                  | Get Historical Data | Download Historical Data | Get Live/Paper Data | Stream Live/Paper Data |
-| -------------------------------------------- | ------------------- | ------------------------ | ------------------- | ------------------------ |
-| Yahoo Finance                                | 🟢                  | ⚪                       | ⚪                  | ⚪                       |
-| Bybit                                        | 🟢                  | 🟢                       | 🟡                  | 🔴                       |
-| *Interactive Brokers (IB)                    | 🔴                  | ⚪                       | 🔴                  | 🔴                       |
-| *[FirstRate Data](https://firstratedata.com) | 🔴                  | 🔴                       | ⚪                  | ⚪                       |
-| Binance                                      | 🔴                  | 🔴                       | 🔴                  | 🔴                       |
-| OKX                                          | 🔴                  | 🔴                       | 🔴                  | 🔴                       |
+| Data Source               | Get Historical Data | Download Historical Data | Get Live/Paper Data | Stream Live/Paper Data |
+| ------------------------- | ------------------- | ------------------------ | ------------------- | ---------------------- |
+| Yahoo Finance             | 🟢                  | ⚪                       | ⚪                  | ⚪                     |
+| Bybit                     | 🟢                  | 🟢                       | 🟡                  | 🔴                     |
+| *Interactive Brokers (IB) | 🔴                  | ⚪                       | 🔴                  | 🔴                     |
+| *[FirstRate Data]         | 🔴                  | 🔴                       | ⚪                  | ⚪                     |
+| Binance                   | 🔴                  | 🔴                       | 🔴                  | 🔴                     |
+| OKX                       | 🔴                  | 🔴                       | 🔴                  | 🔴                     |
+
+[FirstRate Data]: https://firstratedata.com
 
 🟢 = finished \
 🟡 = in progress \
@@ -132,3 +136,4 @@ stream data = listen to real-time data and store it optionally
 
 ## Related Projects
 - [PFund](https://github.com/PFund-Software-Ltd/pfund) — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
+- [PyTrade.org](https://pytrade.org) - A curated list of Python libraries and resources for algorithmic trading.

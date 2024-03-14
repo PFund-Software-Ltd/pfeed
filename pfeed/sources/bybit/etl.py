@@ -11,6 +11,7 @@ from pfeed.const.paths import DATA_PATH
 from pfeed.sources.bybit.const import DATA_SOURCE, SELECTED_RAW_COLS, RENAMING_COLS, RAW_DATA_TIMESTAMP_UNITS
 from pfeed.datastore import Datastore, check_if_minio_running, check_if_minio_access_key_and_secret_key_provided
 from pfeed.filepath import FilePath
+from pfeed.config_handler import ConfigHandler
 
 
 logger = logging.getLogger(DATA_SOURCE.lower())
@@ -21,8 +22,11 @@ def extract_data(
     date: str,
     dtype: Literal['raw', 'tick', 'second', 'minute', 'hour', 'daily'],
     mode: Literal['historical', 'streaming']='historical',
-    data_path: str=str(DATA_PATH),
+    data_path: str | None=None,
 ) -> bytes | None:
+    if not data_path:
+        config = ConfigHandler.load_config()
+        data_path = config.data_path or str(DATA_PATH)
     file_extension = '.csv.gz' if dtype == 'raw' else '.parquet.gz'
     fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=data_path, file_extension=file_extension)
     if fp.exists():
@@ -51,10 +55,13 @@ def load_data(
     pdt: str,
     date: str,
     data: bytes,
-    data_path: str=str(DATA_PATH),
+    data_path: str | None=None,
     use_minio=True,
     **kwargs
 ):  
+    if not data_path:
+        config = ConfigHandler.load_config()
+        data_path = config.data_path or str(DATA_PATH)
     file_extension = '.csv.gz' if dtype == 'raw' else '.parquet.gz'
     fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=data_path, file_extension=file_extension)
     if use_minio:

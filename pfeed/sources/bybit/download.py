@@ -43,7 +43,6 @@ def create_pdts_using_ptypes(ptypes) -> list[str]:
 def run_etl(product: BaseProduct, date, dtypes, data_path, use_minio):
     ptype, pdt = product.ptype, product.pdt
     if raw_data := api.get_data(pdt, date):
-        # EXTEND: currently the transformations are fixed and not independent, maybe allow user to pass in custom transformation functions?
         tick_data: bytes = etl.clean_data(ptype, raw_data)
         second_data: bytes = etl.resample_data(tick_data, resolution='1s', is_tick=True)
         minute_data: bytes = etl.resample_data(second_data, resolution='1m')
@@ -69,7 +68,7 @@ def download_historical_data(
     pdts: list[str] | None=None, 
     dtypes: list[str] | None=None,
     ptypes: list[str] | None=None, 
-    start_date: datetime.date | None=None, 
+    start_date: datetime.date | None=None,
     end_date: datetime.date | None=None,
     batch_size: int=8,
     use_ray: bool=True,
@@ -92,7 +91,7 @@ def download_historical_data(
     data_path = config.data_path
     
     # prepare dtypes
-    dtypes = [dtype.lower() for dtype in dtypes] if dtypes else SUPPORTED_DATA_TYPES[:]
+    dtypes = [dtype.lower() for dtype in dtypes] if dtypes else ['raw']
     assert all(dtype in SUPPORTED_DATA_TYPES for dtype in dtypes), f'{dtypes=} but {SUPPORTED_DATA_TYPES=}'
     
     # prepare pdts

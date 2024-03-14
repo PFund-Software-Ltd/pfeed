@@ -2,13 +2,25 @@ version: '3.8'
 name: pfeed
 services:
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-02-04T22-36-13Z
+    container_name: minio
+    image: quay.io/minio/minio:RELEASE.2022-03-11T23-57-45Z
     ports:
       - "${MINIO_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - ${PFEED_DATA_PATH:-./data}:/data
+      - ${PFEED_DATA_PATH:-./data}/minio:/data
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pfunder}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-password}
     command: server /data --console-address ":${MINIO_CONSOLE_PORT:-9001}"
+  timescaledb:
+    container_name: timescaledb
+    image: timescaledev/timescaledb-ha:pg16.2-ts2.14.1-all
+    ports:
+      - "${TIMESCALEDB_PORT:-5432}:5432"
+    volumes:
+      - ${PFEED_DATA_PATH:-./data}/timescaledb:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${TIMESCALEDB_DB:-pfeed}
+      POSTGRES_USER: ${TIMESCALEDB_USER:-pfunder}
+      POSTGRES_PASSWORD: ${TIMESCALEDB_PASSWORD:-password}

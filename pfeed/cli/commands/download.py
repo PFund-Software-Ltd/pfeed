@@ -37,7 +37,7 @@ def download(ctx, env_file_path, data_source, pdts, dtypes, ptypes, start_date, 
         data_source = ALIASES[data_source]
         
     pipeline = importlib.import_module(f'pfeed.sources.{data_source.lower()}.download')
-    pipeline.run(
+    pipeline.download_historical_data(
         pdts=pdts,
         dtypes=list(dtypes),
         ptypes=list(ptypes),

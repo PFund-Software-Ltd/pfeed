@@ -26,7 +26,7 @@ exchange = Exchange(env='LIVE')
 adapter = exchange.adapter
 
 
-__all__ = ['download_historical_data']
+__all__ = ['download_historical_data', 'download']
 
 
 def create_pdts_using_ptypes(ptypes) -> list[str]:
@@ -114,12 +114,8 @@ def download_historical_data(
         pdts = create_pdts_using_ptypes(ptypes)
     
     # prepare dates
-    start_date = start_date or DATA_START_DATE
-    start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-    if end_date:
-        end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
-    else:
-        end_date = datetime.datetime.now(tz=datetime.timezone.utc).date()
+    start_date = start_date or datetime.datetime.strptime(DATA_START_DATE, '%Y-%m-%d').date()
+    end_date = end_date or datetime.datetime.now(tz=datetime.timezone.utc).date()
     dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
     
     # check if use Ray
@@ -166,5 +162,3 @@ def download_historical_data(
         ray.shutdown()  # without this will lead to segmentation fault
                 
     logger.warning(f'finished downloading {source} historical data to {config.data_path}')
-
-run = download_historical_data

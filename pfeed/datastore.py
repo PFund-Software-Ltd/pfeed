@@ -13,7 +13,7 @@ from minio.api import ObjectWriteResult
 logger = logging.getLogger('minio')
 
 
-def check_if_minio_running():
+def assert_if_minio_running():
     endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
     if 'http' not in endpoint:
         if 'localhost' in endpoint:
@@ -22,21 +22,19 @@ def check_if_minio_running():
             endpoint = f'https://{endpoint}'
     try:
         response = requests.get(f'{endpoint}/minio/health/live', timeout=3)
-        if response.status_code == 200:
-            # print(f"MinIO is running on {endpoint}")
-            return True
-        else:
+        if response.status_code != 200:
             raise Exception(f"Unhandled response: {response.status_code=} {response.content} {response}")
     except (ReadTimeout, RequestException) as e:
-        print(f"MinIO is not running on {endpoint}: {e}")
-    return False
+        raise Exception(f"MinIO is not running or not detected on {endpoint}: {e}")
 
 
-def check_if_minio_access_key_and_secret_key_provided():
-    if os.getenv('MINIO_ACCESS_KEY') and os.getenv('MINIO_SECRET_KEY'):
-        return True
-    else:
-        return False
+def assert_if_minio_access_key_and_secret_key_provided():
+    if not (os.getenv('MINIO_ACCESS_KEY') and os.getenv('MINIO_SECRET_KEY')):
+        console_endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
+        raise Exception(f'''MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,
+            Please create them using MinIO Console on {console_endpoint}.
+            For details, please refer to https://min.io/docs/minio/container/administration/console/security-and-access.html
+        ''')
     
 
 # EXTEND, currently only consider using MinIO
@@ -45,10 +43,8 @@ class Datastore:
     BUCKET_NAME = 'pfeed' + '-' + os.getenv('PFEED_ENV', 'DEV').lower()
     
     def __init__(self, **kwargs):
-        if not check_if_minio_access_key_and_secret_key_provided():
-            console_endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
-            raise Exception(f'MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,\nPlease create them using MinIO Console on {console_endpoint}.\n' \
-                            'For details, please refer to https://min.io/docs/minio/container/administration/console/security-and-access.html')
+        assert_if_minio_running()
+        assert_if_minio_access_key_and_secret_key_provided()
         self.minio = Minio(
             endpoint=os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
             access_key=os.getenv('MINIO_ACCESS_KEY'),

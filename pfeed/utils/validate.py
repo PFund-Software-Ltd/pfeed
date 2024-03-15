@@ -18,7 +18,7 @@ def validate_pdts_and_ptypes(source: str, pdts: list[str], ptypes: list[str], is
         for pdt in pdts:
             match = pdt_pattern.match(pdt)
             if not match or match.group(1) not in SUPPORTED_PRODUCT_TYPES:
-                error_msg = f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type.'
+                error_msg = f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {source} are: {SUPPORTED_PRODUCT_TYPES})'
                 raise click.BadParameter(error_msg) if is_cli else ValueError(error_msg)
     elif ptypes:
         for ptype in ptypes:

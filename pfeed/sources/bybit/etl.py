@@ -7,75 +7,91 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from pfeed.const.paths import DATA_PATH
-from pfeed.sources.bybit.const import DATA_SOURCE, SELECTED_RAW_COLS, RENAMING_COLS, RAW_DATA_TIMESTAMP_UNITS
-from pfeed.datastore import Datastore, check_if_minio_running, check_if_minio_access_key_and_secret_key_provided
+from pfeed.sources.bybit.const import DATA_SOURCE, SELECTED_RAW_COLS, RENAMING_COLS, RAW_DATA_TIMESTAMP_UNITS, SUPPORTED_RAW_DATA_TYPES
+from pfeed.datastore import Datastore
 from pfeed.filepath import FilePath
 from pfeed.config_handler import ConfigHandler
+from pfeed.utils.utils import transform
+from pfeed.const.commons import SUPPORTED_DATA_TYPES
 
 
 logger = logging.getLogger(DATA_SOURCE.lower())
 
 
 def extract_data(
+    data_origin: Literal['local', 'minio', 'timescaledb'],
+    dtype: Literal['raw_tick', 'raw', 'tick', 'second', 'minute', 'hour', 'daily'],
     pdt: str,
     date: str,
-    dtype: Literal['raw', 'tick', 'second', 'minute', 'hour', 'daily'],
     mode: Literal['historical', 'streaming']='historical',
-    data_path: str | None=None,
 ) -> bytes | None:
-    if not data_path:
-        config = ConfigHandler.load_config()
-        data_path = config.data_path or str(DATA_PATH)
-    file_extension = '.csv.gz' if dtype == 'raw' else '.parquet.gz'
-    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=data_path, file_extension=file_extension)
-    if fp.exists():
-        with open(fp.file_path, 'rb') as f:
-            data: bytes = f.read()
-            logger.debug(f'read data from {fp.file_path}')
-            return data
-    else:
-        # print(f'failed to find {fp.file_path}, trying to extract data from MinIO')
-        if check_if_minio_running() and check_if_minio_access_key_and_secret_key_provided():
-            datastore = Datastore()
-            object_name = fp.storage_path
-            data: bytes | None = datastore.get_object(object_name)
-            if data:
-                logger.debug(f'extracted data from MinIO object {object_name}')
-            else:
-                logger.warning(f'failed to extract data from MinIO object {object_name}')
-            return data
+    # convert 'raw' to 'raw_tick'
+    if dtype == 'raw':
+        dtype = SUPPORTED_RAW_DATA_TYPES[0]  
+    assert dtype in SUPPORTED_DATA_TYPES, f'invalid {dtype=}, {SUPPORTED_DATA_TYPES=}'
+     
+    config = ConfigHandler.load_config()
+    file_extension = '.csv.gz' if dtype == 'raw_tick' else '.parquet.gz'
+    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=config.data_path, file_extension=file_extension)
+    if data_origin == 'local':
+        if fp.exists():
+            with open(fp.file_path, 'rb') as f:
+                data: bytes = f.read()
+                logger.debug(f'extracted data from {fp.storage_path}')
+                return data
         else:
-            return None
+            logger.error(f'failed to extract data from local path: {fp.storage_path}')
+    elif data_origin == 'minio':
+        datastore = Datastore()
+        object_name = fp.storage_path
+        data: bytes | None = datastore.get_object(object_name)
+        if data:
+            logger.debug(f'extracted data from MinIO object {object_name}')
+        else:
+            logger.error(f'failed to extract data from MinIO object {object_name}')
+        return data
+    # TODO
+    elif data_origin == 'timescaledb':
+        pass
+    else:
+        raise NotImplementedError(f'{data_origin=}')
 
 
 def load_data(
+    data_destination: Literal['local', 'minio', 'timescaledb'],
     mode: Literal['historical', 'streaming'],
-    dtype: Literal['raw', 'tick', 'second', 'minute', 'hour', 'daily'],
+    dtype: Literal['raw_tick', 'raw', 'tick', 'second', 'minute', 'hour', 'daily'],
     pdt: str,
     date: str,
     data: bytes,
-    data_path: str | None=None,
-    use_minio=True,
     **kwargs
 ):  
-    if not data_path:
-        config = ConfigHandler.load_config()
-        data_path = config.data_path or str(DATA_PATH)
-    file_extension = '.csv.gz' if dtype == 'raw' else '.parquet.gz'
-    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=data_path, file_extension=file_extension)
-    if use_minio:
-        datastore = Datastore()
-        object_name = fp.storage_path
-        datastore.put_object(object_name, data, **kwargs)
-        logger.debug(f'loaded data to object {object_name} {kwargs=}')
-    else:
+    # convert 'raw' to 'raw_tick'
+    if dtype == 'raw':
+        dtype = SUPPORTED_RAW_DATA_TYPES[0]  
+    assert dtype in SUPPORTED_DATA_TYPES, f'invalid {dtype=}, {SUPPORTED_DATA_TYPES=}'
+    
+    config = ConfigHandler.load_config()
+    file_extension = '.csv.gz' if dtype == 'raw_tick' else '.parquet.gz'
+    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=config.data_path, file_extension=file_extension)
+    if data_destination == 'local':
         fp.parent.mkdir(parents=True, exist_ok=True)
         with open(fp.file_path, 'wb') as f:
             f.write(data)
-            logger.debug(f'loaded data to {fp.file_path}')
+            logger.debug(f'loaded data to {fp.storage_path}')
+    elif data_destination == 'minio':
+        datastore = Datastore()
+        object_name = fp.storage_path
+        datastore.put_object(object_name, data, **kwargs)
+        logger.debug(f'loaded data to MinIO object {object_name} {kwargs=}')
+    # TODO
+    elif data_destination == 'timescaledb':
+        pass
+    else:
+        raise NotImplementedError(f'{data_destination=}')
+        
 
-
+@transform
 def clean_data(ptype: str, data: bytes) -> bytes:
     df = pd.read_csv(io.BytesIO(data), compression='gzip')
     df = df.loc[:, SELECTED_RAW_COLS[ptype]]
@@ -88,6 +104,7 @@ def clean_data(ptype: str, data: bytes) -> bytes:
     return df.to_parquet()
 
 
+@transform
 def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to_parquet=True) -> bytes:
     '''
     Args:

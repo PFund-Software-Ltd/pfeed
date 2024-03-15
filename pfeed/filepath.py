@@ -5,13 +5,13 @@ from typing import Literal
 
 from pfeed.utils.utils import create_filename
 from pfeed.const.paths import DATA_PATH
-
+from pfeed.const.commons import SUPPORTED_DATA_TYPES
 
 @dataclass
 class FilePath:
     data_source: str
     mode: Literal['historical', 'streaming']
-    data_type: Literal['raw', 'tick', 'second', 'minute', 'hour', 'daily']
+    dtype: Literal['raw_tick', 'raw_second', 'raw_minute', 'raw_hour', 'raw_daily', 'tick', 'second', 'minute', 'hour', 'daily']
     pdt: str
     date: str
     file_extension: str = '.parquet.gz'
@@ -64,7 +64,7 @@ class FilePath:
     def __post_init__(self):
         self.data_source = self.data_source.lower()
         self.mode = self.mode.lower()
-        self.data_type = self.dtype = self.data_type.lower()
+        self.dtype = self.dtype = self.dtype.lower()
         self.pdt = self.pdt.lower()
         self.date = str(self.date)
         

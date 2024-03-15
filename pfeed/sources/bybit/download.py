@@ -9,13 +9,12 @@ from tqdm import tqdm
 from rich.console import Console
 
 from pfeed.config_handler import ConfigHandler
-from pfeed.utils.utils import get_dates_in_between
+from pfeed.utils.utils import get_dates_in_between, complete_raw_dtype
 from pfeed.utils.validate import validate_pdts_and_ptypes
 from pfeed.const.commons import SUPPORTED_DATA_TYPES
-from pfeed.sources.bybit.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, PTYPE_TO_CATEGORY, create_efilename
+from pfeed.sources.bybit.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES, PTYPE_TO_CATEGORY, create_efilename
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit import etl
-from pfeed.datastore import check_if_minio_running
 from pfund.products.product_base import BaseProduct
 from pfund.exchanges.bybit.exchange import Exchange
 from pfund.plogging import set_up_loggers
@@ -40,7 +39,7 @@ def create_pdts_using_ptypes(ptypes) -> list[str]:
     return pdts
 
 
-def run_etl(product: BaseProduct, date, dtypes, data_path, use_minio):
+def run_etl(product: BaseProduct, date, dtypes, use_minio):
     ptype, pdt = product.ptype, product.pdt
     if raw_data := api.get_data(pdt, date):
         tick_data: bytes = etl.clean_data(ptype, raw_data)
@@ -50,7 +49,7 @@ def run_etl(product: BaseProduct, date, dtypes, data_path, use_minio):
         daily_data: bytes = etl.resample_data(hour_data, resolution='1d')
         logger.debug(f'resampled {DATA_SOURCE} {pdt} {date} data')
         resampled_datas = {
-            'raw': raw_data,
+            'raw_tick': raw_data,
             'tick': tick_data,
             'second': second_data,
             'minute': minute_data,
@@ -59,17 +58,18 @@ def run_etl(product: BaseProduct, date, dtypes, data_path, use_minio):
         }
         for dtype in dtypes:
             data = resampled_datas[dtype]
-            etl.load_data('historical', dtype, pdt, date, data, data_path=data_path, use_minio=use_minio)
+            data_destination = 'minio' if use_minio else 'local'
+            etl.load_data(data_destination, 'historical', dtype, pdt, date, data)
     else:
         raise Exception(f'failed to download {DATA_SOURCE} {pdt} {date} historical data')
 
 
 def download_historical_data(
-    pdts: list[str] | None=None, 
-    dtypes: list[str] | None=None,
-    ptypes: list[str] | None=None, 
-    start_date: datetime.date | None=None,
-    end_date: datetime.date | None=None,
+    pdts: str | list[str] | None=None, 
+    dtypes: str | list[str] | None=None,
+    ptypes: str | list[str] | None=None, 
+    start_date: str | None=None,
+    end_date: str | None=None,
     batch_size: int=8,
     use_ray: bool=True,
     use_minio: bool=False,
@@ -83,18 +83,29 @@ def download_historical_data(
     if not config:
         config = ConfigHandler.load_config()
         
+    print(f'''Hint: 
+        You can use the command "pfeed config --data-path ..." to set your data path that stores downloaded data.
+        The current data path is: {config.data_path}.
+    ''')
+        
     if debug:
         if 'handlers' not in config.logging_config:
             config.logging_config['handlers'] = {}
         config.logging_config['handlers']['stream_handler'] = {'level': 'DEBUG'}
     set_up_loggers(f'{config.log_path}/{os.getenv("PFEED_ENV", "DEV")}', config.logging_config_file_path, user_logging_config=config.logging_config)
-    data_path = config.data_path
     
     # prepare dtypes
-    dtypes = [dtype.lower() for dtype in dtypes] if dtypes else ['raw']
+    dtypes = [dtypes] if type(dtypes) is str else dtypes
+    dtypes = [dtype.lower() for dtype in dtypes] if dtypes else SUPPORTED_RAW_DATA_TYPES[0]
     assert all(dtype in SUPPORTED_DATA_TYPES for dtype in dtypes), f'{dtypes=} but {SUPPORTED_DATA_TYPES=}'
+    # NOTE: if the data source supports only one raw data type, e.g. bybit has only 'raw_tick', 
+    # then 'raw' data type will be converted to 'raw_tick' implicitly
+    raw_dtypes = [SUPPORTED_RAW_DATA_TYPES[0] if dtype == 'raw' else dtype for dtype in dtypes if dtype.startswith('raw')]
+    assert all(raw_dtype in SUPPORTED_RAW_DATA_TYPES for raw_dtype in raw_dtypes), f'{raw_dtypes=} but {SUPPORTED_RAW_DATA_TYPES=} in {source}'
     
     # prepare pdts
+    pdts = [pdts] if type(pdts) is str else pdts
+    pdts = [pdt.replace('-', '_') for pdt in pdts]
     validate_pdts_and_ptypes(source, pdts, ptypes, is_cli=False)
     ptypes = [ptype.upper() for ptype in ptypes] if ptypes else SUPPORTED_PRODUCT_TYPES[:]
     pdts = [pdt.replace('-', '_').upper() for pdt in pdts] if pdts else []
@@ -102,8 +113,12 @@ def download_historical_data(
         pdts = create_pdts_using_ptypes(ptypes)
     
     # prepare dates
-    start_date = start_date or datetime.datetime.strptime(DATA_START_DATE, '%Y-%m-%d').date()
-    end_date = end_date or datetime.datetime.now(tz=datetime.timezone.utc).date()
+    start_date = start_date or DATA_START_DATE
+    start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+    if end_date:
+        end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+    else:
+        end_date = datetime.datetime.now(tz=datetime.timezone.utc).date()
     dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
     
     # check if use Ray
@@ -111,13 +126,14 @@ def download_historical_data(
     cprint(f"Ray is {'enabled' if use_ray else 'disabled'}", style='bold')
     
     # check if use MinIO
-    if use_minio:
-        assert check_if_minio_running(), "MinIO is not running or not detected"
     cprint(f"MinIO is {'enabled' if use_minio else 'disabled'}", style='bold')
 
     cprint(f'PFeed: downloading historical data from {source}, {start_date=} {end_date=}', style='bold yellow')
     for pdt in pdts if use_ray else tqdm(pdts, desc=f'Downloading {source} historical data by product', colour='green'):
-        product = exchange.create_product(*pdt.split('_'))
+        try:
+            product = exchange.create_product(*pdt.split('_'))
+        except KeyError:
+            raise ValueError(f'"{pdt}" is not a valid product in {source}')
         efilenames = api.get_efilenames(pdt)
         # check if the efilename created by the date exists in the efilenames (files on the data server)
         dates = [date for date in dates if create_efilename(pdt, date) in efilenames]
@@ -125,7 +141,7 @@ def download_historical_data(
             if use_ray:
                 ray_tasks[pdt].append((product, date))
             else:
-                run_etl(product, date, dtypes, data_path, use_minio)
+                run_etl(product, date, dtypes, use_minio)
 
     if use_ray:
         import ray
@@ -136,7 +152,7 @@ def download_historical_data(
             if not logger.handlers:
                 logger.addHandler(QueueHandler(log_queue))
                 logger.setLevel(logging.DEBUG)
-            run_etl(product, date, dtypes, data_path, use_minio)
+            run_etl(product, date, dtypes, use_minio)
 
         log_queue = Queue()
         QueueListener(log_queue, *logger.handlers, respect_handler_level=True).start()
@@ -148,6 +164,6 @@ def download_historical_data(
         
         ray.shutdown()  # without this will lead to segmentation fault
                 
-    logger.warning(f'finished downloading {source} historical data to {data_path}')
+    logger.warning(f'finished downloading {source} historical data to {config.data_path}')
 
 run = download_historical_data

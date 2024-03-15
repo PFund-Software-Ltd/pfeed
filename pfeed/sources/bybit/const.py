@@ -4,8 +4,8 @@ PTYPE_TO_CATEGORY = Exchange.PTYPE_TO_CATEGORY
 
 DATA_SOURCE = 'BYBIT'
 SUPPORTED_PRODUCT_TYPES = ['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT']
-RAW_DATA_TYPE = 'tick'
-DATA_START_DATE = '2020-01-01'  # do not need to be precise
+SUPPORTED_RAW_DATA_TYPES = ['raw_tick']
+DATA_START_DATE = '2020-01-01'  # do not need to be precise, if it doesn't exist, it will be skipped
 DATA_SOURCE_URLS = {
     'PERP': 'https://public.bybit.com/trading',
     'FUT': 'https://public.bybit.com/trading',
@@ -53,3 +53,5 @@ def create_efilename(pdt: str, date: str):
         return f'{epdt}_{date}.csv.gz'
     else:
         return f'{epdt}{date}.csv.gz'
+    
+    

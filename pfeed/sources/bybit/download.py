@@ -9,7 +9,7 @@ from tqdm import tqdm
 from rich.console import Console
 
 from pfeed.config_handler import ConfigHandler
-from pfeed.utils.utils import get_dates_in_between, complete_raw_dtype
+from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
 from pfeed.const.commons import SUPPORTED_DATA_TYPES
 from pfeed.sources.bybit.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES, PTYPE_TO_CATEGORY, create_efilename
@@ -96,13 +96,14 @@ def download_historical_data(
     
     # prepare dtypes
     dtypes = [dtypes] if type(dtypes) is str else dtypes
-    dtypes = [dtype.lower() for dtype in dtypes] if dtypes else SUPPORTED_RAW_DATA_TYPES[0]
+    if not dtypes:
+        dtypes = SUPPORTED_RAW_DATA_TYPES[0]
+    else:
+        # NOTE: if the data source supports only one raw data type, e.g. bybit has only 'raw_tick', 
+        # then 'raw' data type will be converted to 'raw_tick' implicitly
+        dtypes = [SUPPORTED_RAW_DATA_TYPES[0] if dtype.lower() == 'raw' else dtype.lower() for dtype in dtypes]
     assert all(dtype in SUPPORTED_DATA_TYPES for dtype in dtypes), f'{dtypes=} but {SUPPORTED_DATA_TYPES=}'
-    # NOTE: if the data source supports only one raw data type, e.g. bybit has only 'raw_tick', 
-    # then 'raw' data type will be converted to 'raw_tick' implicitly
-    raw_dtypes = [SUPPORTED_RAW_DATA_TYPES[0] if dtype == 'raw' else dtype for dtype in dtypes if dtype.startswith('raw')]
-    assert all(raw_dtype in SUPPORTED_RAW_DATA_TYPES for raw_dtype in raw_dtypes), f'{raw_dtypes=} but {SUPPORTED_RAW_DATA_TYPES=} in {source}'
-    
+
     # prepare pdts
     pdts = [pdts] if type(pdts) is str else pdts
     pdts = [pdt.replace('-', '_') for pdt in pdts]

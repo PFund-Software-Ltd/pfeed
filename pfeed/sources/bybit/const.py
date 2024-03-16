@@ -21,27 +21,8 @@ DATA_NAMING_REGEX_PATTERNS = {
     # match everything since everything from https://public.bybit.com/spot is spot
     'SPOT': '.*',
 }
-SELECTED_RAW_COLS = {
-    'PERP': ['timestamp', 'side', 'size', 'price'],
-    'FUT': ['timestamp', 'side', 'size', 'price'],
-    'IPERP': ['timestamp', 'side', 'size', 'price'],
-    'IFUT': ['timestamp', 'side', 'size', 'price'],
-    'SPOT': ['timestamp', 'side', 'volume', 'price'],
-}
-RENAMING_COLS = {
-    'PERP': {'timestamp': 'ts', 'size': 'volume'},
-    'FUT': {'timestamp': 'ts', 'size': 'volume'},
-    'IPERP': {'timestamp': 'ts', 'size': 'volume'},
-    'IFUT': {'timestamp': 'ts', 'size': 'volume'},
-    'SPOT': {'timestamp': 'ts'},
-}
-RAW_DATA_TIMESTAMP_UNITS = {
-    'PERP': 's',
-    'FUT': 's',
-    'IPERP': 's',
-    'IFUT': 's',
-    'SPOT': 'ms'
-}
+SELECTED_COLS = ['ts', 'side', 'volume', 'price']
+RENAMING_COLS = {'timestamp': 'ts', 'size': 'volume'}
 
 
 def create_efilename(pdt: str, date: str):

@@ -6,16 +6,36 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
+from minio.error import MinioException
 
-from pfeed.sources.bybit.const import DATA_SOURCE, SELECTED_RAW_COLS, RENAMING_COLS, RAW_DATA_TIMESTAMP_UNITS, SUPPORTED_RAW_DATA_TYPES
+from pfeed.sources.bybit.const import DATA_SOURCE, SELECTED_COLS, RENAMING_COLS, SUPPORTED_RAW_DATA_TYPES
 from pfeed.datastore import Datastore
 from pfeed.filepath import FilePath
 from pfeed.config_handler import ConfigHandler
-from pfeed.utils.utils import transform
-from pfeed.const.commons import SUPPORTED_DATA_TYPES
+from pfeed.const.commons import SUPPORTED_DATA_TYPES, SUPPORTED_DATA_STORAGES
 
 
 logger = logging.getLogger(DATA_SOURCE.lower())
+
+
+def get_data(
+    dtype: Literal['raw_tick', 'raw', 'tick', 'second', 'minute', 'hour', 'daily'],
+    pdt: str,
+    date: str,
+    mode: Literal['historical', 'streaming']='historical',
+) -> bytes | None:
+    """Extract data without specifying the data origin. 
+    This function will try to extract data from all supported data origins.
+    """
+    for data_origin in SUPPORTED_DATA_STORAGES:
+        try:
+            data: bytes = extract_data(data_origin, dtype, pdt, date, mode=mode)
+        except MinioException:
+            data = None
+        if data:
+            return data
+    else:
+        logger.warning(f'{pdt} {date} {dtype} data is nowhere to be found, {SUPPORTED_DATA_STORAGES=}')
 
 
 def extract_data(
@@ -25,22 +45,23 @@ def extract_data(
     date: str,
     mode: Literal['historical', 'streaming']='historical',
 ) -> bytes | None:
+    assert data_origin in SUPPORTED_DATA_STORAGES, f'Invalid {data_origin=}, {SUPPORTED_DATA_STORAGES=}'
     # convert 'raw' to 'raw_tick'
     if dtype == 'raw':
-        dtype = SUPPORTED_RAW_DATA_TYPES[0]  
-    assert dtype in SUPPORTED_DATA_TYPES, f'invalid {dtype=}, {SUPPORTED_DATA_TYPES=}'
+        dtype = SUPPORTED_RAW_DATA_TYPES[0]
+    assert dtype in SUPPORTED_DATA_TYPES, f'Invalid {dtype=}, {SUPPORTED_DATA_TYPES=}'
+    assert mode in ['historical', 'streaming'], f'Invalid {mode=}'
      
     config = ConfigHandler.load_config()
-    file_extension = '.csv.gz' if dtype == 'raw_tick' else '.parquet.gz'
-    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=config.data_path, file_extension=file_extension)
+    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=config.data_path, file_extension='.parquet')
     if data_origin == 'local':
         if fp.exists():
             with open(fp.file_path, 'rb') as f:
                 data: bytes = f.read()
-                logger.debug(f'extracted data from {fp.storage_path}')
-                return data
+            logger.debug(f'extracted data from {fp.storage_path}')
+            return data
         else:
-            logger.error(f'failed to extract data from local path: {fp.storage_path}')
+            logger.warning(f'failed to extract data from local path: {fp.storage_path}')
     elif data_origin == 'minio':
         datastore = Datastore()
         object_name = fp.storage_path
@@ -48,7 +69,9 @@ def extract_data(
         if data:
             logger.debug(f'extracted data from MinIO object {object_name}')
         else:
-            logger.error(f'failed to extract data from MinIO object {object_name}')
+            logger.warning(f'failed to extract data from MinIO object {object_name}')
+        # TODO: convert to df
+        # ...
         return data
     # TODO
     elif data_origin == 'timescaledb':
@@ -59,21 +82,22 @@ def extract_data(
 
 def load_data(
     data_destination: Literal['local', 'minio', 'timescaledb'],
-    mode: Literal['historical', 'streaming'],
+    data: bytes,
     dtype: Literal['raw_tick', 'raw', 'tick', 'second', 'minute', 'hour', 'daily'],
     pdt: str,
     date: str,
-    data: bytes,
+    mode: Literal['historical', 'streaming'] = 'historical',
     **kwargs
 ):  
+    assert data_destination in SUPPORTED_DATA_STORAGES, f'Invalid {data_destination=}, {SUPPORTED_DATA_STORAGES=}'
     # convert 'raw' to 'raw_tick'
     if dtype == 'raw':
         dtype = SUPPORTED_RAW_DATA_TYPES[0]  
-    assert dtype in SUPPORTED_DATA_TYPES, f'invalid {dtype=}, {SUPPORTED_DATA_TYPES=}'
+    assert dtype in SUPPORTED_DATA_TYPES, f'Invalid {dtype=}, {SUPPORTED_DATA_TYPES=}'
+    assert mode in ['historical', 'streaming'], f'Invalid {mode=}'
     
     config = ConfigHandler.load_config()
-    file_extension = '.csv.gz' if dtype == 'raw_tick' else '.parquet.gz'
-    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=config.data_path, file_extension=file_extension)
+    fp = FilePath(DATA_SOURCE, mode, dtype, pdt, date, data_path=config.data_path, file_extension='.parquet')
     if data_destination == 'local':
         fp.parent.mkdir(parents=True, exist_ok=True)
         with open(fp.file_path, 'wb') as f:
@@ -91,24 +115,30 @@ def load_data(
         raise NotImplementedError(f'{data_destination=}')
         
 
-@transform
-def clean_data(ptype: str, data: bytes) -> bytes:
-    df = pd.read_csv(io.BytesIO(data), compression='gzip')
-    df = df.loc[:, SELECTED_RAW_COLS[ptype]]
+def clean_raw_data(raw_data: bytes) -> bytes:
+    """Convert raw data to internal data format, e.g. renaming, setting index to datetime etc."""
+    df = pd.read_csv(io.BytesIO(raw_data), compression='gzip')
     df['side'] = df['side'].map({'Buy': 1, 'Sell': -1})
-    df = df.rename(columns=RENAMING_COLS[ptype])
-    df.set_index('ts', inplace=True)
-    # NOTE: this may make the `ts` value inaccurate, 
-    # e.g. 1671580800.9906 -> 1671580800.990600192
-    df.index = pd.to_datetime(df.index, unit=RAW_DATA_TIMESTAMP_UNITS[ptype])
-    return df.to_parquet()
+    df = df.rename(columns=RENAMING_COLS)
+    # NOTE: for ptype SPOT, unit is ms, e.g. 1671580800123, in milliseconds
+    unit = 'ms' if df['ts'][0] > 10**12 else 's'  # REVIEW
+    # NOTE: this may make the `ts` value inaccurate, e.g. 1671580800.9906 -> 1671580800.990600192
+    df['ts'] = pd.to_datetime(df['ts'], unit=unit)
+    raw_tick: bytes = df.to_parquet(compression='snappy')
+    return raw_tick
 
 
-@transform
-def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to_parquet=True) -> bytes:
+def clean_raw_tick_data(raw_tick: bytes) -> bytes:
+    """filter out unnecessary columns"""
+    df = pd.read_parquet(io.BytesIO(raw_tick))
+    df = df.loc[:, SELECTED_COLS]
+    tick_data: bytes = df.to_parquet(compression='snappy')
+    return tick_data
+
+
+def resample_data(data: bytes, resolution: str, only_ohlcv=False) -> bytes:
     '''
     Args:
-        is_tick: if True, use tick data to resample data
         resolution: # + unit (s/m/h/d), e.g. 1s
     '''
     def find_high_or_low_first(series: pd.Series):
@@ -129,23 +159,24 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
             # If arg_high == arg_low, return the original value of 'first'
             return row['first']
         
-    # EXTEND:
     # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
     if 'm' in resolution:
-        resolution = resolution.replace('m', 'min')
+        eresolution = resolution.replace('m', 'min')
     elif 'd' in resolution:
-        resolution = resolution.replace('d', 'D')
+        eresolution = resolution.replace('d', 'D')
+    else:
+        eresolution = resolution
     
     if type(data) is bytes:
         df = pd.read_parquet(io.BytesIO(data))
-    elif type(data) is pd.DataFrame:
-        df = data
     else:
         raise TypeError(f'invalid data type {type(data)}')
     
+    is_tick_data = True if 'price' in df.columns else False
     assert not df.empty, 'data is empty'
+    df.set_index('ts', inplace=True)
     
-    if is_tick:
+    if is_tick_data:
         df['num_buys'] = df['side'].map({1: 1, -1: np.nan})
         df['num_sells'] = df['side'].map({1: np.nan, -1: 1})
         df['buy_volume'] = np.where(df['side'] == 1, df['volume'], np.nan)
@@ -181,11 +212,11 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
             
     resampled_df = (
         df
-        .resample(resolution)
+        .resample(eresolution)
         .apply(resample_logic)
     )
     
-    if is_tick:
+    if is_tick_data:
         resampled_df = resampled_df.droplevel(0, axis=1)
         # convert float to int
         resampled_df['num_buys'] = resampled_df['num_buys'].astype(int)
@@ -196,16 +227,8 @@ def resample_data(data: bytes | pd.DataFrame, resolution: str, is_tick=False, to
 
     resampled_df.dropna(subset=[col for col in resampled_df.columns if col != 'first'], inplace=True)
     
-    if to_parquet:
-        return resampled_df.to_parquet()
-    else:
-        return resampled_df
-
-
-if __name__ == '__main__':
-    pdt = 'BTC_USDT_PERP'
-    date = '2024-02-14'
-    dtype = 'daily'
-    data: bytes = extract_data(pdt, date, dtype)
-    df = resample_data(data, '1d', is_tick=(dtype == 'tick'), to_parquet=False)
-    print(df)
+    if only_ohlcv:
+        resampled_df = resampled_df[['open', 'high', 'low', 'close', 'volume']]
+    
+    resampled_df.reset_index(inplace=True)
+    return resampled_df.to_parquet(compression='snappy')

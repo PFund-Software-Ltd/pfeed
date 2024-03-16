@@ -7,6 +7,7 @@ from requests.exceptions import RequestException, ReadTimeout
 from typing import Generator
 
 from minio import Minio, S3Error
+from minio.error import MinioException
 from minio.api import ObjectWriteResult
 
 
@@ -23,15 +24,15 @@ def assert_if_minio_running():
     try:
         response = requests.get(f'{endpoint}/minio/health/live', timeout=3)
         if response.status_code != 200:
-            raise Exception(f"Unhandled response: {response.status_code=} {response.content} {response}")
+            raise MinioException(f"Unhandled response: {response.status_code=} {response.content} {response}")
     except (ReadTimeout, RequestException) as e:
-        raise Exception(f"MinIO is not running or not detected on {endpoint}: {e}")
+        raise MinioException(f"MinIO is not running or not detected on {endpoint}: {e}")
 
 
 def assert_if_minio_access_key_and_secret_key_provided():
     if not (os.getenv('MINIO_ACCESS_KEY') and os.getenv('MINIO_SECRET_KEY')):
         console_endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
-        raise Exception(f'''MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,
+        raise MinioException(f'''MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,
             Please create them using MinIO Console on {console_endpoint}.
             For details, please refer to https://min.io/docs/minio/container/administration/console/security-and-access.html
         ''')

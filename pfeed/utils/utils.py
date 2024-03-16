@@ -4,11 +4,6 @@ import calendar
 import pytz
 
 
-def transform(fn):
-    '''Marks a function as intended for data transformation'''
-    return fn
-
-
 def get_TZ_abbrev_and_UTC_offset(date: str, tz_identifier='US/Eastern'):
     '''Returns timezone abbreviation (e.g. EST, EDT) based on the timezone identifier.
     Useful when you want to determine if e.g. New York is in EST or EDT now.

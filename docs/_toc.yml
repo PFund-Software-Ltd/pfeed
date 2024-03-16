@@ -11,6 +11,7 @@ chapters:
     sections:
     - file: getting-started/quickstart/download_data
     - file: getting-started/quickstart/stream_data
+- file: concepts/index
 - file: tutorials/index
 - file: how-to-guides/index
 - file: api-reference

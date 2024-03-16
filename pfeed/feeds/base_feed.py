@@ -22,16 +22,21 @@ class BaseFeed:
     def _derive_dtype_from_resolution(resolution):
         from pfund.datas.resolution import Resolution
         
-        resolution = Resolution(resolution)
-        if resolution.is_tick():
-            return 'tick'
-        elif resolution.is_second():
-            return 'second'
-        elif resolution.is_minute():
-            return 'minute'
-        elif resolution.is_hour():
-            return 'hour'
-        elif resolution.is_day():
-            return 'daily'
+        if resolution.startswith('raw'):
+            dtype = resolution
+            return dtype
         else:
-            raise Exception(f'{resolution=} is not supported')
+            resolution = Resolution(resolution)
+            if resolution.is_tick():
+                assert resolution.period == 1, f'{resolution=} is not supported'
+                return 'tick'
+            elif resolution.is_second():
+                return 'second'
+            elif resolution.is_minute():
+                return 'minute'
+            elif resolution.is_hour():
+                return 'hour'
+            elif resolution.is_day():
+                return 'daily'
+            else:
+                raise Exception(f'{resolution=} is not supported')

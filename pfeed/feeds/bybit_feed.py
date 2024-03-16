@@ -1,5 +1,8 @@
+"""High-level API for getting historical/streaming data from Bybit."""
 import io
 import datetime
+
+from typing import Literal
 
 import pandas as pd
 
@@ -23,16 +26,31 @@ class BybitFeed(BaseFeed):
         self,
         pdt: str,
         rollback_period: str='1w',
-        resolution: str='1d',
+        resolution: str | Literal['raw', 'raw_tick']='1d',
         start_date: str=None,
         end_date: str=None,
+        only_ohlcv: bool=False,
     ) -> pd.DataFrame:
-        source = DATA_SOURCE
-        exchange = Exchange(env='LIVE')
+        """Get historical data from Bybit.
+        Args:
+            pdt: Product symbol, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
+            rollback_period: 
+                Period to rollback from today, only used when `start_date` is not specified.
+                Default is '1w' = 1 week.
+            resolution: Data resolution, 
+                e.g. '1m' = 1 minute as the unit of each data bar/candle.
+                if resolution='raw'/'raw_tick', 
+                return the downloaded raw tick data from Bybit directly after standardizing the format.
+                Default is '1d' = 1 day.
+            start_date: Start date.
+            end_date: End date.
+            only_ohlcv: If True, only return OHLCV columns.
+        """
+        # exchange = Exchange(env='LIVE')
         # adapter = exchange.adapter
+        # product = exchange.create_product(*pdt.split('_'))
+        source = DATA_SOURCE
         dtype = self._derive_dtype_from_resolution(resolution)
-        product = exchange.create_product(*pdt.split('_'))
-        ptype = product.ptype
         efilenames = api.get_efilenames(pdt)
         
         if start_date:
@@ -45,20 +63,30 @@ class BybitFeed(BaseFeed):
         dfs = []
         dates = [date for date in dates if create_efilename(pdt, date) in efilenames]
         for date in dates:
-            data_str = f'{source} {pdt} {date}'
-            if local_data := etl.extract_data(pdt, date, dtype, mode='historical', data_path=self.data_path):
-                # e.g. local_data could be 1m data (period always = 1), but resampled_data could be 3m data
-                resampled_data: bytes = etl.resample_data(local_data, resolution, is_tick=(dtype == 'tick'))
-                self.logger.info(f'loaded {data_str} local {dtype} data')
+            data_str = f'{source} {pdt} {date} {dtype}'
+            if local_data := etl.get_data(dtype, pdt, date, mode='historical'):
+                self.logger.debug(f'loaded {data_str} data locally')
+                if dtype not in ['raw', 'raw_tick', 'tick']:
+                    data: bytes = etl.resample_data(local_data, resolution, only_ohlcv=only_ohlcv)
+                    self.logger.debug(f'resampled {data_str} data to {resolution=}')
+                else:
+                    data = local_data
             else:
                 self.logger.warning(f"Downloading {data_str} data on the fly, please consider using pfeed's {source.lower()}.download(...) to pre-download data to your local computer first")
                 if raw_data := api.get_data(pdt, date):
-                    tick_data: bytes = etl.clean_data(ptype, raw_data)
-                    resampled_data: bytes = etl.resample_data(tick_data, resolution, is_tick=True)
-                    self.logger.debug(f'resampled {data_str} data to {resolution=}')
+                    raw_tick: bytes = etl.clean_raw_data(raw_data)
+                    if dtype in ['raw', 'raw_tick']:
+                        data = raw_tick
+                    else:
+                        tick_data: bytes = etl.clean_raw_tick_data(raw_tick)
+                        if dtype != 'tick':
+                            data: bytes = etl.resample_data(tick_data, resolution, only_ohlcv=only_ohlcv)
+                            self.logger.debug(f'resampled {data_str} data to {resolution=}')
+                        else:
+                            data = tick_data
                 else:
-                    raise Exception(f'failed to download {data_str} historical data')
-            df = pd.read_parquet(io.BytesIO(resampled_data))
+                    raise Exception(f'failed to download {data_str} historical data, please check your network connection')
+            df = pd.read_parquet(io.BytesIO(data))
             dfs.append(df)
         
         df = pd.concat(dfs)
@@ -66,7 +94,9 @@ class BybitFeed(BaseFeed):
         # NOTE: Since the downloaded data is in daily units, we can't resample it to e.g. '2d' resolution
         # using the above logic. Need to resample the aggregated daily data to resolution '2d':
         if dtype == 'daily' and resolution != '1d':
-            df = etl.resample_data(df, resolution, is_tick=False, to_parquet=False)
+            data: bytes = df.to_parquet(compression='snappy')
+            resampled_data: bytes = etl.resample_data(data, resolution, only_ohlcv=only_ohlcv)
+            df = pd.read_parquet(io.BytesIO(resampled_data))
             
         df.insert(0, 'product', pdt)
         df.insert(1, 'resolution', resolution)
@@ -75,9 +105,3 @@ class BybitFeed(BaseFeed):
     # TODO?: maybe useful if used as a standalone program, not useful at all if used with PFund
     def get_real_time_data(self, env='LIVE'):
         pass
-    
-        
-if __name__ == '__main__':
-    feed = BybitFeed()
-    df = feed.get_historical_data('BTC_USDT_PERP', resolution='1d', rollback_period='2d')
-    print(df)

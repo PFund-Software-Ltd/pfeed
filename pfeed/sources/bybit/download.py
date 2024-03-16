@@ -26,7 +26,7 @@ exchange = Exchange(env='LIVE')
 adapter = exchange.adapter
 
 
-__all__ = ['download_historical_data', 'download']
+__all__ = ['download_historical_data']
 
 
 def create_pdts_using_ptypes(ptypes) -> list[str]:
@@ -40,16 +40,17 @@ def create_pdts_using_ptypes(ptypes) -> list[str]:
 
 
 def run_etl(product: BaseProduct, date, dtypes, use_minio):
-    ptype, pdt = product.ptype, product.pdt
+    pdt = product.pdt
     if raw_data := api.get_data(pdt, date):
-        tick_data: bytes = etl.clean_data(ptype, raw_data)
-        second_data: bytes = etl.resample_data(tick_data, resolution='1s', is_tick=True)
+        raw_tick: bytes = etl.clean_raw_data(raw_data)
+        tick_data: bytes = etl.clean_raw_tick_data(raw_tick)
+        second_data: bytes = etl.resample_data(tick_data, resolution='1s')
         minute_data: bytes = etl.resample_data(second_data, resolution='1m')
         hour_data: bytes = etl.resample_data(minute_data, resolution='1h')
         daily_data: bytes = etl.resample_data(hour_data, resolution='1d')
         logger.debug(f'resampled {DATA_SOURCE} {pdt} {date} data')
         resampled_datas = {
-            'raw_tick': raw_data,
+            'raw_tick': raw_tick,
             'tick': tick_data,
             'second': second_data,
             'minute': minute_data,
@@ -57,9 +58,9 @@ def run_etl(product: BaseProduct, date, dtypes, use_minio):
             'daily': daily_data,
         }
         for dtype in dtypes:
-            data = resampled_datas[dtype]
+            data: bytes = resampled_datas[dtype]
             data_destination = 'minio' if use_minio else 'local'
-            etl.load_data(data_destination, 'historical', dtype, pdt, date, data)
+            etl.load_data(data_destination, data, dtype, pdt, date, mode='historical')
     else:
         raise Exception(f'failed to download {DATA_SOURCE} {pdt} {date} historical data')
 
@@ -106,12 +107,14 @@ def download_historical_data(
 
     # prepare pdts
     pdts = [pdts] if type(pdts) is str else pdts
-    pdts = [pdt.replace('-', '_') for pdt in pdts]
+    pdts = [pdt.replace('-', '_').upper() for pdt in pdts]
+    ptypes = [ptypes] if type(ptypes) is str else ptypes
+    ptypes = [ptype.upper() for ptype in ptypes]
     validate_pdts_and_ptypes(source, pdts, ptypes, is_cli=False)
-    ptypes = [ptype.upper() for ptype in ptypes] if ptypes else SUPPORTED_PRODUCT_TYPES[:]
-    pdts = [pdt.replace('-', '_').upper() for pdt in pdts] if pdts else []
     if not pdts:
         pdts = create_pdts_using_ptypes(ptypes)
+    if not ptypes:
+        ptypes = SUPPORTED_PRODUCT_TYPES[:]
     
     # prepare dates
     start_date = start_date or datetime.datetime.strptime(DATA_START_DATE, '%Y-%m-%d').date()

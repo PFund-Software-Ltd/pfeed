@@ -6,6 +6,17 @@ import click
 from rich.console import Console
 
 
+def validate_pdt(source: str, pdt: str) -> bool:
+    SUPPORTED_PRODUCT_TYPES = getattr(importlib.import_module(f'pfeed.sources.{source.lower()}.const'), 'SUPPORTED_PRODUCT_TYPES')
+    # REVIEW: pattern: XXX_YYY_PTYPE, hard-coded the max length of XXX and YYY is 8
+    pdt_pattern = re.compile(r'^[A-Za-z]{1,8}_[A-Za-z]{1,8}_(.+)$')
+    match = pdt_pattern.match(pdt)
+    if not match or match.group(1) not in SUPPORTED_PRODUCT_TYPES:
+        return False
+    else:
+        return True
+
+
 def validate_pdts_and_ptypes(source: str, pdts: list[str], ptypes: list[str], is_cli=False):
     SUPPORTED_PRODUCT_TYPES = getattr(importlib.import_module(f'pfeed.sources.{source.lower()}.const'), 'SUPPORTED_PRODUCT_TYPES')
     if not pdts and not ptypes:
@@ -13,11 +24,8 @@ def validate_pdts_and_ptypes(source: str, pdts: list[str], ptypes: list[str], is
         if is_cli and not click.confirm('Do you want to continue?', default=False):
             sys.exit(1)
     elif pdts:
-        # REVIEW: pattern: XXX_YYY_PTYPE, hard-coded the max length of XXX and YYY is 8
-        pdt_pattern = re.compile(r'^[A-Za-z]{1,8}_[A-Za-z]{1,8}_(.+)$')
         for pdt in pdts:
-            match = pdt_pattern.match(pdt)
-            if not match or match.group(1) not in SUPPORTED_PRODUCT_TYPES:
+            if not validate_pdt(source, pdt):
                 error_msg = f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {source} are: {SUPPORTED_PRODUCT_TYPES})'
                 raise click.BadParameter(error_msg) if is_cli else ValueError(error_msg)
     elif ptypes:

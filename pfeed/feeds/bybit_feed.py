@@ -10,9 +10,10 @@ from pfeed.config_handler import ConfigHandler
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit import etl
-from pfeed.sources.bybit.const import DATA_SOURCE, create_efilename
+from pfeed.sources.bybit.const import DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES, create_efilename
 from pfeed.utils.utils import get_dates_in_between, rollback_date_range
-from pfund.exchanges.bybit.exchange import Exchange
+from pfeed.utils.validate import validate_pdt
+# from pfund.exchanges.bybit.exchange import Exchange
 
 
 __all__ = ['BybitFeed']
@@ -46,18 +47,31 @@ class BybitFeed(BaseFeed):
             end_date: End date.
             only_ohlcv: If True, only return OHLCV columns.
         """
+        from pfund.datas.resolution import Resolution
+        
         # exchange = Exchange(env='LIVE')
         # adapter = exchange.adapter
         # product = exchange.create_product(*pdt.split('_'))
         source = DATA_SOURCE
-        dtype = self._derive_dtype_from_resolution(resolution)
+        
+        assert validate_pdt(source, pdt), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {source} are: {SUPPORTED_PRODUCT_TYPES})'
+        
+        if resolution.startswith('raw'):
+            dtype = resolution
+            resolution = Resolution('1tick')  # NOTE: bybit only has raw tick data
+        else:
+            resolution = Resolution(resolution)
+            dtype = self._derive_dtype_from_resolution(resolution)
+        assert dtype in SUPPORTED_RAW_DATA_TYPES, f'{dtype=} is not supported for {source} data'
+        
         efilenames = api.get_efilenames(pdt)
         
         if start_date:
             # default for end_date is yesterday
             end_date: str = end_date or (datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
         else:
-            start_date, end_date = rollback_date_range(rollback_period)
+            rollback_period = Resolution(rollback_period)
+            start_date, end_date = rollback_date_range(repr(rollback_period))
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         
         dfs = []

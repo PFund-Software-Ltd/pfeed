@@ -76,7 +76,7 @@ def download_historical_data(
     use_minio: bool=False,
     debug: bool=False,
     config: ConfigHandler | None=None,
-):    
+) -> None:
     # setup
     source = DATA_SOURCE
     

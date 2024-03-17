@@ -5,7 +5,7 @@ from typing import Literal
 
 from pfeed.utils.utils import create_filename
 from pfeed.const.paths import DATA_PATH
-from pfeed.const.commons import SUPPORTED_DATA_TYPES
+
 
 @dataclass
 class FilePath:

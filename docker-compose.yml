@@ -13,14 +13,14 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pfunder}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-password}
     command: server /data --console-address ":${MINIO_CONSOLE_PORT:-9001}"
-  timescaledb:
-    container_name: pe-timescaledb
-    image: timescaledev/timescaledb-ha:pg16.2-ts2.14.1-all
-    ports:
-      - "${TIMESCALEDB_PORT:-5432}:5432"
-    volumes:
-      - ${PFEED_DATA_PATH}/timescaledb:/var/lib/postgresql/data
-    environment:
-      POSTGRES_DB: ${TIMESCALEDB_DB:-pfeed}
-      POSTGRES_USER: ${TIMESCALEDB_USER:-pfunder}
-      POSTGRES_PASSWORD: ${TIMESCALEDB_PASSWORD:-password}
+  # timescaledb:
+  #   container_name: pe-timescaledb
+  #   image: timescaledev/timescaledb-ha:pg16.2-ts2.14.1-all
+  #   ports:
+  #     - "${TIMESCALEDB_PORT:-5432}:5432"
+  #   volumes:
+  #     - ${PFEED_DATA_PATH}/timescaledb:/var/lib/postgresql/data
+  #   environment:
+  #     POSTGRES_DB: ${TIMESCALEDB_DB:-pfeed}
+  #     POSTGRES_USER: ${TIMESCALEDB_USER:-pfunder}
+  #     POSTGRES_PASSWORD: ${TIMESCALEDB_PASSWORD:-password}

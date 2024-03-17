@@ -8,13 +8,13 @@ from logging.handlers import QueueHandler, QueueListener
 from tqdm import tqdm
 from rich.console import Console
 
+from pfeed import etl
 from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
 from pfeed.const.commons import SUPPORTED_DATA_TYPES
 from pfeed.sources.bybit.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES, PTYPE_TO_CATEGORY, create_efilename
 from pfeed.sources.bybit import api
-from pfeed.sources.bybit import etl
 from pfund.products.product_base import BaseProduct
 from pfund.exchanges.bybit.exchange import Exchange
 from pfund.plogging import set_up_loggers
@@ -42,7 +42,7 @@ def create_pdts_using_ptypes(ptypes) -> list[str]:
 def run_etl(product: BaseProduct, date, dtypes, use_minio):
     pdt = product.pdt
     if raw_data := api.get_data(pdt, date):
-        raw_tick: bytes = etl.clean_raw_data(raw_data)
+        raw_tick: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)
         tick_data: bytes = etl.clean_raw_tick_data(raw_tick)
         second_data: bytes = etl.resample_data(tick_data, resolution='1s')
         minute_data: bytes = etl.resample_data(second_data, resolution='1m')

@@ -6,10 +6,10 @@ from typing import Literal
 
 import pandas as pd
 
+from pfeed import etl
 from pfeed.config_handler import ConfigHandler
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit import api
-from pfeed.sources.bybit import etl
 from pfeed.sources.bybit.const import DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, create_efilename
 from pfeed.utils.utils import get_dates_in_between, rollback_date_range
 from pfeed.utils.validate import validate_pdt
@@ -67,7 +67,7 @@ class BybitFeed(BaseFeed):
         dfs = []
         dates = [date for date in dates if create_efilename(pdt, date) in efilenames]
         for date in dates:
-            if local_data := etl.get_data(dtype, pdt, date, mode='historical'):
+            if local_data := etl.get_data(DATA_SOURCE, dtype, pdt, date, mode='historical'):
                 local_data_dtype = dtype
             # if can't find local data with dtype e.g. second, check if raw data exists
             elif dtype != 'raw_tick' and (local_data := etl.get_data('raw_tick', pdt, date, mode='historical')):
@@ -86,12 +86,12 @@ class BybitFeed(BaseFeed):
                         data: bytes = etl.resample_data(local_data, resolution, only_ohlcv=only_ohlcv)
                     else:
                         data: bytes = etl.clean_raw_tick_data(local_data)
-                    self.logger.info(f'resampled {data_str} data to {resolution=}')
+                    self.logger.warning(f'resampled local {data_str} data on the fly to {resolution=}, please consider storing "{dtype}" data locally')
             else:
                 data_str = f'{source} {pdt} {date} {dtype}'
                 self.logger.warning(f"Downloading {data_str} data on the fly, please consider using pfeed's {source.lower()}.download(...) to pre-download data to your local computer first")
                 if raw_data := api.get_data(pdt, date):
-                    raw_tick: bytes = etl.clean_raw_data(raw_data)
+                    raw_tick: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)
                     if dtype == 'raw_tick':
                         data = raw_tick
                     else:
@@ -108,15 +108,17 @@ class BybitFeed(BaseFeed):
         
         df = pd.concat(dfs)
         
+        resolution = Resolution(resolution)
+        
         # NOTE: Since the downloaded data is in daily units, we can't resample it to e.g. '2d' resolution
         # using the above logic. Need to resample the aggregated daily data to resolution '2d':
-        if dtype == 'daily' and resolution != '1d':
+        if dtype == 'daily' and repr(resolution) != '1d':
             data: bytes = df.to_parquet(compression='snappy')
-            resampled_data: bytes = etl.resample_data(data, resolution, only_ohlcv=only_ohlcv)
+            resampled_data: bytes = etl.resample_data(data, repr(resolution), only_ohlcv=only_ohlcv)
             df = pd.read_parquet(io.BytesIO(resampled_data))
         
         df.insert(0, 'product', pdt)
-        df.insert(1, 'resolution', repr(Resolution(resolution)))
+        df.insert(1, 'resolution', repr(resolution))
         
         return df
     

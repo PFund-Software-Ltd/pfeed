@@ -10,7 +10,7 @@ from pfeed.config_handler import ConfigHandler
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit import etl
-from pfeed.sources.bybit.const import DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES, create_efilename
+from pfeed.sources.bybit.const import DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, create_efilename
 from pfeed.utils.utils import get_dates_in_between, rollback_date_range
 from pfeed.utils.validate import validate_pdt
 # from pfund.exchanges.bybit.exchange import Exchange
@@ -27,7 +27,8 @@ class BybitFeed(BaseFeed):
         self,
         pdt: str,
         rollback_period: str='1w',
-        resolution: str | Literal['raw', 'raw_tick']='1d',
+        # HACK: mixing resolution with dtype for convenience
+        resolution: str | Literal['raw', 'raw_tick']='1d',  
         start_date: str=None,
         end_date: str=None,
         only_ohlcv: bool=False,
@@ -53,49 +54,51 @@ class BybitFeed(BaseFeed):
         # adapter = exchange.adapter
         # product = exchange.create_product(*pdt.split('_'))
         source = DATA_SOURCE
-        
         assert validate_pdt(source, pdt), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {source} are: {SUPPORTED_PRODUCT_TYPES})'
-        
-        if resolution.startswith('raw'):
-            dtype = resolution
-            resolution = Resolution('1tick')  # NOTE: bybit only has raw tick data
-        else:
-            resolution = Resolution(resolution)
-            dtype = self._derive_dtype_from_resolution(resolution)
-        assert dtype in SUPPORTED_RAW_DATA_TYPES, f'{dtype=} is not supported for {source} data'
-        
+        dtype = self._derive_dtype_from_resolution(resolution)
         efilenames = api.get_efilenames(pdt)
-        
         if start_date:
             # default for end_date is yesterday
             end_date: str = end_date or (datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
         else:
-            rollback_period = Resolution(rollback_period)
-            start_date, end_date = rollback_date_range(repr(rollback_period))
+            start_date, end_date = rollback_date_range(rollback_period)
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         
         dfs = []
         dates = [date for date in dates if create_efilename(pdt, date) in efilenames]
         for date in dates:
-            data_str = f'{source} {pdt} {date} {dtype}'
             if local_data := etl.get_data(dtype, pdt, date, mode='historical'):
-                self.logger.debug(f'loaded {data_str} data locally')
-                if dtype not in ['raw', 'raw_tick', 'tick']:
-                    data: bytes = etl.resample_data(local_data, resolution, only_ohlcv=only_ohlcv)
-                    self.logger.debug(f'resampled {data_str} data to {resolution=}')
-                else:
-                    data = local_data
+                local_data_dtype = dtype
+            # if can't find local data with dtype e.g. second, check if raw data exists
+            elif dtype != 'raw_tick' and (local_data := etl.get_data('raw_tick', pdt, date, mode='historical')):
+                local_data_dtype = 'raw_tick'
+                self.logger.warning(f'No local data found with {dtype=}, switch to find "{local_data_dtype}" data instead')
             else:
+                local_data_dtype = ''
+            
+            if local_data:
+                data_str = f'{source} {pdt} {date}'
+                self.logger.info(f'loaded {data_str} {local_data_dtype} data locally')
+                if local_data_dtype == dtype:
+                    data = local_data
+                else:
+                    if dtype != 'tick':
+                        data: bytes = etl.resample_data(local_data, resolution, only_ohlcv=only_ohlcv)
+                    else:
+                        data: bytes = etl.clean_raw_tick_data(local_data)
+                    self.logger.info(f'resampled {data_str} data to {resolution=}')
+            else:
+                data_str = f'{source} {pdt} {date} {dtype}'
                 self.logger.warning(f"Downloading {data_str} data on the fly, please consider using pfeed's {source.lower()}.download(...) to pre-download data to your local computer first")
                 if raw_data := api.get_data(pdt, date):
                     raw_tick: bytes = etl.clean_raw_data(raw_data)
-                    if dtype in ['raw', 'raw_tick']:
+                    if dtype == 'raw_tick':
                         data = raw_tick
                     else:
                         tick_data: bytes = etl.clean_raw_tick_data(raw_tick)
                         if dtype != 'tick':
                             data: bytes = etl.resample_data(tick_data, resolution, only_ohlcv=only_ohlcv)
-                            self.logger.debug(f'resampled {data_str} data to {resolution=}')
+                            self.logger.info(f'resampled {data_str} data to {resolution=}')
                         else:
                             data = tick_data
                 else:
@@ -111,9 +114,10 @@ class BybitFeed(BaseFeed):
             data: bytes = df.to_parquet(compression='snappy')
             resampled_data: bytes = etl.resample_data(data, resolution, only_ohlcv=only_ohlcv)
             df = pd.read_parquet(io.BytesIO(resampled_data))
-            
+        
         df.insert(0, 'product', pdt)
-        df.insert(1, 'resolution', resolution)
+        df.insert(1, 'resolution', repr(Resolution(resolution)))
+        
         return df
     
     # TODO?: maybe useful if used as a standalone program, not useful at all if used with PFund

@@ -61,7 +61,7 @@ def extract_data(
             logger.debug(f'extracted data from {fp.storage_path}')
             return data
         else:
-            logger.warning(f'failed to extract data from local path: {fp.storage_path}')
+            logger.debug(f'failed to extract data from local path: {fp.storage_path}')
     elif data_origin == 'minio':
         datastore = Datastore()
         object_name = fp.storage_path
@@ -69,7 +69,7 @@ def extract_data(
         if data:
             logger.debug(f'extracted data from MinIO object {object_name}')
         else:
-            logger.warning(f'failed to extract data from MinIO object {object_name}')
+            logger.debug(f'failed to extract data from MinIO object {object_name}')
         # TODO: convert to df
         # ...
         return data

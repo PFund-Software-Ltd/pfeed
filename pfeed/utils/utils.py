@@ -43,6 +43,11 @@ def extract_date_from_filename(filename: str) -> str | None:
 
 
 def rollback_date_range(rollback_period: str) -> tuple[datetime.date, datetime.date]:
+    from pfund.datas.resolution import Resolution
+    
+    # check if rollback_period is a valid Resolution
+    rollback_period = repr(Resolution(rollback_period))
+    
     '''Returns start_date and end_date based on the rollback_period (e.g. '1w', '1M').'''
     def _nextmonth(year, month):
         if month == 12:

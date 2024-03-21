@@ -21,6 +21,7 @@ DATA_NAMING_REGEX_PATTERNS = {
     # match everything since everything from https://public.bybit.com/spot is spot
     'SPOT': '.*',
 }
+MAPPING_COLS = {'Buy': 1, 'Sell': -1}
 RENAMING_COLS = {'timestamp': 'ts', 'size': 'volume'}
 
 

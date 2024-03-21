@@ -26,7 +26,7 @@ class BaseFeed:
         if resolution.startswith('raw'):
             SUPPORTED_RAW_DATA_TYPES = getattr(importlib.import_module(f'pfeed.sources.{self.name.lower()}.const'), 'SUPPORTED_RAW_DATA_TYPES')
             dtype = resolution
-            # convert 'raw' to 'raw_tick'
+            # e.g. convert 'raw' to 'raw_tick'
             if dtype == 'raw':
                 dtype = SUPPORTED_RAW_DATA_TYPES[0]
             assert dtype in SUPPORTED_RAW_DATA_TYPES, f'{dtype=} is not supported for {self.name} data'

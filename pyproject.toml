@@ -26,6 +26,9 @@ pyarrow = "^15.0.0"
 minio = "^7.2.4"
 click = "^8.1.7"
 platformdirs = "^4.2.0"
+polars = "^0.20.16"
+s3fs = "^2024.3.1"
+connectorx = "^0.3.2"
 
 [tool.poetry.scripts]
 pfeed = "pfeed.main:run_cli"

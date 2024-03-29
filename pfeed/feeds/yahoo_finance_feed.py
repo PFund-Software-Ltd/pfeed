@@ -78,6 +78,7 @@ class YahooFinanceFeed(BaseFeed):
         if start_date:
             # default for end_date is today
             end_date = end_date or datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y-%m-%d')
+            assert start_date != end_date, f'{start_date=} and {end_date=} cannot be the same, end_date in yfinance is exclusive'    
         else:
             start_date = end_date = None
         
@@ -99,9 +100,3 @@ class YahooFinanceFeed(BaseFeed):
         df.insert(0, 'symbol', symbol)
         df.insert(1, 'resolution', repr(resolution))
         return df
-    
-    
-if __name__ == '__main__':
-    feed = YahooFinanceFeed()
-    df = feed.get_historical_data('TSLA', resolution='1d')
-    print(df)

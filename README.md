@@ -98,7 +98,7 @@ pip install pfeed
 
     > By using pfeed, you are just one line of code away from playing with e.g. bybit data, how convenient!
 
-    Printing `df`:
+    Printing the first few rows of `df`:
     |    | ts                            | symbol   |   side |   volume |   price | tickDirection   | trdMatchID                           |   grossValue |   homeNotional |   foreignNotional |
     |---:|:------------------------------|:---------|-------:|---------:|--------:|:----------------|:-------------------------------------|-------------:|---------------:|------------------:|
     |  0 | 2024-03-01 00:00:00.097599983 | BTCUSDT  |      1 |    0.003 | 61184.1 | ZeroMinusTick   | 79ac9a21-0249-5985-b042-906ec7604794 |  1.83552e+10 |          0.003 |           183.552 |
@@ -113,22 +113,50 @@ pip install pfeed
     # df is a dataframe or a lazyframe (lazily loaded dataframe)
     df = feed.get_historical_data(
         'BTC_USDT_PERP',
-        resolution='1minute',
+        resolution='1minute',  # or '1tick'/'1t', '2seconds'/'2s', '3minute'/'3m' etc.
         start_date='2024-03-01',
         end_date='2024-03-01',
-        data_tool='polars',  # or 'pandas'
+        data_tool='polars',
     )
     ```
     > If you will be interacting with the data frequently, you should consider downloading it to your local machine.
 
-    Printing `df`:
+    Printing the first few rows of `df`:
     |    | ts                  | product       | resolution   |    open |    high |     low |   close |   volume |
     |---:|:--------------------|:--------------|:-------------|--------:|--------:|--------:|--------:|---------:|
     |  0 | 2024-03-01 00:00:00 | BTC_USDT_PERP | 1m           | 61184.1 | 61244.5 | 61175.8 | 61244.5 |  159.142 |
     |  1 | 2024-03-01 00:01:00 | BTC_USDT_PERP | 1m           | 61245.3 | 61276.5 | 61200.7 | 61232.2 |  227.242 |
     |  2 | 2024-03-01 00:02:00 | BTC_USDT_PERP | 1m           | 61232.2 | 61249   | 61180   | 61184.2 |   91.446 |
-    |  3 | 2024-03-01 00:03:00 | BTC_USDT_PERP | 1m           | 61184.2 | 61231.2 | 61167.8 | 61210   |   67.783 |
-    |  4 | 2024-03-01 00:04:00 | BTC_USDT_PERP | 1m           | 61210   | 61218.7 | 61168.1 | 61169.1 |   37.482 |
+
+
+3. pfeed also supports simple wrapping of [yfinance](https://github.com/ranaroussi/yfinance)
+    ```python
+    import pfeed as pe
+
+    feed = pe.YahooFinanceFeed()
+
+    # you can still use any kwargs supported by yfinance's ticker.history(...)
+    # e.g. 'prepost', 'auto_adjust' etc.
+    yfinance_kwargs = {}
+
+    df = feed.get_historical_data(
+        'AAPL',
+        resolution='1d',
+        start_date='2024-03-01',
+        end_date='2024-03-20',
+        **yfinance_kwargs
+    )
+    ```
+    > Note that YahooFinanceFeed doesn't support the kwarg `data_tool`, e.g. polars
+    
+    Printing the first few rows of `df`:
+    | ts                  | symbol   | resolution   |   open |   high |    low |   close |   volume |   dividends |   stock_splits |
+    |:--------------------|:---------|:-------------|-------:|-------:|-------:|--------:|---------:|------------:|---------------:|
+    | 2024-03-01 05:00:00 | AAPL     | 1d           | 179.55 | 180.53 | 177.38 |  179.66 | 73488000 |           0 |              0 |
+    | 2024-03-04 05:00:00 | AAPL     | 1d           | 176.15 | 176.9  | 173.79 |  175.1  | 81510100 |           0 |              0 |
+    | 2024-03-05 05:00:00 | AAPL     | 1d           | 170.76 | 172.04 | 169.62 |  170.12 | 95132400 |           0 |              0 |
+
+
 
 ### Download Historical Data on the Command Line Interface (CLI)
 ```bash

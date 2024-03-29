@@ -21,14 +21,14 @@ rich = "^13.7.0"
 tqdm = "^4.66.2"
 yfinance = "^0.2.36"
 pandas = "^2.2.0"
-ray = "^2.9.2"
 pyarrow = "^15.0.0"
-minio = "^7.2.4"
 click = "^8.1.7"
 platformdirs = "^4.2.0"
 polars = "^0.20.16"
 s3fs = "^2024.3.1"
 connectorx = "^0.3.2"
+ray = "^2.10.0"
+minio = "^7.2.5"
 
 [tool.poetry.scripts]
 pfeed = "pfeed.main:run_cli"
@@ -43,6 +43,9 @@ pre-commit = "^3.6.0"
 bandit = "^1.7.7"
 ruff = "^0.1.15"
 pyright = "^1.1.349"
+pytest-xdist = "^3.5.0"
+faker = "^24.4.0"
+tox = "^4.14.2"
 
 [tool.poetry.group.doc]
 optional = true

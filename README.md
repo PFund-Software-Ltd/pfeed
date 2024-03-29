@@ -9,7 +9,7 @@
 
 PFeed (/piː fiːd/) is a data integration library tailored for algorithmic trading, 
 serving as an ETL (Extract, Transform, Load) data pipeline between raw data sources and traders,
-helping them in creating a local data lake for quantitative research.
+helping them in creating a **local data lake for quantitative research**.
 
 PFeed allows traders to download historical, paper, and live data from various data sources, both free and paid,
 and stores them into a local data lake using [MinIO](https://min.io/).
@@ -24,8 +24,11 @@ It is designed to be used alongside [PFund](https://github.com/PFund-Software-Lt
 - [Core Features](#core-features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+    - [Main Usage: Data Feed](#main-usage-data-feed)
     - [Download Historical Data on Command Line](#download-historical-data-on-command-line)
     - [Download Historical Data in Python](#download-historical-data-in-python)
+    - [List Current Config](#list-current-config)
+    - [Run PFeed's docker-compose.yml](#run-pfeeds-docker-composeyml)
 - [Supported Data Sources](#supported-data-sources)
 - [Related Projects](#related-projects)
 
@@ -57,6 +60,7 @@ However, preparing this data for use is not quick and easy. For example, sometim
 - [x] Unified approach for interacting with various data sources, obtaining historical and real-time data
 - [x] ETL data pipline for transforming raw data and storing it in [MinIO](https://min.io/) (optional)
 - [x] Utilizes [Ray](https://github.com/ray-project/ray) for parallel data downloading
+- [x] Supports Pandas, [Polars](https://github.com/pola-rs/polars) as data tools
 - [ ] Integrates with [Prefect](https://www.prefect.io) to control data flows
 - [ ] Listens to PFund's trade engine and adds trade history to a local database [Timescaledb](https://www.timescale.com/) (optional)
 
@@ -74,14 +78,99 @@ pip install pfeed
 
 
 ## Quick Start
+### Main Usage: Data Feed
+1. Download bybit raw data on the fly if not stored locally
+
+    ```python
+    import pfeed as pe
+
+    feed = pe.BybitFeed()
+
+    # df is a dataframe or a lazyframe (lazily loaded dataframe)
+    df = feed.get_historical_data(
+        'BTC_USDT_PERP',
+        resolution='raw',
+        start_date='2024-03-01',
+        end_date='2024-03-01',
+        data_tool='polars',  # or 'pandas'
+    )
+    ```
+
+    > By using pfeed, you are just one line of code away from playing with e.g. bybit data, how convenient!
+
+    Printing `df`:
+    |    | ts                            | symbol   |   side |   volume |   price | tickDirection   | trdMatchID                           |   grossValue |   homeNotional |   foreignNotional |
+    |---:|:------------------------------|:---------|-------:|---------:|--------:|:----------------|:-------------------------------------|-------------:|---------------:|------------------:|
+    |  0 | 2024-03-01 00:00:00.097599983 | BTCUSDT  |      1 |    0.003 | 61184.1 | ZeroMinusTick   | 79ac9a21-0249-5985-b042-906ec7604794 |  1.83552e+10 |          0.003 |           183.552 |
+    |  1 | 2024-03-01 00:00:00.098299980 | BTCUSDT  |      1 |    0.078 | 61184.9 | PlusTick        | 2af4e516-8ff4-5955-bb9c-38aa385b7b44 |  4.77242e+11 |          0.078 |          4772.42  |
+
+2. Get dataframe with different resolution, e.g. 1-minute data
+    ```python
+    import pfeed as pe
+
+    feed = pe.BybitFeed()
+
+    # df is a dataframe or a lazyframe (lazily loaded dataframe)
+    df = feed.get_historical_data(
+        'BTC_USDT_PERP',
+        resolution='1minute',
+        start_date='2024-03-01',
+        end_date='2024-03-01',
+        data_tool='polars',  # or 'pandas'
+    )
+    ```
+    > If you will be interacting with the data frequently, you should consider downloading it to your local machine.
+
+    Printing `df`:
+    |    | ts                  | product       | resolution   |    open |    high |     low |   close |   volume |
+    |---:|:--------------------|:--------------|:-------------|--------:|--------:|--------:|--------:|---------:|
+    |  0 | 2024-03-01 00:00:00 | BTC_USDT_PERP | 1m           | 61184.1 | 61244.5 | 61175.8 | 61244.5 |  159.142 |
+    |  1 | 2024-03-01 00:01:00 | BTC_USDT_PERP | 1m           | 61245.3 | 61276.5 | 61200.7 | 61232.2 |  227.242 |
+    |  2 | 2024-03-01 00:02:00 | BTC_USDT_PERP | 1m           | 61232.2 | 61249   | 61180   | 61184.2 |   91.446 |
+    |  3 | 2024-03-01 00:03:00 | BTC_USDT_PERP | 1m           | 61184.2 | 61231.2 | 61167.8 | 61210   |   67.783 |
+    |  4 | 2024-03-01 00:04:00 | BTC_USDT_PERP | 1m           | 61210   | 61218.7 | 61168.1 | 61169.1 |   37.482 |
+
 ### Download Historical Data on the Command Line Interface (CLI)
 ```bash
-# download data
-pfeed download -d bybit -p BTC_USDT_PERP
+# download data, default data type (dtype) is 'raw' data
+pfeed download -d BYBIT -p BTC_USDT_PERP --start-date 2024-03-01 --end-date 2024-03-08
 
-# enable debug mode
-pfeed download -d bybit -p BTC_USDT_PERP --debug
+# download multiple products BTC_USDT_PERP and ETH_USDT_PERP and minute data
+pfeed download -d BYBIT -p BTC_USDT_PERP -p ETH_USDT_PERP --dtype minute
 
+# download all perpetuals data from bybit
+pfeed download -d BYBIT --ptype PERP
+
+# download all the data from bybit (CAUTION: your local machine probably won't have enough space for this!)
+pfeed download -d BYBIT
+
+# store data into MinIO (need to start MinIO by running `pfeed docker-compose up -d` first)
+pfeed download -d BYBIT -p BTC_USDT_PERP --use-minio
+
+# enable debug mode and turn off using Ray
+pfeed download -d BYBIT -p BTC_USDT_PERP --debug --no-ray
+```
+
+### Download Historical Data in Python
+```python
+import pfeed as pe
+
+# compared to the CLI approach, this is more convenient for downloading multiple products
+pe.bybit.download(
+    pdts=[
+        'BTC_USDT_PERP',
+        'ETH_USDT_PERP',
+        'BCH_USDT_PERP',
+    ],
+    dtypes=['raw'],  # data types, e.g. 'raw', 'tick', 'second', 'minute' etc.
+    start_date='2024-03-01',
+    end_date='2024-03-08',
+    use_minio=False,
+)
+```
+
+### List Current Config
+```bash
 # list the current config:
 pfeed config --list
 
@@ -90,13 +179,6 @@ pfeed config --data-path ./data
 
 # for more commands:
 pfeed --help
-```
-
-### Download Historical Data in Python
-```python
-from pfeed import bybit
-
-bybit.download(pdts=['BTC_USDT_PERP'])
 ```
 
 ### Run PFeed's docker-compose.yml

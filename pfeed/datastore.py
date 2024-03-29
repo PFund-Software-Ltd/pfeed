@@ -16,8 +16,8 @@ logger = logging.getLogger('minio')
 
 def assert_if_minio_running():
     endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
-    if 'http' not in endpoint:
-        if 'localhost' in endpoint:
+    if not endpoint.startswith('http'):
+        if any(local in endpoint for local in ['localhost:', '127.0.0.1:']):
             endpoint = f'http://{endpoint}'
         else:
             endpoint = f'https://{endpoint}'
@@ -29,29 +29,19 @@ def assert_if_minio_running():
         raise MinioException(f"MinIO is not running or not detected on {endpoint}: {e}")
 
 
-def assert_if_minio_access_key_and_secret_key_provided():
-    if not (os.getenv('MINIO_ACCESS_KEY') and os.getenv('MINIO_SECRET_KEY')):
-        console_endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_CONSOLE_PORT', '9001')
-        raise MinioException(f'''MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required in environment variables,
-            Please create them using MinIO Console on {console_endpoint}.
-            For details, please refer to https://min.io/docs/minio/container/administration/console/security-and-access.html
-        ''')
-    
-
 # EXTEND, currently only consider using MinIO
 class Datastore:
     DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
-    BUCKET_NAME = 'pfeed' + '-' + os.getenv('PFEED_ENV', 'DEV').lower()
+    BUCKET_NAME = 'pfeed'
     
     def __init__(self, **kwargs):
         assert_if_minio_running()
-        assert_if_minio_access_key_and_secret_key_provided()
         self.minio = Minio(
             endpoint=os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
-            access_key=os.getenv('MINIO_ACCESS_KEY'),
-            secret_key=os.getenv('MINIO_SECRET_KEY'),
+            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
+            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
             # turn off TLS, i.e. not using HTTPS
-            secure=True if os.getenv('PFEED_ENV', 'DEV').upper() == 'PRD' else False,
+            secure=True if os.getenv('MINIO_HOST', 'localhost') not in ['localhost', '127.0.0.1'] else False,
             **kwargs,
         )
 

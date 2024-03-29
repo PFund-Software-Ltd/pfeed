@@ -94,7 +94,7 @@ def extract_data(
         NotImplementedError: If the data origin is not supported.
         MinioException: If MinIO is not running / set up correctly.
     """
-    
+    data_sink, data_source, dtype, pdt, mode = data_sink.lower(), data_source.upper(), dtype.lower(), pdt.upper(), mode.lower()
     assert data_sink in SUPPORTED_DATA_SINKS, f'Invalid {data_sink=}, {SUPPORTED_DATA_SINKS=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
     if dtype == 'raw':
@@ -108,10 +108,10 @@ def extract_data(
         if fp.exists():
             with open(fp.file_path, 'rb') as f:
                 data: bytes = f.read()
-            logger.debug(f'extracted {data_source} data from {fp.storage_path}')
+            logger.debug(f'extracted {data_source} data from local path {fp.storage_path}')
             return data
         else:
-            logger.debug(f'failed to extract {data_source} data from local path: {fp.storage_path}')
+            logger.debug(f'failed to extract {data_source} data from local path {fp.storage_path}')
     elif data_sink == 'minio':
         datastore = Datastore()
         object_name = fp.storage_path
@@ -159,7 +159,7 @@ def load_data(
         NotImplementedError: If the specified data destination is not implemented.
         MinioException: If MinIO is not running / set up correctly.
     """
-      
+    data_sink, data_source, dtype, pdt, mode = data_sink.lower(), data_source.upper(), dtype.lower(), pdt.upper(), mode.lower()
     assert data_sink in SUPPORTED_DATA_SINKS, f'Invalid {data_sink=}, {SUPPORTED_DATA_SINKS=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
     if dtype == 'raw':

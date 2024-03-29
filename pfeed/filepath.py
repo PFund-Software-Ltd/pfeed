@@ -9,7 +9,7 @@ from pfeed.const.paths import DATA_PATH
 
 @dataclass
 class FilePath:
-    data_source: str
+    data_source: Literal['BYBIT']
     mode: Literal['historical', 'streaming']
     dtype: Literal['raw_tick', 'raw_second', 'raw_minute', 'raw_hour', 'raw_daily', 'tick', 'second', 'minute', 'hour', 'daily']
     pdt: str

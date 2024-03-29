@@ -88,12 +88,13 @@ def download_historical_data(
         You can use the command "pfeed config --data-path ..." to set your data path that stores downloaded data.
         The current data path is: {config.data_path}.
     ''')
-        
-    if debug:
+    
+    # make stream_handler level INFO if not debug, default level is DEBUG in logging.yml
+    if not debug:
         if 'handlers' not in config.logging_config:
             config.logging_config['handlers'] = {}
-        config.logging_config['handlers']['stream_handler'] = {'level': 'DEBUG'}
-    set_up_loggers(f'{config.log_path}/{os.getenv("PFEED_ENV", "DEV")}', config.logging_config_file_path, user_logging_config=config.logging_config)
+        config.logging_config['handlers']['stream_handler'] = {'level': 'INFO'}
+    set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
     
     # prepare dtypes
     dtypes = [dtypes] if type(dtypes) is str else dtypes
@@ -162,6 +163,4 @@ def download_historical_data(
                 futures = [_run_task.remote(log_queue, *task) for task in batch]
                 ray.get(futures)
         
-        ray.shutdown()  # without this will lead to segmentation fault
-                
     logger.warning(f'finished downloading {source} historical data to {config.data_path}')

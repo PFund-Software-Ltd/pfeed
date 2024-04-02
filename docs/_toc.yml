@@ -7,11 +7,15 @@ chapters:
 - file: getting-started/index
   sections:
   - file: getting-started/installation
+  - file: getting-started/basics
   - file: getting-started/quickstart/index
     sections:
     - file: getting-started/quickstart/download_data
     - file: getting-started/quickstart/stream_data
-- file: concepts/index
+- file: supported-data-sources
+- file: concepts
 - file: tutorials/index
 - file: how-to-guides/index
+  sections:
+  - file: how-to-guides/bybit_eda
 - file: api-reference

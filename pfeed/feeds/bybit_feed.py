@@ -85,7 +85,7 @@ class BybitFeed(BaseFeed):
             # if can't find local data with dtype e.g. second, check if raw data exists
             elif dtype != default_raw_dtype and (local_data := etl.get_data(DATA_SOURCE, default_raw_dtype, pdt, date, mode='historical')):
                 local_data_dtype = default_raw_dtype
-                self.logger.warning(f'No local data found with {dtype=}, switch to find "{local_data_dtype}" data instead')
+                self.logger.info(f'No local data found with {dtype=}, switch to find "{local_data_dtype}" data instead')
             else:
                 local_data_dtype = ''
             

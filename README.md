@@ -113,7 +113,7 @@ pip install pfeed
     # df is a dataframe or a lazyframe (lazily loaded dataframe)
     df = feed.get_historical_data(
         'BTC_USDT_PERP',
-        resolution='1minute',  # or '1tick'/'1t', '2seconds'/'2s', '3minute'/'3m' etc.
+        resolution='1minute',  # or '1tick'/'1t', '2second'/'2s', '3minute'/'3m' etc.
         start_date='2024-03-01',
         end_date='2024-03-01',
         data_tool='polars',
@@ -238,9 +238,10 @@ pfeed docker-compose down
 🟡 = in progress \
 🔴 = todo \
 ⚪ = not applicable \
-\* = paid data \
+\* = paid data
+
 get data = store it in memory for python to use \
-download data = store it in local machine for later research
+download data = store it in local machine for later research \
 stream data = listen to real-time data and store it optionally
 
 

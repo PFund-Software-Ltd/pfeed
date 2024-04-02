@@ -64,7 +64,7 @@ def get_data(
         if data:
             return data
     else:
-        logger.warning(f'{data_source} {pdt} {date} {dtype} data is nowhere to be found, {SUPPORTED_DATA_SINKS=}')
+        logger.info(f'{data_source} {pdt} {date} {dtype} data is nowhere to be found, {SUPPORTED_DATA_SINKS=}')
 
 
 def extract_data(

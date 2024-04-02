@@ -97,19 +97,25 @@ def download_historical_data(
     set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
     
     # prepare dtypes
-    dtypes = [dtypes] if type(dtypes) is str else dtypes
-    if not dtypes:
-        dtypes = SUPPORTED_RAW_DATA_TYPES[0]
-    else:
-        # NOTE: if the data source supports only one raw data type, e.g. bybit has only 'raw_tick', 
-        # then 'raw' data type will be converted to 'raw_tick' implicitly
-        dtypes = [SUPPORTED_RAW_DATA_TYPES[0] if dtype.lower() == 'raw' else dtype.lower() for dtype in dtypes]
+    if dtypes is None:
+        dtypes = [SUPPORTED_RAW_DATA_TYPES[0]]
+    elif type(dtypes) is str:
+        dtypes = [dtypes]
+    # NOTE: if the data source supports only one raw data type, e.g. bybit has only 'raw_tick', 
+    # then 'raw' data type will be converted to 'raw_tick' implicitly
+    dtypes = [SUPPORTED_RAW_DATA_TYPES[0] if dtype.lower() == 'raw' else dtype.lower() for dtype in dtypes]
     assert all(dtype in SUPPORTED_DATA_TYPES for dtype in dtypes), f'{dtypes=} but {SUPPORTED_DATA_TYPES=}'
 
     # prepare pdts
-    pdts = [pdts] if type(pdts) is str else pdts
+    if pdts is None:
+        pdts = []
+    elif type(pdts) is str:
+        pdts = [pdts]
     pdts = [pdt.replace('-', '_').upper() for pdt in pdts]
-    ptypes = [ptypes] if type(ptypes) is str else ptypes
+    if ptypes is None:
+        ptypes = []
+    elif type(ptypes) is str:
+        ptypes = [ptypes]
     ptypes = [ptype.upper() for ptype in ptypes]
     validate_pdts_and_ptypes(source, pdts, ptypes, is_cli=False)
     if not pdts:

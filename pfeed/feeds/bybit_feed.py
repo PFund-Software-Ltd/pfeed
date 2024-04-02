@@ -166,5 +166,5 @@ class BybitFeed(BaseFeed):
                 raise NotImplementedError('pyspark is not supported yet')
     
     # TODO?: maybe useful if used as a standalone program, not useful at all if used with PFund
-    def get_real_time_data(self, env='LIVE'):
+    def get_realtime_data(self, env='LIVE'):
         pass

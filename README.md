@@ -240,10 +240,6 @@ pfeed docker-compose down
 ⚪ = not applicable \
 \* = paid data
 
-get data = store it in memory for python to use \
-download data = store it in local machine for later research \
-stream data = listen to real-time data and store it optionally
-
 
 ## Related Projects
 - [PFund](https://github.com/PFund-Software-Ltd/pfund) — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading

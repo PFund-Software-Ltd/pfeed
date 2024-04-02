@@ -10,8 +10,10 @@ chapters:
   - file: getting-started/basics
   - file: getting-started/quickstart/index
     sections:
-    - file: getting-started/quickstart/download_data
-    - file: getting-started/quickstart/stream_data
+    - file: getting-started/quickstart/get_historical_data
+    - file: getting-started/quickstart/get_realtime_data
+    - file: getting-started/quickstart/download_historical_data
+    - file: getting-started/quickstart/stream_realtime_data
 - file: supported-data-sources
 - file: concepts
 - file: tutorials/index

@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "pfeed"
-version = "0.0.1.dev4"
+version = "0.0.1.dev5"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfeed@gmail.com>"]
 readme = "README.md"
 homepage = "https://pfund.ai"
 repository = "https://github.com/PFund-Software-Ltd/pfeed"
-documentation = "https://pfund.ai/docs"
+documentation = "https://pfeed-docs.pfund.ai"
 keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "data warehouse", "data integration", "historical data", "live data", "data streaming"]
 
 [tool.poetry.dependencies]

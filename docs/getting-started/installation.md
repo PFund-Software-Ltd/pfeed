@@ -24,9 +24,6 @@ poetry update pfeed
 ```bash
 pip install pfeed
 
-# if you are a contributor/maintainer:
-pip install "pfeed[dev,doc]"
-
 # install the latest version:
 pip install -U pfeed
 ```

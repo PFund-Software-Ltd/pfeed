@@ -12,7 +12,7 @@ keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "dat
 
 [tool.poetry.dependencies]
 python = "^3.10 <3.12"
-pfund = "^0.0.1.dev4"
+pfund = "^0.0.1.dev5"
 python-dotenv = "^1.0.1"
 pyyaml = "^6.0.1"
 beautifulsoup4 = "^4.12.3"

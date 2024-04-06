@@ -30,7 +30,7 @@ In pfeed, data feeds are objects that serve as high-level interfaces designed fo
 import pfeed as pe
 from pfeed.config_handler import ConfigHandler
 
-# HACKY: increase the log level to hide some log outputs in the following examples
+# HACK: increase the log level to hide some log outputs in the following examples
 config = ConfigHandler(
     logging_config={ 'handlers': { 'stream_handler': {'level': 'critical'} } }
 )

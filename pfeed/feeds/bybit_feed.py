@@ -9,6 +9,7 @@ import pandas as pd
 from pfeed import etl
 from pfeed.config_handler import ConfigHandler
 from pfeed.const.commons import SUPPORTED_DATA_TOOLS
+from pfeed.const.common_literals import tSUPPORTED_DATA_TOOLS
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit.const import DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, create_efilename, SUPPORTED_RAW_DATA_TYPES
@@ -16,9 +17,6 @@ from pfeed.utils.utils import get_dates_in_between, rollback_date_range
 from pfeed.utils.validate import validate_pdt
 from pfeed.data_tools.data_tool_polars import estimate_memory_usage
 # from pfund.exchanges.bybit.exchange import Exchange
-
-
-DataTool = Literal['pandas', 'polars', 'pyspark']
 
 
 __all__ = ['BybitFeed']
@@ -36,7 +34,7 @@ class BybitFeed(BaseFeed):
         resolution: str | Literal['raw', 'raw_tick']='1d',  
         start_date: str=None,
         end_date: str=None,
-        data_tool: Literal['pandas', 'polars', 'pyspark']='pandas',
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
         memory_usage_limit_in_gb: int=2,  # in GB
     ) -> pd.DataFrame | pl.LazyFrame:
         """Get historical data from Bybit.
@@ -90,8 +88,8 @@ class BybitFeed(BaseFeed):
                 local_data_dtype = ''
             
             if local_data:
-                data_str = f'{source} {pdt} {date}'
-                self.logger.info(f'loaded {data_str} {local_data_dtype} data locally')
+                data_str = f'{source} {pdt} {date} {local_data_dtype}'
+                self.logger.info(f'loaded {data_str} data locally')
                 # REVIEW: last bar is very likely incomplete when e.g. 20 days of daily data is resampled to '3d'
                 check_if_drop_last_bar = (local_data_dtype == dtype and resolution.period != 1)
                 if local_data_dtype == dtype and resolution.period == 1:

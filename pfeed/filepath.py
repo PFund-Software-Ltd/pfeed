@@ -1,17 +1,16 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from typing import Literal
-
+from pfeed.const.common_literals import tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_MODES, tSUPPORTED_DATA_TYPES
 from pfeed.utils.utils import create_filename
 from pfeed.const.paths import DATA_PATH
 
 
 @dataclass
 class FilePath:
-    data_source: Literal['BYBIT']
-    mode: Literal['historical', 'streaming']
-    dtype: Literal['raw_tick', 'raw_second', 'raw_minute', 'raw_hour', 'raw_daily', 'tick', 'second', 'minute', 'hour', 'daily']
+    data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES
+    mode: tSUPPORTED_DATA_MODES
+    dtype: tSUPPORTED_DATA_TYPES
     pdt: str
     date: str
     file_extension: str = '.parquet.gz'

@@ -3,8 +3,6 @@ import io
 import logging
 import importlib
 
-from typing import Literal
-
 import pandas as pd
 from minio.error import MinioException
 
@@ -12,15 +10,9 @@ from pfeed.datastore import Datastore
 from pfeed.filepath import FilePath
 from pfeed.config_handler import ConfigHandler
 from pfeed.const.commons import SUPPORTED_DATA_TYPES, SUPPORTED_DATA_SINKS, SUPPORTED_DOWNLOAD_DATA_SOURCES, SUPPORTED_DATA_MODES
+from pfeed.const.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_SINKS, tSUPPORTED_DATA_TYPES, tSUPPORTED_DATA_MODES
 from pfeed.utils.monitor import print_disk_usage
 from pfund.datas.resolution import Resolution
-
-
-DataSink = Literal['local', 'minio']
-DataSource = Literal['BYBIT']
-DataTool = Literal['pandas', 'polars', 'pyspark']
-DataType = Literal['raw_tick', 'raw_second', 'raw_minute', 'raw_hour', 'raw_daily', 'raw', 'tick', 'second', 'minute', 'hour', 'daily']
-DataMode = Literal['historical', 'streaming']
 
 
 logger = logging.getLogger('pfeed')
@@ -37,11 +29,11 @@ def _convert_raw_dtype_to_explicit(data_source: str, dtype: str):
 
 
 def get_data(
-    data_source: DataSource,
-    dtype: DataType,
+    data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
+    dtype: tSUPPORTED_DATA_TYPES,
     pdt: str,
     date: str,
-    mode: DataMode='historical',
+    mode: tSUPPORTED_DATA_MODES='historical',
 ) -> bytes | None:
     """Extract data without specifying the data origin. 
     This function will try to extract data from all supported data origins.
@@ -68,12 +60,12 @@ def get_data(
 
 
 def extract_data(
-    data_sink: DataSink,
-    data_source: DataSource,
-    dtype: DataType,
+    data_sink: tSUPPORTED_DATA_SINKS,
+    data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
+    dtype: tSUPPORTED_DATA_TYPES,
     pdt: str,
     date: str,
-    mode: DataMode='historical',
+    mode: tSUPPORTED_DATA_MODES='historical',
 ) -> bytes | None:
     """
     Extracts data from a specified data source and returns it as bytes.
@@ -126,13 +118,13 @@ def extract_data(
 
 
 def load_data(
-    data_sink: DataSink,
-    data_source: DataSource,
+    data_sink: tSUPPORTED_DATA_SINKS,
+    data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
     data: bytes,
-    dtype: DataType,
+    dtype: tSUPPORTED_DATA_TYPES,
     pdt: str,
     date: str,
-    mode: DataMode = 'historical',
+    mode: tSUPPORTED_DATA_MODES = 'historical',
     **kwargs
 ) -> None:
     """
@@ -184,7 +176,7 @@ def load_data(
     print_disk_usage(config.data_path)
         
 
-def clean_raw_data(data_source: DataSource, raw_data: bytes) -> bytes:
+def clean_raw_data(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES, raw_data: bytes) -> bytes:
     module = importlib.import_module(f'pfeed.sources.{data_source.lower()}.const')
     RENAMING_COLS = getattr(module, 'RENAMING_COLS')
     MAPPING_COLS = getattr(module, 'MAPPING_COLS')
@@ -216,6 +208,6 @@ def clean_raw_tick_data(raw_tick: bytes) -> bytes:
     return tick_data
 
 
-def resample_data(data: bytes, resolution: str | Resolution, data_tool: DataTool='polars', check_if_drop_last_bar=False) -> bytes:
+def resample_data(data: bytes, resolution: str | Resolution, data_tool: tSUPPORTED_DATA_TOOLS='polars', check_if_drop_last_bar=False) -> bytes:
     data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool.lower()}')
     return data_tool.resample_data(data, resolution, check_if_drop_last_bar=check_if_drop_last_bar)

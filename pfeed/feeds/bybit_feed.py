@@ -8,8 +8,9 @@ if TYPE_CHECKING:
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
 
 try:
-    import polars as pl
     import pandas as pd
+    import polars as pl
+    from pfeed.data_tools.data_tool_polars import estimate_memory_usage
 except ImportError:
     pass
 
@@ -21,7 +22,6 @@ from pfeed.sources.bybit import api
 from pfeed.sources.bybit.const import DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, create_efilename, SUPPORTED_RAW_DATA_TYPES
 from pfeed.utils.utils import get_dates_in_between, rollback_date_range
 from pfeed.utils.validate import validate_pdt
-from pfeed.data_tools.data_tool_polars import estimate_memory_usage
 # from pfund.exchanges.bybit.exchange import Exchange
 
 

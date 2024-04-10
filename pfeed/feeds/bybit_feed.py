@@ -7,8 +7,11 @@ from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
 
-import polars as pl
-import pandas as pd
+try:
+    import polars as pl
+    import pandas as pd
+except ImportError:
+    pass
 
 from pfeed import etl
 from pfeed.config_handler import ConfigHandler

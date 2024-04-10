@@ -68,14 +68,28 @@ However, preparing this data for use is not quick and easy. For example, sometim
 ## Installation
 ### Using [Poetry](https://python-poetry.org) (Recommended)
 ```bash
+# [RECOMMENDED]: dataframes (e.g. polars, pandas) + data storage (e.g. MinIO) + boosted performance
+poetry add "pfeed[df,data,boost]"
+
+# only for downloading data, e.g. Bybit and Yahoo Finance
 poetry add pfeed
+
+# update to the latest version:
+poetry update pfeed
 ```
 
 ### Using Pip
 ```bash
 pip install pfeed
+
+# install the latest version:
+pip install -U pfeed
 ```
 
+### Checking your installation
+```bash
+$ pfeed --version
+```
 
 ## Quick Start
 ### Main Usage: Data Feed

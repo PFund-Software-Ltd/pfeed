@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfeed"
-version = "0.0.1.dev6"
+version = "0.0.1.dev8"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfeed@gmail.com>"]
@@ -12,49 +12,27 @@ keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "dat
 
 [tool.poetry.dependencies]
 python = ">=3.10 <3.13"
-pfund = "^0.0.1.dev5"
-python-dotenv = "^1.0.1"
-pyyaml = "^6.0.1"
+pfund = "^0.0.1.dev8"
 beautifulsoup4 = "^4.12.3"
-requests = "^2.31.0"
-rich = "^13.7.0"
-tqdm = "^4.66.2"
-pandas = "^2.2.0"
-pyarrow = "^15.0.0"
-click = "^8.1.7"
-platformdirs = "^4.2.0"
-polars = "^0.20.16"
-s3fs = "^2024.3.1"
-connectorx = "^0.3.2"
-ray = "^2.10.0"
-minio = "^7.2.5"
 yfinance = "^0.2.37"
+s3fs = { version = "^2024.3.1", optional = true }
+minio = { version = "^7.2.5", optional = true }
+pandas = { version = "^2.2.0", optional = true }
+polars = { version = "^0.20.16", optional = true }
+connectorx = { version = "^0.3.2", optional = true }
+pyarrow = { version = "^15.0.0", optional = true }
+ray = { version = "^2.10.0", optional = true }
+
+[tool.poetry.extras]
+df = ["pandas", "polars"]
+data = ["minio", "s3fs"]
+boost = ["pyarrow", "connectorx", "ray"]
 
 [tool.poetry.scripts]
 pfeed = "pfeed.main:run_cli"
 
-[tool.poetry.group.dev]
-optional = true
-
 [tool.poetry.group.dev.dependencies]
 pfund = {path = "../pfund", develop = true}
-pytest = "^8.0.0"
-pre-commit = "^3.6.0"
-bandit = "^1.7.7"
-pytest-xdist = "^3.5.0"
-faker = "^24.4.0"
-tox = "^4.14.2"
-mypy = "^1.9.0"
-ruff = "^0.3.5"
-pytest-mock = "^3.14.0"
-pytest-cov = "^5.0.0"
-
-[tool.poetry.group.doc]
-optional = true
-
-[tool.poetry.group.doc.dependencies]
-jupyter-book = "^1.0.0"
-notebook = "^7.1.0"
 
 [build-system]
 requires = ["poetry-core"]

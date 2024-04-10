@@ -11,9 +11,6 @@
 ```bash
 poetry add pfeed
 
-# if you are a contributor/maintainer:
-poetry add pfeed --with dev,doc
-
 # update to the latest version:
 poetry update pfeed
 ```

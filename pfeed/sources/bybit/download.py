@@ -1,5 +1,4 @@
 """Downloads Bybit historical data"""
-import os
 import logging
 import datetime
 from collections import defaultdict

@@ -1,7 +1,11 @@
 """High-level API for getting historical/streaming data from Bybit."""
+from __future__ import annotations
+
 import datetime
 
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
 
 import polars as pl
 import pandas as pd
@@ -9,7 +13,6 @@ import pandas as pd
 from pfeed import etl
 from pfeed.config_handler import ConfigHandler
 from pfeed.const.commons import SUPPORTED_DATA_TOOLS
-from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit.const import DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, create_efilename, SUPPORTED_RAW_DATA_TYPES

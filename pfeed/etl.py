@@ -3,16 +3,24 @@ import io
 import logging
 import importlib
 
-import pandas as pd
-from minio.error import MinioException
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_SINKS, tSUPPORTED_DATA_TYPES, tSUPPORTED_DATA_MODES
 
-from pfeed.datastore import Datastore
+import pandas as pd
+
+try:
+    from pfeed.datastore import Datastore, MinioException
+except ImportError:
+    pass
 from pfeed.filepath import FilePath
 from pfeed.config_handler import ConfigHandler
 from pfeed.const.commons import SUPPORTED_DATA_TYPES, SUPPORTED_DATA_SINKS, SUPPORTED_DOWNLOAD_DATA_SOURCES, SUPPORTED_DATA_MODES
-from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_SINKS, tSUPPORTED_DATA_TYPES, tSUPPORTED_DATA_MODES
-from pfeed.utils.monitor import print_disk_usage
 from pfund.datas.resolution import Resolution
+try:
+    from pfeed.utils.monitor import print_disk_usage
+except ImportError:
+    print_disk_usage = None
 
 
 logger = logging.getLogger('pfeed')
@@ -47,7 +55,7 @@ def get_data(
 
     Returns:
         bytes | None: The extracted data as bytes, or None if the data is not found.
-    """
+    """    
     for data_sink in SUPPORTED_DATA_SINKS:
         try:
             data: bytes = extract_data(data_sink, data_source, dtype, pdt, date, mode=mode)
@@ -173,7 +181,8 @@ def load_data(
         logger.info(f'loaded {data_source} data to MinIO object {object_name} {kwargs=}')
     else:
         raise NotImplementedError(f'{data_sink=}')
-    print_disk_usage(config.data_path)
+    if print_disk_usage:
+        print_disk_usage(config.data_path)
         
 
 def clean_raw_data(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES, raw_data: bytes) -> bytes:
@@ -209,5 +218,9 @@ def clean_raw_tick_data(raw_tick: bytes) -> bytes:
 
 
 def resample_data(data: bytes, resolution: str | Resolution, data_tool: tSUPPORTED_DATA_TOOLS='polars', check_if_drop_last_bar=False) -> bytes:
-    data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool.lower()}')
+    try:
+        data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool.lower()}')
+    except ImportError:
+        # fallback data_tool to pandas
+        data_tool = importlib.import_module('pfeed.data_tools.data_tool_pandas')
     return data_tool.resample_data(data, resolution, check_if_drop_last_bar=check_if_drop_last_bar)

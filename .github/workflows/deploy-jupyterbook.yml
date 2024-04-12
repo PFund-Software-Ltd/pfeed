@@ -39,7 +39,11 @@ jobs:
         pip install pfeed
 
     - name: Build Jupyter Book
-      run: jupyter-book build docs/
+      run: |
+        chmod +x ./docs/build.sh
+        bash ./docs/build.sh
+      env:
+        GA_TRACKING_ID: ${{ secrets.GA_TRACKING_ID }}
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3

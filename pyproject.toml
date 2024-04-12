@@ -33,7 +33,7 @@ boost = ["pyarrow", "connectorx", "ray"]
 pfeed = "pfeed.main:run_cli"
 
 [tool.poetry.group.dev.dependencies]
-pfund = {path = "../pfund", develop = true}
+pfund = { path = "../pfund", develop = true }
 
 [build-system]
 requires = ["poetry-core"]

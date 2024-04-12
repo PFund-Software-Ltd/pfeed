@@ -36,7 +36,7 @@ pfeed = "pfeed.main:run_cli"
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-pfund = { path = "../pfund", develop = true }
+# pfund = { path = "../pfund", develop = true }
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.0.0"

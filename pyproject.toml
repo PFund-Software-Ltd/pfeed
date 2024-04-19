@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfeed"
-version = "0.0.1.dev10"
+version = "0.0.1.dev11"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfeed@gmail.com>"]
@@ -12,7 +12,7 @@ keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "dat
 
 [tool.poetry.dependencies]
 python = ">=3.10 <3.13"
-pfund = "^0.0.1.dev10"
+pfund = "^0.0.1.dev13"
 beautifulsoup4 = "^4.12.3"
 yfinance = "^0.2.37"
 psutil = { version = "^5.9.8", optional = true }
@@ -37,6 +37,10 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 # pfund = { path = "../pfund", develop = true }
+commitizen = "^3.24.0"
+mypy = "^1.9.0"
+ruff = "^0.3.5"
+grayskull = "^2.5.3"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.0.0"
@@ -47,9 +51,6 @@ pre-commit = "^3.6.1"
 tox = "^4.14.2"
 faker = "^24.4.0"
 bandit = "^1.7.7"
-grayskull = "^2.5.3"
-mypy = "^1.9.0"
-ruff = "^0.3.5"
 
 [tool.poetry.group.doc.dependencies]
 jupyter-book = "^1.0.0"

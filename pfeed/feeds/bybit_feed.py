@@ -14,7 +14,6 @@ try:
 except ImportError:
     pass
 
-from pfeed import etl
 from pfeed.config_handler import ConfigHandler
 from pfeed.const.commons import SUPPORTED_DATA_TOOLS
 from pfeed.feeds.base_feed import BaseFeed
@@ -61,7 +60,8 @@ class BybitFeed(BaseFeed):
                 If the memory usage exceeds the limit, the output DataFrame will be converted to a polars LazyFrame.
         """
         from pfund.datas.resolution import Resolution
-        
+        from pfeed import etl
+         
         # exchange = Exchange(env='LIVE')
         # adapter = exchange.adapter
         # product = exchange.create_product(*pdt.split('_'))

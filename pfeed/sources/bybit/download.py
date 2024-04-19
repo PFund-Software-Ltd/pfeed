@@ -7,7 +7,6 @@ from logging.handlers import QueueHandler, QueueListener
 from tqdm import tqdm
 from rich.console import Console
 
-from pfeed import etl
 from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
@@ -39,6 +38,7 @@ def create_pdts_using_ptypes(ptypes) -> list[str]:
 
 
 def run_etl(product: BaseProduct, date, dtypes, use_minio):
+    from pfeed import etl
     pdt = product.pdt
     if raw_data := api.get_data(pdt, date):
         raw_tick: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)

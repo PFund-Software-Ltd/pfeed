@@ -1,6 +1,7 @@
 from importlib.metadata import version
 
 from pfeed.config_handler import configure
+from pfeed.const.commons import ALIASES
 
 
 # NOTE: dynamically import modules to avoid click cli latency (reduced from ~4s to ~0.2s)
@@ -50,6 +51,7 @@ __version__ = version('pfeed')
 __all__ = (
     '__version__',
     'configure',
+    'ALIASES',
     'etl',
     'bybit',
     'binance',

@@ -40,8 +40,10 @@ def __getattr__(name):
 # you will still see the following suggestions even they are dynamically imported:
 etl: ...
 bybit: ...
+binance: ...
 YahooFinanceFeed: ...
 BybitFeed: ...
+BinanceFeed: ...
 
 
 __version__ = version('pfeed')
@@ -50,6 +52,8 @@ __all__ = (
     'configure',
     'etl',
     'bybit',
+    'binance',
     'YahooFinanceFeed',
     'BybitFeed',
+    'BinanceFeed',
 )

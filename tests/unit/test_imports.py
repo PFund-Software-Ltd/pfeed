@@ -3,22 +3,43 @@ import pfeed as pe
 
 
 def test_import_etl():
-    from pfeed import etl
-    assert etl, 'Failed to import etl module'
+    try:
+        from pfeed import etl
+    except ImportError:
+        pytest.fail("Failed to import etl module")
     
 def test_import_bybit():
-    from pfeed import bybit
-    assert bybit, 'Failed to import bybit module'
+    try:
+        from pfeed import bybit
+    except ImportError:
+        pytest.fail("Failed to import bybit module")
+
+def test_import_binance():
+    try:
+        from pfeed import binance
+    except ImportError:
+        pytest.fail("Failed to import binance module")
     
 def test_import_YahooFinanceFeed():
-    from pfeed import YahooFinanceFeed
-    assert YahooFinanceFeed, 'Failed to import YahooFinanceFeed class'
+    try:
+        from pfeed import YahooFinanceFeed
+    except ImportError:
+        pytest.fail("Failed to import YahooFinanceFeed class")
     
 def test_import_BybitFeed():
-    from pfeed import BybitFeed
-    assert BybitFeed, 'Failed to import BybitFeed class'
+    try:
+        from pfeed import BybitFeed
+    except ImportError:
+        pytest.fail("Failed to import BybitFeed class")
 
+def test_import_BinanceFeed():
+    try:
+        from pfeed import BinanceFeed
+    except ImportError:
+        pytest.fail("Failed to import BinanceFeed class")
+    
 @pytest.mark.smoke
 def test_import_all():
     for attr in pe.__all__:
         assert hasattr(pe, attr), f"Package 'pfeed' does not have '{attr}'"
+    

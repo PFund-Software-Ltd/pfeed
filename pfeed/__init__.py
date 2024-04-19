@@ -16,20 +16,29 @@ def __getattr__(name):
     - Includes any class containing 'Feed' from pfeed.feeds
     """
     import importlib
+    from pfeed.const.commons import SUPPORTED_DOWNLOAD_DATA_SOURCES
+    
     if 'Feed' in name:
         Feed = getattr(importlib.import_module('pfeed.feeds'), name)
         globals()[name] = Feed
         return Feed
-    else:
+    elif name.lower() == 'etl':
+        etl = importlib.import_module('pfeed.etl')
+        globals()['etl'] = etl
+        return etl
+    elif name.upper() in SUPPORTED_DOWNLOAD_DATA_SOURCES:
         name = name.lower()
         data_source = importlib.import_module(f'pfeed.sources.{name}')
         globals()[name] = data_source
         return data_source
-    
+    else:
+        raise AttributeError(f"module 'pfeed' has no attribute '{name}'")
+
 
 # NOTE: dummy classes/modules for type hinting
 # e.g. import pfeed as pe, when you type "pe.", 
 # you will still see the following suggestions even they are dynamically imported:
+etl: ...
 bybit: ...
 YahooFinanceFeed: ...
 BybitFeed: ...
@@ -39,6 +48,7 @@ __version__ = version('pfeed')
 __all__ = (
     '__version__',
     'configure',
+    'etl',
     'bybit',
     'YahooFinanceFeed',
     'BybitFeed',

@@ -2936,31 +2936,29 @@ name = "pfund"
 version = "0.0.1.dev13"
 description = "A Complete Algo-Trading Framework for Machine Learning, enabling trading across TradFi, CeFi and DeFi. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading"
 optional = false
-python-versions = ">=3.10 <3.13"
-files = []
-develop = true
+python-versions = "<3.13,>=3.10"
+files = [
+    {file = "pfund-0.0.1.dev13-py3-none-any.whl", hash = "sha256:db7c4013322c0a1d72c18444aa87e606b9097f8e7cfaadae4cececcafe133270"},
+    {file = "pfund-0.0.1.dev13.tar.gz", hash = "sha256:72da7a6936aeb67ad9bc0bbf83fce1354df81cab05d93e0ace7513aa852c46a2"},
+]
 
 [package.dependencies]
-click = "^8.1.7"
-gitpython = "^3.1.43"
-platformdirs = "^4.2.0"
-python-dotenv = "^1.0.1"
-python-telegram-bot = "^20.7"
-pyyaml = "^6.0.1"
-requests = "^2.31.0"
-rich = "^13.7.0"
-schedule = "^1.2.1"
-tqdm = "^4.66.2"
-websocket-client = "^1.7.0"
+click = ">=8.1.7,<9.0.0"
+gitpython = ">=3.1.43,<4.0.0"
+platformdirs = ">=4.2.0,<5.0.0"
+python-dotenv = ">=1.0.1,<2.0.0"
+python-telegram-bot = ">=20.7,<21.0"
+pyyaml = ">=6.0.1,<7.0.0"
+requests = ">=2.31.0,<3.0.0"
+rich = ">=13.7.0,<14.0.0"
+schedule = ">=1.2.1,<2.0.0"
+tqdm = ">=4.66.2,<5.0.0"
+websocket-client = ">=1.7.0,<2.0.0"
 
 [package.extras]
 analytics = ["papermill (>=2.5.0,<3.0.0)", "pfolio[bayesian,data,portfolio,temporary] (>=0.0.1.dev4,<0.0.2)", "voila (>=0.5.6,<0.6.0)"]
 data = ["orjson (>=3.9.14,<4.0.0)", "pfeed[boost,data,df] (>=0.0.1.dev11,<0.0.2)", "pyzmq (>=25.1.2,<26.0.0)"]
 ml = ["mlflow (>=2.11.3,<3.0.0)", "scikit-learn (>=1.4.0,<2.0.0)", "ta (>=0.11.0,<0.12.0)", "torch (>=2.1.2,<3.0.0)"]
-
-[package.source]
-type = "directory"
-url = "../pfund"
 
 [[package]]
 name = "pip"
@@ -5397,4 +5395,4 @@ df = ["pandas", "polars"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10 <3.13"
-content-hash = "f5a415d8eb333d9131d415aec43496344e5bf3384312c68bf2277d05ffff0ae0"
+content-hash = "f7613cfec241c76dc4624e6fe6954e08935218d5053983b78012a3365270ff33"

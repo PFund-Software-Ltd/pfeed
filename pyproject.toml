@@ -36,7 +36,7 @@ pfeed = "pfeed.main:run_cli"
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-# pfund = { path = "../pfund", develop = true }
+pfund = { path = "../pfund", develop = true }
 commitizen = "^3.24.0"
 mypy = "^1.9.0"
 ruff = "^0.3.5"

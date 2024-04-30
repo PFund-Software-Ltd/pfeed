@@ -129,4 +129,4 @@ def resample_data(data: bytes, resolution: str | Resolution, check_if_drop_last_
     
     resampled_df.reset_index(inplace=True)
     
-    return resampled_df.to_parquet(compression='snappy')
+    return resampled_df.to_parquet(compression='zstd')

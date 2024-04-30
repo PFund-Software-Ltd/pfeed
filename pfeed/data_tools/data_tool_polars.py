@@ -21,7 +21,7 @@ def estimate_memory_usage(lf: pl.LazyFrame) -> float:
     return estimated_memory_usage_in_gb
 
 
-def to_parquet(df: pl.DataFrame, compression: str='snappy') -> bytes:
+def to_parquet(df: pl.DataFrame, compression: str='zstd') -> bytes:
     """Converts a Polars DataFrame to Parquet bytes format.
 
     Args:

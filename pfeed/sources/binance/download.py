@@ -1,4 +1,5 @@
 """Downloads Binance historical data"""
+import os
 import logging
 import datetime
 from collections import defaultdict
@@ -11,7 +12,7 @@ from pfeed import etl
 from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
-from pfeed.const.commons import SUPPORTED_DATA_TYPES
+from pfeed.const.common import SUPPORTED_DATA_TYPES
 from pfeed.sources.binance.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES, PTYPE_TO_CATEGORY, create_efilename
 from pfeed.sources.binance import api
 from pfund.products.product_base import BaseProduct
@@ -70,7 +71,7 @@ def download_historical_data(
     ptypes: str | list[str] | None=None, 
     start_date: str | None=None,
     end_date: str | None=None,
-    batch_size: int=8,
+    num_cpus: int=8,
     use_ray: bool=True,
     use_minio: bool=False,
     debug: bool=False,
@@ -156,6 +157,11 @@ def download_historical_data(
         import ray
         from ray.util.queue import Queue
 
+        logical_cpus = os.cpu_count()
+        num_cpus = min(num_cpus, logical_cpus)
+        ray.init(num_cpus=num_cpus)
+        print(f"Ray's num_cpus is set to {num_cpus}")
+        
         @ray.remote
         def _run_task(log_queue: Queue, product: BaseProduct, date: str):
             if not logger.handlers:
@@ -163,6 +169,7 @@ def download_historical_data(
                 logger.setLevel(logging.DEBUG)
             run_etl(product, date, dtypes, use_minio)
 
+        batch_size = num_cpus
         log_queue = Queue()
         QueueListener(log_queue, *logger.handlers, respect_handler_level=True).start()
         for pdt in tqdm(ray_tasks, desc=f'Downloading {source} historical data by product', colour='green'):

@@ -15,7 +15,7 @@ except ImportError:
     pass
 
 from pfeed.config_handler import ConfigHandler
-from pfeed.const.commons import SUPPORTED_DATA_TOOLS
+from pfeed.const.common import SUPPORTED_DATA_TOOLS
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.binance import api
 from pfeed.sources.binance.const import DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, create_efilename, SUPPORTED_RAW_DATA_TYPES

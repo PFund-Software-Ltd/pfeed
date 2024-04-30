@@ -14,8 +14,9 @@ class BaseFeed:
         # configure
         if not config:
             config = ConfigHandler.load_config()
+        
         set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
-        self.logger = logging.getLogger(self.name.lower())
+        self.logger = logging.getLogger(self.name.lower() + '_feed')
         self._config = config
         self.data_path = config.data_path
         

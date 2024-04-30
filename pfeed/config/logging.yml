@@ -1,5 +1,6 @@
 version: 1
 filename_format: '%Y-%m-%d_UTC%z'
+incremental: True
 loggers:
   root:
     level: 'WARNING'
@@ -13,11 +14,11 @@ loggers:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  yahoo_finance:
+  yfinance_feed:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  bybit:
+  bybit_feed:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False

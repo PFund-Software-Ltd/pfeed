@@ -41,7 +41,7 @@ To print out the supported data feeds in pfeed, you can use the following code s
 ```{code-cell}
 :tags: [hide-output]
 
-from pfeed.const.commons import SUPPORTED_DATA_FEEDS
+from pfeed.const.common import SUPPORTED_DATA_FEEDS
 from pprint import pprint
 
 pprint(SUPPORTED_DATA_FEEDS)

@@ -1,7 +1,13 @@
+from __future__ import annotations
+
 import datetime
 
 import pandas as pd
 import yfinance as yf
+
+from typing import Literal, TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
 
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.config_handler import ConfigHandler
@@ -28,7 +34,7 @@ class YahooFinanceFeed(BaseFeed):
     }
     
     def __init__(self, config: ConfigHandler | None=None):
-        super().__init__('yahoo_finance', config=config)
+        super().__init__('yfinance', config=config)
     
     def get_ticker(self, symbol):
         return yf.Ticker(symbol.upper())
@@ -37,10 +43,11 @@ class YahooFinanceFeed(BaseFeed):
     def get_historical_data(
         self, 
         symbol: str,
-        rollback_period: str='1M', 
+        rollback_period: str='1w', 
         resolution: str='1d', 
-        start_date: str=None,
-        end_date: str=None, 
+        start_date: str='',
+        end_date: str='', 
+        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
         **kwargs
     ) -> pd.DataFrame:
         """Simple Wrapper of yfinance history().

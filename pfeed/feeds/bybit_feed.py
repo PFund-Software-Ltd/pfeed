@@ -15,7 +15,7 @@ except ImportError:
     pass
 
 from pfeed.config_handler import ConfigHandler
-from pfeed.const.commons import SUPPORTED_DATA_TOOLS
+from pfeed.const.common import SUPPORTED_DATA_TOOLS
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit.const import DATA_SOURCE, SUPPORTED_PRODUCT_TYPES, create_efilename, SUPPORTED_RAW_DATA_TYPES
@@ -37,8 +37,8 @@ class BybitFeed(BaseFeed):
         rollback_period: str='1w',
         # HACK: mixing resolution with dtypes for convenience
         resolution: str | Literal['raw', 'raw_tick']='1d',  
-        start_date: str=None,
-        end_date: str=None,
+        start_date: str='',
+        end_date: str='',
         data_tool: tSUPPORTED_DATA_TOOLS='pandas',
         memory_usage_limit_in_gb: int=2,  # in GB
     ) -> pd.DataFrame | pl.LazyFrame:
@@ -140,7 +140,7 @@ class BybitFeed(BaseFeed):
         # NOTE: Since the downloaded data is in daily units, we can't resample it to e.g. '2d' resolution
         # using the above logic. Need to resample the aggregated daily data to resolution '2d':
         if dtype == 'daily' and resolution.period != 1:
-            data: bytes = lf.collect().to_pandas().to_parquet()
+            data: bytes = lf.collect().to_pandas().to_parquet(compression='zstd')
             data: bytes = etl.resample_data(data, resolution, check_if_drop_last_bar=True)
             lf = pl.read_parquet(data).lazy()
                 

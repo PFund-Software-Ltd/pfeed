@@ -17,7 +17,7 @@ except ImportError:
     pass
 from pfeed.filepath import FilePath
 from pfeed.config_handler import ConfigHandler
-from pfeed.const.commons import SUPPORTED_DATA_TYPES, SUPPORTED_DATA_SINKS, SUPPORTED_DOWNLOAD_DATA_SOURCES, SUPPORTED_DATA_MODES
+from pfeed.const.common import SUPPORTED_DATA_TYPES, SUPPORTED_DATA_SINKS, SUPPORTED_DOWNLOAD_DATA_SOURCES, SUPPORTED_DATA_MODES
 from pfund.datas.resolution import Resolution
 try:
     from pfeed.utils.monitor import print_disk_usage
@@ -200,7 +200,7 @@ def clean_raw_data(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES, raw_data: byte
     # they could be: 'datetime' | 'datetime_str' | 'float' | 'float_str'
     # NOTE: this may make the `ts` value inaccurate, e.g. 1671580800.9906 -> 1671580800.990600192
     df['ts'] = pd.to_datetime(df['ts'], unit=unit)
-    raw_tick: bytes = df.to_parquet(compression='snappy')
+    raw_tick: bytes = df.to_parquet(compression='zstd')
     return raw_tick
 
 
@@ -215,7 +215,7 @@ def clean_raw_tick_data(raw_tick: bytes) -> bytes:
     """
     df = pd.read_parquet(io.BytesIO(raw_tick))
     df = df.loc[:, ['ts', 'side', 'volume', 'price']]
-    tick_data: bytes = df.to_parquet(compression='snappy')
+    tick_data: bytes = df.to_parquet(compression='zstd')
     return tick_data
 
 

@@ -1,7 +1,7 @@
 from importlib.metadata import version
 
 from pfeed.config_handler import configure
-from pfeed.const.commons import ALIASES
+from pfeed.const.common import ALIASES
 
 
 # NOTE: dynamically import modules to avoid click cli latency (reduced from ~4s to ~0.2s)
@@ -17,7 +17,7 @@ def __getattr__(name):
     - Includes any class containing 'Feed' from pfeed.feeds
     """
     import importlib
-    from pfeed.const.commons import SUPPORTED_DOWNLOAD_DATA_SOURCES
+    from pfeed.const.common import SUPPORTED_DOWNLOAD_DATA_SOURCES
     
     if 'Feed' in name:
         Feed = getattr(importlib.import_module('pfeed.feeds'), name)

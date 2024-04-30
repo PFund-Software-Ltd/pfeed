@@ -1,6 +1,9 @@
 version: 1
 filename_format: '%Y-%m-%d_UTC%z'
-incremental: True
+# incremental False = replaces the existing configuration
+incremental: False  
+# disable_existing_loggers will be ignored if incremental is True
+disable_existing_loggers: False
 loggers:
   root:
     level: 'WARNING'

@@ -34,7 +34,7 @@ class YahooFinanceFeed(BaseFeed):
     }
     
     def __init__(self, config: ConfigHandler | None=None):
-        super().__init__('yfinance', config=config)
+        super().__init__('yahoo_finance', config=config)
     
     def get_ticker(self, symbol):
         return yf.Ticker(symbol.upper())
@@ -94,16 +94,20 @@ class YahooFinanceFeed(BaseFeed):
         
         assert not df.empty, f'No data found for {symbol=}, {resolution=}, {rollback_period=}, {start_date=}, {end_date=}. SUPPORTED_TIMEFRAMES_AND_PERIODS={self.SUPPORTED_TIMEFRAMES_AND_PERIODS}'
         
-        df.rename_axis('ts', inplace=True)  # rename index 'Date' to 'ts'
-        df.columns = df.columns.str.lower()
-        # if there are spaces in column names, they will be turned into some weird names like "_10" 
-        # during "for row in df.itertuples()"
-        df = df.rename(columns={'stock splits': 'stock_splits'})
         # convert to UTC
         df.index = df.index.tz_convert('UTC')
         # convert to UTC and remove +hh:mm from YYYY-MM-DD hh:mm:ss+hh:mm
         df.index = df.index.tz_convert('UTC').tz_localize(None)
-        
-        df.insert(0, 'symbol', symbol)
-        df.insert(1, 'resolution', repr(resolution))
+        df.reset_index(inplace=True)
+        df['symbol'] = symbol
+        df['resolution'] = repr(resolution)
+        df.columns = df.columns.str.lower()
+        # if there are spaces in column names, they will be turned into some weird names like "_10" 
+        # during "for row in df.itertuples()"
+        # Replace spaces in the column names with underscores
+        df.columns = [col.replace(' ', '_') for col in df.columns]
+        df = df.rename(columns={'date': 'ts'})
+        # reorder columns
+        left_cols = ['ts', 'symbol', 'resolution']
+        df = df[left_cols + [col for col in df.columns if col not in left_cols]]
         return df

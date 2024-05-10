@@ -28,6 +28,7 @@ ray = { version = "^2.10.0", optional = true }
 df = ["pandas", "polars"]
 data = ["psutil", "minio", "s3fs"]
 boost = ["pyarrow", "connectorx", "ray"]
+all = ["pandas", "polars", "psutil", "minio", "s3fs", "pyarrow", "connectorx", "ray"]
 
 [tool.poetry.scripts]
 pfeed = "pfeed.main:run_cli"

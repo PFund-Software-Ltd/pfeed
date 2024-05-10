@@ -68,10 +68,16 @@ However, preparing this data for use is not quick and easy. For example, sometim
 ## Installation
 ### Using [Poetry](https://python-poetry.org) (Recommended)
 ```bash
-# [RECOMMENDED]: dataframes (e.g. polars, pandas) + data storage (e.g. MinIO) + boosted performance
-poetry add "pfeed[df,data,boost]"
+# [RECOMMENDED]: Downloading Data (e.g. Bybit and Yahoo Finance) + Data Tools (e.g. polars) + Data Storage (e.g. MinIO) + Boosted Performance (e.g. Ray)
+poetry add "pfeed[all]"
 
-# only for downloading data, e.g. Bybit and Yahoo Finance
+# [Downloading Data + Data Tools + Data Storage]
+poetry add "pfeed[df,data]"
+
+# [Downloading Data + Data Tools]
+poetry add "pfeed[df]"
+
+# [Downloading Data only]:
 poetry add pfeed
 
 # update to the latest version:

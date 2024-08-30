@@ -8,7 +8,7 @@ from pfund.exchanges.binance.exchange import Exchange
 from pfeed.sources.binance.const import DATA_SOURCE, DATA_SOURCE_URLS, DATA_NAMING_REGEX_PATTERNS, PTYPE_TO_CATEGORY, create_efilename
 
 
-logger = logging.getLogger(DATA_SOURCE.lower())
+logger = logging.getLogger(DATA_SOURCE.lower() + '_data')
 
 
 # EXTEND: support more browsers

@@ -4,6 +4,27 @@ import calendar
 import pytz
 
 
+def separate_number_and_chars(input_string):
+    """Separates the number and characters from a string.
+    Args:
+        input_string: e.g. '1d'
+    Returns:
+        number_part: e.g. 1
+        char_part: e.g. 'd'
+    """
+    # Regex pattern: (\d+) captures one or more digits, (\D+) captures one or more non-digits
+    pattern = r'(\d+)(\D+)'
+    
+    match = re.match(pattern, input_string)
+    
+    if match:
+        number_part = match.group(1)
+        char_part = match.group(2)
+        return number_part, char_part
+    else:
+        return None, None  # Return None if no match is found
+
+
 def get_TZ_abbrev_and_UTC_offset(date: str, tz_identifier='US/Eastern'):
     '''Returns timezone abbreviation (e.g. EST, EDT) based on the timezone identifier.
     Useful when you want to determine if e.g. New York is in EST or EDT now.

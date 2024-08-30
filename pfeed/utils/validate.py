@@ -23,16 +23,17 @@ def validate_pdts_and_ptypes(source: str, pdts: list[str], ptypes: list[str], is
         Console().print(f'Warning: no "--pdts" or "--ptypes" provided, will download ALL products with ALL product types {SUPPORTED_PRODUCT_TYPES} from {source}', style='bold red')
         if is_cli and not click.confirm('Do you want to continue?', default=False):
             sys.exit(1)
-    elif pdts:
-        for pdt in pdts:
-            if not validate_pdt(source, pdt):
-                error_msg = f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {source} are: {SUPPORTED_PRODUCT_TYPES})'
-                raise click.BadParameter(error_msg) if is_cli else ValueError(error_msg)
-    elif ptypes:
-        for ptype in ptypes:
-            if ptype not in SUPPORTED_PRODUCT_TYPES:
-                error_msg = f'{ptype} is not supported. Supported types are: {SUPPORTED_PRODUCT_TYPES}'
-                raise click.BadParameter(error_msg) if is_cli else ValueError(error_msg)
-    
-    if pdts and ptypes:
+    elif pdts and ptypes:
         Console().print(f'Warning: both "--pdts" and "--ptypes" provided, will only use "--pdts" {pdts}', style='bold red')
+
+    for pdt in pdts:
+        if not validate_pdt(source, pdt):
+            error_msg = f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {source} are: {SUPPORTED_PRODUCT_TYPES})'
+            raise click.BadParameter(error_msg) if is_cli else ValueError(error_msg)
+
+    for ptype in ptypes:
+        if ptype not in SUPPORTED_PRODUCT_TYPES:
+            error_msg = f'{ptype} is not supported. Supported types are: {SUPPORTED_PRODUCT_TYPES}'
+            raise click.BadParameter(error_msg) if is_cli else ValueError(error_msg)
+    
+    

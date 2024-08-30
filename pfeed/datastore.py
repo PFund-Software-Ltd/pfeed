@@ -1,20 +1,22 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    try:
+        from minio.api import ObjectWriteResult
+    except ImportError:
+        pass
+    from typing import Generator
+    
 import os
 import io
-import requests
 import logging
-from requests.exceptions import RequestException, ReadTimeout
-
-from typing import Generator
-
-from minio import Minio, S3Error
-from minio.error import MinioException
-from minio.api import ObjectWriteResult
-
-
-logger = logging.getLogger('minio')
 
 
 def assert_if_minio_running():
+    import requests
+    from requests.exceptions import RequestException, ReadTimeout
+    from minio.error import MinioException
+
     endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
     if not endpoint.startswith('http'):
         if any(local in endpoint for local in ['localhost:', '127.0.0.1:']):
@@ -29,34 +31,47 @@ def assert_if_minio_running():
         raise MinioException(f"MinIO is not running or not detected on {endpoint}: {e}")
 
 
-# EXTEND, currently only consider using MinIO
 class Datastore:
     DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
     BUCKET_NAME = 'pfeed'
-    
-    def __init__(self, **kwargs):
-        assert_if_minio_running()
-        self.minio = Minio(
-            endpoint=os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
-            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
-            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
-            # turn off TLS, i.e. not using HTTPS
-            secure=True if os.getenv('MINIO_HOST', 'localhost') not in ['localhost', '127.0.0.1'] else False,
-            **kwargs,
-        )
 
+    # EXTEND, currently only consider using MinIO
+    @classmethod
+    def initialize_store(cls, name: str, **kwargs):
+        if name == 'minio':
+            from minio import Minio
+            assert_if_minio_running()
+            cls.minio = Minio(
+                endpoint=os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
+                access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
+                secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
+                # turn off TLS, i.e. not using HTTPS
+                secure=True if os.getenv('MINIO_HOST', 'localhost') not in ['localhost', '127.0.0.1'] else False,
+                **kwargs,
+            )
+            if not cls.minio.bucket_exists(cls.BUCKET_NAME):
+                cls.minio.make_bucket(cls.BUCKET_NAME)
+        else:
+            raise NotImplementedError(f'Unsupported datastore {name}')
+    
+    def __init__(self, name: str, **kwargs):
+        self.name = name.lower()
+        self.logger = logging.getLogger(self.name)
+        if not hasattr(self.__class__, self.name):
+            self.__class__.initialize_store(self.name, **kwargs)
+        
     def __getattr__(self, attr):
         '''gets triggered only when the attribute is not found'''
         return getattr(self.minio, attr)
     
     def get_object(self, object_name: str) -> bytes | None:
+        from minio import S3Error
         try:
-            bucket_name = self.BUCKET_NAME
-            res = self.minio.get_object(bucket_name, object_name)
+            res = self.minio.get_object(self.BUCKET_NAME, object_name)
             if res.status == 200:
                 return res.data
             else:
-                logger.error(f'Unhandled MinIO response status {res.status}')
+                self.logger.error(f'Unhandled MinIO response status {res.status}')
         except S3Error as err:
             # logger.warning(f'MinIO S3Error {object_name=} {err=}')
             pass
@@ -66,16 +81,12 @@ class Datastore:
             Args:
                 prefix: e.g. live/bybit/historical/raw/BTC_USDT_PERP/
         '''
-        bucket_name = self.BUCKET_NAME
-        objects: Generator = self.minio.list_objects(bucket_name, prefix=prefix)
+        objects: Generator = self.minio.list_objects(self.BUCKET_NAME, prefix=prefix)
         return list(objects)
     
     def put_object(self, object_name: str, data: bytes, **kwargs) -> ObjectWriteResult:
-        bucket_name = self.BUCKET_NAME
-        if not self.minio.bucket_exists(bucket_name):
-            self.minio.make_bucket(bucket_name)
         return self.minio.put_object(
-            bucket_name,
+            self.BUCKET_NAME,
             object_name,
             data=io.BytesIO(data),
             part_size=self.DATA_PART_SIZE,
@@ -85,7 +96,7 @@ class Datastore:
         
             
 if __name__ == '__main__':
-    datastore = Datastore()
+    datastore = Datastore('minio')
     # list buckets
     # buckets = datastore.list_buckets()
     # for bucket in buckets:

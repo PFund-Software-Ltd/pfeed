@@ -7,4 +7,4 @@ tSUPPORTED_DATA_TYPES = Literal['raw_tick', 'raw_second', 'raw_minute', 'raw_hou
 tSUPPORTED_DATA_SINKS = Literal['local', 'minio']
 tSUPPORTED_DOWNLOAD_DATA_SOURCES = Literal['BYBIT']
 tSUPPORTED_DATA_MODES = Literal['historical', 'streaming']
-tSUPPORTED_DATA_TOOLS = Literal['pandas', 'polars', 'pyspark']
+tSUPPORTED_DATA_TOOLS = Literal['pandas', 'polars']

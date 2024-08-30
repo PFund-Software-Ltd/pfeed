@@ -23,7 +23,9 @@ def docker_compose(ctx, env_file_path, docker_file_path):
             click.echo(f'.env file path is not specified, using env file in "{env_file_path}"')
         else:
             click.echo('.env file is not found')
-    load_dotenv(env_file_path, override=True)
+    
+    if env_file_path:
+        load_dotenv(env_file_path, override=True)
     
     config = ctx.obj['config']
     os.environ['PFEED_DATA_PATH'] = config.data_path

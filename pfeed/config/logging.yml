@@ -17,11 +17,12 @@ loggers:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  yahoo_finance_feed:
+  # NOTE: avoid name conflict with pfund, add "_data" suffix to e.g. bybit
+  yahoo_finance_data:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  bybit_feed:
+  bybit_data:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False

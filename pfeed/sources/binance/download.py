@@ -20,7 +20,7 @@ from pfund.exchanges.binance.exchange import Exchange
 from pfund.plogging import set_up_loggers
 
 
-logger = logging.getLogger(DATA_SOURCE.lower())
+logger = logging.getLogger(DATA_SOURCE.lower() + '_data')
 cprint = Console().print
 
 

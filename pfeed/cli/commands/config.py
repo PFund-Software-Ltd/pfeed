@@ -10,7 +10,7 @@ from pfeed.config_handler import ConfigHandler
 
 
 def save_config(config: ConfigHandler, config_file_path: str | Path):
-    if type(config_file_path) is str:
+    if isinstance(config_file_path, str):
         config_file_path = Path(config_file_path)
     config_file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(config_file_path, 'w') as f:

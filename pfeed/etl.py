@@ -1,31 +1,38 @@
 '''ETL = Extract, Transform, Load data'''
 from __future__ import annotations
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.types.common_literals import tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_SINKS, tSUPPORTED_DATA_TYPES, tSUPPORTED_DATA_MODES
+    try:
+        import pandas as pd
+        import polars as pl
+    except ImportError:
+        pass
+    from pfund.datas.resolution import Resolution
+    
 import io
 import logging
 import importlib
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_SINKS, tSUPPORTED_DATA_TYPES, tSUPPORTED_DATA_MODES
-
-import pandas as pd
-
-try:
-    from pfeed.datastore import Datastore, MinioException
-except ImportError:
-    pass
+from pfeed.datastore import Datastore
 from pfeed.filepath import FilePath
 from pfeed.config_handler import ConfigHandler
 from pfeed.const.common import SUPPORTED_DATA_TYPES, SUPPORTED_DATA_SINKS, SUPPORTED_DOWNLOAD_DATA_SOURCES, SUPPORTED_DATA_MODES
-from pfund.datas.resolution import Resolution
+
 try:
     from pfeed.utils.monitor import print_disk_usage
 except ImportError:
     print_disk_usage = None
 
 
-logger = logging.getLogger('pfeed')
+__all__ = [
+    'get_data',
+    'extract_data',
+    'load_data',
+    'clean_raw_data',
+    'clean_raw_tick_data',
+    'resample_data',
+]
 
 
 def _convert_raw_dtype_to_explicit(data_source: str, dtype: str):
@@ -58,6 +65,13 @@ def get_data(
     Returns:
         bytes | None: The extracted data as bytes, or None if the data is not found.
     """    
+    try:
+        from minio.error import MinioException
+    except ImportError:
+        MinioException = Exception
+    
+    logger = logging.getLogger(data_source.lower() + '_data')
+        
     for data_sink in SUPPORTED_DATA_SINKS:
         try:
             data: bytes = extract_data(data_sink, data_source, dtype, pdt, date, mode=mode)
@@ -87,7 +101,6 @@ def extract_data(
         pdt (str): product, e.g. BTC_USDT_PERP.
         date (str): The date of the data.
         mode (optional): The mode of extraction. Defaults to 'historical'.
-
     Returns:
         bytes | None: The extracted data as bytes, or None if extraction fails.
 
@@ -96,6 +109,8 @@ def extract_data(
         NotImplementedError: If the data origin is not supported.
         MinioException: If MinIO is not running / set up correctly.
     """
+    logger = logging.getLogger(data_source.lower() + '_data')
+    
     data_sink, data_source, dtype, pdt, mode = data_sink.lower(), data_source.upper(), dtype.lower(), pdt.upper(), mode.lower()
     assert data_sink in SUPPORTED_DATA_SINKS, f'Invalid {data_sink=}, {SUPPORTED_DATA_SINKS=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
@@ -115,7 +130,7 @@ def extract_data(
         else:
             logger.debug(f'failed to extract {data_source} data from local path {fp.storage_path}')
     elif data_sink == 'minio':
-        datastore = Datastore()
+        datastore = Datastore(data_sink)
         object_name = fp.storage_path
         data: bytes | None = datastore.get_object(object_name)
         if data:
@@ -141,7 +156,6 @@ def load_data(
     Loads data into the specified data destination.
 
     Args:
-        
         data_sink: The destination where the data will be loaded. 
             It can be either 'local' or 'minio'.
         data_source: The source of the data.
@@ -161,6 +175,8 @@ def load_data(
         NotImplementedError: If the specified data destination is not implemented.
         MinioException: If MinIO is not running / set up correctly.
     """
+    logger = logging.getLogger(data_source.lower() + '_data')
+    
     data_sink, data_source, dtype, pdt, mode = data_sink.lower(), data_source.upper(), dtype.lower(), pdt.upper(), mode.lower()
     assert data_sink in SUPPORTED_DATA_SINKS, f'Invalid {data_sink=}, {SUPPORTED_DATA_SINKS=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
@@ -175,9 +191,9 @@ def load_data(
         fp.parent.mkdir(parents=True, exist_ok=True)
         with open(fp.file_path, 'wb') as f:
             f.write(data)
-            logger.info(f'loaded {data_source} data to {fp.storage_path}')
+            logger.info(f'loaded {data_source} data to {fp.file_path}')
     elif data_sink == 'minio':
-        datastore = Datastore()
+        datastore = Datastore(data_sink)
         object_name = fp.storage_path
         datastore.put_object(object_name, data, **kwargs)
         logger.info(f'loaded {data_source} data to MinIO object {object_name} {kwargs=}')
@@ -188,6 +204,7 @@ def load_data(
         
 
 def clean_raw_data(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES, raw_data: bytes) -> bytes:
+    import pandas as pd
     module = importlib.import_module(f'pfeed.sources.{data_source.lower()}.const')
     RENAMING_COLS = getattr(module, 'RENAMING_COLS')
     MAPPING_COLS = getattr(module, 'MAPPING_COLS')
@@ -213,16 +230,91 @@ def clean_raw_tick_data(raw_tick: bytes) -> bytes:
     Returns:
         bytes: The cleaned tick data in bytes format.
     """
+    import pandas as pd
     df = pd.read_parquet(io.BytesIO(raw_tick))
     df = df.loc[:, ['ts', 'side', 'volume', 'price']]
     tick_data: bytes = df.to_parquet(compression='zstd')
     return tick_data
 
 
-def resample_data(data: bytes, resolution: str | Resolution, data_tool: tSUPPORTED_DATA_TOOLS='polars', check_if_drop_last_bar=False) -> bytes:
+def resample_data(
+    data: bytes | pd.DataFrame | pl.LazyFrame, 
+    resolution: str | Resolution, 
+) -> bytes | pd.DataFrame | pl.LazyFrame:
+    '''
+    Resamples the input data based on the specified resolution and returns the resampled data in Parquet format.
+    
+    Args:
+        data (bytes): The input data to be resampled.
+        resolution (str | Resolution): The resolution at which the data should be resampled. 
+            if string, it should be in the format of "# + unit (s/m/h/d)", e.g. "1s".
+    '''
     try:
-        data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool.lower()}')
+        import pandas as pd
+        import polars as pl
     except ImportError:
-        # fallback data_tool to pandas
-        data_tool = importlib.import_module('pfeed.data_tools.data_tool_pandas')
-    return data_tool.resample_data(data, resolution, check_if_drop_last_bar=check_if_drop_last_bar)
+        pass
+    from pfund.datas.resolution import Resolution
+    
+    # standardize resolution by following pfund's standard, e.g. '1minute' -> '1m'
+    if type(resolution) is not Resolution:
+        resolution = Resolution(resolution)
+    eresolution = repr(resolution)
+        
+    # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
+    eresolution = eresolution.replace('m', 'min')
+    eresolution = eresolution.replace('d', 'D')
+    
+    if isinstance(data, bytes):
+        df = pd.read_parquet(io.BytesIO(data))
+    elif isinstance(data, pd.DataFrame):
+        df = data
+    elif isinstance(data, pl.LazyFrame):
+        df = data.collect().to_pandas()
+    else:
+        raise TypeError(f'Invalid data type {type(data)}, expected bytes or pd.DataFrame or pl.LazyFrame')
+    
+    is_tick_data = True if 'price' in df.columns else False
+    assert not df.empty, 'data is empty'
+    df.set_index('ts', inplace=True)
+    
+    if is_tick_data:
+        resample_logic = {
+            'price': 'ohlc',
+            'volume': 'sum',
+        }
+    else:
+        resample_logic = {
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum',
+        }
+
+    if 'dividends' in df.columns:
+        resample_logic['dividends'] = 'sum'
+    if 'splits' in df.columns:
+        resample_logic['splits'] = 'prod'
+            
+    resampled_df = (
+        df
+        .resample(eresolution)
+        .apply(resample_logic)
+    )
+    
+    if is_tick_data:
+        # drop an unnecessary level created by 'ohlc' in the resample_logic
+        resampled_df = resampled_df.droplevel(0, axis=1)
+
+    resampled_df.dropna(inplace=True)
+    resampled_df.reset_index(inplace=True)
+    
+    if isinstance(data, bytes):
+        return resampled_df.to_parquet(compression='zstd')
+    elif isinstance(data, pd.DataFrame):
+        return resampled_df
+    elif isinstance(data, pl.LazyFrame):
+        return pl.from_pandas(resampled_df).lazy()
+    else:
+        return resampled_df

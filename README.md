@@ -68,16 +68,16 @@ However, preparing this data for use is not quick and easy. For example, sometim
 ## Installation
 ### Using [Poetry](https://python-poetry.org) (Recommended)
 ```bash
-# [RECOMMENDED]: Downloading Data (e.g. Bybit and Yahoo Finance) + Data Tools (e.g. polars) + Data Storage (e.g. MinIO) + Boosted Performance (e.g. Ray)
+# [RECOMMENDED]: Download data (e.g. Bybit and Yahoo Finance) + Data tools (e.g. pandas, polars) + Data storage (e.g. MinIO) + Boosted performance (e.g. Ray)
 poetry add "pfeed[all]"
 
-# [Downloading Data + Data Tools + Data Storage]
+# [Download data + Data tools + Data storage]
 poetry add "pfeed[df,data]"
 
-# [Downloading Data + Data Tools]
+# [Download data + Data tools]
 poetry add "pfeed[df]"
 
-# [Downloading Data only]:
+# [Download data only]:
 poetry add pfeed
 
 # update to the latest version:
@@ -184,10 +184,10 @@ $ pfeed --version
 pfeed download -d BYBIT -p BTC_USDT_PERP --start-date 2024-03-01 --end-date 2024-03-08
 
 # download multiple products BTC_USDT_PERP and ETH_USDT_PERP and minute data
-pfeed download -d BYBIT -p BTC_USDT_PERP -p ETH_USDT_PERP --dtype minute
+pfeed download -d BYBIT -p BTC_USDT_PERP -p ETH_USDT_PERP --dtypes minute
 
 # download all perpetuals data from bybit
-pfeed download -d BYBIT --ptype PERP
+pfeed download -d BYBIT --ptypes PERP
 
 # download all the data from bybit (CAUTION: your local machine probably won't have enough space for this!)
 pfeed download -d BYBIT
@@ -204,7 +204,8 @@ pfeed download -d BYBIT -p BTC_USDT_PERP --debug --no-ray
 import pfeed as pe
 
 # compared to the CLI approach, this is more convenient for downloading multiple products
-pe.bybit.download(
+pe.download(
+    data_source='bybit',
     pdts=[
         'BTC_USDT_PERP',
         'ETH_USDT_PERP',

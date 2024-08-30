@@ -1,9 +1,11 @@
 from __future__ import annotations
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.types.common_literals import tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_MODES, tSUPPORTED_DATA_TYPES
+    
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pfeed.types.common_literals import tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_MODES, tSUPPORTED_DATA_TYPES
 from pfeed.utils.utils import create_filename
 from pfeed.const.paths import DATA_PATH
 

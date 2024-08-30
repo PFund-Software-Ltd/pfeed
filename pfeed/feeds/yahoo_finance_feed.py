@@ -1,113 +1,181 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING, Literal
+if TYPE_CHECKING:
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
+    try:
+        import pandas as pd
+        import polars as pl
+    except ImportError:
+        pass
 
 import datetime
 
-import pandas as pd
-import yfinance as yf
-
-from typing import Literal, TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
-
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.config_handler import ConfigHandler
+from pfeed.utils.utils import separate_number_and_chars
 
 
-__all__ = ['YahooFinanceFeed']
+__all__ = ["YahooFinanceFeed"]
 
 
 class YahooFinanceFeed(BaseFeed):
     _ADAPTER = {
-        'timeframe': {
-            # pfund's : yfinance's
-            'M': 'mo',
-            'w': 'wk',
+        "timeframe": {
+            "M": "mo",
+            "mo": "M",
+            "w": "wk",
+            "wk": "w",
         }
     }
-    # yfinance's valid intervals: [1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo]
-    SUPPORTED_TIMEFRAMES_AND_PERIODS = {
-        'm': [1, 2, 5, 15, 30, 60, 90],
-        'h': [1],
-        'd': [1, 5],
-        'w': [1],
-        'M': [1, 3],
+    # yfinance's valid periods
+    SUPPORTED_PERIODS = {
+        "d": [1, 5],
+        "M": [1, 3, 6],
+        "y": [1, 2, 5, 10],
     }
-    
-    def __init__(self, config: ConfigHandler | None=None):
-        super().__init__('yahoo_finance', config=config)
-    
+    # yfinance's valid intervals
+    SUPPORTED_INTERVALS = {
+        "m": [1, 2, 5, 15, 30, 60, 90],
+        "h": [1],
+        "d": [1, 5],
+        "w": [1],
+        "M": [1, 3],
+    }
+
+    def __init__(
+        self,
+        data_tool: tSUPPORTED_DATA_TOOLS = "pandas",
+        config: ConfigHandler | None = None,
+    ):
+        super().__init__("yahoo_finance", data_tool=data_tool, config=config)
+
     def get_ticker(self, symbol):
+        import yfinance as yf
         return yf.Ticker(symbol.upper())
-    
-    # TODO: should manipulate the input resolution and support e.g. '2d' resolution even it is not in the SUPPORTED_TIMEFRAMES_AND_PERIODS
+
     def get_historical_data(
-        self, 
+        self,
         symbol: str,
-        rollback_period: str='1w', 
-        resolution: str='1d', 
-        start_date: str='',
-        end_date: str='', 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
-        **kwargs
-    ) -> pd.DataFrame:
+        rollback_period: str | Literal["ytd", "max"] = "1M",
+        resolution: str = "1d",
+        start_date: str = "",
+        end_date: str = "",
+        use_pfeed_resample: bool = True,
+        **kwargs,
+    ) -> pd.DataFrame | pl.DataFrame:
         """Simple Wrapper of yfinance history().
         For the details of args and kwargs, please refer to https://github.com/ranaroussi/yfinance
-        
+
         Args:
+            rollback_period: Data resolution or 'ytd' or 'max'
+                Period to rollback from today, only used when `start_date` is not specified.
+                Default is '1M' = 1 month.
+                if 'period' in kwargs is specified, it will be used instead of `rollback_period`.
+            resolution: Data resolution
+                e.g. '1m' = 1 minute as the unit of each data bar/candle.
+                Default is '1d' = 1 day.
+            # REVIEW: yfinance's resampling result looks incorrect, e.g. try using '5d' resolution, ohlc is wrong
+            use_pfeed_resample: Whether to use pfeed's resampling logic.
+                Default is True.
+                This will automatically be triggered if yfinance does not support the resolution.
             **kwargs: kwargs supported by `yfinance`
         """
+        import pandas as pd
+        
+        from pfeed import etl
         from pfund.datas.resolution import Resolution
-        
-        # convert pfund's rollback_period format to yfinance's period
-        rollback_period = Resolution(rollback_period)
-        timeframe = repr(rollback_period.timeframe)
-        etimeframe = self._ADAPTER['timeframe'].get(timeframe, timeframe)
-        erollback_period = str(rollback_period.period) + etimeframe
-        # if user is directly using yfinance variable `period`, use it
-        if 'period' in kwargs:
-            period = kwargs['period']
-            del kwargs['period']
+
+        if rollback_period in ["ytd", "max"]:
+            period = rollback_period
         else:
-            period = erollback_period
-            
-        # convert pfund's resolution format to yfinance's interval
-        resolution = Resolution(resolution)
-        timeframe = repr(resolution.timeframe)
-        etimeframe = self._ADAPTER['timeframe'].get(timeframe, timeframe)
-        eresolution = str(resolution.period) + etimeframe
+            # if user is directly using yfinance variable `period`, use it
+            if "period" in kwargs:
+                period = kwargs["period"]
+                del kwargs["period"]
+            else:
+                # convert pfund's rollback_period format to yfinance's period
+                rollback_period = Resolution(rollback_period)
+                timeframe = repr(rollback_period.timeframe)
+                etimeframe = self._ADAPTER["timeframe"].get(timeframe, timeframe)
+                erollback_period = str(rollback_period.period) + etimeframe
+                period = erollback_period
+
         # if user is directly using yfinance variable `interval`, use it
-        if 'interval' in kwargs:
-            interval = kwargs['interval']
-            del kwargs['interval']
+        if "interval" in kwargs:
+            interval = kwargs["interval"]
+            del kwargs["interval"]
+            number_part, char_part = separate_number_and_chars(interval)
+            etimeframe = char_part
+            timeframe = self._ADAPTER["timeframe"].get(etimeframe, etimeframe)
+            resolution = Resolution(number_part + timeframe)
         else:
-            interval = eresolution
-        
+            # convert pfund's resolution format to yfinance's interval
+            resolution = Resolution(resolution)
+            timeframe = repr(resolution.timeframe)
+            etimeframe = self._ADAPTER["timeframe"].get(timeframe, timeframe)
+            interval = str(resolution.period) + etimeframe
+
+        # manipulate the input resolution and support e.g. '2d' resolution even it is not in the SUPPORTED_INTERVALS
+        if (use_pfeed_resample and resolution.period != 1) or (
+            timeframe in self.SUPPORTED_INTERVALS
+            and resolution.period not in self.SUPPORTED_INTERVALS[timeframe]
+            and 1 in self.SUPPORTED_INTERVALS[timeframe]
+        ):
+            # if resolution (e.g. '2d') is not supported in yfinance, using "1d" instead'
+            interval = "1" + etimeframe
+            is_resample = True
+        else:
+            is_resample = False
+
         if start_date:
             # default for end_date is today
-            end_date = end_date or datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y-%m-%d')
-            assert start_date != end_date, f'{start_date=} and {end_date=} cannot be the same, end_date in yfinance is exclusive'    
+            today = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d")
+            end_date = end_date or today
+            assert (
+                start_date != end_date
+            ), f"{start_date=} and {end_date=} cannot be the same, end_date in yfinance is exclusive"
         else:
             start_date = end_date = None
-        
+
         ticker = self.get_ticker(symbol)
-        df = ticker.history(period=period, interval=interval, start=start_date, end=end_date, **kwargs)
-        
-        assert not df.empty, f'No data found for {symbol=}, {resolution=}, {rollback_period=}, {start_date=}, {end_date=}. SUPPORTED_TIMEFRAMES_AND_PERIODS={self.SUPPORTED_TIMEFRAMES_AND_PERIODS}'
-        
+        df = ticker.history(
+            period=period, interval=interval, start=start_date, end=end_date, **kwargs
+        )
+
+        assert not df.empty, f"No data found for {symbol=}, {resolution=}, {rollback_period=}, {start_date=}, {end_date=}."
+
         # convert to UTC
-        df.index = df.index.tz_convert('UTC')
+        df.index = df.index.tz_convert("UTC")
         # convert to UTC and remove +hh:mm from YYYY-MM-DD hh:mm:ss+hh:mm
-        df.index = df.index.tz_convert('UTC').tz_localize(None)
+        df.index = df.index.tz_convert("UTC").tz_localize(None)
         df.reset_index(inplace=True)
-        df['symbol'] = symbol
-        df['resolution'] = repr(resolution)
         df.columns = df.columns.str.lower()
-        # if there are spaces in column names, they will be turned into some weird names like "_10" 
+        # if there are spaces in column names, they will be turned into some weird names like "_10"
         # during "for row in df.itertuples()"
         # Replace spaces in the column names with underscores
-        df.columns = [col.replace(' ', '_') for col in df.columns]
-        df = df.rename(columns={'date': 'ts'})
+        df.columns = [col.replace(" ", "_") for col in df.columns]
+        # somehow different column names "Date" and "Datetime" are used in yfinance depending on the resolution
+        df = df.rename(columns={
+            "date": "ts", 
+            "datetime": "ts",
+            'stock_splits': 'splits',
+        })
+
+        if is_resample:
+            if not use_pfeed_resample:
+                self.logger.warning(
+                    f"yfinance does not support {repr(resolution)} as an interval, auto-resampling to {resolution=}"
+                )
+            df = etl.resample_data(df, resolution)
+        
+        df["symbol"] = symbol
+        df["resolution"] = repr(resolution)
         # reorder columns
-        left_cols = ['ts', 'symbol', 'resolution']
+        left_cols = ["ts", "symbol", "resolution"]
         df = df[left_cols + [col for col in df.columns if col not in left_cols]]
-        return df
+        
+        if self.data_tool == "pandas":
+            return df
+        elif self.data_tool == "polars":
+            import polars as pl
+            return pl.from_pandas(df)

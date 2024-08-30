@@ -34,10 +34,14 @@ MAPPING_COLS = {'Buy': 1, 'Sell': -1}
 # TODO:
 RENAMING_COLS = {'timestamp': 'ts', 'size': 'volume'}
 
+# TODO: support other ptypes
+SUPPORTED_PRODUCT_TYPES = ['PERP']
+adapters = {ptype: Exchange(env='LIVE', ptype=ptype).adapter for ptype in SUPPORTED_PRODUCT_TYPES}
+
 
 def create_efilename(pdt: str, date: str):
     ptype = pdt.split('_')[-1].upper()  # REVIEW: is this always the case?
-    adapter = Exchange(env='LIVE', ptype=ptype).adapter
+    adapter = adapters[ptype]
     epdt = adapter(pdt, ref_key=PTYPE_TO_CATEGORY[ptype])
     return f'{epdt}-trades-{date}.zip'
  

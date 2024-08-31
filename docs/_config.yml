@@ -51,4 +51,3 @@ sphinx:
   extra_extensions:
   - 'sphinx.ext.autodoc'
   - 'sphinx.ext.napoleon'
-  - 'sphinxawesome_theme.highlighting'

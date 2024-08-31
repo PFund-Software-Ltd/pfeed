@@ -7,21 +7,42 @@
 [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfeed/main/docs/images/jupyterbook.svg)](https://jupyterbook.org)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 
-PFeed (/piː fiːd/) is a data integration library tailored for algorithmic trading, 
-serving as an ETL (Extract, Transform, Load) data pipeline between raw data sources and traders,
-helping them in creating a **local data lake for quantitative research**.
+[MinIO]: https://min.io/
+[PFund]: https://github.com/PFund-Software-Ltd/pfund
+[Ray]: https://github.com/ray-project/ray
+[Polars]: https://github.com/pola-rs/polars
+[Prefect]: https://www.prefect.io
+[Timescaledb]: https://www.timescale.com/
+[Dask]: https://www.dask.org/
+[Spark]: https://spark.apache.org/docs/latest/api/python/index.html
+[DuckDB]: https://github.com/duckdb/duckdb
+[Daft]: https://github.com/Eventual-Inc/Daft
 
-PFeed allows traders to download historical, paper, and live data from various data sources, both free and paid,
-and stores them into a local data lake using [MinIO](https://min.io/).
+## Problem
+Starting algo-trading requires reliable, clean data. However, the time-consuming and mundane tasks of data cleaning and storage often discourage traders from embarking on their algo-trading journey.
 
-It is designed to be used alongside [PFund](https://github.com/PFund-Software-Ltd/pfund) — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading, or as a standalone package.
+## Solution
+By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, accelerating traders to get to the strategy development phase.
+
+---
+PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a bridge between raw data sources and traders by automating the process of data collection, cleaning, transformation, and storage, loading clean data into a **local data lake for quantitative analysis**.
+
+## Core Features
+- [x] Unified approach for interacting with various data sources and obtaining historical and live data
+- [x] ETL data pipline for transforming raw data to clean data and storing it in [MinIO] (optional)
+- [x] Fast data downloading, utilizing [Ray] for parallelization
+- [x] Supports multiple data tools (e.g. Pandas, [Polars], [Dask], [Spark], [DuckDB], [Daft])
+- [ ] Integrates with [Prefect] to control data flows
+- [ ] Listens to PFund's trade engine and adds trade history to a local database [Timescaledb] (optional)
+
+> It is designed to be used alongside [PFund] — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready.
+
+---
 
 <details>
 <summary>Table of Contents</summary>
 
 - [Project Status](#project-status)
-- [Mission](#mission)
-- [Core Features](#core-features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
     - [Main Usage: Data Feed](#main-usage-data-feed)
@@ -30,39 +51,16 @@ It is designed to be used alongside [PFund](https://github.com/PFund-Software-Lt
     - [List Current Config](#list-current-config)
     - [Run PFeed's docker-compose.yml](#run-pfeeds-docker-composeyml)
 - [Supported Data Sources](#supported-data-sources)
+- [Supported Data Tools](#supported-data-tools)
 - [Related Projects](#related-projects)
+- [Disclaimer](#disclaimer)
 
 </details>
 
 
 ## Project Status
-**_Caution: PFeed is at a VERY EARLY stage, use it at your own risk._**
-
 PFeed is currently under active development, the framework design will be prioritized first over
-stability and scalability. 
-
-Please note that the available version is a *dev* version, not a *stable* one. \
-You are encouraged to play with the *dev* version, but only use it when a *stable* version is released.
-
-> PFeed for the time being only supports [Bybit](https://bybit.com/) and Yahoo Finance for testing purpose.
-
-## Mission
-Algo-trading has always been a complicated task due to the multitude of components and procedures involved. \
-Data collection and processing is probably the most mundane and yet critical part of it, as all results and findings 
-are derived from the data.
-
-However, preparing this data for use is not quick and easy. For example, sometimes even when the data is available (e.g. [Bybit data](https://public.bybit.com/trading/)), it is often in raw form and requires some cleaning.
-
-> PFeed's mission is to **_free traders from the tedious data work_** by providing cleaned data in a standard format that is ready for use, making them significantly faster to get to the analysis and strategy development phase.
-
-
-## Core Features
-- [x] Unified approach for interacting with various data sources, obtaining historical and real-time data
-- [x] ETL data pipline for transforming raw data and storing it in [MinIO](https://min.io/) (optional)
-- [x] Utilizes [Ray](https://github.com/ray-project/ray) for parallel data downloading
-- [x] Supports Pandas, [Polars](https://github.com/pola-rs/polars) as data tools
-- [ ] Integrates with [Prefect](https://www.prefect.io) to control data flows
-- [ ] Listens to PFund's trade engine and adds trade history to a local database [Timescaledb](https://www.timescale.com/) (optional)
+stability and scalability.
 
 
 ## Installation
@@ -262,6 +260,25 @@ pfeed docker-compose down
 \* = paid data
 
 
+## Supported Data Tools
+| Data Tools               | Supported |
+| ------------------------ | --------- |
+| Pandas                   | 🟢        |
+| [Polars]                 | 🟢        |
+| [Dask]                   | 🔴        |
+| [Spark]                  | 🔴        |
+| [DuckDB]                 | 🔴        |
+| [Daft]                   | 🔴        |
+
+
 ## Related Projects
 - [PFund](https://github.com/PFund-Software-Ltd/pfund) — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
 - [PyTrade.org](https://pytrade.org) - A curated list of Python libraries and resources for algorithmic trading.
+
+
+## Disclaimer
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+This framework is intended for educational and research purposes only. It should not be used for real trading without understanding the risks involved. Trading in financial markets involves significant risk, and there is always the potential for loss. Your trading results may vary. No representation is being made that any account will or is likely to achieve profits or losses similar to those discussed on this platform.
+
+The developers of this framework are not responsible for any financial losses incurred from using this software. This includes but not limited to losses resulting from inaccuracies in any financial data output by PFeed. Users should conduct their due diligence, verify the accuracy of any data produced by PFeed, and consult with a professional financial advisor before engaging in real trading activities.

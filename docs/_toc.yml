@@ -14,10 +14,16 @@ chapters:
     - file: getting-started/quickstart/get_realtime_data
     - file: getting-started/quickstart/download_historical_data
     - file: getting-started/quickstart/stream_realtime_data
-- file: supported-data-sources
 - file: concepts
 - file: tutorials/index
 - file: how-to-guides/index
   sections:
   - file: how-to-guides/bybit_eda
+- file: integrations/index
+  sections:
+  - file: integrations/quadratic
+  - file: integrations/ibis
+  - file: integrations/fugue
+- file: supported-data-sources
+- file: supported-data-tools
 - file: api-reference

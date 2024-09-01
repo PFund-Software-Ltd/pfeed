@@ -1,4 +1,6 @@
 [FirstRate Data]: https://firstratedata.com
+[Databento]: https://databento.com/
+[Polygon]: https://polygon.io/
 
 # Supported Data Sources
 
@@ -8,6 +10,8 @@
 | Bybit                     | 🟢                  | 🟢                       | 🟡                  | 🔴                     |
 | *Interactive Brokers (IB) | 🔴                  | ⚪                       | 🔴                  | 🔴                     |
 | *[FirstRate Data]         | 🔴                  | 🔴                       | ⚪                  | ⚪                     |
+| [Databento]               | 🔴                  | 🔴                       | 🔴                  | 🔴                     |
+| [Polygon]                 | 🔴                  | 🔴                       | 🔴                  | 🔴                     |
 | Binance                   | 🔴                  | 🔴                       | 🔴                  | 🔴                     |
 | OKX                       | 🔴                  | 🔴                       | 🔴                  | 🔴                     |
 

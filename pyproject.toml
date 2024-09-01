@@ -14,7 +14,7 @@ keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "dat
 python = ">=3.10 <3.13"
 pfund = "^0.0.1.dev13"
 beautifulsoup4 = "^4.12.3"
-yfinance = "^0.2.41"
+yfinance = "^0.2.43"
 fastparquet = "^2024.5.0"
 psutil = {version = "^6.0.0", optional = true}
 minio = {version = "^7.2.8", optional = true}
@@ -55,9 +55,9 @@ faker = "^24.4.0"
 bandit = "^1.7.7"
 
 [tool.poetry.group.doc.dependencies]
-jupyter-book = "^1.0.0"
-notebook = "^7.1.2"
-sphinxawesome-theme = "^5.1.1"
+jupyter-book = "^1.0.2"
+notebook = "^7.2.2"
+sphinxawesome-theme = "^5.2.0"
 
 [build-system]
 requires = ["poetry-core"]

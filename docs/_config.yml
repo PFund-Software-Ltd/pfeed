@@ -29,7 +29,7 @@ repository:
 # Add GitHub buttons to your book
 # See https://jupyterbook.org/customize/config.html#add-a-link-to-your-repository
 html:
-  google_analytics_id: {GA_TRACKING_ID_PLACEHOLDER}
+  # google_analytics_id: {GA_TRACKING_ID_PLACEHOLDER}
   home_page_in_navbar: true
   favicon: images/favicon-dark.ico
   # NOTE: buttons will not work when using sphinxawesome_theme
@@ -51,3 +51,4 @@ sphinx:
   extra_extensions:
   - 'sphinx.ext.autodoc'
   - 'sphinx.ext.napoleon'
+  # - 'sphinxawesome_theme.highlighting'

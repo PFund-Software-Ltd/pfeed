@@ -22,6 +22,7 @@ from pfeed.config_handler import ConfigHandler
 from pfeed.const.common import SUPPORTED_DATA_FEEDS, SUPPORTED_DATA_TOOLS
 from pfeed.utils.utils import get_dates_in_between, rollback_date_range
 from pfeed.utils.validate import validate_pdt
+from pfeed import etl
 
 
 __all__ = ["BaseFeed"]
@@ -33,6 +34,7 @@ class BaseFeed:
         name: str,
         data_tool: tSUPPORTED_DATA_TOOLS='pandas',
         config: ConfigHandler | None = None,
+        debug: bool = False,
     ):
         from pfund.plogging import set_up_loggers
 
@@ -47,26 +49,29 @@ class BaseFeed:
             self.api = None
 
         try:
-            self._const = getattr(
-                importlib.import_module(f"pfeed.sources.{self.name.lower()}"), "const"
-            )
+            self._const = getattr(importlib.import_module(f"pfeed.sources.{self.name.lower()}"), "const")
             self._default_raw_dtype = self._const.SUPPORTED_RAW_DATA_TYPES[0]
         except (AttributeError, ModuleNotFoundError):
             self._const = self._default_raw_dtype = None
 
-        # configure
         if not config:
             config = ConfigHandler.load_config()
-
-        set_up_loggers(
-            config.log_path,
-            config.logging_config_file_path,
-            user_logging_config=config.logging_config,
-        )
-        self.logger = logging.getLogger(self.name.lower() + '_data')
         self._config = config
         self.data_path = config.data_path
-        self.temp_dir = tempfile.mktemp(prefix=f"{self.name.lower()}_temp_", dir=config.data_path)
+
+        # make stream_handler level INFO if debug=False, default level is DEBUG in logging.yml
+        if not debug:
+            if 'handlers' not in config.logging_config:
+                config.logging_config['handlers'] = {}
+            config.logging_config['handlers']['stream_handler'] = {'level': 'INFO'}
+        set_up_loggers(
+            config.log_path, 
+            config.logging_config_file_path, 
+            user_logging_config=config.logging_config
+        )
+        self.logger = logging.getLogger(self.name.lower() + '_data')
+        
+        self.temp_dir = tempfile.mktemp(prefix=f"{self.name.lower()}_temp_", dir=self.data_path)
 
     def _derive_dtype_and_resolution(self, resolution: str):
         """Derive dtype and resolution from the given resolution string.
@@ -112,7 +117,6 @@ class BaseFeed:
         self, pdt: str, date: str, dtype: tSUPPORTED_DATA_TYPES, resolution: Resolution,
     ) -> bytes | None:
         from pfund.datas.resolution import Resolution
-        from pfeed import etl
 
         if local_data := etl.get_data(self.name, dtype, pdt, date, mode="historical"):
             local_data_dtype = dtype
@@ -122,27 +126,27 @@ class BaseFeed:
             (local_data := etl.get_data(self.name, self._default_raw_dtype, pdt, date, mode="historical")):
             local_data_dtype = self._default_raw_dtype
             local_data_resolution = Resolution('1' + self._default_raw_dtype.split('_')[-1])
-            assert local_data_resolution.timeframe >= resolution.timeframe, f"{resolution=} but the raw data with the highest resolution is {local_data_resolution}, please use a lower resolution"
-            self.logger.info(f'No local data found with {dtype=}, switch to find "{local_data_dtype}" data instead')
+            assert local_data_resolution.timeframe <= resolution.timeframe, f"{resolution=} but the local raw data with the highest resolution is {local_data_resolution}, please use a lower resolution"
+            self.logger.info(f'No local {self.name} data found with {dtype=}, switched to find "{local_data_dtype}" data instead')
         else:
             local_data = None
             return local_data
             
         data_str = f"{self.name} {pdt} {date} {local_data_dtype} data"
         self.logger.info(f"loaded {data_str} locally")
-        data = local_data
-        if local_data_dtype == 'raw_tick' and local_data_dtype != dtype:
-            data: bytes = etl.clean_raw_tick_data(local_data)
-        is_resample_data = (resolution.period != 1)
-        if is_resample_data:
-            data: bytes = etl.resample_data(data, resolution)
-            self.logger.info(f'resampled {data_str} to {resolution=}')
-        return data
 
+        if local_data_dtype == self._default_raw_dtype and local_data_dtype != dtype:
+            return self._transform_raw_data_to_dtype(local_data, dtype, resolution)
+        else:
+            return local_data
+    
     def _get_data_from_source(
         self, pdt: str, date: str, dtype: tSUPPORTED_DATA_TYPES, resolution: Resolution
     ) -> bytes | None:
         raise NotImplementedError(f"{self.name} _get_data_from_source() is not implemented")
+    
+    def _transform_raw_data_to_dtype(self, raw_data: bytes, dtype: tSUPPORTED_DATA_TYPES, resolution: Resolution) -> bytes:
+        raise NotImplementedError(f"{self.name} _transform_raw_data_to_dtype() is not implemented")
     
     def _read_parquet(self, temp_file_path: str) -> pl.LazyFrame:
         """Read a parquet file into a lazyframe."""
@@ -222,10 +226,7 @@ class BaseFeed:
             end_date: End date.
         """
         import pandas as pd
-        from pfeed import etl
-        
-        self._prepare_temp_dir()
-
+            
         assert validate_pdt(
             self.name, pdt
         ), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {self.name} are: {self._const.SUPPORTED_PRODUCT_TYPES})'
@@ -242,6 +243,9 @@ class BaseFeed:
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         dfs = []  # could be dataframes or lazyframes
         total_estimated_memory_usage_in_gb = 0
+        if self.data_tool != 'pandas':
+            self._prepare_temp_dir()
+        
         for date in dates:
             data = self._get_data_from_local(pdt, date, dtype, resolution) or self._get_data_from_source(pdt, date, dtype, resolution)
             if not data:
@@ -253,6 +257,7 @@ class BaseFeed:
                 self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {date} is {total_estimated_memory_usage_in_gb:.2f} GB")
 
             if self.data_tool != 'pandas':
+                self._prepare_temp_dir()
                 # Create a temporary parquet file for lazyframe to point to
                 temp_file_path = os.path.join(self.temp_dir, f"temp_{self.name}_{pdt}_{repr(resolution)}_{date.strftime('%Y%m%d')}.parquet")
                 df.to_parquet(temp_file_path, compression='zstd')

@@ -16,6 +16,7 @@ from dotenv import find_dotenv, load_dotenv
 from tqdm import tqdm
 from rich.console import Console
 
+from pfeed import etl
 from pfeed.datastore import Datastore
 from pfeed.config_handler import ConfigHandler
 from pfeed.sources.bybit import api
@@ -96,7 +97,6 @@ def _prepare_dates(start_date: str | None, end_date: str | None) -> tuple[dateti
 
 
 def _run_etl(data_sink: tSUPPORTED_DATA_SINKS, product: BaseProduct, date: datetime.date, dtypes: list[str]):
-    from pfeed import etl
     pdt = product.pdt
     if raw_data := api.get_data(pdt, date):
         raw_tick: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)

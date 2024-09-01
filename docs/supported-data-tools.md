@@ -17,4 +17,4 @@
 
 🟢 = finished \
 🟡 = in progress \
-🔴 = todo \
+🔴 = todo 

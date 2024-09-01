@@ -10,6 +10,16 @@
 
 ## Using [Poetry](https://python-poetry.org) (Recommended)
 ```bash
+# [RECOMMENDED]: Download data (e.g. Bybit and Yahoo Finance) + Data tools (e.g. pandas, polars) + Data storage (e.g. MinIO) + Boosted performance (e.g. Ray)
+poetry add "pfeed[all]"
+
+# [Download data + Data tools + Data storage]
+poetry add "pfeed[df,data]"
+
+# [Download data + Data tools]
+poetry add "pfeed[df]"
+
+# [Download data only]:
 poetry add pfeed
 
 # update to the latest version:
@@ -20,7 +30,8 @@ poetry update pfeed
 ## Using Pip
 
 ```bash
-pip install pfeed
+# same as above, you can choose to install "pfeed[all]", "pfeed[df,data]", "pfeed[df]" or "pfeed"
+pip install "pfeed[all]"
 
 # install the latest version:
 pip install -U pfeed
@@ -30,6 +41,4 @@ pip install -U pfeed
 ## Checking your installation
 ```bash
 $ pfeed --version
-
-pfeed, version 0.0.1.dev4
 ```

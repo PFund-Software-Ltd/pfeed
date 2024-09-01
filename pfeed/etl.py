@@ -70,8 +70,6 @@ def get_data(
     except ImportError:
         MinioException = Exception
     
-    logger = logging.getLogger(data_source.lower() + '_data')
-        
     for data_sink in SUPPORTED_DATA_SINKS:
         try:
             data: bytes = extract_data(data_sink, data_source, dtype, pdt, date, mode=mode)
@@ -79,8 +77,6 @@ def get_data(
             data = None
         if data:
             return data
-    else:
-        logger.info(f'{data_source} {pdt} {date} {dtype} data is nowhere to be found, {SUPPORTED_DATA_SINKS=}')
 
 
 def extract_data(
@@ -125,18 +121,18 @@ def extract_data(
         if fp.exists():
             with open(fp.file_path, 'rb') as f:
                 data: bytes = f.read()
-            logger.debug(f'extracted {data_source} data from local path {fp.storage_path}')
+            logger.debug(f'extracted {data_source} {dtype} data from local path {fp.file_path}')
             return data
         else:
-            logger.debug(f'failed to extract {data_source} data from local path {fp.storage_path}')
+            logger.debug(f'failed to extract {data_source} {dtype} data from local path {fp.file_path}')
     elif data_sink == 'minio':
         datastore = Datastore(data_sink)
         object_name = fp.storage_path
         data: bytes | None = datastore.get_object(object_name)
         if data:
-            logger.debug(f'extracted {data_source} data from MinIO object {object_name}')
+            logger.debug(f'extracted {data_source} {dtype} data from MinIO object {object_name}')
         else:
-            logger.debug(f'failed to extract {data_source} data from MinIO object {object_name}')
+            logger.debug(f'failed to extract {data_source} {dtype} data from MinIO object {object_name}')
         return data
     else:
         raise NotImplementedError(f'{data_sink=}')
@@ -255,7 +251,7 @@ def resample_data(
     except ImportError:
         pass
     from pfund.datas.resolution import Resolution
-    
+
     # standardize resolution by following pfund's standard, e.g. '1minute' -> '1m'
     if type(resolution) is not Resolution:
         resolution = Resolution(resolution)

@@ -45,6 +45,15 @@ def download(
     )
 
 
+# TODO
+def stream():
+    pass
+
+
+download_historical_data = download
+stream_realtime_data = stream
+
+
 __version__ = version("pfeed")
 __all__ = (
     "__version__",

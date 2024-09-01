@@ -17,6 +17,11 @@
 [Spark]: https://spark.apache.org/docs/latest/api/python/index.html
 [DuckDB]: https://github.com/duckdb/duckdb
 [Daft]: https://github.com/Eventual-Inc/Daft
+[PyTrade.org]: https://pytrade.org
+[Databento]: https://databento.com/
+[Polygon]: https://polygon.io/
+[Bybit]: https://bybit.com/
+[FirstRate Data]: https://firstratedata.com
 
 ## Problem
 Starting algo-trading requires reliable, clean data. However, the time-consuming and mundane tasks of data cleaning and storage often discourage traders from embarking on their algo-trading journey.
@@ -42,7 +47,6 @@ PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a br
 <details>
 <summary>Table of Contents</summary>
 
-- [Project Status](#project-status)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
     - [Main Usage: Data Feed](#main-usage-data-feed)
@@ -56,11 +60,6 @@ PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a br
 - [Disclaimer](#disclaimer)
 
 </details>
-
-
-## Project Status
-PFeed is currently under active development, the framework design will be prioritized first over
-stability and scalability.
 
 
 ## Installation
@@ -84,7 +83,8 @@ poetry update pfeed
 
 ### Using Pip
 ```bash
-pip install pfeed
+# same as above, you can choose to install "pfeed[all]", "pfeed[df,data]", "pfeed[df]" or "pfeed"
+pip install "pfeed[all]"
 
 # install the latest version:
 pip install -U pfeed
@@ -96,87 +96,34 @@ $ pfeed --version
 ```
 
 ## Quick Start
-### Main Usage: Data Feed
-1. Download bybit raw data on the fly if not stored locally
+### 1. Get Historical Data in Dataframe (No storage)
+Get [Bybit]'s data in dataframe, e.g. 1-minute data (data is downloaded on the fly if not stored locally)
 
-    ```python
-    import pfeed as pe
+```python
+import pfeed as pe
 
-    feed = pe.BybitFeed()
+feed = pe.BybitFeed(data_tool='polars')
 
-    # df is a dataframe or a lazyframe (lazily loaded dataframe)
-    df = feed.get_historical_data(
-        'BTC_USDT_PERP',
-        resolution='raw',
-        start_date='2024-03-01',
-        end_date='2024-03-01',
-        data_tool='polars',  # or 'pandas'
-    )
-    ```
+df = feed.get_historical_data(
+    'BTC_USDT_PERP',
+    resolution='1minute',  # 'raw' or '1tick'/'1t' or '2second'/'2s' etc.
+    start_date='2024-03-01',
+    end_date='2024-03-01',
+)
+```
 
-    > By using pfeed, you are just one line of code away from playing with e.g. bybit data, how convenient!
+Printing the first few rows of `df`:
+|    | ts                  | product       | resolution   |    open |    high |     low |   close |   volume |
+|---:|:--------------------|:--------------|:-------------|--------:|--------:|--------:|--------:|---------:|
+|  0 | 2024-03-01 00:00:00 | BTC_USDT_PERP | 1m           | 61184.1 | 61244.5 | 61175.8 | 61244.5 |  159.142 |
+|  1 | 2024-03-01 00:01:00 | BTC_USDT_PERP | 1m           | 61245.3 | 61276.5 | 61200.7 | 61232.2 |  227.242 |
+|  2 | 2024-03-01 00:02:00 | BTC_USDT_PERP | 1m           | 61232.2 | 61249   | 61180   | 61184.2 |   91.446 |
 
-    Printing the first few rows of `df`:
-    |    | ts                            | symbol   |   side |   volume |   price | tickDirection   | trdMatchID                           |   grossValue |   homeNotional |   foreignNotional |
-    |---:|:------------------------------|:---------|-------:|---------:|--------:|:----------------|:-------------------------------------|-------------:|---------------:|------------------:|
-    |  0 | 2024-03-01 00:00:00.097599983 | BTCUSDT  |      1 |    0.003 | 61184.1 | ZeroMinusTick   | 79ac9a21-0249-5985-b042-906ec7604794 |  1.83552e+10 |          0.003 |           183.552 |
-    |  1 | 2024-03-01 00:00:00.098299980 | BTCUSDT  |      1 |    0.078 | 61184.9 | PlusTick        | 2af4e516-8ff4-5955-bb9c-38aa385b7b44 |  4.77242e+11 |          0.078 |          4772.42  |
-
-2. Get dataframe with different resolution, e.g. 1-minute data
-    ```python
-    import pfeed as pe
-
-    feed = pe.BybitFeed()
-
-    # df is a dataframe or a lazyframe (lazily loaded dataframe)
-    df = feed.get_historical_data(
-        'BTC_USDT_PERP',
-        resolution='1minute',  # or '1tick'/'1t', '2second'/'2s', '3minute'/'3m' etc.
-        start_date='2024-03-01',
-        end_date='2024-03-01',
-        data_tool='polars',
-    )
-    ```
-    > If you will be interacting with the data frequently, you should consider downloading it to your local machine.
-
-    Printing the first few rows of `df`:
-    |    | ts                  | product       | resolution   |    open |    high |     low |   close |   volume |
-    |---:|:--------------------|:--------------|:-------------|--------:|--------:|--------:|--------:|---------:|
-    |  0 | 2024-03-01 00:00:00 | BTC_USDT_PERP | 1m           | 61184.1 | 61244.5 | 61175.8 | 61244.5 |  159.142 |
-    |  1 | 2024-03-01 00:01:00 | BTC_USDT_PERP | 1m           | 61245.3 | 61276.5 | 61200.7 | 61232.2 |  227.242 |
-    |  2 | 2024-03-01 00:02:00 | BTC_USDT_PERP | 1m           | 61232.2 | 61249   | 61180   | 61184.2 |   91.446 |
-
-
-3. pfeed also supports simple wrapping of [yfinance](https://github.com/ranaroussi/yfinance)
-    ```python
-    import pfeed as pe
-
-    feed = pe.YahooFinanceFeed()
-
-    # you can still use any kwargs supported by yfinance's ticker.history(...)
-    # e.g. 'prepost', 'auto_adjust' etc.
-    yfinance_kwargs = {}
-
-    df = feed.get_historical_data(
-        'AAPL',
-        resolution='1d',
-        start_date='2024-03-01',
-        end_date='2024-03-20',
-        **yfinance_kwargs
-    )
-    ```
-    > Note that YahooFinanceFeed doesn't support the kwarg `data_tool`, e.g. polars
-    
-    Printing the first few rows of `df`:
-    | ts                  | symbol   | resolution   |   open |   high |    low |   close |   volume |   dividends |   stock_splits |
-    |:--------------------|:---------|:-------------|-------:|-------:|-------:|--------:|---------:|------------:|---------------:|
-    | 2024-03-01 05:00:00 | AAPL     | 1d           | 179.55 | 180.53 | 177.38 |  179.66 | 73488000 |           0 |              0 |
-    | 2024-03-04 05:00:00 | AAPL     | 1d           | 176.15 | 176.9  | 173.79 |  175.1  | 81510100 |           0 |              0 |
-    | 2024-03-05 05:00:00 | AAPL     | 1d           | 170.76 | 172.04 | 169.62 |  170.12 | 95132400 |           0 |              0 |
+> By using pfeed, you are just a few lines of code away from a standardized dataframe, how convenient!
 
 
 
-### Download Historical Data on the Command Line Interface (CLI)
+### 2. Download Historical Data on the Command Line Interface (CLI)
 ```bash
 # download data, default data type (dtype) is 'raw' data
 pfeed download -d BYBIT -p BTC_USDT_PERP --start-date 2024-03-01 --end-date 2024-03-08
@@ -197,11 +144,11 @@ pfeed download -d BYBIT -p BTC_USDT_PERP --use-minio
 pfeed download -d BYBIT -p BTC_USDT_PERP --debug --no-ray
 ```
 
-### Download Historical Data in Python
+### 3. Download Historical Data in Python
 ```python
 import pfeed as pe
 
-# compared to the CLI approach, this is more convenient for downloading multiple products
+# compared to the CLI approach, this approach is more convenient for downloading multiple products
 pe.download(
     data_source='bybit',
     pdts=[
@@ -244,14 +191,14 @@ pfeed docker-compose down
 ## Supported Data Sources
 | Data Source               | Get Historical Data | Download Historical Data | Get Live/Paper Data | Stream Live/Paper Data |
 | ------------------------- | ------------------- | ------------------------ | ------------------- | ---------------------- |
-| Yahoo Finance             | 🟢                  | ⚪                       | ⚪                  | ⚪                     |
-| Bybit                     | 🟢                  | 🟢                       | 🟡                  | 🔴                     |
-| *Interactive Brokers (IB) | 🔴                  | ⚪                       | 🔴                  | 🔴                     |
-| *[FirstRate Data]         | 🔴                  | 🔴                       | ⚪                  | ⚪                     |
-| Binance                   | 🔴                  | 🔴                       | 🔴                  | 🔴                     |
-| OKX                       | 🔴                  | 🔴                       | 🔴                  | 🔴                     |
-
-[FirstRate Data]: https://firstratedata.com
+| Yahoo Finance             | 🟢                  | ⚪                        | ⚪                  | ⚪                     |
+| Bybit                     | 🟢                  | 🟢                        | 🟡                  | 🔴                     |
+| *Interactive Brokers (IB) | 🔴                  | ⚪                        | 🔴                  | 🔴                     |
+| *[FirstRate Data]         | 🔴                  | 🔴                        | ⚪                  | ⚪                     |
+| [Databento]               | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
+| [Polygon]                 | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
+| Binance                   | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
+| OKX                       | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
 
 🟢 = finished \
 🟡 = in progress \
@@ -272,8 +219,8 @@ pfeed docker-compose down
 
 
 ## Related Projects
-- [PFund](https://github.com/PFund-Software-Ltd/pfund) — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
-- [PyTrade.org](https://pytrade.org) - A curated list of Python libraries and resources for algorithmic trading.
+- [PFund] — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
+- [PyTrade.org] - A curated list of Python libraries and resources for algorithmic trading.
 
 
 ## Disclaimer

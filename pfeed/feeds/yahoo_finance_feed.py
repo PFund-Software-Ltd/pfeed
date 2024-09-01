@@ -13,6 +13,7 @@ import datetime
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import separate_number_and_chars
+from pfeed import etl
 
 
 __all__ = ["YahooFinanceFeed"]
@@ -46,8 +47,9 @@ class YahooFinanceFeed(BaseFeed):
         self,
         data_tool: tSUPPORTED_DATA_TOOLS = "pandas",
         config: ConfigHandler | None = None,
+        debug: bool = False,
     ):
-        super().__init__("yahoo_finance", data_tool=data_tool, config=config)
+        super().__init__("yahoo_finance", data_tool=data_tool, config=config, debug=debug)
 
     def get_ticker(self, symbol):
         import yfinance as yf
@@ -82,7 +84,6 @@ class YahooFinanceFeed(BaseFeed):
         """
         import pandas as pd
         
-        from pfeed import etl
         from pfund.datas.resolution import Resolution
 
         if rollback_period in ["ytd", "max"]:

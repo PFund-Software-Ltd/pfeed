@@ -19,7 +19,7 @@ kernelspec:
 [PFund's Basics]: https://pfund-docs.pfund.ai/getting-started/basics.html
 [PFund's Conventions]: https://pfund-docs.pfund.ai/getting-started/conventions.html
 
-# Basics
+# Usage
 Some basic concepts and usage in pfeed will be explained here.
 
 ## Data Feeds
@@ -151,6 +151,10 @@ pfeed docker-compose up -d
 # e.g. stop services
 pfeed docker-compose down
 ```
+
+
+## Configuration
+TODO
 
 
 ```{seealso}

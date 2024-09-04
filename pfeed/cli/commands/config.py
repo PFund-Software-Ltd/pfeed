@@ -31,6 +31,8 @@ def remove_config(config_file_path: str | Path):
 @click.option('--logging-config', type=dict, help='Set the logging config')
 @click.option('--use-fork-process', type=bool, help='If True, multiprocessing.set_start_method("fork")')
 @click.option('--use-custom-excepthook', type=bool, help='If True, log uncaught exceptions to file')
+@click.option('--env-file', 'env_file_path', type=click.Path(resolve_path=True, exists=True), help='Path to the .env file')
+@click.option('--debug', is_flag=True, help='if enabled, debug mode will be enabled where logs at DEBUG level will be printed')
 @click.option('--list', '-l', is_flag=True, is_eager=True, help='List all available options')
 @click.option('--reset', is_flag=True, is_eager=True, help='Reset the configuration to defaults') 
 def config(ctx, **kwargs):

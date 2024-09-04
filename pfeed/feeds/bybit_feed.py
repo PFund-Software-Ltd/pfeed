@@ -5,23 +5,18 @@ if TYPE_CHECKING:
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
     from pfeed.sources.bybit.types import tSUPPORTED_DATA_TYPES
     from pfund.datas.resolution import Resolution
-    from pfeed.config_handler import ConfigHandler
     
 from pfeed import etl
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit.utils import create_efilename
 
+
 __all__ = ['BybitFeed']
 
 
 class BybitFeed(BaseFeed):
-    def __init__(
-        self, 
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas', 
-        config: ConfigHandler | None=None, 
-        debug: bool=False,
-    ):
-        super().__init__('bybit', data_tool=data_tool, config=config, debug=debug)
+    def __init__(self, data_tool: tSUPPORTED_DATA_TOOLS='pandas'):
+        super().__init__('bybit', data_tool=data_tool)
     
     def _get_data_from_source(
         self, 

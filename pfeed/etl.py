@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from pfeed.types.common_literals import tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_SINKS, tSUPPORTED_DATA_TYPES, tSUPPORTED_DATA_MODES
     try:
         import pandas as pd
-        import polars as pl
     except ImportError:
         pass
     from pfund.datas.resolution import Resolution
@@ -13,6 +12,11 @@ if TYPE_CHECKING:
 import io
 import logging
 import importlib
+
+try:
+    import polars as pl
+except ImportError:
+    pass
 
 from pfeed.datastore import Datastore
 from pfeed.filepath import FilePath
@@ -247,7 +251,6 @@ def resample_data(
     '''
     try:
         import pandas as pd
-        import polars as pl
     except ImportError:
         pass
     from pfund.datas.resolution import Resolution

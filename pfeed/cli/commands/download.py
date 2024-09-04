@@ -1,8 +1,8 @@
 import importlib
 
 import click
-from dotenv import find_dotenv, load_dotenv
 
+import pfeed as pe
 from pfeed.const.common import ALIASES, SUPPORTED_DOWNLOAD_DATA_SOURCES, SUPPORTED_DATA_TYPES
 
 
@@ -16,7 +16,6 @@ SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED = SUPPORTED_DATA_TYPES + ['raw']
 
 @click.command()
 @click.pass_context
-@click.option('--env-file', 'env_file_path', type=click.Path(exists=True), help='Path to the .env file')
 @click.option('--data-source', '-d', required=True, type=click.Choice(SUPPORTED_DOWNLOAD_DATA_SOURCES_ALIASES_INCLUDED, case_sensitive=False), help='Data source')
 @click.option('--dtypes', '--dt', 'dtypes', multiple=True, default=['raw'], type=click.Choice(SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED, case_sensitive=False), help=f'{SUPPORTED_DATA_TYPES=}. How to pass in multiple values: --dt raw --dt tick')
 @click.option('--pdts', '-p', 'pdts', multiple=True, default=[], help='List of trading products')
@@ -26,8 +25,10 @@ SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED = SUPPORTED_DATA_TYPES + ['raw']
 @click.option('--num-cpus', '-n', default=8, type=int, help="number of logical CPUs used for Ray's tasks")
 @click.option('--use-minio', '-m', is_flag=True, help='if enabled, data will be loaded into Minio')
 @click.option('--no-ray', is_flag=True, help='if enabled, Ray will not be used')
+@click.option('--env-file', 'env_file_path', type=click.Path(exists=True), help='Path to the .env file')
 @click.option('--debug', is_flag=True, help='if enabled, debug mode will be enabled where logs at DEBUG level will be printed')
-def download(ctx, env_file_path, data_source, pdts, dtypes, ptypes, start_date, end_date, num_cpus, no_ray, use_minio, debug):
+def download(data_source, dtypes, pdts, ptypes, start_date, end_date, num_cpus, no_ray, use_minio, env_file_path, debug):
+    pe.configure(env_file_path=env_file_path, debug=debug)
     data_source = ALIASES.get(data_source, data_source)
     pipeline = importlib.import_module(f'pfeed.sources.{data_source.lower()}.download')
     pipeline.download_historical_data(
@@ -39,7 +40,4 @@ def download(ctx, env_file_path, data_source, pdts, dtypes, ptypes, start_date, 
         num_cpus=num_cpus,
         use_ray=not no_ray,
         use_minio=use_minio,
-        debug=debug,
-        config=ctx.obj['config'],
-        env_file_path=env_file_path,
     )

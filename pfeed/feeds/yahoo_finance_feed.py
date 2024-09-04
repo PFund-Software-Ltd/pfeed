@@ -4,14 +4,17 @@ if TYPE_CHECKING:
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
     try:
         import pandas as pd
-        import polars as pl
     except ImportError:
         pass
 
 import datetime
 
+try:
+    import polars as pl
+except ImportError:
+    pass
+
 from pfeed.feeds.base_feed import BaseFeed
-from pfeed.config_handler import ConfigHandler
 from pfeed.utils.utils import separate_number_and_chars
 from pfeed import etl
 
@@ -43,17 +46,13 @@ class YahooFinanceFeed(BaseFeed):
         "M": [1, 3],
     }
 
-    def __init__(
-        self,
-        data_tool: tSUPPORTED_DATA_TOOLS = "pandas",
-        config: ConfigHandler | None = None,
-        debug: bool = False,
-    ):
-        super().__init__("yahoo_finance", data_tool=data_tool, config=config, debug=debug)
+    def __init__(self, data_tool: tSUPPORTED_DATA_TOOLS = "pandas"):
+        import yfinance
+        super().__init__("yahoo_finance", data_tool=data_tool)
+        self.api = yfinance
 
     def get_ticker(self, symbol):
-        import yfinance as yf
-        return yf.Ticker(symbol.upper())
+        return self.api.Ticker(symbol.upper())
 
     def get_historical_data(
         self,
@@ -82,8 +81,6 @@ class YahooFinanceFeed(BaseFeed):
                 This will automatically be triggered if yfinance does not support the resolution.
             **kwargs: kwargs supported by `yfinance`
         """
-        import pandas as pd
-        
         from pfund.datas.resolution import Resolution
 
         if rollback_period in ["ytd", "max"]:
@@ -178,5 +175,4 @@ class YahooFinanceFeed(BaseFeed):
         if self.data_tool == "pandas":
             return df
         elif self.data_tool == "polars":
-            import polars as pl
             return pl.from_pandas(df)

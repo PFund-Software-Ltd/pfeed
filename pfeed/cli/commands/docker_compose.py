@@ -3,7 +3,6 @@ from pathlib import Path
 import importlib.resources
 import subprocess
 
-from dotenv import find_dotenv, load_dotenv
 import click
 
 from pfeed.const.paths import PROJ_NAME
@@ -18,16 +17,8 @@ from pfeed.const.paths import PROJ_NAME
 @click.option('--docker-file', 'docker_file_path', type=click.Path(exists=True), help='Path to the docker-compose.yml file')
 def docker_compose(ctx, env_file_path, docker_file_path):
     """Forwards commands to docker-compose with the package's docker-compose.yml file if not specified."""
-    if not env_file_path:
-        if env_file_path := find_dotenv(usecwd=True, raise_error_if_not_found=False):
-            click.echo(f'.env file path is not specified, using env file in "{env_file_path}"')
-        else:
-            click.echo('.env file is not found')
-    
-    if env_file_path:
-        load_dotenv(env_file_path, override=True)
-    
     config = ctx.obj['config']
+    config.load_env_file(env_file_path)
     os.environ['PFEED_DATA_PATH'] = config.data_path
     
     if not docker_file_path:

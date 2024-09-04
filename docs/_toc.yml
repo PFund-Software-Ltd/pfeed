@@ -13,17 +13,30 @@ chapters:
     - file: getting-started/quickstart/get_realtime_data
     - file: getting-started/quickstart/download_historical_data
     - file: getting-started/quickstart/stream_realtime_data
-  - file: getting-started/usage
-- file: concepts
+  - file: getting-started/cli_commands
+- file: concepts/index
+  sections:
+  - file: concepts/data_types
+  - file: concepts/etl_elt
+  - file: concepts/data_lake
 - file: tutorials/index
+  sections:
+  - file: tutorials/configuration
+  - file: tutorials/data_feed
+  - file: tutorials/download
+  - file: tutorials/stream
+  - file: tutorials/storage
 - file: how-to-guides/index
   sections:
-  - file: how-to-guides/bybit_eda
+  - file: how-to-guides/eda
+  - file: how-to-guides/scale_up
 - file: integrations/index
   sections:
   - file: integrations/quadratic
   - file: integrations/ibis
   - file: integrations/fugue
+  - file: integrations/delta_lake
 - file: supported-data-sources
 - file: supported-data-tools
 - file: api-reference
+- file: cli-reference

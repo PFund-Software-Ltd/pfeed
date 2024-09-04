@@ -12,13 +12,12 @@ import datetime
 from collections import defaultdict
 from logging.handlers import QueueHandler, QueueListener
 
-from dotenv import find_dotenv, load_dotenv
 from tqdm import tqdm
 from rich.console import Console
 
 from pfeed import etl
 from pfeed.datastore import Datastore
-from pfeed.config_handler import ConfigHandler
+from pfeed.config_handler import get_config
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES
 from pfeed.sources.bybit.utils import get_exchange, create_efilename
@@ -29,27 +28,6 @@ from pfeed.const.common import SUPPORTED_DATA_TYPES
 
 __all__ = ['download_historical_data']
 
-
-def _set_up_loggers(config: ConfigHandler, debug: bool):
-    from pfund.plogging import set_up_loggers
-    # make stream_handler level INFO if debug=False, default level is DEBUG in logging.yml
-    if not debug:
-        if 'handlers' not in config.logging_config:
-            config.logging_config['handlers'] = {}
-        config.logging_config['handlers']['stream_handler'] = {'level': 'INFO'}
-    set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
-
-
-def _load_env_file(env_file_path: str | None):
-    if not env_file_path:
-        if env_file_path := find_dotenv(usecwd=True, raise_error_if_not_found=False):
-            print(f'.env file path is not specified, using env file in "{env_file_path}"')
-        else:
-            print('.env file is not found')
-    
-    if env_file_path:
-        load_dotenv(env_file_path, override=True)
-        
 
 def _prepare_dtypes(dtypes: list[str]) -> list[str]:
     default_raw_dtype = SUPPORTED_RAW_DATA_TYPES[0]
@@ -129,21 +107,20 @@ def download_historical_data(
     num_cpus: int=8,
     use_ray: bool=True,
     use_minio: bool=False,
-    debug: bool=False,
-    config: ConfigHandler | None=None,
-    env_file_path: str | None=None,
 ) -> None:
-    if not config:
-        config = ConfigHandler.load_config()
-        
+    from pfund.plogging import set_up_loggers
+    
+    config = get_config()
+    is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
+    if not is_loggers_set_up:
+        set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
+    logger = logging.getLogger(DATA_SOURCE.lower() + '_data')
+
     print(f'''Hint: 
         You can use the command "pfeed config --data-path ..." to set your data path that stores downloaded data.
         The current data path is: {config.data_path}.
     ''')
     
-    _set_up_loggers(config, debug)
-    _load_env_file(env_file_path)
-    logger = logging.getLogger(DATA_SOURCE.lower() + '_data')
     dtypes = _prepare_dtypes(dtypes)
     pdts = _prepare_pdts(pdts, ptypes)
     start_date, end_date = _prepare_dates(start_date, end_date)

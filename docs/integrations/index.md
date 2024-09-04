@@ -1,4 +1,4 @@
-# Integrations (TODO)
+# Integrations
 
 
 ```{tableofcontents}

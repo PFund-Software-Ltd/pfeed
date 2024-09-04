@@ -2,20 +2,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfeed.config_handler import ConfigHandler
     from pfeed.types.common_literals import tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_TYPES
 
 import importlib
 from importlib.metadata import version
 
 from pfeed import etl
-from pfeed.config_handler import configure
+from pfeed.config_handler import configure, get_config
 from pfeed.const.common import ALIASES
 from pfeed.sources import bybit
 from pfeed.feeds import BybitFeed, YahooFinanceFeed
 
 
-def download(
+def download_historical_data(
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
     pdts: str | list[str] | None = None,
     dtypes: tSUPPORTED_DATA_TYPES | list[tSUPPORTED_DATA_TYPES] | None = None,
@@ -25,39 +24,36 @@ def download(
     num_cpus: int = 8,
     use_ray: bool = True,
     use_minio: bool = False,
-    debug: bool = False,
-    config: ConfigHandler | None = None,
-    env_file_path: str | None = None,
 ):
     data_source = importlib.import_module(f"pfeed.sources.{data_source.lower()}")
-    return data_source.download(
-        pdts,
-        dtypes,
-        ptypes,
-        start_date,
-        end_date,
-        num_cpus,
-        use_ray,
-        use_minio,
-        debug,
-        config,
-        env_file_path,
+    return data_source.download_historical_data(
+        pdts=pdts,
+        dtypes=dtypes,
+        ptypes=ptypes,
+        start_date=start_date,
+        end_date=end_date,
+        num_cpus=num_cpus,
+        use_ray=use_ray,
+        use_minio=use_minio,
     )
 
 
 # TODO
-def stream():
-    pass
+def stream_realtime_data(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES):
+    data_source = importlib.import_module(f"pfeed.sources.{data_source.lower()}")
+    return data_source.stream_realtime_data()
+    
 
 
-download_historical_data = download
-stream_realtime_data = stream
+download = download_historical_data
+stream = stream_realtime_data
 
 
 __version__ = version("pfeed")
 __all__ = (
     "__version__",
     "configure",
+    "get_config",
     "ALIASES",
     "etl",
     "bybit",

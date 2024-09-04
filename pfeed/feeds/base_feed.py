@@ -3,7 +3,6 @@ from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     try:
         import pandas as pd
-        import polars as pl
     except ImportError:
         pass
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_DATA_TYPES
@@ -18,7 +17,12 @@ import datetime
 import importlib
 import tempfile
 
-from pfeed.config_handler import ConfigHandler
+try:
+    import polars as pl
+except ImportError:
+    pass
+
+from pfeed.config_handler import get_config
 from pfeed.const.common import SUPPORTED_DATA_FEEDS, SUPPORTED_DATA_TOOLS
 from pfeed.utils.utils import get_dates_in_between, rollback_date_range
 from pfeed.utils.validate import validate_pdt
@@ -29,46 +33,28 @@ __all__ = ["BaseFeed"]
 
 
 class BaseFeed:
-    def __init__(
-        self,
-        name: str,
-        data_tool: tSUPPORTED_DATA_TOOLS='pandas',
-        config: ConfigHandler | None = None,
-        debug: bool = False,
-    ):
+    def __init__(self, name: str, data_tool: tSUPPORTED_DATA_TOOLS='pandas'):
         from pfund.plogging import set_up_loggers
-
+        
         self.name = name.upper()
         assert self.name in SUPPORTED_DATA_FEEDS, f"Invalid {self.name=}, {SUPPORTED_DATA_FEEDS=}"
         self.data_tool = data_tool.lower()
         assert self.data_tool in SUPPORTED_DATA_TOOLS, f"Invalid {self.data_tool=}, {SUPPORTED_DATA_TOOLS=}"
         
         try:
-            self.api = getattr(importlib.import_module(f'pfeed.sources.{self.name.lower()}'), 'api')
+            module = importlib.import_module(f'pfeed.sources.{self.name.lower()}')
+            setattr(self, self.name.lower(), module)  # set e.g. 'bybit' module as attribute
+            self.api = getattr(module, "api")
+            self.const = getattr(module, "const")
+            self._default_raw_dtype = self.const.SUPPORTED_RAW_DATA_TYPES[0]
         except (AttributeError, ModuleNotFoundError):
-            self.api = None
+            self.api = self.const = self._default_raw_dtype = None
 
-        try:
-            self._const = getattr(importlib.import_module(f"pfeed.sources.{self.name.lower()}"), "const")
-            self._default_raw_dtype = self._const.SUPPORTED_RAW_DATA_TYPES[0]
-        except (AttributeError, ModuleNotFoundError):
-            self._const = self._default_raw_dtype = None
-
-        if not config:
-            config = ConfigHandler.load_config()
-        self._config = config
+        config = get_config()
+        is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
+        if not is_loggers_set_up:
+            set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
         self.data_path = config.data_path
-
-        # make stream_handler level INFO if debug=False, default level is DEBUG in logging.yml
-        if not debug:
-            if 'handlers' not in config.logging_config:
-                config.logging_config['handlers'] = {}
-            config.logging_config['handlers']['stream_handler'] = {'level': 'INFO'}
-        set_up_loggers(
-            config.log_path, 
-            config.logging_config_file_path, 
-            user_logging_config=config.logging_config
-        )
         self.logger = logging.getLogger(self.name.lower() + '_data')
         
         self.temp_dir = tempfile.mktemp(prefix=f"{self.name.lower()}_temp_", dir=self.data_path)
@@ -93,8 +79,8 @@ class BaseFeed:
             if dtype == "raw":
                 dtype = self._default_raw_dtype
             assert (
-                dtype in self._const.SUPPORTED_RAW_DATA_TYPES
-            ), f'"{dtype}" is not supported for {self.name} data, supported types are: {self._const.SUPPORTED_RAW_DATA_TYPES}'
+                dtype in self.const.SUPPORTED_RAW_DATA_TYPES
+            ), f'"{dtype}" is not supported for {self.name} data, supported types are: {self.const.SUPPORTED_RAW_DATA_TYPES}'
             resolution = Resolution("1" + dtype.split("_")[-1])
         else:
             resolution = Resolution(resolution)
@@ -161,7 +147,6 @@ class BaseFeed:
             import pandas as pd
             return pd.concat(dfs)
         elif self.data_tool == 'polars':
-            import polars as pl
             return pl.concat(dfs)
     
     def _prepare_temp_dir(self):
@@ -197,7 +182,6 @@ class BaseFeed:
         if self.data_tool == 'pandas':
             return df.memory_usage(deep=True).sum() / (1024 ** 3)
         elif self.data_tool == 'polars':
-            import polars as pl
             return pl.from_pandas(df).estimated_size(unit='gb')
     
     def get_historical_data(
@@ -229,7 +213,7 @@ class BaseFeed:
             
         assert validate_pdt(
             self.name, pdt
-        ), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {self.name} are: {self._const.SUPPORTED_PRODUCT_TYPES})'
+        ), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {self.name} are: {self.const.SUPPORTED_PRODUCT_TYPES})'
         dtype, resolution = self._derive_dtype_and_resolution(resolution)
         if start_date:
             yesterday = (
@@ -257,7 +241,6 @@ class BaseFeed:
                 self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {date} is {total_estimated_memory_usage_in_gb:.2f} GB")
 
             if self.data_tool != 'pandas':
-                self._prepare_temp_dir()
                 # Create a temporary parquet file for lazyframe to point to
                 temp_file_path = os.path.join(self.temp_dir, f"temp_{self.name}_{pdt}_{repr(resolution)}_{date.strftime('%Y%m%d')}.parquet")
                 df.to_parquet(temp_file_path, compression='zstd')
@@ -279,3 +262,39 @@ class BaseFeed:
         
         return df
     
+    def download_historical_data(
+        self,
+        pdts: str | list[str] | None = None,
+        dtypes: tSUPPORTED_DATA_TYPES | list[tSUPPORTED_DATA_TYPES] | None = None,
+        ptypes: str | list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        num_cpus: int = 8,
+        use_ray: bool = True,
+        use_minio: bool = False,
+    ):
+        try:
+            data_source = getattr(self, self.name.lower())
+            data_source.download_historical_data(
+                pdts=pdts,
+                dtypes=dtypes,
+                ptypes=ptypes,
+                start_date=start_date,
+                end_date=end_date,
+                num_cpus=num_cpus,
+                use_ray=use_ray,
+                use_minio=use_minio,          
+            )
+        except AttributeError:
+            raise Exception(f'{self.name} does not support download_historical_data()')
+    
+    # TODO
+    def stream_realtime_data(self):
+        try:
+            data_source = getattr(self, self.name.lower())
+            data_source.stream_realtime_data()
+        except AttributeError:
+            raise Exception(f'{self.name} does not support stream_realtime_data()')
+    
+    download = download_historical_data
+    stream = stream_realtime_data

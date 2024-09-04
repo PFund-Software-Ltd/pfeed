@@ -1,4 +1,4 @@
-# How-to Guides (TODO)
+# How-to Guides
 
 
 ```{tableofcontents}

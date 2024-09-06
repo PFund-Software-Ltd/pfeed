@@ -33,7 +33,7 @@ By leveraging modern data engineering tools, `pfeed` handles the tedious data wo
 PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a bridge between raw data sources and traders by automating the process of data collection, cleaning, transformation, and storage, loading clean data into a **local data lake for quantitative analysis**.
 
 ## Core Features
-- [x] Unified approach for interacting with various data sources and obtaining historical and live data
+- [x] Unified approach for interacting with various [data sources](#supported-data-sources) and obtaining historical and live data
 - [x] ETL data pipline for transforming raw data to clean data and storing it in [MinIO] (optional)
 - [x] Fast data downloading, utilizing [Ray] for parallelization
 - [x] Supports multiple data tools (e.g. Pandas, [Polars], [Dask], [Spark], [DuckDB], [Daft])

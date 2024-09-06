@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
+    from pfund.products.product_crypto import CryptoProduct
     from pfeed.types.common_literals import tSUPPORTED_DATA_SINKS
     from pfeed.sources.bybit.types import tSUPPORTED_PRODUCT_TYPES, tSUPPORTED_DATA_TYPES
     
@@ -74,7 +74,7 @@ def _prepare_dates(start_date: str | None, end_date: str | None) -> tuple[dateti
     return start_date, end_date
 
 
-def _run_etl(data_sink: tSUPPORTED_DATA_SINKS, product: BaseProduct, date: datetime.date, dtypes: list[str]):
+def _run_etl(data_sink: tSUPPORTED_DATA_SINKS, product: CryptoProduct, date: datetime.date, dtypes: list[str]):
     pdt = product.pdt
     if raw_data := api.get_data(pdt, date):
         raw_tick: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)
@@ -93,7 +93,7 @@ def _run_etl(data_sink: tSUPPORTED_DATA_SINKS, product: BaseProduct, date: datet
         }
         for dtype in dtypes:
             data: bytes = resampled_datas[dtype]
-            etl.load_data(data_sink, DATA_SOURCE, data, dtype, pdt, date, mode='historical')
+            etl.load_data('BACKTEST', data_sink, DATA_SOURCE, product.exch, data, dtype, pdt, date)
     else:
         raise Exception(f'failed to download {DATA_SOURCE} {pdt} {date} historical data')
 
@@ -157,7 +157,7 @@ def download_historical_data(
         atexit.register(lambda: ray.shutdown())
         
         @ray.remote
-        def _run_task(log_queue: Queue, product: BaseProduct, date: str):
+        def _run_task(log_queue: Queue, product: CryptoProduct, date: str):
             try:
                 if not logger.handlers:
                     logger.addHandler(QueueHandler(log_queue))

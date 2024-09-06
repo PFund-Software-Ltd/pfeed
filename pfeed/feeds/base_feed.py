@@ -24,8 +24,9 @@ except ImportError:
 
 from pfeed.config_handler import get_config
 from pfeed.const.common import SUPPORTED_DATA_FEEDS, SUPPORTED_DATA_TOOLS
-from pfeed.utils.utils import get_dates_in_between, rollback_date_range
+from pfeed.utils.utils import get_dates_in_between, rollback_date_range, derive_trading_venue
 from pfeed.utils.validate import validate_pdt
+from pfeed.filepath import FilePath
 from pfeed import etl
 
 
@@ -99,17 +100,17 @@ class BaseFeed:
                 raise Exception(f"{resolution=} is not supported")
         return dtype, resolution
 
-    def _get_data_from_local(
-        self, pdt: str, date: str, dtype: tSUPPORTED_DATA_TYPES, resolution: Resolution,
+    def _get_historical_data_from_local(
+        self, trading_venue: str, pdt: str, date: str, dtype: tSUPPORTED_DATA_TYPES, resolution: Resolution,
     ) -> bytes | None:
         from pfund.datas.resolution import Resolution
 
-        if local_data := etl.get_data(self.name, dtype, pdt, date, mode="historical"):
+        if local_data := etl.get_data('BACKTEST', self.name, dtype, pdt, date, trading_venue=trading_venue):
             local_data_dtype = dtype
             local_data_resolution = Resolution('1' + repr(resolution.timeframe))
         # if can't find local data with dtype e.g. second, check if raw data exists
         elif self._default_raw_dtype and not dtype.startswith('raw') and dtype != self._default_raw_dtype and \
-            (local_data := etl.get_data(self.name, self._default_raw_dtype, pdt, date, mode="historical")):
+            (local_data := etl.get_data('BACKTEST', self.name, self._default_raw_dtype, pdt, date, trading_venue=trading_venue)):
             local_data_dtype = self._default_raw_dtype
             local_data_resolution = Resolution('1' + self._default_raw_dtype.split('_')[-1])
             assert local_data_resolution.timeframe <= resolution.timeframe, f"{resolution=} but the local raw data with the highest resolution is {local_data_resolution}, please use a lower resolution"
@@ -126,20 +127,20 @@ class BaseFeed:
         else:
             return local_data
     
-    def _get_data_from_source(
-        self, pdt: str, date: str, dtype: tSUPPORTED_DATA_TYPES, resolution: Resolution
+    def _get_historical_data_from_source(
+        self, trading_venue: str, pdt: str, date: str, dtype: tSUPPORTED_DATA_TYPES, resolution: Resolution
     ) -> bytes | None:
         raise NotImplementedError(f"{self.name} _get_data_from_source() is not implemented")
     
     def _transform_raw_data_to_dtype(self, raw_data: bytes, dtype: tSUPPORTED_DATA_TYPES, resolution: Resolution) -> bytes:
         raise NotImplementedError(f"{self.name} _transform_raw_data_to_dtype() is not implemented")
     
-    def _read_parquet(self, temp_file_path: str) -> pl.LazyFrame:
+    def _read_parquet(self, file_path: str) -> pl.LazyFrame:
         """Read a parquet file into a lazyframe."""
         if self.data_tool == 'pandas':
             raise Exception(f"{self.data_tool=} is not supposed to use this method")
         elif self.data_tool == 'polars':
-            lf = pl.scan_parquet(temp_file_path)
+            lf = pl.scan_parquet(file_path)
             return lf
     
     def _concat_dfs(self, dfs: list[pd.DataFrame | pl.LazyFrame]) -> pd.DataFrame | pl.LazyFrame:
@@ -194,6 +195,7 @@ class BaseFeed:
         ] = "1d",
         start_date: str = "",
         end_date: str = "",
+        trading_venue: str='',
         show_memory_warning: bool = False,
     ) -> pd.DataFrame | pl.LazyFrame:
         """Get historical data from the data source.
@@ -208,6 +210,8 @@ class BaseFeed:
                 Default is '1d' = 1 day.
             start_date: Start date.
             end_date: End date.
+            trading_venue: trading venue's name, e.g. exchange's name or dapp's name
+            show_memory_warning: Whether to show memory usage warning.
         """
         import pandas as pd
             
@@ -215,6 +219,7 @@ class BaseFeed:
             self.name, pdt
         ), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {self.name} are: {self.const.SUPPORTED_PRODUCT_TYPES})'
         dtype, resolution = self._derive_dtype_and_resolution(resolution)
+        trading_venue = trading_venue or derive_trading_venue(self.name)
         if start_date:
             yesterday = (
                 datetime.datetime.now(tz=datetime.timezone.utc)
@@ -231,7 +236,12 @@ class BaseFeed:
             self._prepare_temp_dir()
         
         for date in dates:
-            data = self._get_data_from_local(pdt, date, dtype, resolution) or self._get_data_from_source(pdt, date, dtype, resolution)
+            if data := self._get_historical_data_from_local(trading_venue, pdt, date, dtype, resolution):
+                fp = FilePath(self.name, "historical", dtype, pdt, date=date, data_path=self.data_path, file_extension='.parquet')
+            else:
+                data = self._get_historical_data_from_source(trading_venue, pdt, date, dtype, resolution)
+                fp = None
+            
             if not data:
                 raise Exception(f"No data found for {self.name} {pdt} {date} from local or source")
 
@@ -241,10 +251,13 @@ class BaseFeed:
                 self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {date} is {total_estimated_memory_usage_in_gb:.2f} GB")
 
             if self.data_tool != 'pandas':
-                # Create a temporary parquet file for lazyframe to point to
-                temp_file_path = os.path.join(self.temp_dir, f"temp_{self.name}_{pdt}_{repr(resolution)}_{date.strftime('%Y%m%d')}.parquet")
-                df.to_parquet(temp_file_path, compression='zstd')
-                lf = self._read_parquet(temp_file_path)
+                # Create a temporary parquet file for the lazyframe to point to
+                if fp is None:
+                    temp_file_path = os.path.join(self.temp_dir, f"temp_{self.name}_{pdt}_{repr(resolution)}_{date.strftime('%Y%m%d')}.parquet")
+                    df.to_parquet(temp_file_path, compression='zstd')
+                    lf = self._read_parquet(temp_file_path)
+                else:
+                    lf = self._read_parquet(fp.file_path)
                 dfs.append(lf)
             else:
                 dfs.append(df)

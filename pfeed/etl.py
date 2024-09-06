@@ -2,7 +2,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_SINKS, tSUPPORTED_DATA_TYPES, tSUPPORTED_DATA_MODES
+    from pfeed.types.common_literals import (
+        tSUPPORTED_ENVIRONMENTS,
+        tSUPPORTED_DOWNLOAD_DATA_SOURCES, 
+        tSUPPORTED_DATA_SINKS, 
+        tSUPPORTED_DATA_TYPES, 
+    )
     try:
         import pandas as pd
     except ImportError:
@@ -20,8 +25,14 @@ except ImportError:
 
 from pfeed.datastore import Datastore
 from pfeed.filepath import FilePath
-from pfeed.config_handler import ConfigHandler
-from pfeed.const.common import SUPPORTED_DATA_TYPES, SUPPORTED_DATA_SINKS, SUPPORTED_DOWNLOAD_DATA_SOURCES, SUPPORTED_DATA_MODES
+from pfeed.config_handler import get_config
+from pfeed.const.common import (
+    SUPPORTED_ENVIRONMENTS, 
+    SUPPORTED_DATA_TYPES, 
+    SUPPORTED_DATA_SINKS, 
+    SUPPORTED_DOWNLOAD_DATA_SOURCES, 
+)
+from pfeed.utils.utils import derive_trading_venue
 
 try:
     from pfeed.utils.monitor import print_disk_usage
@@ -50,21 +61,23 @@ def _convert_raw_dtype_to_explicit(data_source: str, dtype: str):
 
 
 def get_data(
+    env: tSUPPORTED_ENVIRONMENTS,
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
     dtype: tSUPPORTED_DATA_TYPES,
     pdt: str,
     date: str,
-    mode: tSUPPORTED_DATA_MODES='historical',
+    trading_venue: str='',
 ) -> bytes | None:
     """Extract data without specifying the data origin. 
     This function will try to extract data from all supported data origins.
 
     Args:
+        env: trading environment, e.g. 'PAPER' | 'LIVE'.
         data_source (Literal['BYBIT']): The data source to extract data from.
         dtype (Literal['raw_tick', 'raw', 'tick', 'second', 'minute', 'hour', 'daily']): The type of data to extract.
         pdt (str): product, e.g. BTC_USDT_PERP.
         date (str): The date of the data to extract.
-        mode (Literal['historical', 'streaming'], optional): The mode of extraction. Defaults to 'historical'.
+        trading_venue (str): trading venue's name, e.g. exchange's name or dapp's name
 
     Returns:
         bytes | None: The extracted data as bytes, or None if the data is not found.
@@ -74,9 +87,11 @@ def get_data(
     except ImportError:
         MinioException = Exception
     
+    trading_venue = trading_venue or derive_trading_venue(data_source)
+    
     for data_sink in SUPPORTED_DATA_SINKS:
         try:
-            data: bytes = extract_data(data_sink, data_source, dtype, pdt, date, mode=mode)
+            data: bytes = extract_data(env, data_sink, data_source, trading_venue, dtype, pdt, date)
         except MinioException:
             data = None
         if data:
@@ -84,23 +99,25 @@ def get_data(
 
 
 def extract_data(
+    env: tSUPPORTED_ENVIRONMENTS,
     data_sink: tSUPPORTED_DATA_SINKS,
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
+    trading_venue: str,
     dtype: tSUPPORTED_DATA_TYPES,
     pdt: str,
     date: str,
-    mode: tSUPPORTED_DATA_MODES='historical',
 ) -> bytes | None:
     """
     Extracts data from a specified data source and returns it as bytes.
 
     Args:
+        env: trading environment, e.g. 'PAPER' | 'LIVE'.
         data_sink: The origin of the data (local or minio).
         data_source: The source of the data.
+        trading_venue: trading venue's name, e.g. exchange's name or dapp's name
         dtype: The type of data to extract.
         pdt (str): product, e.g. BTC_USDT_PERP.
         date (str): The date of the data.
-        mode (optional): The mode of extraction. Defaults to 'historical'.
     Returns:
         bytes | None: The extracted data as bytes, or None if extraction fails.
 
@@ -111,16 +128,16 @@ def extract_data(
     """
     logger = logging.getLogger(data_source.lower() + '_data')
     
-    data_sink, data_source, dtype, pdt, mode = data_sink.lower(), data_source.upper(), dtype.lower(), pdt.upper(), mode.lower()
+    env, data_sink, data_source, dtype, pdt = env.upper(), data_sink.lower(), data_source.upper(), dtype.lower(), pdt.upper()
+    assert env in SUPPORTED_ENVIRONMENTS, f'Invalid {env=}, {SUPPORTED_ENVIRONMENTS=}'
     assert data_sink in SUPPORTED_DATA_SINKS, f'Invalid {data_sink=}, {SUPPORTED_DATA_SINKS=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
     if dtype == 'raw':
         dtype = _convert_raw_dtype_to_explicit(data_source, dtype)
     assert dtype in SUPPORTED_DATA_TYPES, f'Invalid {dtype=}, {SUPPORTED_DATA_TYPES=}'
-    assert mode in SUPPORTED_DATA_MODES, f'Invalid {mode=}, {SUPPORTED_DATA_MODES=}'
      
-    config = ConfigHandler.load_config()
-    fp = FilePath(data_source, mode, dtype, pdt, date, data_path=config.data_path, file_extension='.parquet')
+    config = get_config()
+    fp = FilePath(env, data_source, trading_venue, dtype, pdt, date, file_extension='.parquet', data_path=config.data_path)
     if data_sink == 'local':
         if fp.exists():
             with open(fp.file_path, 'rb') as f:
@@ -143,28 +160,29 @@ def extract_data(
 
 
 def load_data(
+    env: tSUPPORTED_ENVIRONMENTS,
     data_sink: tSUPPORTED_DATA_SINKS,
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
+    trading_venue: str,
     data: bytes,
     dtype: tSUPPORTED_DATA_TYPES,
     pdt: str,
     date: str,
-    mode: tSUPPORTED_DATA_MODES = 'historical',
     **kwargs
 ) -> None:
     """
     Loads data into the specified data destination.
 
     Args:
+        env: trading environment, e.g. 'PAPER' | 'LIVE'.
         data_sink: The destination where the data will be loaded. 
             It can be either 'local' or 'minio'.
         data_source: The source of the data.
+        trading_venue: trading venue's name, e.g. exchange's name or dapp's name
         data (bytes): The data to be loaded.
         dtype: The type of the data.
         pdt (str): product, e.g. BTC_USDT_PERP.
         date (str): The date of the data.
-        mode (optional): The mode of loading the data. 
-            Defaults to 'historical'.
         **kwargs: Additional keyword arguments for MinIO.
 
     Returns:
@@ -177,16 +195,16 @@ def load_data(
     """
     logger = logging.getLogger(data_source.lower() + '_data')
     
-    data_sink, data_source, dtype, pdt, mode = data_sink.lower(), data_source.upper(), dtype.lower(), pdt.upper(), mode.lower()
+    env, data_sink, data_source, dtype, pdt = env.upper(), data_sink.lower(), data_source.upper(), dtype.lower(), pdt.upper()
+    assert env in SUPPORTED_ENVIRONMENTS, f'Invalid {env=}, {SUPPORTED_ENVIRONMENTS=}'
     assert data_sink in SUPPORTED_DATA_SINKS, f'Invalid {data_sink=}, {SUPPORTED_DATA_SINKS=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
     if dtype == 'raw':
         dtype = _convert_raw_dtype_to_explicit(data_source, dtype)
     assert dtype in SUPPORTED_DATA_TYPES, f'Invalid {dtype=}, {SUPPORTED_DATA_TYPES=}'
-    assert mode in SUPPORTED_DATA_MODES, f'Invalid {mode=}, {SUPPORTED_DATA_MODES=}'
     
-    config = ConfigHandler.load_config()
-    fp = FilePath(data_source, mode, dtype, pdt, date, data_path=config.data_path, file_extension='.parquet')
+    config = get_config()
+    fp = FilePath(env, data_source, trading_venue, dtype, pdt, date, file_extension='.parquet', data_path=config.data_path)
     if data_sink == 'local':
         fp.parent.mkdir(parents=True, exist_ok=True)
         with open(fp.file_path, 'wb') as f:

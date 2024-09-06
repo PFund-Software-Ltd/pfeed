@@ -15,10 +15,9 @@ SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED = SUPPORTED_DATA_TYPES + ['raw']
 
 
 @click.command()
-@click.pass_context
 @click.option('--data-source', '-d', required=True, type=click.Choice(SUPPORTED_DOWNLOAD_DATA_SOURCES_ALIASES_INCLUDED, case_sensitive=False), help='Data source')
-@click.option('--dtypes', '--dt', 'dtypes', multiple=True, default=['raw'], type=click.Choice(SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED, case_sensitive=False), help=f'{SUPPORTED_DATA_TYPES=}. How to pass in multiple values: --dt raw --dt tick')
 @click.option('--pdts', '-p', 'pdts', multiple=True, default=[], help='List of trading products')
+@click.option('--dtypes', '--dt', 'dtypes', multiple=True, default=['raw'], type=click.Choice(SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED, case_sensitive=False), help=f'{SUPPORTED_DATA_TYPES=}. How to pass in multiple values: --dt raw --dt tick')
 @click.option('--ptypes', '--pt', 'ptypes', multiple=True, default=[], help='List of product types, e.g. PERP = get all perpetuals')
 @click.option('--start-date', '-s', type=click.DateTime(formats=["%Y-%m-%d"]), help='Start date in YYYY-MM-DD format')
 @click.option('--end-date', '-e', type=click.DateTime(formats=["%Y-%m-%d"]), help='End date in YYYY-MM-DD format')
@@ -27,7 +26,7 @@ SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED = SUPPORTED_DATA_TYPES + ['raw']
 @click.option('--no-ray', is_flag=True, help='if enabled, Ray will not be used')
 @click.option('--env-file', 'env_file_path', type=click.Path(exists=True), help='Path to the .env file')
 @click.option('--debug', is_flag=True, help='if enabled, debug mode will be enabled where logs at DEBUG level will be printed')
-def download(data_source, dtypes, pdts, ptypes, start_date, end_date, num_cpus, no_ray, use_minio, env_file_path, debug):
+def download(data_source, pdts, dtypes, ptypes, start_date, end_date, num_cpus, no_ray, use_minio, env_file_path, debug):
     pe.configure(env_file_path=env_file_path, debug=debug)
     data_source = ALIASES.get(data_source, data_source)
     pipeline = importlib.import_module(f'pfeed.sources.{data_source.lower()}.download')

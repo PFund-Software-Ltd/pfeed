@@ -1,7 +1,24 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.types.common_literals import (
+        tSUPPORTED_DOWNLOAD_DATA_SOURCES, 
+    )
+
 import re
 import datetime
 import calendar
 import pytz
+
+from pfeed.const.common import SUPPORTED_CRYPTO_EXCHANGES
+
+
+def derive_trading_venue(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES) -> str:
+    if data_source.upper() in SUPPORTED_CRYPTO_EXCHANGES:
+        trading_venue = data_source.upper()
+    else:
+        trading_venue = 'SMART'
+    return trading_venue
 
 
 def separate_number_and_chars(input_string):

@@ -28,7 +28,7 @@ def assert_if_minio_running():
         if response.status_code != 200:
             raise MinioException(f"Unhandled response: {response.status_code=} {response.content} {response}")
     except (ReadTimeout, RequestException) as e:
-        raise MinioException(f"MinIO is not running or not detected on {endpoint}: {e}")
+        raise MinioException(f"MinIO is not running or not detected on {endpoint}: {e}, please use 'pfeed docker-compose up -d' to start MinIO")
 
 
 class Datastore:

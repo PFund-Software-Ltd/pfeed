@@ -1,11 +1,18 @@
 """High-level API for getting historical/streaming data from Bybit."""
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    import pandas as pd
+    
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
     from pfeed.sources.bybit.types import tSUPPORTED_DATA_TYPES
     from pfund.datas.resolution import Resolution
     
+try:
+    import polars as pl
+except ImportError:
+    pass
+
 from pfeed import etl
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.bybit.utils import create_efilename
@@ -18,8 +25,9 @@ class BybitFeed(BaseFeed):
     def __init__(self, data_tool: tSUPPORTED_DATA_TOOLS='pandas'):
         super().__init__('bybit', data_tool=data_tool)
     
-    def _get_data_from_source(
+    def _get_historical_data_from_source(
         self, 
+        trading_venue: str,
         pdt: str, 
         date: str, 
         dtype: tSUPPORTED_DATA_TYPES, 

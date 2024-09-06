@@ -1,7 +1,11 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DOWNLOAD_DATA_SOURCES, tSUPPORTED_DATA_MODES, tSUPPORTED_DATA_TYPES
+    from pfeed.types.common_literals import (
+        tSUPPORTED_ENVIRONMENTS,
+        tSUPPORTED_DOWNLOAD_DATA_SOURCES, 
+        tSUPPORTED_DATA_TYPES,
+    )
     
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,8 +16,9 @@ from pfeed.const.paths import DATA_PATH
 
 @dataclass
 class FilePath:
+    env: tSUPPORTED_ENVIRONMENTS
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES
-    mode: tSUPPORTED_DATA_MODES
+    trading_venue: str
     dtype: tSUPPORTED_DATA_TYPES
     pdt: str
     date: str
@@ -65,15 +70,28 @@ class FilePath:
         return self.file_Path.parent
     
     def __post_init__(self):
-        self.data_source = self.data_source.lower()
-        self.mode = self.mode.lower()
-        self.dtype = self.dtype = self.dtype.lower()
-        self.pdt = self.pdt.lower()
+        self.env = self.env.upper()
+        self.data_source = self.data_source.upper()
+        self.trading_venue = self.trading_venue.upper()
+        self.dtype = self.dtype.lower()
+        self.pdt = self.pdt.upper()
+        self.ptype = self.pdt.split('_')[2]
         self.date = str(self.date)
+        self.year, self.month, self.day = self.date.split('-')
         
         # derived attributes
-        self.filename = create_filename(self.pdt.upper(), self.date, self.file_extension)
-        self.storage_path = str(Path(self.data_source) / self.mode / self.dtype / self.pdt.upper() / self.filename)
+        self.filename = create_filename(self.pdt, self.date, self.file_extension)
+        self.storage_path = str(
+            Path(self.env)
+            / self.data_source
+            / self.trading_venue
+            / self.ptype
+            / self.pdt
+            / self.dtype
+            / self.year
+            / self.month 
+            / self.filename
+        )
         self.file_path = str(self.data_Path / self.storage_Path)
         
     def exists(self):

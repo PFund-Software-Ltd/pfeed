@@ -59,8 +59,8 @@ def run_etl(product: BaseProduct, date, dtypes, use_minio):
         }
         for dtype in dtypes:
             data: bytes = resampled_datas[dtype]
-            data_sink = 'minio' if use_minio else 'local'
-            etl.load_data(data_sink, DATA_SOURCE, data, dtype, pdt, date, mode='historical')
+            storage = 'minio' if use_minio else 'local'
+            etl.load_data(storage, DATA_SOURCE, data, dtype, pdt, date, mode='historical')
     else:
         raise Exception(f'failed to download {DATA_SOURCE} {pdt} {date} historical data')
 

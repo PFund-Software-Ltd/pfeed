@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.products.product_crypto import CryptoProduct
-    from pfeed.types.common_literals import tSUPPORTED_DATA_SINKS
+    from pfeed.types.common_literals import tSUPPORTED_STORAGES
     from pfeed.sources.bybit.types import tSUPPORTED_PRODUCT_TYPES, tSUPPORTED_DATA_TYPES
+    from pfeed.resolution import ExtendedResolution
     
 import os
 import logging
@@ -15,22 +16,28 @@ from logging.handlers import QueueHandler, QueueListener
 from tqdm import tqdm
 from rich.console import Console
 
-from pfeed import etl
 from pfeed.datastore import Datastore
 from pfeed.config_handler import get_config
 from pfeed.sources.bybit import api
-from pfeed.sources.bybit.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES
-from pfeed.sources.bybit.utils import get_exchange, create_efilename
+from pfeed.sources.bybit.const import (
+    DATA_START_DATE, 
+    DATA_SOURCE,
+    SUPPORTED_PRODUCT_TYPES,
+    SUPPORTED_DATA_TYPES,
+    DTYPES_TO_RAW_RESOLUTIOS,
+)
+from pfeed.sources.bybit.utils import get_exchange, create_efilename, get_default_raw_resolution
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
-from pfeed.const.common import SUPPORTED_DATA_TYPES
 
 
 __all__ = ['download_historical_data']
 
 
-def _prepare_dtypes(dtypes: list[str]) -> list[str]:
-    default_raw_dtype = SUPPORTED_RAW_DATA_TYPES[0]
+def _convert_dtypes_to_resolutions(dtypes: tSUPPORTED_DATA_TYPES | list[tSUPPORTED_DATA_TYPES] | None) -> list[ExtendedResolution]:
+    from pfeed.resolution import ExtendedResolution
+    assert SUPPORTED_DATA_TYPES[0].startswith('raw_')
+    default_raw_dtype = SUPPORTED_DATA_TYPES[0]
     if dtypes is None:
         dtypes = [default_raw_dtype]
     elif isinstance(dtypes, str):
@@ -39,7 +46,10 @@ def _prepare_dtypes(dtypes: list[str]) -> list[str]:
     # then 'raw' data type will be converted to 'raw_tick' implicitly
     dtypes = [default_raw_dtype if dtype.lower() == 'raw' else dtype.lower() for dtype in dtypes]
     assert all(dtype in SUPPORTED_DATA_TYPES for dtype in dtypes), f'{dtypes=} but {SUPPORTED_DATA_TYPES=}'
-    return dtypes
+    resolutions = [ExtendedResolution(
+        DTYPES_TO_RAW_RESOLUTIOS[dtype] if dtype.startswith('raw_') else '1' + dtype[0]
+    ) for dtype in dtypes]
+    return resolutions
 
 
 def _prepare_pdts(pdts: str | list[str] | None, ptypes: str | list[str] | None) -> tuple[list[str], list[str]]:
@@ -74,26 +84,15 @@ def _prepare_dates(start_date: str | None, end_date: str | None) -> tuple[dateti
     return start_date, end_date
 
 
-def _run_etl(data_sink: tSUPPORTED_DATA_SINKS, product: CryptoProduct, date: datetime.date, dtypes: list[str]):
+def _run_etl(storage: tSUPPORTED_STORAGES, product: CryptoProduct, date: datetime.date, resolutions: list[ExtendedResolution]):
+    from pfeed import etl
     pdt = product.pdt
     if raw_data := api.get_data(pdt, date):
-        raw_tick: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)
-        tick_data: bytes = etl.clean_raw_tick_data(raw_tick)
-        second_data: bytes = etl.resample_data(tick_data, resolution='1s')
-        minute_data: bytes = etl.resample_data(second_data, resolution='1m')
-        hour_data: bytes = etl.resample_data(minute_data, resolution='1h')
-        daily_data: bytes = etl.resample_data(hour_data, resolution='1d')
-        resampled_datas = {
-            'raw_tick': raw_tick,
-            'tick': tick_data,
-            'second': second_data,
-            'minute': minute_data,
-            'hour': hour_data,
-            'daily': daily_data,
-        }
-        for dtype in dtypes:
-            data: bytes = resampled_datas[dtype]
-            etl.load_data('BACKTEST', data_sink, DATA_SOURCE, product.exch, data, dtype, pdt, date)
+        raw_resolution = get_default_raw_resolution()
+        for resolution in resolutions:
+            data: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)
+            data: bytes = etl.transform_data(DATA_SOURCE, data, raw_resolution, resolution)
+            etl.load_data('BACKTEST', storage, DATA_SOURCE, product.exch, data, resolution, pdt, date)
     else:
         raise Exception(f'failed to download {DATA_SOURCE} {pdt} {date} historical data')
 
@@ -121,7 +120,7 @@ def download_historical_data(
         The current data path is: {config.data_path}.
     ''')
     
-    dtypes = _prepare_dtypes(dtypes)
+    resolutions: list[ExtendedResolution] = _convert_dtypes_to_resolutions(dtypes)
     pdts = _prepare_pdts(pdts, ptypes)
     start_date, end_date = _prepare_dates(start_date, end_date)
     dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
@@ -132,7 +131,7 @@ def download_historical_data(
     
     if use_minio:
         Datastore.initialize_store('minio')
-    data_sink = 'minio' if use_minio else 'local'
+    storage = 'minio' if use_minio else 'local'
     exchange = get_exchange()
     ray_tasks = defaultdict(list)
     for pdt in pdts if use_ray else tqdm(pdts, desc=f'Downloading {DATA_SOURCE} historical data by product', colour='green'):
@@ -147,7 +146,7 @@ def download_historical_data(
             if use_ray:
                 ray_tasks[pdt].append((product, date))
             else:
-                _run_etl(data_sink, product, date, dtypes)
+                _run_etl(storage, product, date, resolutions)
 
     if use_ray:
         import atexit
@@ -163,7 +162,7 @@ def download_historical_data(
                     logger.addHandler(QueueHandler(log_queue))
                     logger.setLevel(logging.DEBUG)
                 logger.debug(f'cleaning {DATA_SOURCE} {pdt} {date} data')
-                _run_etl(data_sink, product, date, dtypes)
+                _run_etl(storage, product, date, resolutions)
             except Exception:
                 logger.exception(f'error processing ray task {product} {date}:')
                 return False

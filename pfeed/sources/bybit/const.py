@@ -1,7 +1,10 @@
 """Metadata of bybit's data"""
 DATA_SOURCE = 'BYBIT'
 SUPPORTED_PRODUCT_TYPES = ['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT']
-SUPPORTED_RAW_DATA_TYPES = ['raw_tick']
+SUPPORTED_DATA_TYPES = ['raw_tick', 'tick', 'second', 'minute', 'hour', 'daily']
+DTYPES_TO_RAW_RESOLUTIOS = {
+    'raw_tick': 'r1tick',
+}
 DATA_START_DATE = '2020-01-01'  # do not need to be precise, if it doesn't exist, it will be skipped
 DATA_SOURCE_URLS = {
     'PERP': 'https://public.bybit.com/trading',

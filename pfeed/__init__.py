@@ -7,7 +7,6 @@ if TYPE_CHECKING:
 import importlib
 from importlib.metadata import version
 
-from pfeed import etl
 from pfeed.config_handler import configure, get_config
 from pfeed.const.common import ALIASES
 from pfeed.sources import bybit
@@ -55,7 +54,6 @@ __all__ = (
     "configure",
     "get_config",
     "ALIASES",
-    "etl",
     "bybit",
     "binance",
     "YahooFinanceFeed",

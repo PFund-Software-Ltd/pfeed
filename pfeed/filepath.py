@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pfeed.resolution import ExtendedResolution
     from pfeed.types.common_literals import (
         tSUPPORTED_ENVIRONMENTS,
         tSUPPORTED_DOWNLOAD_DATA_SOURCES, 
-        tSUPPORTED_DATA_TYPES,
     )
     
 from dataclasses import dataclass, field
@@ -19,8 +19,8 @@ class FilePath:
     env: tSUPPORTED_ENVIRONMENTS
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES
     trading_venue: str
-    dtype: tSUPPORTED_DATA_TYPES
     pdt: str
+    resolution: str | ExtendedResolution
     date: str
     file_extension: str = '.parquet.gz'
     data_path: str = str(DATA_PATH)
@@ -73,7 +73,9 @@ class FilePath:
         self.env = self.env.upper()
         self.data_source = self.data_source.upper()
         self.trading_venue = self.trading_venue.upper()
-        self.dtype = self.dtype.lower()
+        if isinstance(self.resolution, str):
+            self.resolution = ExtendedResolution(self.resolution)
+        self.resolution = repr(self.resolution)
         self.pdt = self.pdt.upper()
         self.ptype = self.pdt.split('_')[2]
         self.date = str(self.date)
@@ -87,7 +89,7 @@ class FilePath:
             / self.trading_venue
             / self.ptype
             / self.pdt
-            / self.dtype
+            / self.resolution
             / self.year
             / self.month 
             / self.filename

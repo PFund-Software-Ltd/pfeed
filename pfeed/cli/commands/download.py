@@ -3,7 +3,12 @@ import importlib
 import click
 
 import pfeed as pe
-from pfeed.const.common import ALIASES, SUPPORTED_DOWNLOAD_DATA_SOURCES, SUPPORTED_DATA_TYPES
+from pfeed.const.common import (
+    ALIASES, 
+    SUPPORTED_DOWNLOAD_DATA_SOURCES, 
+    SUPPORTED_DATA_TYPES,
+    SUPPORTED_PRODUCT_TYPES,
+)
 
 
 # add aliases to supported download data sources
@@ -18,7 +23,7 @@ SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED = SUPPORTED_DATA_TYPES + ['raw']
 @click.option('--data-source', '-d', required=True, type=click.Choice(SUPPORTED_DOWNLOAD_DATA_SOURCES_ALIASES_INCLUDED, case_sensitive=False), help='Data source')
 @click.option('--pdts', '-p', 'pdts', multiple=True, default=[], help='List of trading products')
 @click.option('--dtypes', '--dt', 'dtypes', multiple=True, default=['raw'], type=click.Choice(SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED, case_sensitive=False), help=f'{SUPPORTED_DATA_TYPES=}. How to pass in multiple values: --dt raw --dt tick')
-@click.option('--ptypes', '--pt', 'ptypes', multiple=True, default=[], help='List of product types, e.g. PERP = get all perpetuals')
+@click.option('--ptypes', '--pt', 'ptypes', multiple=True, default=[], type=click.Choice(SUPPORTED_PRODUCT_TYPES, case_sensitive=False), help='List of product types, e.g. PERP = get all perpetuals')
 @click.option('--start-date', '-s', type=click.DateTime(formats=["%Y-%m-%d"]), help='Start date in YYYY-MM-DD format')
 @click.option('--end-date', '-e', type=click.DateTime(formats=["%Y-%m-%d"]), help='End date in YYYY-MM-DD format')
 @click.option('--num-cpus', '-n', default=8, type=int, help="number of logical CPUs used for Ray's tasks")

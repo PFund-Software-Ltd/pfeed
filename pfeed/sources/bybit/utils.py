@@ -1,3 +1,10 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import pandas as pd
+    from pfeed.resolution import ExtendedResolution
+    
+    
 from functools import lru_cache
 
 
@@ -17,3 +24,26 @@ def create_efilename(pdt: str, date: str):
         return f'{epdt}_{date}.csv.gz'
     else:
         return f'{epdt}{date}.csv.gz'
+
+
+def get_default_raw_resolution() -> ExtendedResolution:
+    from pfeed.resolution import ExtendedResolution
+    from pfeed.sources.bybit.const import SUPPORTED_DATA_TYPES, DTYPES_TO_RAW_RESOLUTIOS
+    return ExtendedResolution(DTYPES_TO_RAW_RESOLUTIOS[SUPPORTED_DATA_TYPES[0]])
+
+
+def read_raw_data(raw_data: bytes) -> pd.DataFrame:
+    import io
+    import pandas as pd
+    return pd.read_csv(io.BytesIO(raw_data), compression='gzip')
+
+
+def standardize_ts_column(df: pd.DataFrame) -> pd.DataFrame:
+    import pandas as pd
+    # NOTE: for ptype SPOT, unit is 'ms', e.g. 1671580800123, in milliseconds
+    unit = 'ms' if df['ts'][0] > 10**12 else 's'  # REVIEW
+    # EXTEND: not all 'ts' columns from raw data are float, 
+    # they could be: 'datetime' | 'datetime_str' | 'float' | 'float_str'
+    # NOTE: this may make the `ts` value inaccurate, e.g. 1671580800.9906 -> 1671580800.990600192
+    df['ts'] = pd.to_datetime(df['ts'], unit=unit)
+    return df

@@ -16,7 +16,6 @@ except ImportError:
 
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.utils.utils import separate_number_and_chars
-from pfeed import etl
 
 
 __all__ = ["YahooFinanceFeed"]
@@ -81,6 +80,7 @@ class YahooFinanceFeed(BaseFeed):
                 This will automatically be triggered if yfinance does not support the resolution.
             **kwargs: kwargs supported by `yfinance`
         """
+        from pfeed import etl
         from pfund.datas.resolution import Resolution
 
         if rollback_period in ["ytd", "max"]:

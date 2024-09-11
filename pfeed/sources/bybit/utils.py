@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import datetime
     import pandas as pd
     from pfeed.resolution import ExtendedResolution
     
@@ -14,7 +15,7 @@ def get_exchange():
     return Exchange(env='LIVE')
 
 
-def create_efilename(pdt: str, date: str):
+def create_efilename(pdt: str, date: str | datetime.date):
     ptype = pdt.split('_')[-1].upper()  # REVIEW: is this always the case?
     exchange = get_exchange()
     category = exchange.PTYPE_TO_CATEGORY[ptype]
@@ -30,12 +31,6 @@ def get_default_raw_resolution() -> ExtendedResolution:
     from pfeed.resolution import ExtendedResolution
     from pfeed.sources.bybit.const import SUPPORTED_DATA_TYPES, DTYPES_TO_RAW_RESOLUTIOS
     return ExtendedResolution(DTYPES_TO_RAW_RESOLUTIOS[SUPPORTED_DATA_TYPES[0]])
-
-
-def read_raw_data(raw_data: bytes) -> pd.DataFrame:
-    import io
-    import pandas as pd
-    return pd.read_csv(io.BytesIO(raw_data), compression='gzip')
 
 
 def standardize_ts_column(df: pd.DataFrame) -> pd.DataFrame:

@@ -47,9 +47,13 @@ def estimate_memory_usage(df: pl.DataFrame | pl.LazyFrame) -> float:
 
 def organize_time_series_columns(pdt: str, resolution: str | ExtendedResolution, df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
     from pfeed.resolution import ExtendedResolution
-    assert 'ts' in df.columns, "'ts' column not found"
-    assert 'product' not in df.columns, "'product' column already exists"
-    assert 'resolution' not in df.columns, "'resolution' column already exists"
+    if isinstance(df, pl.LazyFrame):
+        cols = df.collect_schema().names()
+    else:
+        cols = df.columns
+    assert 'ts' in cols, "'ts' column not found"
+    assert 'product' not in cols, "'product' column already exists"
+    assert 'resolution' not in cols, "'resolution' column already exists"
     if isinstance(resolution, str):
         resolution = ExtendedResolution(resolution)
     df = df.with_columns(

@@ -26,9 +26,9 @@ ray = {version = "^2.35.0", optional = true}
 s3fs = {version = "^2024.9.0", optional = true}
 
 [tool.poetry.extras]
-df = ["pandas", "polars"]
+df = ["pandas", "pyarrow", "polars"]
 data = ["psutil", "minio", "s3fs"]
-boost = ["pyarrow", "connectorx", "ray"]
+boost = ["connectorx", "ray"]
 all = ["pandas", "polars", "psutil", "minio", "s3fs", "pyarrow", "connectorx", "ray"]
 
 [tool.poetry.scripts]

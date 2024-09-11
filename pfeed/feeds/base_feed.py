@@ -3,11 +3,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     try:
         import pandas as pd
+        import polars as pl
     except ImportError:
         pass
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
     from pfeed.sources.bybit.types import tSUPPORTED_DATA_TYPES
     from pfeed.resolution import ExtendedResolution
+    DataFrame = pd.DataFrame | pl.LazyFrame
     
 import os
 import io
@@ -16,6 +18,7 @@ import shutil
 import logging
 import datetime
 import importlib
+from logging.handlers import QueueHandler, QueueListener
 
 try:
     import polars as pl
@@ -63,32 +66,8 @@ class BaseFeed:
         temp_dir_name = f"{self.name.lower()}_temp_{current_date}"
         return os.path.join(self.data_path, temp_dir_name)
     
-    def _create_temp_file_path(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date) -> str:
+    def _create_temp_file_path(self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution) -> str:
         return os.path.join(self.temp_dir, f"temp_{self.name}_{trading_venue.upper()}_{pdt.upper()}_{repr(resolution)}_{date.strftime('%Y%m%d')}.parquet")
-    
-    def _get_historical_data_from_local(self, trading_venue: str, pdt: str, date: str, resolution: ExtendedResolution) -> pd.DataFrame | pl.LazyFrame | None:
-        from pfeed import etl
-        default_raw_resolution = self.utils.get_default_raw_resolution()
-        if (local_data := etl.get_data("BACKTEST", self.name, resolution, pdt, date, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
-            return local_data
-        # if can't find local data with resolution, check if raw data exists
-        elif default_raw_resolution and not resolution.is_raw() and default_raw_resolution.is_ge(resolution) and \
-            (local_raw_data := etl.get_data("BACKTEST", self.name, default_raw_resolution, pdt, date, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
-            self.logger.info(f'No local {self.name} data found with {resolution=}, switched to find "{default_raw_resolution}" data instead')
-            transformed_data = etl.transform_data(self.name, local_raw_data, default_raw_resolution, resolution)
-            self.logger.info(f'resampled {self.name} raw data to {resolution=}')
-            return transformed_data
-    
-    def _get_historical_data_from_temp(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date) -> pd.DataFrame | pl.LazyFrame | None:
-        temp_file_path = self._create_temp_file_path(trading_venue, pdt, resolution, date)
-        if os.path.exists(temp_file_path):
-            self.logger.info(f'loaded temporary parquet file: {temp_file_path}')
-            return self.data_tool.read_parquet(temp_file_path)
-    
-    def _get_historical_data_from_source(
-        self, trading_venue: str, pdt: str, date: str, resolution: ExtendedResolution
-    ) -> bytes | None:
-        raise NotImplementedError(f"{self.name} _get_historical_data_from_source() is not implemented")
     
     def _prepare_temp_dir(self):
         """Remove old temp directories and create a new temp directory."""
@@ -101,19 +80,76 @@ class BaseFeed:
                     self.logger.debug(f"Removed temporary directory: {dir_path}")
             except Exception as e:
                 self.logger.error(f"Error removing directory {dir_path}: {str(e)}")
-        if not os.path.exists(self.temp_dir):
+        if self.temp_dir and not os.path.exists(self.temp_dir):
             os.mkdir(self.temp_dir)
+            
+    @staticmethod
+    def _prepare_dates(start_date: str | None, end_date: str | None, rollback_period: str) -> list[datetime.date]:
+        if start_date:
+            yesterday = (
+                datetime.datetime.now(tz=datetime.timezone.utc)
+                - datetime.timedelta(days=1)
+            ).strftime("%Y-%m-%d")
+            end_date: str = end_date or yesterday
+        else:
+            start_date, end_date = rollback_date_range(rollback_period)
+        dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
+        return dates
+            
+    def _get_historical_data_from_local(self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution) -> DataFrame | None:
+        from pfeed import etl
+        default_raw_resolution = self.utils.get_default_raw_resolution()
+        if (local_data := etl.get_data("BACKTEST", self.name, resolution, pdt, date, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
+            return local_data
+        # if can't find local data with resolution, check if raw data exists
+        elif default_raw_resolution and not resolution.is_raw() and default_raw_resolution.is_ge(resolution) and \
+            (local_raw_data := etl.get_data("BACKTEST", self.name, default_raw_resolution, pdt, date, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
+            self.logger.info(f'No local {self.name} data found with {resolution=}, switched to find "{default_raw_resolution}" data instead')
+            transformed_data = etl.transform_data(self.name, local_raw_data, default_raw_resolution, resolution)
+            self.logger.info(f'resampled {self.name} raw data to {resolution=}')
+            return transformed_data
+    
+    def _get_historical_data_from_temp(self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution) -> DataFrame | None:
+        temp_file_path = self._create_temp_file_path(trading_venue, pdt, date, resolution)
+        if os.path.exists(temp_file_path):
+            self.logger.info(f'loaded temporary parquet file: {temp_file_path}')
+            return self.data_tool.read_parquet(temp_file_path)
+    
+    def _get_historical_data_from_source(
+        self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution
+    ) -> bytes | None:
+        raise NotImplementedError(f"{self.name} _get_historical_data_from_source() is not implemented")
+    
+    def _get_historical_data(self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution) -> DataFrame:
+        import pandas as pd
+        if (df := self._get_historical_data_from_local(trading_venue, pdt, date, resolution)) is not None:
+            pass
+        elif (df := self._get_historical_data_from_temp(trading_venue, pdt, date, resolution)) is not None:
+            pass
+        elif data := self._get_historical_data_from_source(trading_venue, pdt, date, resolution):
+            df = pd.read_parquet(io.BytesIO(data))
+            temp_file_path = self._create_temp_file_path(trading_venue, pdt, date, resolution)
+            df.to_parquet(temp_file_path, compression='zstd')
+            self.logger.info(f'created temporary parquet file: {temp_file_path}')
+            if self.data_tool.name != 'pandas':
+                # read_parquet will return a lazyFrame for e.g. polars
+                df = self.data_tool.read_parquet(temp_file_path)
+        else:
+            raise Exception(f"No data found for {self.name} {pdt} {date} from local, temp, or source")
+        return df
     
     def get_historical_data(
         self,
         pdt: str,
-        rollback_period: str = "1w",
-        resolution: str = "1d",
-        start_date: str = "",
-        end_date: str = "",
+        rollback_period: str="1w",
+        resolution: str="1d",
+        start_date: str="",
+        end_date: str="",
         trading_venue: str='',
-        show_memory_warning: bool = False,
-    ) -> pd.DataFrame | pl.LazyFrame:
+        show_memory_warning: bool=False,
+        num_cpus: int=8,
+        use_ray: bool=False,
+    ) -> DataFrame:
         """Get historical data from the data source.
         Args:
             pdt: Product symbol, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -127,8 +163,9 @@ class BaseFeed:
             end_date: End date.
             trading_venue: trading venue's name, e.g. exchange's name or dapp's name
             show_memory_warning: Whether to show memory usage warning.
+            num_cpus: Number of CPUs to use when using Ray.
+            use_ray: Whether to use Ray to download data.
         """
-        import pandas as pd
         from pfeed import etl
         from pfeed.resolution import ExtendedResolution
         
@@ -138,41 +175,76 @@ class BaseFeed:
         ), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {self.name} are: {self.const.SUPPORTED_PRODUCT_TYPES})'
         resolution = ExtendedResolution(resolution)
         trading_venue = trading_venue or derive_trading_venue(self.name)
-        if start_date:
-            yesterday = (
-                datetime.datetime.now(tz=datetime.timezone.utc)
-                - datetime.timedelta(days=1)
-            ).strftime("%Y-%m-%d")
-            end_date: str = end_date or yesterday
-        else:
-            start_date, end_date = rollback_date_range(rollback_period)
+        self._prepare_temp_dir()
+        dates: list[datetime.date] = self._prepare_dates(start_date, end_date, rollback_period)
         
-        dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         dfs = []  # could be dataframes or lazyframes
         total_estimated_memory_usage_in_gb = 0
-        self._prepare_temp_dir()
-        
-        for date in dates:            
-            if (df := self._get_historical_data_from_local(trading_venue, pdt, date, resolution)) is not None:
-                pass
-            elif (df := self._get_historical_data_from_temp(trading_venue, pdt, resolution, date)) is not None:
-                pass
-            elif data := self._get_historical_data_from_source(trading_venue, pdt, date, resolution):
-                temp_file_path = self._create_temp_file_path(trading_venue, pdt, resolution, date)
-                df = pd.read_parquet(io.BytesIO(data))
-                df.to_parquet(temp_file_path, compression='zstd')
-                self.logger.info(f'created temporary parquet file: {temp_file_path}')
-                if self.data_tool.name != 'pandas':
-                    # read_parquet will return a lazyFrame for e.g. polars
-                    df = self.data_tool.read_parquet(temp_file_path)
+        ray_tasks = []
+
+        for date in dates:
+            if use_ray:
+                ray_tasks.append((date,))
             else:
-                raise Exception(f"No data found for {self.name} {pdt} {date} from local, temp, or source")
-            dfs.append(df)
+                df = self._get_historical_data(trading_venue, pdt, date, resolution)
+                dfs.append(df)
+                if show_memory_warning:
+                    total_estimated_memory_usage_in_gb += self.data_tool.estimate_memory_usage(df)
+                    self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {date} is {total_estimated_memory_usage_in_gb:.2f} GB")
 
-            if show_memory_warning:
-                total_estimated_memory_usage_in_gb += self.data_tool.estimate_memory_usage(df)
-                self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {date} is {total_estimated_memory_usage_in_gb:.2f} GB")
-
+        if use_ray:
+            import atexit
+            import ray
+            from ray.util.queue import Queue
+            
+            atexit.register(lambda: ray.shutdown())
+            
+            @ray.remote
+            def _run_task(log_queue: Queue, date: datetime.date) -> DataFrame | None:
+                try:
+                    if not self.logger.handlers:
+                        self.logger.addHandler(QueueHandler(log_queue))
+                        self.logger.setLevel(logging.DEBUG)
+                    self.logger.warning(f'getting {self.name} {pdt} {date} data')
+                    df = self._get_historical_data(trading_venue, pdt, date, resolution)
+                    return df
+                except Exception:
+                    self.logger.exception(f'error processing ray task for getting historical {pdt} data {date=}:')
+                    return None
+            
+            try:
+                log_listener = None
+                logical_cpus = os.cpu_count()
+                num_cpus = min(num_cpus, logical_cpus)
+                ray.init(num_cpus=num_cpus)
+                print(f"Ray's num_cpus is set to {num_cpus}")
+                batch_size = num_cpus
+                log_queue = Queue()
+                log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
+                log_listener.start()
+                batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
+                for batch in batches:
+                    futures = [_run_task.remote(log_queue, *task) for task in batch]
+                    results = ray.get(futures)
+                    if not all([df is not None for df in results]):
+                        self.logger.warning(f'getting {self.name} historical data partially failed, check {self.logger.name}.log for details')
+                    returned_dfs = [df for df in results if df is not None]
+                    dfs.extend(returned_dfs)
+                    if show_memory_warning:
+                        for _df in returned_dfs:
+                            total_estimated_memory_usage_in_gb += self.data_tool.estimate_memory_usage(_df)
+                        batch_end_date, = batch[-1]
+                        self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {batch_end_date} is {total_estimated_memory_usage_in_gb:.2f} GB")
+                self.logger.warning(f'finished getting {self.name} historical data')
+            except KeyboardInterrupt:
+                print(f"KeyboardInterrupt received, stopping getting {self.name} historical data...")
+            except Exception:
+                self.logger.exception(f'Error in getting {self.name} historical data:')
+            finally:
+                if log_listener:
+                    log_listener.stop()
+                ray.shutdown()
+        
         df = self.data_tool.concat(dfs)
         
         # Resample daily data

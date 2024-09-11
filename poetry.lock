@@ -5703,11 +5703,11 @@ type = ["pytest-mypy"]
 
 [extras]
 all = ["connectorx", "minio", "pandas", "polars", "psutil", "pyarrow", "ray", "s3fs"]
-boost = ["connectorx", "pyarrow", "ray"]
+boost = ["connectorx", "ray"]
 data = ["minio", "psutil", "s3fs"]
-df = ["pandas", "polars"]
+df = ["pandas", "polars", "pyarrow"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10 <3.13"
-content-hash = "8cc310502bd629ba424167bdd41a7efaa5297885187184a923f43dd4d62e48cf"
+content-hash = "d0604ab22aa13cecab8fcbc98198c4d0dee617cd67fb430c65a48ad87b762189"

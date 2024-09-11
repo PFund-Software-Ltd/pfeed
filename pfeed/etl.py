@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from pfeed.resolution import ExtendedResolution
     tOUTPUT_FORMATS = Literal['bytes'] | tSUPPORTED_DATA_TOOLS
 
-import io
 import logging
 import importlib
 
@@ -34,6 +33,7 @@ from pfeed.const.common import (
 )
 from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
 from pfeed.utils.utils import derive_trading_venue
+from pfeed.utils.file_format import read_raw_data
 
 try:
     from pfeed.utils.monitor import print_disk_usage
@@ -284,7 +284,7 @@ def clean_raw_data(
     const = importlib.import_module(f'pfeed.sources.{data_source.lower()}.const')
     utils = importlib.import_module(f'pfeed.sources.{data_source.lower()}.utils')
     
-    df: pd.DataFrame = _convert_data_to_pandas_df(data, read_method=utils.read_raw_data)
+    df: pd.DataFrame = _convert_data_to_pandas_df(data)
     if RENAMING_COLS := getattr(const, 'RENAMING_COLS', {}):
         df = df.rename(columns=RENAMING_COLS)
     if MAPPING_COLS := getattr(const, 'MAPPING_COLS', {}):
@@ -380,15 +380,10 @@ def resample_data(
     return _handle_result(data, resampled_df)
 
 
-def _convert_data_to_pandas_df(data: bytes | pd.DataFrame | pl.LazyFrame, read_method=None) -> pd.DataFrame:
-    """Converts data to pandas DataFrame.
-    Args:
-        read_method: a function to read the data, default is pd.read_parquet
-    """
+def _convert_data_to_pandas_df(data: bytes | pd.DataFrame | pl.LazyFrame) -> pd.DataFrame:
+    """Converts data to pandas DataFrame."""
     if isinstance(data, bytes):
-        default_read_method = lambda d: pd.read_parquet(io.BytesIO(d))
-        read_method = read_method or default_read_method
-        df = read_method(data)
+        df = read_raw_data(data)
     elif isinstance(data, pd.DataFrame):
         df = data
     elif isinstance(data, pl.LazyFrame):

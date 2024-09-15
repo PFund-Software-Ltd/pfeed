@@ -157,9 +157,6 @@ class BaseFeed:
         trading_venue: str='',
         from_storage: tSUPPORTED_STORAGES='',
         show_memory_warning: bool=False,
-        use_ray: bool=False,
-        ray_num_cpus: int=8,
-        ray_batch_size: int | None=None,
     ) -> DataFrame:
         """Get historical data from the data source.
         Args:
@@ -175,9 +172,6 @@ class BaseFeed:
             trading_venue: trading venue's name, e.g. exchange's name or dapp's name
             from_storage: If specified, only search for data in the specified storage.
             show_memory_warning: Whether to show memory usage warning.
-            use_ray: Whether to use Ray to download data.
-            ray_num_cpus: Number of CPUs to use when using Ray.
-            ray_batch_size: Number of tasks to run in a CPU when using Ray.
         """
         from pfeed import etl
         from pfeed.resolution import ExtendedResolution
@@ -194,76 +188,14 @@ class BaseFeed:
         
         dfs = []  # could be dataframes or lazyframes
         total_estimated_memory_usage_in_gb = 0
-        ray_tasks = []
 
         for date in dates:
-            if use_ray:
-                ray_tasks.append((date,))
-            else:
-                df = self._get_historical_data(trading_venue, pdt, resolution, date, from_storage=from_storage)
-                dfs.append(df)
-                if show_memory_warning:
-                    total_estimated_memory_usage_in_gb += self.data_tool.estimate_memory_usage(df)
-                    self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {date} is {total_estimated_memory_usage_in_gb:.2f} GB")
+            df = self._get_historical_data(trading_venue, pdt, resolution, date, from_storage=from_storage)
+            dfs.append(df)
+            if show_memory_warning:
+                total_estimated_memory_usage_in_gb += self.data_tool.estimate_memory_usage(df)
+                self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {date} is {total_estimated_memory_usage_in_gb:.2f} GB")
 
-        if use_ray:
-            import atexit
-            import ray
-            from ray.util.queue import Queue
-            
-            atexit.register(lambda: ray.shutdown())
-            
-            @ray.remote
-            def _run_task(log_queue: Queue, date: datetime.date) -> DataFrame | None:
-                try:
-                    if not self.logger.handlers:
-                        self.logger.addHandler(QueueHandler(log_queue))
-                        self.logger.setLevel(logging.DEBUG)
-                    self.logger.debug(f'getting {self.name} {pdt} {date} data')
-                    df = self._get_historical_data(trading_venue, pdt, resolution, date)
-                    return df
-                except Exception:
-                    self.logger.exception(f'error processing ray task for getting historical {pdt} data {date=}:')
-                    return None
-                
-            def _get_batch_size(total_items, num_cpu, target_batches_per_cpu=1):
-                import math
-                total_batches = num_cpu * target_batches_per_cpu
-                return max(1, math.ceil(total_items / total_batches))
-            
-            try:
-                log_listener = None
-                logical_cpus = os.cpu_count()
-                num_cpus = min(ray_num_cpus, logical_cpus)
-                ray.init(num_cpus=num_cpus)
-                batch_size = ray_batch_size or _get_batch_size(len(ray_tasks), num_cpus)
-                print(f"Ray's num_cpus is set to {num_cpus} with {batch_size=}")
-                log_queue = Queue()
-                log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
-                log_listener.start()
-                batches = [ray_tasks[i: i + batch_size] for i in range(0, len(ray_tasks), batch_size)]
-                for batch in batches:
-                    futures = [_run_task.remote(log_queue, *task) for task in batch]
-                    results = ray.get(futures)
-                    if not all([df is not None for df in results]):
-                        self.logger.warning(f'getting {self.name} historical data partially failed, check {self.logger.name}.log for details')
-                    returned_dfs = [df for df in results if df is not None]
-                    dfs.extend(returned_dfs)
-                    if show_memory_warning:
-                        for _df in returned_dfs:
-                            total_estimated_memory_usage_in_gb += self.data_tool.estimate_memory_usage(_df)
-                        batch_end_date, = batch[-1]
-                        self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {batch_end_date} is {total_estimated_memory_usage_in_gb:.2f} GB")
-                self.logger.warning(f'finished getting {self.name} historical data')
-            except KeyboardInterrupt:
-                print(f"KeyboardInterrupt received, stopping getting {self.name} historical data...")
-            except Exception:
-                self.logger.exception(f'Error in getting {self.name} historical data:')
-            finally:
-                if log_listener:
-                    log_listener.stop()
-                ray.shutdown()
-        
         df = self.data_tool.concat(dfs)
         
         # Resample daily data

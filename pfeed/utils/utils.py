@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.types.common_literals import (
         tSUPPORTED_DOWNLOAD_DATA_SOURCES, 
+        tSUPPORTED_STORAGES,
     )
 
 import re
@@ -10,7 +11,7 @@ import datetime
 import calendar
 import pytz
 
-from pfeed.const.common import SUPPORTED_CRYPTO_EXCHANGES
+from pfeed.const.common import SUPPORTED_CRYPTO_EXCHANGES, SUPPORTED_STORAGES
 
 
 def derive_trading_venue(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES) -> str:
@@ -19,6 +20,20 @@ def derive_trading_venue(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES) -> str:
     else:
         trading_venue = 'SMART'
     return trading_venue
+
+
+def get_available_data_storages() -> list[tSUPPORTED_STORAGES]:
+    from pfeed.datastore import check_if_minio_running
+    available_storages = ['local']
+    for storage in SUPPORTED_STORAGES:
+        if storage == 'local':
+            continue
+        elif storage == 'minio':
+            if check_if_minio_running():
+                available_storages.append('minio')
+        else:
+            raise ValueError(f"Unsupported {storage=}")
+    return available_storages
 
 
 def separate_number_and_chars(input_string):

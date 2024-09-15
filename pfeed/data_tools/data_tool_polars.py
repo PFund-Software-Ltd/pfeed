@@ -61,5 +61,5 @@ def organize_time_series_columns(pdt: str, resolution: str | ExtendedResolution,
         pl.lit(repr(resolution)).alias('resolution')
     )
     left_cols = ['ts', 'product', 'resolution']
-    df = df.select(left_cols + [col for col in df.collect_schema().names() if col not in left_cols])
+    df = df.select(left_cols + [col for col in cols if col not in left_cols])
     return df

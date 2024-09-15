@@ -20,9 +20,10 @@ def download_historical_data(
     ptypes: str | list[str] | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
-    num_cpus: int = 8,
-    use_ray: bool = True,
     use_minio: bool = False,
+    use_ray: bool = True,
+    ray_num_cpus: int = 8,
+    ray_batch_size: int | None = None,
 ):
     data_source = importlib.import_module(f"pfeed.sources.{data_source.lower()}")
     return data_source.download_historical_data(
@@ -31,9 +32,10 @@ def download_historical_data(
         ptypes=ptypes,
         start_date=start_date,
         end_date=end_date,
-        num_cpus=num_cpus,
-        use_ray=use_ray,
         use_minio=use_minio,
+        use_ray=use_ray,
+        ray_num_cpus=ray_num_cpus,
+        ray_batch_size=ray_batch_size,
     )
 
 

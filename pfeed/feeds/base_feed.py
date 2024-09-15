@@ -6,7 +6,7 @@ if TYPE_CHECKING:
         import polars as pl
     except ImportError:
         pass
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_STORAGES
     from pfeed.sources.bybit.types import tSUPPORTED_DATA_TYPES
     from pfeed.resolution import ExtendedResolution
     DataFrame = pd.DataFrame | pl.LazyFrame
@@ -26,8 +26,12 @@ except ImportError:
     pass
 
 from pfeed.config_handler import get_config
-from pfeed.const.common import SUPPORTED_DATA_FEEDS, SUPPORTED_DATA_TOOLS
-from pfeed.utils.utils import get_dates_in_between, rollback_date_range, derive_trading_venue
+from pfeed.const.common import SUPPORTED_DATA_FEEDS, SUPPORTED_DATA_TOOLS, SUPPORTED_STORAGES
+from pfeed.utils.utils import (
+    get_dates_in_between, 
+    rollback_date_range, 
+    derive_trading_venue,
+)
 from pfeed.utils.validate import validate_pdt
 
 
@@ -36,6 +40,10 @@ __all__ = ["BaseFeed"]
 
 class BaseFeed:
     def __init__(self, name: str, data_tool: tSUPPORTED_DATA_TOOLS='pandas'):
+        '''
+        Args:
+            from_storage: If specified, only search for data in the specified storage.
+        '''
         from pfund.plogging import set_up_loggers
 
         self.name = name.upper()
@@ -60,13 +68,13 @@ class BaseFeed:
         self.data_path = config.data_path
         self.logger = logging.getLogger(self.name.lower() + '_data')
         self.temp_dir = self._create_temp_dir()
-        
+    
     def _create_temp_dir(self):
         current_date = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d')
         temp_dir_name = f"{self.name.lower()}_temp_{current_date}"
         return os.path.join(self.data_path, temp_dir_name)
     
-    def _create_temp_file_path(self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution) -> str:
+    def _create_temp_file_path(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date) -> str:
         return os.path.join(self.temp_dir, f"temp_{self.name}_{trading_venue.upper()}_{pdt.upper()}_{repr(resolution)}_{date.strftime('%Y%m%d')}.parquet")
     
     def _prepare_temp_dir(self):
@@ -96,41 +104,42 @@ class BaseFeed:
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         return dates
             
-    def _get_historical_data_from_local(self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution) -> DataFrame | None:
+    def _get_historical_data_from_storages(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date, from_storage: tSUPPORTED_STORAGES='') -> DataFrame | None:
         from pfeed import etl
         default_raw_resolution = self.utils.get_default_raw_resolution()
-        if (local_data := etl.get_data("BACKTEST", self.name, resolution, pdt, date, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
-            return local_data
+        storages = [from_storage] if from_storage else SUPPORTED_STORAGES
+        if (data := etl.get_data("BACKTEST", self.name, pdt, resolution, date, storages=storages, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
+            return data
         # if can't find local data with resolution, check if raw data exists
         elif default_raw_resolution and not resolution.is_raw() and default_raw_resolution.is_ge(resolution) and \
-            (local_raw_data := etl.get_data("BACKTEST", self.name, default_raw_resolution, pdt, date, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
-            self.logger.info(f'No local {self.name} data found with {resolution=}, switched to find "{default_raw_resolution}" data instead')
-            transformed_data = etl.transform_data(self.name, local_raw_data, default_raw_resolution, resolution)
-            self.logger.info(f'resampled {self.name} raw data to {resolution=}')
+            (data := etl.get_data("BACKTEST", self.name, pdt, default_raw_resolution, date, storages=storages, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
+            self.logger.debug(f'No local {self.name} data found with {resolution=}, switched to find "{default_raw_resolution}" data instead')
+            transformed_data = etl.transform_data(self.name, data, default_raw_resolution, resolution)
+            self.logger.debug(f'transformed {self.name} raw data to {resolution=}')
             return transformed_data
     
-    def _get_historical_data_from_temp(self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution) -> DataFrame | None:
-        temp_file_path = self._create_temp_file_path(trading_venue, pdt, date, resolution)
+    def _get_historical_data_from_temp(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date) -> DataFrame | None:
+        temp_file_path = self._create_temp_file_path(trading_venue, pdt, resolution, date)
         if os.path.exists(temp_file_path):
-            self.logger.info(f'loaded temporary parquet file: {temp_file_path}')
+            self.logger.debug(f'loaded temporary parquet file: {temp_file_path}')
             return self.data_tool.read_parquet(temp_file_path)
     
     def _get_historical_data_from_source(
-        self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution
+        self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date
     ) -> bytes | None:
         raise NotImplementedError(f"{self.name} _get_historical_data_from_source() is not implemented")
     
-    def _get_historical_data(self, trading_venue: str, pdt: str, date: datetime.date, resolution: ExtendedResolution) -> DataFrame:
+    def _get_historical_data(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date, from_storage: tSUPPORTED_STORAGES='') -> DataFrame:
         import pandas as pd
-        if (df := self._get_historical_data_from_local(trading_venue, pdt, date, resolution)) is not None:
+        if (df := self._get_historical_data_from_storages(trading_venue, pdt, resolution, date, from_storage=from_storage)) is not None:
             pass
-        elif (df := self._get_historical_data_from_temp(trading_venue, pdt, date, resolution)) is not None:
+        elif (df := self._get_historical_data_from_temp(trading_venue, pdt, resolution, date)) is not None:
             pass
-        elif data := self._get_historical_data_from_source(trading_venue, pdt, date, resolution):
+        elif data := self._get_historical_data_from_source(trading_venue, pdt, resolution, date):
             df = pd.read_parquet(io.BytesIO(data))
-            temp_file_path = self._create_temp_file_path(trading_venue, pdt, date, resolution)
+            temp_file_path = self._create_temp_file_path(trading_venue, pdt, resolution, date)
             df.to_parquet(temp_file_path, compression='zstd')
-            self.logger.info(f'created temporary parquet file: {temp_file_path}')
+            self.logger.debug(f'created temporary parquet file: {temp_file_path}')
             if self.data_tool.name != 'pandas':
                 # read_parquet will return a lazyFrame for e.g. polars
                 df = self.data_tool.read_parquet(temp_file_path)
@@ -146,9 +155,11 @@ class BaseFeed:
         start_date: str="",
         end_date: str="",
         trading_venue: str='',
+        from_storage: tSUPPORTED_STORAGES='',
         show_memory_warning: bool=False,
-        num_cpus: int=8,
         use_ray: bool=False,
+        ray_num_cpus: int=8,
+        ray_batch_size: int | None=None,
     ) -> DataFrame:
         """Get historical data from the data source.
         Args:
@@ -162,17 +173,20 @@ class BaseFeed:
             start_date: Start date.
             end_date: End date.
             trading_venue: trading venue's name, e.g. exchange's name or dapp's name
+            from_storage: If specified, only search for data in the specified storage.
             show_memory_warning: Whether to show memory usage warning.
-            num_cpus: Number of CPUs to use when using Ray.
             use_ray: Whether to use Ray to download data.
+            ray_num_cpus: Number of CPUs to use when using Ray.
+            ray_batch_size: Number of tasks to run in a CPU when using Ray.
         """
         from pfeed import etl
         from pfeed.resolution import ExtendedResolution
         
-        pdt, trading_venue = pdt.upper(), trading_venue.upper()
+        pdt, trading_venue, from_storage = pdt.upper(), trading_venue.upper(), from_storage.lower()
         assert validate_pdt(
             self.name, pdt
         ), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {self.name} are: {self.const.SUPPORTED_PRODUCT_TYPES})'
+        assert from_storage in SUPPORTED_STORAGES, f"Invalid {from_storage=}, {SUPPORTED_STORAGES=}"
         resolution = ExtendedResolution(resolution)
         trading_venue = trading_venue or derive_trading_venue(self.name)
         self._prepare_temp_dir()
@@ -186,7 +200,7 @@ class BaseFeed:
             if use_ray:
                 ray_tasks.append((date,))
             else:
-                df = self._get_historical_data(trading_venue, pdt, date, resolution)
+                df = self._get_historical_data(trading_venue, pdt, resolution, date, from_storage=from_storage)
                 dfs.append(df)
                 if show_memory_warning:
                     total_estimated_memory_usage_in_gb += self.data_tool.estimate_memory_usage(df)
@@ -205,20 +219,25 @@ class BaseFeed:
                     if not self.logger.handlers:
                         self.logger.addHandler(QueueHandler(log_queue))
                         self.logger.setLevel(logging.DEBUG)
-                    self.logger.warning(f'getting {self.name} {pdt} {date} data')
-                    df = self._get_historical_data(trading_venue, pdt, date, resolution)
+                    self.logger.debug(f'getting {self.name} {pdt} {date} data')
+                    df = self._get_historical_data(trading_venue, pdt, resolution, date)
                     return df
                 except Exception:
                     self.logger.exception(f'error processing ray task for getting historical {pdt} data {date=}:')
                     return None
+                
+            def _get_batch_size(total_items, num_cpu, target_batches_per_cpu=1):
+                import math
+                total_batches = num_cpu * target_batches_per_cpu
+                return max(1, math.ceil(total_items / total_batches))
             
             try:
                 log_listener = None
                 logical_cpus = os.cpu_count()
-                num_cpus = min(num_cpus, logical_cpus)
+                num_cpus = min(ray_num_cpus, logical_cpus)
                 ray.init(num_cpus=num_cpus)
-                print(f"Ray's num_cpus is set to {num_cpus}")
-                batch_size = num_cpus
+                batch_size = ray_batch_size or _get_batch_size(len(ray_tasks), num_cpus)
+                print(f"Ray's num_cpus is set to {num_cpus} with {batch_size=}")
                 log_queue = Queue()
                 log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
                 log_listener.start()
@@ -265,9 +284,10 @@ class BaseFeed:
         ptypes: str | list[str] | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-        num_cpus: int = 8,
-        use_ray: bool = True,
         use_minio: bool = False,
+        use_ray: bool = True,
+        ray_num_cpus: int = 8,
+        ray_batch_size: int | None = None,
     ):
         try:
             data_source = getattr(self, self.name.lower())
@@ -277,9 +297,10 @@ class BaseFeed:
                 ptypes=ptypes,
                 start_date=start_date,
                 end_date=end_date,
-                num_cpus=num_cpus,
-                use_ray=use_ray,
                 use_minio=use_minio,          
+                use_ray=use_ray,
+                ray_num_cpus=ray_num_cpus,
+                ray_batch_size=ray_batch_size,
             )
         except AttributeError:
             raise Exception(f'{self.name} does not support download_historical_data()')

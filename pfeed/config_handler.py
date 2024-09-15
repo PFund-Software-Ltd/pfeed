@@ -5,9 +5,6 @@ import logging
 from types import TracebackType
 from dataclasses import dataclass
 
-import yaml
-from dotenv import find_dotenv, load_dotenv
-
 from pfeed.const.paths import PROJ_NAME, MAIN_PATH, LOG_PATH, DATA_PATH, USER_CONFIG_FILE_PATH
 
 
@@ -48,6 +45,8 @@ class ConfigHandler:
     
     @classmethod
     def load_config(cls):
+        import yaml
+
         '''Loads user's config file and returns a ConfigHandler object'''
         config_file_path = USER_CONFIG_FILE_PATH
         if config_file_path.is_file():
@@ -80,6 +79,8 @@ class ConfigHandler:
             self.enable_debug_mode()
     
     def load_env_file(self, env_file_path: str | None):
+        from dotenv import find_dotenv, load_dotenv
+        
         if not env_file_path:
             found_env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
             if found_env_file_path:

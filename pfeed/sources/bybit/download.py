@@ -16,7 +16,7 @@ from logging.handlers import QueueHandler, QueueListener
 from tqdm import tqdm
 from rich.console import Console
 
-from pfeed.datastore import Datastore
+from pfeed.datastore import check_if_minio_running
 from pfeed.config_handler import get_config
 from pfeed.sources.bybit import api
 from pfeed.sources.bybit.const import (
@@ -92,7 +92,7 @@ def _run_etl(storage: tSUPPORTED_STORAGES, product: CryptoProduct, date: datetim
         for resolution in resolutions:
             data: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)
             data: bytes = etl.transform_data(DATA_SOURCE, data, raw_resolution, resolution)
-            etl.load_data('BACKTEST', storage, DATA_SOURCE, product.exch, data, resolution, pdt, date)
+            etl.load_data('BACKTEST', storage, DATA_SOURCE, data, pdt, resolution, date)
     else:
         raise Exception(f'failed to download {DATA_SOURCE} {pdt} {date} historical data')
 
@@ -103,9 +103,10 @@ def download_historical_data(
     ptypes: tSUPPORTED_PRODUCT_TYPES | list[tSUPPORTED_PRODUCT_TYPES] | None=None, 
     start_date: str | None=None,
     end_date: str | None=None,
-    num_cpus: int=8,
-    use_ray: bool=True,
     use_minio: bool=False,
+    use_ray: bool=True,
+    ray_num_cpus: int=8,
+    ray_batch_size: int | None=None,
 ) -> None:
     from pfund.plogging import set_up_loggers
     
@@ -130,7 +131,7 @@ def download_historical_data(
     Console().print(f'PFeed: downloading historical data from {DATA_SOURCE}, {start_date=} {end_date=}', style='bold yellow')
     
     if use_minio:
-        Datastore.initialize_store('minio')
+        assert check_if_minio_running(), 'MinIO is not running or not detected on, please use "pfeed docker-compose up -d" to start MinIO'
     storage = 'minio' if use_minio else 'local'
     exchange = get_exchange()
     ray_tasks = defaultdict(list)
@@ -168,17 +169,23 @@ def download_historical_data(
                 return False
             return True
         
+        def _get_batch_size(total_items, num_cpu, target_batches_per_cpu=1):
+            import math
+            total_batches = num_cpu * target_batches_per_cpu
+            return max(1, math.ceil(total_items / total_batches))
+        
         try:
             log_listener = None
             logical_cpus = os.cpu_count()
-            num_cpus = min(num_cpus, logical_cpus)
+            num_cpus = min(ray_num_cpus, logical_cpus)
             ray.init(num_cpus=num_cpus)
             print(f"Ray's num_cpus is set to {num_cpus}")
-            batch_size = num_cpus
             log_queue = Queue()
             log_listener = QueueListener(log_queue, *logger.handlers, respect_handler_level=True)
             log_listener.start()
             for pdt in tqdm(ray_tasks, desc=f'Downloading {DATA_SOURCE} historical data by product', colour='green'):
+                batch_size = ray_batch_size or _get_batch_size(len(ray_tasks[pdt]), num_cpus)
+                print(f"Ray's batch_size is set to {batch_size} for {pdt}")
                 batches = [ray_tasks[pdt][i: i + batch_size] for i in range(0, len(ray_tasks[pdt]), batch_size)]
                 for batch in tqdm(batches, desc=f'Downloading {DATA_SOURCE} {pdt} historical data by batch ({batch_size=})', colour='yellow'):
                     futures = [_run_task.remote(log_queue, *task) for task in batch]

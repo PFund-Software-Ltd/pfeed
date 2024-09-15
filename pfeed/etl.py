@@ -10,7 +10,6 @@ if TYPE_CHECKING:
         tSUPPORTED_STORAGES, 
         tSUPPORTED_DATA_TOOLS,
     )
-    from pfeed.resolution import ExtendedResolution
     tOUTPUT_FORMATS = Literal['bytes'] | tSUPPORTED_DATA_TOOLS
 
 import logging
@@ -22,6 +21,7 @@ try:
 except ImportError:
     pass
 
+from pfeed.resolution import ExtendedResolution
 from pfeed.datastore import Datastore
 from pfeed.filepath import FilePath
 from pfeed.config_handler import get_config
@@ -59,9 +59,10 @@ __all__ = [
 def get_data(
     env: tSUPPORTED_ENVIRONMENTS,
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
-    resolution: str | ExtendedResolution,
     pdt: str,
+    resolution: str | ExtendedResolution,
     date: str,
+    storages: list[tSUPPORTED_STORAGES] | None = None,
     trading_venue: str='',
     output_format: tOUTPUT_FORMATS='pandas',
 ) -> bytes | DataFrame | None:
@@ -71,27 +72,22 @@ def get_data(
     Args:
         env: trading environment, e.g. 'PAPER' | 'LIVE'.
         data_source (Literal['BYBIT']): The data source to extract data from.
+        pdt (str): product, e.g. BTC_USDT_PERP.
         resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
             Also supports raw resolution such as 'r1m', where 'r' stands for raw.            
             Default is '1d' = 1 day.
-        pdt (str): product, e.g. BTC_USDT_PERP.
         date (str): The date of the data to extract.
+        storages: origins of data to search from, default is all supported storages
         trading_venue (str): trading venue's name, e.g. exchange's name or dapp's name
         output_format: The format of the output data. Default is 'pandas'.
     Returns:
         bytes | DataFrame | None: The extracted data as bytes, or None if the data is not found.
     """    
-    try:
-        from minio.error import MinioException
-    except ImportError:
-        MinioException = Exception
-    
-    trading_venue = trading_venue or derive_trading_venue(data_source)
-    for storage in SUPPORTED_STORAGES:
-        try:
-            data: bytes | pd.DataFrame | None = extract_data(env, storage, data_source, trading_venue, resolution, pdt, date, output_format=output_format)
-        except MinioException:
-            data = None
+    logger = logging.getLogger(data_source.lower() + '_data')
+    storages = storages or SUPPORTED_STORAGES
+    for storage in storages:
+        logger.debug(f'searching {storage=} for {data_source} {pdt} {resolution} {date} data')
+        data: bytes | pd.DataFrame | None = extract_data(env, storage, data_source, pdt, resolution, date, trading_venue=trading_venue, output_format=output_format)
         if data is not None:
             return data
 
@@ -100,10 +96,10 @@ def extract_data(
     env: tSUPPORTED_ENVIRONMENTS,
     storage: tSUPPORTED_STORAGES,
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
-    trading_venue: str,
-    resolution: str | ExtendedResolution,
     pdt: str,
+    resolution: str | ExtendedResolution,
     date: str,
+    trading_venue: str='',
     output_format: tOUTPUT_FORMATS='pandas',
 ) -> bytes | DataFrame | None:
     """
@@ -111,14 +107,14 @@ def extract_data(
 
     Args:
         env: trading environment, e.g. 'PAPER' | 'LIVE'.
-        storage: The origin of the data (local or minio).
+        storage: The origin of the data (e.g. local or minio).
         data_source: The source of the data.
-        trading_venue: trading venue's name, e.g. exchange's name or dapp's name
+        pdt (str): product, e.g. BTC_USDT_PERP.
         resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
             Also supports raw resolution such as 'r1m', where 'r' stands for raw.            
             Default is '1d' = 1 day.
-        pdt (str): product, e.g. BTC_USDT_PERP.
         date (str): The date of the data.
+        trading_venue: trading venue's name, e.g. exchange's name or dapp's name
         output_format: The format of the output data. Default is 'pandas'.
     Returns:
         bytes | DataFrame | None: The extracted data as bytes, or None if extraction fails.
@@ -128,11 +124,10 @@ def extract_data(
         NotImplementedError: If the data origin is not supported.
         MinioException: If MinIO is not running / set up correctly.
     """
-    from pfeed.resolution import ExtendedResolution
-    
     logger = logging.getLogger(data_source.lower() + '_data')
-    
     env, storage, data_source, pdt, output_format = env.upper(), storage.lower(), data_source.upper(), pdt.upper(), output_format.lower()
+    trading_venue = trading_venue or derive_trading_venue(data_source)
+    trading_venue = trading_venue.upper()
     assert env in SUPPORTED_ENVIRONMENTS, f'Invalid {env=}, {SUPPORTED_ENVIRONMENTS=}'
     assert storage in SUPPORTED_STORAGES, f'Invalid {storage=}, {SUPPORTED_STORAGES=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
@@ -143,31 +138,35 @@ def extract_data(
         data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{output_format.lower()}')
     config = get_config()
     fp = FilePath(env, data_source, trading_venue, pdt, resolution, date, file_extension='.parquet', data_path=config.data_path)
-    if storage == 'local':
-        if fp.exists():
-            if output_format == 'bytes':
-                with open(fp.file_path, 'rb') as f:
-                    data: bytes = f.read()
+    try:
+        if storage == 'local':
+            if fp.exists():
+                if output_format == 'bytes':
+                    with open(fp.file_path, 'rb') as f:
+                        data: bytes = f.read()
+                else:
+                    data: DataFrame = data_tool.read_parquet(fp.file_path)
+                logger.debug(f'extracted {data_source} {pdt} {date} {resolution} data from local path {fp.file_path}')
+                return data
             else:
-                data: DataFrame = data_tool.read_parquet(fp.file_path)
-            logger.debug(f'extracted {data_source} {pdt} {date} {resolution} data from local path {fp.file_path}')
-            return data
+                logger.debug(f'failed to extract {data_source} {pdt} {date} {resolution} data from local path {fp.file_path}')
+        elif storage == 'minio':
+            datastore = Datastore(storage)
+            object_name = fp.storage_path
+            if datastore.exist_object(object_name):
+                if output_format != 'bytes':
+                    file_path = "s3://" + datastore.BUCKET_NAME + "/" + object_name
+                    data: DataFrame = data_tool.read_parquet(file_path, storage='minio')
+                else:
+                    data: bytes | None = datastore.get_object(object_name)
+                logger.debug(f'extracted {data_source} {pdt} {date} {resolution} data from MinIO')
+                return data
+            else:
+                logger.debug(f'No data found in MinIO for {data_source} {pdt} {date} {resolution}')
         else:
-            logger.debug(f'failed to extract {data_source} {pdt} {date} {resolution} data from local path {fp.file_path}')
-    elif storage == 'minio':
-        datastore = Datastore(storage)
-        object_name = fp.storage_path
-        data: bytes | None = datastore.get_object(object_name)
-        if data:
-            if output_format != 'bytes':
-                file_path = "s3://" + datastore.BUCKET_NAME + "/" + object_name
-                data: DataFrame = data_tool.read_parquet(file_path, storage='minio')
-            logger.debug(f'extracted {data_source} {pdt} {date} {resolution} data from MinIO object {object_name}')
-        else:
-            logger.debug(f'failed to extract {data_source} {pdt} {date} {resolution} data from MinIO object {object_name}')
-        return data
-    else:
-        raise NotImplementedError(f'{storage=}')
+            raise NotImplementedError(f'{storage=}')
+    except Exception as err:
+        logger.exception(f'failed to extract {data_source} {pdt} {date} {resolution} data from {storage}, {err=}')
     
     
 def transform_data(
@@ -177,7 +176,6 @@ def transform_data(
     target_resolution: str | ExtendedResolution,
 ) -> bytes | pd.DataFrame | pl.LazyFrame:
     """Transforms data to a target resolution"""
-    from pfeed.resolution import ExtendedResolution
     if isinstance(data_resolution, str):
         data_resolution = ExtendedResolution(data_resolution)
     if isinstance(target_resolution, str):
@@ -203,11 +201,11 @@ def load_data(
     env: tSUPPORTED_ENVIRONMENTS,
     storage: tSUPPORTED_STORAGES,
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
-    trading_venue: str,
     data: bytes,
-    resolution: str | ExtendedResolution,
     pdt: str,
+    resolution: str | ExtendedResolution,
     date: str,
+    trading_venue: str='',
     **kwargs
 ) -> None:
     """
@@ -218,13 +216,13 @@ def load_data(
         storage: The destination where the data will be loaded. 
             It can be either 'local' or 'minio'.
         data_source: The source of the data.
-        trading_venue: trading venue's name, e.g. exchange's name or dapp's name
         data (bytes): The data to be loaded.
+        pdt (str): product, e.g. BTC_USDT_PERP.
         resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
             Also supports raw resolution such as 'r1m', where 'r' stands for raw.            
             Default is '1d' = 1 day.
-        pdt (str): product, e.g. BTC_USDT_PERP.
         date (str): The date of the data.
+        trading_venue: trading venue's name, e.g. exchange's name or dapp's name
         **kwargs: Additional keyword arguments for MinIO.
 
     Returns:
@@ -235,11 +233,11 @@ def load_data(
         NotImplementedError: If the specified data destination is not implemented.
         MinioException: If MinIO is not running / set up correctly.
     """
-    from pfeed.resolution import ExtendedResolution
-    
     logger = logging.getLogger(data_source.lower() + '_data')
     
     env, storage, data_source, pdt = env.upper(), storage.lower(), data_source.upper(), pdt.upper()
+    trading_venue = trading_venue or derive_trading_venue(data_source)
+    trading_venue = trading_venue.upper()
     assert env in SUPPORTED_ENVIRONMENTS, f'Invalid {env=}, {SUPPORTED_ENVIRONMENTS=}'
     assert storage in SUPPORTED_STORAGES, f'Invalid {storage=}, {SUPPORTED_STORAGES=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
@@ -326,8 +324,6 @@ def resample_data(
         resolution (str | Resolution): The resolution at which the data should be resampled. 
             if string, it should be in the format of "# + unit (s/m/h/d)", e.g. "1s".
     '''
-    from pfeed.resolution import ExtendedResolution
-
     # standardize resolution by following pfund's standard, e.g. '1minute' -> '1m'
     if isinstance(resolution, str):
         resolution = ExtendedResolution(resolution)

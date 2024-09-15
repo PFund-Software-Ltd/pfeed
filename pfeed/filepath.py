@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.resolution import ExtendedResolution
     from pfeed.types.common_literals import (
         tSUPPORTED_ENVIRONMENTS,
         tSUPPORTED_DOWNLOAD_DATA_SOURCES, 
@@ -10,6 +9,7 @@ if TYPE_CHECKING:
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pfeed.resolution import ExtendedResolution
 from pfeed.utils.utils import create_filename
 from pfeed.const.paths import DATA_PATH
 

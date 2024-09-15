@@ -5702,10 +5702,10 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 type = ["pytest-mypy"]
 
 [extras]
-all = ["connectorx", "minio", "pandas", "psutil", "pyarrow", "ray", "s3fs"]
+all = ["connectorx", "minio", "pandas", "polars", "psutil", "pyarrow", "ray", "s3fs"]
 boost = ["connectorx", "ray"]
 data = ["minio", "psutil", "s3fs"]
-df = ["pandas", "pyarrow"]
+df = ["pandas", "polars", "pyarrow"]
 
 [metadata]
 lock-version = "2.0"

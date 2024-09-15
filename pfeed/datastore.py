@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     try:
-        from minio.api import ObjectWriteResult
+        from minio.api import ObjectWriteResult, Tags
     except ImportError:
         pass
     from typing import Generator
@@ -12,10 +12,9 @@ import io
 import logging
 
 
-def assert_if_minio_running():
+def check_if_minio_running():
     import requests
     from requests.exceptions import RequestException, ReadTimeout
-    from minio.error import MinioException
 
     endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
     if not endpoint.startswith('http'):
@@ -26,9 +25,11 @@ def assert_if_minio_running():
     try:
         response = requests.get(f'{endpoint}/minio/health/live', timeout=3)
         if response.status_code != 200:
-            raise MinioException(f"Unhandled response: {response.status_code=} {response.content} {response}")
+            print(f"Unhandled response from MinIO: {response.status_code=} {response.content} {response}")
+            return False
     except (ReadTimeout, RequestException) as e:
-        raise MinioException(f"MinIO is not running or not detected on {endpoint}: {e}, please use 'pfeed docker-compose up -d' to start MinIO")
+        return False
+    return True
 
 
 class Datastore:
@@ -40,9 +41,9 @@ class Datastore:
     def initialize_store(cls, name: str, **kwargs):
         if name == 'minio':
             from minio import Minio
-            assert_if_minio_running()
+            endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
             cls.minio = Minio(
-                endpoint=os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
+                endpoint=endpoint,
                 access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
                 secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
                 # turn off TLS, i.e. not using HTTPS
@@ -74,7 +75,16 @@ class Datastore:
                 self.logger.error(f'Unhandled MinIO response status {res.status}')
         except S3Error as err:
             # logger.warning(f'MinIO S3Error {object_name=} {err=}')
-            pass
+            return None
+
+    def exist_object(self, object_name: str) -> bool:
+        from minio import S3Error
+        try:
+            res: Tags | None = self.minio.get_object_tags(self.BUCKET_NAME, object_name)
+            return True
+        except S3Error as err:
+            # self.logger.warning(f'MinIO S3Error {object_name=} {err=}')
+            return False
 
     def list_objects(self, prefix) -> list | None:
         '''

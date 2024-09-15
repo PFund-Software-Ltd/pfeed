@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
-    
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
     from pfeed.resolution import ExtendedResolution
 
@@ -22,8 +21,8 @@ class BybitFeed(BaseFeed):
         self, 
         trading_venue: str,
         pdt: str, 
-        date: datetime.date, 
         resolution: ExtendedResolution,
+        date: datetime.date, 
     ) -> bytes | None:
         from pfeed import etl
         from pfeed.sources.bybit.utils import create_efilename

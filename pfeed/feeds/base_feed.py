@@ -209,7 +209,6 @@ class BaseFeed:
         use_minio: bool = False,
         use_ray: bool = True,
         ray_num_cpus: int = 8,
-        ray_batch_size: int | None = None,
     ):
         try:
             data_source = getattr(self, self.name.lower())
@@ -222,7 +221,6 @@ class BaseFeed:
                 use_minio=use_minio,          
                 use_ray=use_ray,
                 ray_num_cpus=ray_num_cpus,
-                ray_batch_size=ray_batch_size,
             )
         except AttributeError:
             raise Exception(f'{self.name} does not support download_historical_data()')

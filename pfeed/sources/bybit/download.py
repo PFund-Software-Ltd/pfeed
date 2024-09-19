@@ -106,7 +106,6 @@ def download_historical_data(
     use_minio: bool=False,
     use_ray: bool=True,
     ray_num_cpus: int=8,
-    ray_batch_size: int | None=None,
 ) -> None:
     from pfund.plogging import set_up_loggers
     
@@ -157,16 +156,17 @@ def download_historical_data(
         atexit.register(lambda: ray.shutdown())
         
         @ray.remote
-        def _run_task(log_queue: Queue, batch: list[tuple[CryptoProduct, datetime.date]]):
-            if not logger.handlers:
-                logger.addHandler(QueueHandler(log_queue))
-                logger.setLevel(logging.DEBUG)
-            for product, date in batch:
-                try:
-                    logger.debug(f'cleaning {DATA_SOURCE} {product} {date} data')
-                    _run_etl(storage, product, date, resolutions)
-                except Exception:
-                    logger.exception(f'error downloading {DATA_SOURCE} {product} {date}:')
+        def _run_task(log_queue: Queue, product: CryptoProduct, date: datetime.date):
+            try:
+                if not logger.handlers:
+                    logger.addHandler(QueueHandler(log_queue))
+                    logger.setLevel(logging.DEBUG)
+                logger.debug(f'cleaning {DATA_SOURCE} {product} {date} data')
+                _run_etl(storage, product, date, resolutions)
+                return True
+            except Exception:
+                logger.exception(f'error downloading {DATA_SOURCE} {product} {date}:')
+                return False
         
         def _get_batch_size(total_items, num_cpu, target_batches_per_cpu=5):
             import math
@@ -178,24 +178,18 @@ def download_historical_data(
             logical_cpus = os.cpu_count()
             num_cpus = min(ray_num_cpus, logical_cpus)
             ray.init(num_cpus=num_cpus)
+            batch_size = num_cpus
             print(f"Ray's num_cpus is set to {num_cpus}")
             log_queue = Queue()
             log_listener = QueueListener(log_queue, *logger.handlers, respect_handler_level=True)
             log_listener.start()
             for pdt in tqdm(ray_tasks, desc=f'Downloading {DATA_SOURCE} historical data by product', colour='green'):
-                batch_size = ray_batch_size or _get_batch_size(len(ray_tasks[pdt]), num_cpus)
-                print(f"Ray's batch_size is set to {batch_size} for {pdt}")
                 batches = [ray_tasks[pdt][i: i + batch_size] for i in range(0, len(ray_tasks[pdt]), batch_size)]
-                with tqdm(
-                    total=len(batches),
-                    desc=f'Downloading {DATA_SOURCE} {pdt} historical data by batch ({batch_size=})',
-                    colour='yellow'
-                ) as tqdm_bar:
-                    task_ids = [_run_task.remote(log_queue, batch) for batch in batches]
-                    while task_ids:
-                        done_id, task_ids = ray.wait(task_ids)
-                        # result = ray.get(done_id[0])
-                        tqdm_bar.update(1)
+                for batch in tqdm(batches, desc=f'Downloading {DATA_SOURCE} {pdt} historical data', colour='yellow'):
+                    futures = [_run_task.remote(log_queue, *task) for task in batch]
+                    results = ray.get(futures)
+                    if not all(results):
+                        logger.warning(f'some downloading failed in {pdt=}, check {logger.name}.log for details')
             logger.warning(f'finished downloading {DATA_SOURCE} historical data to {config.data_path}')
         except KeyboardInterrupt:
             print("KeyboardInterrupt received, stopping download...")

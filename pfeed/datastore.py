@@ -33,7 +33,7 @@ def check_if_minio_running():
 
 
 class Datastore:
-    DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
+    # DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
     BUCKET_NAME = 'pfeed'
 
     # EXTEND, currently only consider using MinIO
@@ -99,8 +99,8 @@ class Datastore:
             self.BUCKET_NAME,
             object_name,
             data=io.BytesIO(data),
-            part_size=self.DATA_PART_SIZE,
-            length=-1,
+            # part_size=self.DATA_PART_SIZE,
+            length=len(data),
             content_type='application/parquet',
             **kwargs
         )

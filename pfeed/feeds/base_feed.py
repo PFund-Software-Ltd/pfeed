@@ -18,7 +18,6 @@ import shutil
 import logging
 import datetime
 import importlib
-from logging.handlers import QueueHandler, QueueListener
 
 try:
     import polars as pl
@@ -40,10 +39,6 @@ __all__ = ["BaseFeed"]
 
 class BaseFeed:
     def __init__(self, name: str, data_tool: tSUPPORTED_DATA_TOOLS='pandas'):
-        '''
-        Args:
-            from_storage: If specified, only search for data in the specified storage.
-        '''
         from pfund.plogging import set_up_loggers
 
         self.name = name.upper()
@@ -76,7 +71,7 @@ class BaseFeed:
     
     def _create_temp_file_path(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date) -> str:
         return os.path.join(self.temp_dir, f"temp_{self.name}_{trading_venue.upper()}_{pdt.upper()}_{repr(resolution)}_{date.strftime('%Y%m%d')}.parquet")
-    
+
     def _prepare_temp_dir(self):
         """Remove old temp directories and create a new temp directory."""
         today = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d')
@@ -104,47 +99,56 @@ class BaseFeed:
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         return dates
             
-    def _get_historical_data_from_storages(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date, from_storage: tSUPPORTED_STORAGES='') -> DataFrame | None:
+    def _get_historical_data_from_storages(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date], storage: tSUPPORTED_STORAGES='') -> DataFrame | None:
         from pfeed import etl
         default_raw_resolution = self.utils.get_default_raw_resolution()
-        storages = [from_storage] if from_storage else SUPPORTED_STORAGES
-        if (data := etl.get_data("BACKTEST", self.name, pdt, resolution, date, storages=storages, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
-            return data
+        storages = [storage] if storage else SUPPORTED_STORAGES
+        if (df := etl.get_data("BACKTEST", self.name, pdt, resolution, dates, storages=storages, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
+            return df
         # if can't find local data with resolution, check if raw data exists
         elif default_raw_resolution and not resolution.is_raw() and default_raw_resolution.is_ge(resolution) and \
-            (data := etl.get_data("BACKTEST", self.name, pdt, default_raw_resolution, date, storages=storages, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
+            (df := etl.get_data("BACKTEST", self.name, pdt, default_raw_resolution, dates, storages=storages, trading_venue=trading_venue, output_format=self.data_tool.name)) is not None:
             self.logger.debug(f'No local {self.name} data found with {resolution=}, switched to find "{default_raw_resolution}" data instead')
-            transformed_data = etl.transform_data(self.name, data, default_raw_resolution, resolution)
+            transformed_df = etl.transform_data(self.name, pdt, df, default_raw_resolution, resolution)
             self.logger.debug(f'transformed {self.name} raw data to {resolution=}')
-            return transformed_data
+            return transformed_df
     
-    def _get_historical_data_from_temp(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date) -> DataFrame | None:
-        temp_file_path = self._create_temp_file_path(trading_venue, pdt, resolution, date)
-        if os.path.exists(temp_file_path):
-            self.logger.debug(f'loaded temporary parquet file: {temp_file_path}')
-            return self.data_tool.read_parquet(temp_file_path)
+    def _get_historical_data_from_temp(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date]) -> DataFrame | None:
+        from pfeed import etl
+        default_raw_resolution = self.utils.get_default_raw_resolution()
+        temp_file_paths = [self._create_temp_file_path(trading_venue, pdt, resolution, date) for date in dates]
+        raw_temp_file_paths = [self._create_temp_file_path(trading_venue, pdt, default_raw_resolution, date) for date in dates]
+        if all(os.path.exists(path) for path in temp_file_paths):
+            self.logger.debug(f'loaded temporary parquet files from {dates[0]} to {dates[-1]}')
+            return self.data_tool.read_parquet(temp_file_paths)
+        elif default_raw_resolution and not resolution.is_raw() and default_raw_resolution.is_ge(resolution) and \
+            all(os.path.exists(path) for path in raw_temp_file_paths):
+            self.logger.debug(f'loaded temporary raw parquet files from {dates[0]} to {dates[-1]}')
+            df = self.data_tool.read_parquet(raw_temp_file_paths)
+            transformed_df = etl.transform_data(self.name, pdt, df, default_raw_resolution, resolution)
+            self.logger.debug(f'transformed {self.name} raw data to {resolution=}')
+            return transformed_df
     
     def _get_historical_data_from_source(
-        self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date
-    ) -> bytes | None:
+        self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date]
+    ) -> list[bytes]:
         raise NotImplementedError(f"{self.name} _get_historical_data_from_source() is not implemented")
     
-    def _get_historical_data(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, date: datetime.date, from_storage: tSUPPORTED_STORAGES='') -> DataFrame:
-        import pandas as pd
-        if (df := self._get_historical_data_from_storages(trading_venue, pdt, resolution, date, from_storage=from_storage)) is not None:
+    def _get_historical_data(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date], storage: tSUPPORTED_STORAGES='') -> DataFrame:
+        if (df := self._get_historical_data_from_storages(trading_venue, pdt, resolution, dates, storage=storage)) is not None:
             pass
-        elif (df := self._get_historical_data_from_temp(trading_venue, pdt, resolution, date)) is not None:
+        elif (df := self._get_historical_data_from_temp(trading_venue, pdt, resolution, dates)) is not None:
             pass
-        elif data := self._get_historical_data_from_source(trading_venue, pdt, resolution, date):
-            df = pd.read_parquet(io.BytesIO(data))
-            temp_file_path = self._create_temp_file_path(trading_venue, pdt, resolution, date)
-            df.to_parquet(temp_file_path, compression='zstd')
-            self.logger.debug(f'created temporary parquet file: {temp_file_path}')
-            if self.data_tool.name != 'pandas':
-                # read_parquet will return a lazyFrame for e.g. polars
-                df = self.data_tool.read_parquet(temp_file_path)
-        else:
-            raise Exception(f"No data found for {self.name} {pdt} {date} from local, temp, or source")
+        elif datas := self._get_historical_data_from_source(trading_venue, pdt, resolution, dates):
+            import pandas as pd
+            temp_file_paths = []
+            for data, date in zip(datas, dates):
+                df = pd.read_parquet(io.BytesIO(data))
+                temp_file_path = self._create_temp_file_path(trading_venue, pdt, resolution, date)
+                temp_file_paths.append(temp_file_path)
+                df.to_parquet(temp_file_path, compression='zstd')
+                self.logger.debug(f'created temporary parquet file: {temp_file_path}')
+            df = self.data_tool.read_parquet(temp_file_paths)
         return df
     
     def get_historical_data(
@@ -155,8 +159,7 @@ class BaseFeed:
         start_date: str="",
         end_date: str="",
         trading_venue: str='',
-        from_storage: tSUPPORTED_STORAGES='',
-        show_memory_warning: bool=False,
+        storage: tSUPPORTED_STORAGES='',
     ) -> DataFrame:
         """Get historical data from the data source.
         Args:
@@ -170,43 +173,30 @@ class BaseFeed:
             start_date: Start date.
             end_date: End date.
             trading_venue: trading venue's name, e.g. exchange's name or dapp's name
-            from_storage: If specified, only search for data in the specified storage.
-            show_memory_warning: Whether to show memory usage warning.
+            storage: If specified, only search for data in the specified storage.
         """
         from pfeed import etl
         from pfeed.resolution import ExtendedResolution
         
-        pdt, trading_venue, from_storage = pdt.upper(), trading_venue.upper(), from_storage.lower()
+        pdt, trading_venue, storage = pdt.upper(), trading_venue.upper(), storage.lower()
         assert validate_pdt(
             self.name, pdt
         ), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {self.name} are: {self.const.SUPPORTED_PRODUCT_TYPES})'
-        assert from_storage in SUPPORTED_STORAGES, f"Invalid {from_storage=}, {SUPPORTED_STORAGES=}"
+        if storage:
+            assert storage in SUPPORTED_STORAGES, f"Invalid {storage=}, {SUPPORTED_STORAGES=}"
+        self._prepare_temp_dir()
         resolution = ExtendedResolution(resolution)
         trading_venue = trading_venue or derive_trading_venue(self.name)
-        self._prepare_temp_dir()
         dates: list[datetime.date] = self._prepare_dates(start_date, end_date, rollback_period)
-        
-        dfs = []  # could be dataframes or lazyframes
-        total_estimated_memory_usage_in_gb = 0
+        df = self._get_historical_data(trading_venue, pdt, resolution, dates, storage=storage)
 
-        for date in dates:
-            df = self._get_historical_data(trading_venue, pdt, resolution, date, from_storage=from_storage)
-            dfs.append(df)
-            if show_memory_warning:
-                total_estimated_memory_usage_in_gb += self.data_tool.estimate_memory_usage(df)
-                self.logger.warning(f"Estimated memory usage for {self.name} {pdt} {resolution=} from {start_date} to {date} is {total_estimated_memory_usage_in_gb:.2f} GB")
-
-        df = self.data_tool.concat(dfs)
-        
-        # Resample daily data
-        # NOTE: Since the downloaded data is in daily units, we can't resample it to e.g. '2d' resolution
-        # using the above logic. Need to resample the aggregated daily data to resolution '2d':
-        if resolution.is_day() and resolution.period != 1:
+        is_resample_daily_data = resolution.is_day() and resolution.period != 1
+        # NOTE: Since the downloaded data is in daily units, resample it to resolution e.g. '2d' if needed
+        if is_resample_daily_data:
             df = etl.resample_data(df, resolution)
-            self.logger.info(f'resampled {self.name} {pdt} {date} daily data to {resolution=}')
+            self.logger.info(f'resampled {self.name} {pdt} data to {resolution=}')
             
-        # move 'ts', 'product' and 'resolution' columns to the leftmost
-        df = self.data_tool.organize_time_series_columns(pdt, resolution, df)
+        df = self.data_tool.organize_time_series_columns(pdt, resolution, df, override_resolution=is_resample_daily_data)
         return df
     
     def download_historical_data(

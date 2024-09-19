@@ -37,8 +37,10 @@ def standardize_ts_column(df: pd.DataFrame) -> pd.DataFrame:
     import pandas as pd
     # NOTE: for ptype SPOT, unit is 'ms', e.g. 1671580800123, in milliseconds
     unit = 'ms' if df['ts'][0] > 10**12 else 's'  # REVIEW
-    # EXTEND: not all 'ts' columns from raw data are float, 
-    # they could be: 'datetime' | 'datetime_str' | 'float' | 'float_str'
+    # NOTE: somehow some data is in reverse order, e.g. BTC_USDT_PERP in 2020-03-25
+    is_in_reverse_order = df['ts'][0] > df['ts'][1]
+    if is_in_reverse_order:
+        df['ts'] = df['ts'][::-1].values
     # NOTE: this may make the `ts` value inaccurate, e.g. 1671580800.9906 -> 1671580800.990600192
     df['ts'] = pd.to_datetime(df['ts'], unit=unit)
     return df

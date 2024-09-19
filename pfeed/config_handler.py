@@ -76,7 +76,11 @@ class ConfigHandler:
         self.load_env_file(self.env_file_path)
         
         if self.debug:
-            self.enable_debug_mode()
+            is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
+            if is_loggers_set_up:
+                print('loggers are already set up, ignoring enabling debug mode')
+            else:
+                self.enable_debug_mode()
     
     def load_env_file(self, env_file_path: str | None):
         from dotenv import find_dotenv, load_dotenv

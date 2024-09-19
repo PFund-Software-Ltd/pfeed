@@ -2,7 +2,7 @@
 Except extracting and loading data, this module uses "pandas" for data transformation.
 '''
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.types.common_literals import (
         tSUPPORTED_ENVIRONMENTS,
@@ -10,7 +10,6 @@ if TYPE_CHECKING:
         tSUPPORTED_STORAGES, 
         tSUPPORTED_DATA_TOOLS,
     )
-    tOUTPUT_FORMATS = Literal['bytes'] | tSUPPORTED_DATA_TOOLS
 
 import logging
 import importlib
@@ -22,7 +21,7 @@ except ImportError:
     pass
 
 from pfeed.resolution import ExtendedResolution
-from pfeed.datastore import Datastore
+from pfeed.datastore import Datastore, check_if_minio_running
 from pfeed.filepath import FilePath
 from pfeed.config_handler import get_config
 from pfeed.const.common import (
@@ -31,17 +30,14 @@ from pfeed.const.common import (
     SUPPORTED_DOWNLOAD_DATA_SOURCES, 
     SUPPORTED_DATA_TOOLS,
 )
-from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
 from pfeed.utils.utils import derive_trading_venue
 from pfeed.utils.file_format import read_raw_data
-
 try:
     from pfeed.utils.monitor import print_disk_usage
 except ImportError:
     print_disk_usage = None
 
 
-OUTPUT_FORMATS = ['bytes'] + SUPPORTED_DATA_TOOLS
 DataFrame = pd.DataFrame | pl.DataFrame | pl.LazyFrame
 
 
@@ -51,7 +47,6 @@ __all__ = [
     'transform_data',
     'load_data',
     'clean_raw_data',
-    'standardize_raw_data',
     'resample_data',
 ]
 
@@ -61,11 +56,11 @@ def get_data(
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
     pdt: str,
     resolution: str | ExtendedResolution,
-    date: str,
+    dates: list[str],
     storages: list[tSUPPORTED_STORAGES] | None = None,
     trading_venue: str='',
-    output_format: tOUTPUT_FORMATS='pandas',
-) -> bytes | DataFrame | None:
+    output_format: tSUPPORTED_DATA_TOOLS='pandas',
+) -> DataFrame | None:
     """Extract data without specifying the data origin. 
     This function will try to extract data from all supported data origins.
 
@@ -76,18 +71,19 @@ def get_data(
         resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
             Also supports raw resolution such as 'r1m', where 'r' stands for raw.            
             Default is '1d' = 1 day.
-        date (str): The date of the data to extract.
+        dates (list[str]): The dates of the data to extract.
         storages: origins of data to search from, default is all supported storages
         trading_venue (str): trading venue's name, e.g. exchange's name or dapp's name
         output_format: The format of the output data. Default is 'pandas'.
-    Returns:
-        bytes | DataFrame | None: The extracted data as bytes, or None if the data is not found.
     """    
     logger = logging.getLogger(data_source.lower() + '_data')
     storages = storages or SUPPORTED_STORAGES
     for storage in storages:
-        logger.debug(f'searching {storage=} for {data_source} {pdt} {resolution} {date} data')
-        data: bytes | pd.DataFrame | None = extract_data(env, storage, data_source, pdt, resolution, date, trading_venue=trading_venue, output_format=output_format)
+        if storage == 'minio':
+            if not check_if_minio_running():
+                continue
+        logger.debug(f'searching {storage=} for {data_source} {pdt} {resolution} data from {dates[0]} to {dates[-1]}')
+        data: DataFrame | None = extract_data(env, storage, data_source, pdt, resolution, dates, trading_venue=trading_venue, output_format=output_format)
         if data is not None:
             return data
 
@@ -98,10 +94,10 @@ def extract_data(
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
     pdt: str,
     resolution: str | ExtendedResolution,
-    date: str,
+    dates: list[str],
     trading_venue: str='',
-    output_format: tOUTPUT_FORMATS='pandas',
-) -> bytes | DataFrame | None:
+    output_format: tSUPPORTED_DATA_TOOLS='pandas',
+) -> DataFrame | None:
     """
     Extracts data from a specified data source and returns it as bytes.
 
@@ -113,16 +109,9 @@ def extract_data(
         resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
             Also supports raw resolution such as 'r1m', where 'r' stands for raw.            
             Default is '1d' = 1 day.
-        date (str): The date of the data.
+        dates (list[str]): The dates of the data.
         trading_venue: trading venue's name, e.g. exchange's name or dapp's name
         output_format: The format of the output data. Default is 'pandas'.
-    Returns:
-        bytes | DataFrame | None: The extracted data as bytes, or None if extraction fails.
-
-    Raises:
-        AssertionError: If any of the input parameters are invalid.
-        NotImplementedError: If the data origin is not supported.
-        MinioException: If MinIO is not running / set up correctly.
     """
     logger = logging.getLogger(data_source.lower() + '_data')
     env, storage, data_source, pdt, output_format = env.upper(), storage.lower(), data_source.upper(), pdt.upper(), output_format.lower()
@@ -131,46 +120,39 @@ def extract_data(
     assert env in SUPPORTED_ENVIRONMENTS, f'Invalid {env=}, {SUPPORTED_ENVIRONMENTS=}'
     assert storage in SUPPORTED_STORAGES, f'Invalid {storage=}, {SUPPORTED_STORAGES=}'
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
-    assert output_format in OUTPUT_FORMATS, f'Invalid {output_format=}, {OUTPUT_FORMATS=}'
+    assert output_format in SUPPORTED_DATA_TOOLS, f'Invalid {output_format=}, valid options: {SUPPORTED_DATA_TOOLS}'
     if isinstance(resolution, str):
         resolution = ExtendedResolution(resolution)
     if output_format != 'bytes':
         data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{output_format.lower()}')
     config = get_config()
-    fp = FilePath(env, data_source, trading_venue, pdt, resolution, date, file_extension='.parquet', data_path=config.data_path)
+    filepaths = [FilePath(env, data_source, trading_venue, pdt, resolution, date, file_extension='.parquet', data_path=config.data_path) for date in dates]
     try:
+        df = None
         if storage == 'local':
-            if fp.exists():
-                if output_format == 'bytes':
-                    with open(fp.file_path, 'rb') as f:
-                        data: bytes = f.read()
-                else:
-                    data: DataFrame = data_tool.read_parquet(fp.file_path)
-                logger.debug(f'extracted {data_source} {pdt} {date} {resolution} data from local path {fp.file_path}')
-                return data
-            else:
-                logger.debug(f'failed to extract {data_source} {pdt} {date} {resolution} data from local path {fp.file_path}')
+            if all(fp.exists() for fp in filepaths):
+                df: DataFrame = data_tool.read_parquet([fp.file_path for fp in filepaths])
         elif storage == 'minio':
             datastore = Datastore(storage)
-            object_name = fp.storage_path
-            if datastore.exist_object(object_name):
-                if output_format != 'bytes':
-                    file_path = "s3://" + datastore.BUCKET_NAME + "/" + object_name
-                    data: DataFrame = data_tool.read_parquet(file_path, storage='minio')
-                else:
-                    data: bytes | None = datastore.get_object(object_name)
-                logger.debug(f'extracted {data_source} {pdt} {date} {resolution} data from MinIO')
-                return data
-            else:
-                logger.debug(f'No data found in MinIO for {data_source} {pdt} {date} {resolution}')
+            object_names = [fp.storage_path for fp in filepaths]
+            if all(datastore.exist_object(object_name) for object_name in object_names):
+                paths = ["s3://" + datastore.BUCKET_NAME + "/" + object_name for object_name in object_names]
+                df: DataFrame = data_tool.read_parquet(paths, storage='minio')
         else:
             raise NotImplementedError(f'{storage=}')
+        
+        if df is not None:
+            logger.debug(f'extracted {data_source} {pdt} {resolution} data from {dates[0]} to {dates[-1]} from {storage}')
+        else:
+            logger.debug(f'failed to extract {data_source} {pdt} {resolution} data from {dates[0]} to {dates[-1]} from {storage}')
+        return df
     except Exception as err:
-        logger.exception(f'failed to extract {data_source} {pdt} {date} {resolution} data from {storage}, {err=}')
+        logger.exception(f'failed to extract {data_source} {pdt} {resolution} data from {dates[0]} to {dates[-1]} from {storage}, {err=}')
     
     
 def transform_data(
     data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES,
+    pdt: str,
     data: bytes | pd.DataFrame | pl.LazyFrame,
     data_resolution: str | ExtendedResolution,
     target_resolution: str | ExtendedResolution,
@@ -190,11 +172,12 @@ def transform_data(
     elif data_resolution.is_raw() and target_resolution.is_raw():  # e.g. 'r1t' -> 'r1m
         raise Exception(f'{data_resolution=} and {target_resolution=} are both raw resolutions')
     else:
-        data: bytes | pd.DataFrame | pl.LazyFrame = standardize_raw_data(data, data_resolution.is_tick())
-        if target_resolution.is_tick():
-            return data
-        else:
-            return resample_data(data, target_resolution)
+        df: pd.DataFrame = _convert_data_to_pandas_df(data)
+        df = _standardize_columns(df, data_resolution.is_tick())
+        if not target_resolution.is_tick():
+            df = resample_data(df, target_resolution)
+        df = _organize_columns(df, pdt, target_resolution)
+        return _handle_result(data, df)
 
 
 def load_data(
@@ -227,11 +210,6 @@ def load_data(
 
     Returns:
         None
-        
-    Raises:
-        AssertionError: If any of the input parameters are invalid.
-        NotImplementedError: If the specified data destination is not implemented.
-        MinioException: If MinIO is not running / set up correctly.
     """
     logger = logging.getLogger(data_source.lower() + '_data')
     
@@ -278,7 +256,6 @@ def clean_raw_data(
         bytes: The cleaned raw data.
     '''
     assert data_source in SUPPORTED_DOWNLOAD_DATA_SOURCES, f'Invalid {data_source=}, SUPPORTED DATA SOURCES={SUPPORTED_DOWNLOAD_DATA_SOURCES}'
-    
     const = importlib.import_module(f'pfeed.sources.{data_source.lower()}.const')
     utils = importlib.import_module(f'pfeed.sources.{data_source.lower()}.utils')
     
@@ -288,27 +265,6 @@ def clean_raw_data(
     if MAPPING_COLS := getattr(const, 'MAPPING_COLS', {}):
         df['side'] = df['side'].map(MAPPING_COLS)
     df = utils.standardize_ts_column(df)
-    return _handle_result(data, df)
-
-
-def standardize_raw_data(
-    data: bytes | pd.DataFrame | pl.LazyFrame, 
-    is_tick: bool
-) -> bytes | pd.DataFrame | pl.LazyFrame:
-    """Filter out unnecessary columns from raw data.
-
-    Args:
-        data (bytes): The raw data in bytes format.
-
-    Returns:
-        bytes | pd.DataFrame | pl.LazyFrame: The standardized data.
-    """
-    df: pd.DataFrame = _convert_data_to_pandas_df(data)
-    assert 'ts' in df.columns, 'ts column not found, please check if the raw data has been cleaned'
-    if is_tick:
-        df = df.loc[:, ['ts', 'side', 'volume', 'price']]
-    else:
-        df = df.loc[:, ['ts', 'open', 'high', 'low', 'close', 'volume']]
     return _handle_result(data, df)
 
 
@@ -374,6 +330,26 @@ def resample_data(
     resampled_df.reset_index(inplace=True)
     
     return _handle_result(data, resampled_df)
+
+
+def _standardize_columns(df: pd.DataFrame, is_tick: bool) -> pd.DataFrame:
+    """Filter out unnecessary columns from raw data."""
+    assert 'ts' in df.columns, '"ts" column not found'
+    if is_tick:
+        df = df.loc[:, ['ts', 'side', 'volume', 'price']]
+    else:
+        df = df.loc[:, ['ts', 'open', 'high', 'low', 'close', 'volume']]
+    return df
+
+
+def _organize_columns(df: pd.DataFrame, pdt: str, resolution: ExtendedResolution) -> pd.DataFrame:
+    """Organizes the columns of a DataFrame.
+    Moving 'ts', 'product', 'resolution' to the leftmost side.
+    """
+    df['product'] = pdt
+    df['resolution'] = repr(resolution)
+    left_cols = ['ts', 'product', 'resolution']
+    return df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
 
 
 def _convert_data_to_pandas_df(data: bytes | pd.DataFrame | pl.LazyFrame) -> pd.DataFrame:

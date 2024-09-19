@@ -101,6 +101,7 @@ class Datastore:
             data=io.BytesIO(data),
             part_size=self.DATA_PART_SIZE,
             length=-1,
+            content_type='application/parquet',
             **kwargs
         )
         

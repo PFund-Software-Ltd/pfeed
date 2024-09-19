@@ -91,7 +91,7 @@ def _run_etl(storage: tSUPPORTED_STORAGES, product: CryptoProduct, date: datetim
         raw_resolution = get_default_raw_resolution()
         for resolution in resolutions:
             data: bytes = etl.clean_raw_data(DATA_SOURCE, raw_data)
-            data: bytes = etl.transform_data(DATA_SOURCE, data, raw_resolution, resolution)
+            data: bytes = etl.transform_data(DATA_SOURCE, pdt, data, raw_resolution, resolution)
             etl.load_data('BACKTEST', storage, DATA_SOURCE, data, pdt, resolution, date)
     else:
         raise Exception(f'failed to download {DATA_SOURCE} {pdt} {date} historical data')
@@ -157,19 +157,18 @@ def download_historical_data(
         atexit.register(lambda: ray.shutdown())
         
         @ray.remote
-        def _run_task(log_queue: Queue, product: CryptoProduct, date: str):
-            try:
-                if not logger.handlers:
-                    logger.addHandler(QueueHandler(log_queue))
-                    logger.setLevel(logging.DEBUG)
-                logger.debug(f'cleaning {DATA_SOURCE} {pdt} {date} data')
-                _run_etl(storage, product, date, resolutions)
-            except Exception:
-                logger.exception(f'error processing ray task {product} {date}:')
-                return False
-            return True
+        def _run_task(log_queue: Queue, batch: list[tuple[CryptoProduct, datetime.date]]):
+            if not logger.handlers:
+                logger.addHandler(QueueHandler(log_queue))
+                logger.setLevel(logging.DEBUG)
+            for product, date in batch:
+                try:
+                    logger.debug(f'cleaning {DATA_SOURCE} {product} {date} data')
+                    _run_etl(storage, product, date, resolutions)
+                except Exception:
+                    logger.exception(f'error downloading {DATA_SOURCE} {product} {date}:')
         
-        def _get_batch_size(total_items, num_cpu, target_batches_per_cpu=1):
+        def _get_batch_size(total_items, num_cpu, target_batches_per_cpu=5):
             import math
             total_batches = num_cpu * target_batches_per_cpu
             return max(1, math.ceil(total_items / total_batches))
@@ -187,11 +186,16 @@ def download_historical_data(
                 batch_size = ray_batch_size or _get_batch_size(len(ray_tasks[pdt]), num_cpus)
                 print(f"Ray's batch_size is set to {batch_size} for {pdt}")
                 batches = [ray_tasks[pdt][i: i + batch_size] for i in range(0, len(ray_tasks[pdt]), batch_size)]
-                for batch in tqdm(batches, desc=f'Downloading {DATA_SOURCE} {pdt} historical data by batch ({batch_size=})', colour='yellow'):
-                    futures = [_run_task.remote(log_queue, *task) for task in batch]
-                    results = ray.get(futures)
-                    if not all(results):
-                        logger.warning(f'some downloading failed in {pdt=}, check {logger.name}.log for details')
+                with tqdm(
+                    total=len(batches),
+                    desc=f'Downloading {DATA_SOURCE} {pdt} historical data by batch ({batch_size=})',
+                    colour='yellow'
+                ) as tqdm_bar:
+                    for i in range(0, len(batches), num_cpus):
+                        current_batches = batches[i:i+num_cpus]
+                        futures = [_run_task.remote(log_queue, batch) for batch in current_batches]
+                        ray.get(futures)
+                        tqdm_bar.update(len(current_batches))
             logger.warning(f'finished downloading {DATA_SOURCE} historical data to {config.data_path}')
         except KeyboardInterrupt:
             print("KeyboardInterrupt received, stopping download...")

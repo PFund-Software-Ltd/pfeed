@@ -191,11 +191,11 @@ def download_historical_data(
                     desc=f'Downloading {DATA_SOURCE} {pdt} historical data by batch ({batch_size=})',
                     colour='yellow'
                 ) as tqdm_bar:
-                    for i in range(0, len(batches), num_cpus):
-                        current_batches = batches[i:i+num_cpus]
-                        futures = [_run_task.remote(log_queue, batch) for batch in current_batches]
-                        ray.get(futures)
-                        tqdm_bar.update(len(current_batches))
+                    task_ids = [_run_task.remote(log_queue, batch) for batch in batches]
+                    while task_ids:
+                        done_id, task_ids = ray.wait(task_ids)
+                        # result = ray.get(done_id[0])
+                        tqdm_bar.update(1)
             logger.warning(f'finished downloading {DATA_SOURCE} historical data to {config.data_path}')
         except KeyboardInterrupt:
             print("KeyboardInterrupt received, stopping download...")

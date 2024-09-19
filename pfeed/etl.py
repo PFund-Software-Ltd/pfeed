@@ -31,7 +31,7 @@ from pfeed.const.common import (
     SUPPORTED_DATA_TOOLS,
 )
 from pfeed.utils.utils import derive_trading_venue
-from pfeed.utils.file_format import read_raw_data
+from pfeed.utils.file_formats import read_raw_data
 try:
     from pfeed.utils.monitor import print_disk_usage
 except ImportError:

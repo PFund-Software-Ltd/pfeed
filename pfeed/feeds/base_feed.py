@@ -196,7 +196,8 @@ class BaseFeed:
             df = etl.resample_data(df, resolution)
             self.logger.info(f'resampled {self.name} {pdt} data to {resolution=}')
             
-        df = self.data_tool.organize_time_series_columns(pdt, resolution, df, override_resolution=is_resample_daily_data)
+        if not resolution.is_raw():
+            df = self.data_tool.organize_time_series_columns(pdt, resolution, df, override_resolution=is_resample_daily_data)
         return df
     
     def download_historical_data(

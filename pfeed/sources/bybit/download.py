@@ -116,7 +116,7 @@ def download_historical_data(
     logger = logging.getLogger(DATA_SOURCE.lower() + '_data')
 
     print(f'''Hint: 
-        You can use the command "pfeed config --data-path ..." to set your data path that stores downloaded data.
+        You can use the command "pfeed config --data-path {{your_path}}" to set your data path that stores downloaded data.
         The current data path is: {config.data_path}.
     ''')
     

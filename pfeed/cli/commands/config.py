@@ -32,33 +32,30 @@ def remove_config(config_file_path: str | Path):
 @click.option('--use-fork-process', type=bool, help='If True, multiprocessing.set_start_method("fork")')
 @click.option('--use-custom-excepthook', type=bool, help='If True, log uncaught exceptions to file')
 @click.option('--env-file', 'env_file_path', type=click.Path(resolve_path=True, exists=True), help='Path to the .env file')
-@click.option('--debug', is_flag=True, help='if enabled, debug mode will be enabled where logs at DEBUG level will be printed')
-@click.option('--list', '-l', is_flag=True, is_eager=True, help='List all available options')
-@click.option('--reset', is_flag=True, is_eager=True, help='Reset the configuration to defaults') 
-def config(ctx, **kwargs):
+@click.option('--debug', '-d', type=bool, help='If True, enable debug mode where logs at DEBUG level will be printed')
+@click.option('--list', '-l', 'is_list', is_flag=True, is_eager=True, help='List all available options')
+@click.option('--reset', 'is_reset', is_flag=True, is_eager=True, help='Reset the configuration to defaults') 
+def config(ctx, is_list, is_reset, **kwargs):
     """Configures pfeed settings."""
     config: ConfigHandler = ctx.obj['config']
     
     # Filter out options that were not provided by the user
-    provided_options = {k: v for k, v in kwargs.items() if v is not None and v is not False}
+    provided_options = {k: v for k, v in kwargs.items() if v is not None}
     
-    if kwargs.get('list'):  # Check if --list was used
-        del provided_options['list']
+    if is_list:  # Check if --list was used
         assert not provided_options, "No options should be provided with --list"
         config_dict = config.__dict__
         config_dict.update({'config_file_path': USER_CONFIG_FILE_PATH})
         click.echo(f"PFeed's config:\n{pformat(config_dict)}")
         return
 
-    if kwargs.get('reset'): # Check if --reset was used
-        del provided_options['reset']
+    if is_reset:  # Check if --reset was used
         assert not provided_options, "No options should be provided with --reset"
         remove_config(USER_CONFIG_FILE_PATH)
         click.echo("PFeed's config successfully reset.")
-        return
     
     # prints out current config if no options are provided
-    if not provided_options:
+    if not provided_options and not is_list and not is_reset:
         raise click.UsageError("No options provided. Use --list to see all available options.")
     else:
         for option, value in provided_options.items():

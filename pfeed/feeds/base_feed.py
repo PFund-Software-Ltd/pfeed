@@ -153,9 +153,9 @@ class BaseFeed:
     
     def get_historical_data(
         self,
-        pdt: str,
-        rollback_period: str="1w",
+        product: str,
         resolution: str="1d",
+        rollback_period: str="1w",
         start_date: str="",
         end_date: str="",
         trading_venue: str='',
@@ -163,7 +163,7 @@ class BaseFeed:
     ) -> DataFrame:
         """Get historical data from the data source.
         Args:
-            pdt: Product symbol, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
+            product: Product symbol, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
             rollback_period:
                 Period to rollback from today, only used when `start_date` is not specified.
                 Default is '1w' = 1 week.
@@ -178,7 +178,7 @@ class BaseFeed:
         from pfeed import etl
         from pfeed.resolution import ExtendedResolution
         
-        pdt, trading_venue, storage = pdt.upper(), trading_venue.upper(), storage.lower()
+        pdt, trading_venue, storage = product.upper(), trading_venue.upper(), storage.lower()
         assert validate_pdt(
             self.name, pdt
         ), f'"{pdt}" does not match the required format "XXX_YYY_PTYPE" or has an unsupported product type. (PTYPE means product type, e.g. PERP, Supported types for {self.name} are: {self.const.SUPPORTED_PRODUCT_TYPES})'
@@ -202,26 +202,26 @@ class BaseFeed:
     
     def download_historical_data(
         self,
-        pdts: str | list[str] | None = None,
+        products: str | list[str] | None = None,
         dtypes: tSUPPORTED_DATA_TYPES | list[tSUPPORTED_DATA_TYPES] | None = None,
         ptypes: str | list[str] | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
         use_minio: bool = False,
         use_ray: bool = True,
-        ray_num_cpus: int = 8,
+        num_cpus: int = 8,
     ):
         try:
             data_source = getattr(self, self.name.lower())
             data_source.download_historical_data(
-                pdts=pdts,
+                products=products,
                 dtypes=dtypes,
                 ptypes=ptypes,
                 start_date=start_date,
                 end_date=end_date,
                 use_minio=use_minio,          
                 use_ray=use_ray,
-                ray_num_cpus=ray_num_cpus,
+                num_cpus=num_cpus,
             )
         except AttributeError:
             raise Exception(f'{self.name} does not support download_historical_data()')

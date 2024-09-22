@@ -98,14 +98,14 @@ def _run_etl(storage: tSUPPORTED_STORAGES, product: CryptoProduct, date: datetim
 
 
 def download_historical_data(
-    pdts: str | list[str] | None=None, 
+    products: str | list[str] | None=None, 
     dtypes: tSUPPORTED_DATA_TYPES | list[tSUPPORTED_DATA_TYPES] | None=None,
     ptypes: tSUPPORTED_PRODUCT_TYPES | list[tSUPPORTED_PRODUCT_TYPES] | None=None, 
     start_date: str | None=None,
     end_date: str | None=None,
     use_minio: bool=False,
     use_ray: bool=True,
-    ray_num_cpus: int=8,
+    num_cpus: int=8,
 ) -> None:
     from pfund.plogging import set_up_loggers
     
@@ -121,7 +121,7 @@ def download_historical_data(
     ''')
     
     resolutions: list[ExtendedResolution] = _convert_dtypes_to_resolutions(dtypes)
-    pdts = _prepare_pdts(pdts, ptypes)
+    pdts = _prepare_pdts(products, ptypes)
     start_date, end_date = _prepare_dates(start_date, end_date)
     dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
     
@@ -136,7 +136,7 @@ def download_historical_data(
     ray_tasks = defaultdict(list)
     for pdt in pdts if use_ray else tqdm(pdts, desc=f'Downloading {DATA_SOURCE} historical data by product', colour='green'):
         try:
-            product = exchange.create_product(*pdt.split('_'))
+            product = exchange.create_product(pdt)
         except KeyError:
             raise ValueError(f'"{pdt}" is not a valid product in {DATA_SOURCE}')
         efilenames = api.get_efilenames(pdt)
@@ -176,7 +176,7 @@ def download_historical_data(
         try:
             log_listener = None
             logical_cpus = os.cpu_count()
-            num_cpus = min(ray_num_cpus, logical_cpus)
+            num_cpus = min(num_cpus, logical_cpus)
             ray.init(num_cpus=num_cpus)
             batch_size = num_cpus
             print(f"Ray's num_cpus is set to {num_cpus}")

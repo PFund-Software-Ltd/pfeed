@@ -33,7 +33,7 @@ class ConfigHandler:
     logging_config: dict | None = None
     use_fork_process: bool = True
     use_custom_excepthook: bool = False
-    env_file_path: str | None=None
+    env_file_path: str = ''
     debug: bool = False
     
     @classmethod
@@ -57,9 +57,9 @@ class ConfigHandler:
         return cls(**config)
     
     def __post_init__(self):
-        self.initialize()
+        self._initialize()
     
-    def initialize(self):
+    def _initialize(self):
         self.logging_config = self.logging_config or {}
         
         for path in [self.data_path]:
@@ -76,19 +76,15 @@ class ConfigHandler:
         self.load_env_file(self.env_file_path)
         
         if self.debug:
-            is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
-            if is_loggers_set_up:
-                print('loggers are already set up, ignoring enabling debug mode')
-            else:
-                self.enable_debug_mode()
+            self.enable_debug_mode()
     
-    def load_env_file(self, env_file_path: str | None):
+    def load_env_file(self, env_file_path: str=''):
         from dotenv import find_dotenv, load_dotenv
         
         if not env_file_path:
-            found_env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
-            if found_env_file_path:
-                print(f'.env file path is not specified, using env file in "{found_env_file_path}"')
+            env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
+            if env_file_path:
+                print(f'.env file path is not specified, using env file in "{env_file_path}"')
             else:
                 # print('.env file is not found')
                 return
@@ -96,6 +92,10 @@ class ConfigHandler:
     
     def enable_debug_mode(self):
         '''Enables debug mode by setting the log level to DEBUG for all stream handlers'''
+        is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
+        if is_loggers_set_up:
+            print('loggers are already set up, ignoring debug mode')
+            return
         if 'handlers' not in self.logging_config:
             self.logging_config['handlers'] = {}
         for handler in ['stream_handler', 'stream_path_handler']:
@@ -145,7 +145,7 @@ def configure(
         else:
             raise AttributeError(f'{k} is not an attribute of ConfigHandler')
     
-    _global_config.initialize()
+    _global_config._initialize()
     return _global_config
 
 

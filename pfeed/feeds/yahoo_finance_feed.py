@@ -37,7 +37,7 @@ class YahooFinanceFeed(BaseFeed):
         "y": [1, 2, 5, 10],
     }
     # yfinance's valid intervals
-    SUPPORTED_INTERVALS = {
+    SUPPORTED_TIMEFRAMES_AND_PERIODS = {
         "m": [1, 2, 5, 15, 30, 60, 90],
         "h": [1],
         "d": [1, 5],
@@ -56,17 +56,19 @@ class YahooFinanceFeed(BaseFeed):
     def get_historical_data(
         self,
         symbol: str,
-        rollback_period: str | Literal["ytd", "max"] = "1M",
         resolution: str = "1d",
+        rollback_period: str | Literal["ytd", "max"] = "1M",
         start_date: str = "",
         end_date: str = "",
         use_pfeed_resample: bool = True,
+        product: str = "",
         **kwargs,
     ) -> pd.DataFrame | pl.DataFrame:
         """Simple Wrapper of yfinance history().
         For the details of args and kwargs, please refer to https://github.com/ranaroussi/yfinance
 
         Args:
+            symbol: ticker symbol used in yfinance
             rollback_period: Data resolution or 'ytd' or 'max'
                 Period to rollback from today, only used when `start_date` is not specified.
                 Default is '1M' = 1 month.
@@ -78,6 +80,7 @@ class YahooFinanceFeed(BaseFeed):
             use_pfeed_resample: Whether to use pfeed's resampling logic.
                 Default is True.
                 This will automatically be triggered if yfinance does not support the resolution.
+            product: Product symbol, e.g. AAPL_USD_STK. If provided, it will be used to create a column 'product' in the output dataframe.
             **kwargs: kwargs supported by `yfinance`
         """
         from pfeed import etl
@@ -113,11 +116,11 @@ class YahooFinanceFeed(BaseFeed):
             etimeframe = self._ADAPTER["timeframe"].get(timeframe, timeframe)
             interval = str(resolution.period) + etimeframe
 
-        # manipulate the input resolution and support e.g. '2d' resolution even it is not in the SUPPORTED_INTERVALS
+        # manipulate the input resolution and support e.g. '2d' resolution even it is not in the SUPPORTED_TIMEFRAMES_AND_PERIODS
         if (use_pfeed_resample and resolution.period != 1) or (
-            timeframe in self.SUPPORTED_INTERVALS
-            and resolution.period not in self.SUPPORTED_INTERVALS[timeframe]
-            and 1 in self.SUPPORTED_INTERVALS[timeframe]
+            timeframe in self.SUPPORTED_TIMEFRAMES_AND_PERIODS
+            and resolution.period not in self.SUPPORTED_TIMEFRAMES_AND_PERIODS[timeframe]
+            and 1 in self.SUPPORTED_TIMEFRAMES_AND_PERIODS[timeframe]
         ):
             # if resolution (e.g. '2d') is not supported in yfinance, using "1d" instead'
             interval = "1" + etimeframe
@@ -167,12 +170,17 @@ class YahooFinanceFeed(BaseFeed):
             df = etl.resample_data(df, resolution)
         
         df["symbol"] = symbol
+        if product:
+            df["product"] = product
         df["resolution"] = repr(resolution)
         # reorder columns
-        left_cols = ["ts", "symbol", "resolution"]
+        if "product" in df.columns:
+            left_cols = ["ts", "symbol", "product", "resolution"]
+        else:
+            left_cols = ["ts", "symbol", "resolution"]
         df = df[left_cols + [col for col in df.columns if col not in left_cols]]
         
-        if self.data_tool == "pandas":
+        if self.data_tool.name == "pandas":
             return df
-        elif self.data_tool == "polars":
+        elif self.data_tool.name == "polars":
             return pl.from_pandas(df)

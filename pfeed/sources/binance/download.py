@@ -141,7 +141,7 @@ def download_historical_data(
             pdt_splits = pdt.split('_')
             ptype = pdt_splits[-1].upper()
             exchange = Exchange(env='LIVE', ptype=ptype)
-            product = exchange.create_product(*pdt_splits)
+            product = exchange.create_product(pdt)
         except KeyError:
             raise ValueError(f'"{pdt}" is not a valid product in {source}')
         efilenames = api.get_efilenames(pdt)

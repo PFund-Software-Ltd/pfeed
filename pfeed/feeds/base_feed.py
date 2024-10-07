@@ -1,15 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    try:
-        import pandas as pd
-        import polars as pl
-    except ImportError:
-        pass
     from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_STORAGES
+    from pfeed.types.core import tDataFrame
     from pfeed.sources.bybit.types import tSUPPORTED_DATA_TYPES
     from pfeed.resolution import ExtendedResolution
-    DataFrame = pd.DataFrame | pl.LazyFrame
     
 import os
 import io
@@ -18,11 +13,6 @@ import shutil
 import logging
 import datetime
 import importlib
-
-try:
-    import polars as pl
-except ImportError:
-    pass
 
 from pfeed.config_handler import get_config
 from pfeed.const.common import SUPPORTED_DATA_FEEDS, SUPPORTED_DATA_TOOLS, SUPPORTED_STORAGES
@@ -99,7 +89,7 @@ class BaseFeed:
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         return dates
             
-    def _get_historical_data_from_storages(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date], storage: tSUPPORTED_STORAGES='') -> DataFrame | None:
+    def _get_historical_data_from_storages(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date], storage: tSUPPORTED_STORAGES='') -> tDataFrame | None:
         from pfeed import etl
         default_raw_resolution = self.utils.get_default_raw_resolution()
         storages = [storage] if storage else SUPPORTED_STORAGES
@@ -113,7 +103,7 @@ class BaseFeed:
             self.logger.debug(f'transformed {self.name} raw data to {resolution=}')
             return transformed_df
     
-    def _get_historical_data_from_temp(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date]) -> DataFrame | None:
+    def _get_historical_data_from_temp(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date]) -> tDataFrame | None:
         from pfeed import etl
         default_raw_resolution = self.utils.get_default_raw_resolution()
         temp_file_paths = [self._create_temp_file_path(trading_venue, pdt, resolution, date) for date in dates]
@@ -134,7 +124,7 @@ class BaseFeed:
     ) -> list[bytes]:
         raise NotImplementedError(f"{self.name} _get_historical_data_from_source() is not implemented")
     
-    def _get_historical_data(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date], storage: tSUPPORTED_STORAGES='') -> DataFrame:
+    def _get_historical_data(self, trading_venue: str, pdt: str, resolution: ExtendedResolution, dates: list[datetime.date], storage: tSUPPORTED_STORAGES='') -> tDataFrame:
         if (df := self._get_historical_data_from_storages(trading_venue, pdt, resolution, dates, storage=storage)) is not None:
             pass
         elif (df := self._get_historical_data_from_temp(trading_venue, pdt, resolution, dates)) is not None:
@@ -160,7 +150,7 @@ class BaseFeed:
         end_date: str="",
         trading_venue: str='',
         storage: tSUPPORTED_STORAGES='',
-    ) -> DataFrame:
+    ) -> tDataFrame:
         """Get historical data from the data source.
         Args:
             product: Product symbol, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".

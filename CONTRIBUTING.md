@@ -3,7 +3,7 @@
 git clone git@github.com:PFund-Software-Ltd/pfeed.git
 cd pfeed
 git submodule update --init --recursive
-poetry install --all-extras
+poetry install --with dev,test,doc --all-extras
 ```
 
 ## Pull updates

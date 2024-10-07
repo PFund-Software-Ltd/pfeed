@@ -15,8 +15,6 @@
 [Timescaledb]: https://www.timescale.com/
 [Dask]: https://www.dask.org/
 [Spark]: https://spark.apache.org/docs/latest/api/python/index.html
-[DuckDB]: https://github.com/duckdb/duckdb
-[Daft]: https://github.com/Eventual-Inc/Daft
 [PyTrade.org]: https://pytrade.org
 [Databento]: https://databento.com/
 [Polygon]: https://polygon.io/
@@ -36,7 +34,7 @@ PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a br
 - [x] Unified approach for interacting with various [data sources](#supported-data-sources) and obtaining historical and live data
 - [x] ETL data pipline for transforming raw data to clean data and storing it in [MinIO] (optional)
 - [x] Fast data downloading, utilizing [Ray] for parallelization
-- [x] Supports multiple data tools (e.g. Pandas, [Polars], [Dask], [Spark], [DuckDB], [Daft])
+- [x] Supports multiple data tools (e.g. Pandas, [Polars], [Dask], [Spark])
 - [ ] Integrates with [Prefect] to control data flows
 - [ ] Listens to PFund's trade engine and adds trade history to a local database [Timescaledb] (optional)
 
@@ -214,8 +212,6 @@ pfeed docker-compose down
 | [Polars]                 | 🟢        |
 | [Dask]                   | 🔴        |
 | [Spark]                  | 🔴        |
-| [DuckDB]                 | 🔴        |
-| [Daft]                   | 🔴        |
 
 
 ## Related Projects

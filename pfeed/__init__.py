@@ -8,7 +8,7 @@ import importlib
 from importlib.metadata import version
 
 from pfeed.config_handler import configure, get_config
-from pfeed.const.common import ALIASES
+from pfeed.const.common import ALIASES as aliases
 from pfeed.sources import bybit
 from pfeed.feeds import BybitFeed, YahooFinanceFeed
 
@@ -53,7 +53,7 @@ __all__ = (
     "__version__",
     "configure",
     "get_config",
-    "ALIASES",
+    "aliases",
     "bybit",
     "binance",
     "YahooFinanceFeed",

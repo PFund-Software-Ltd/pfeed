@@ -37,7 +37,7 @@ jobs:
       run: |
         pip install jupyter-book
         pip install sphinxawesome-theme
-        pip install "pfeed[df,data,boost]"
+        pip install "pfeed[all]"
 
     - name: Build Jupyter Book
       run: |

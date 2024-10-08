@@ -28,7 +28,7 @@ Starting algo-trading requires reliable, clean data. However, the time-consuming
 By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, accelerating traders to get to the strategy development phase.
 
 ---
-PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a bridge between raw data sources and traders by automating the process of data collection, cleaning, transformation, and storage, loading clean data into a **local data lake for quantitative analysis**.
+PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a bridge between raw data sources and traders. It automates the processes of data collection, cleaning, transformation, and storage, loading clean data into a **local data lake for quantitative analysis**, with support for **downloading historical data**, as well as **live data streaming and recording**.
 
 ## Core Features
 - [x] Unified approach for interacting with various [data sources](#supported-data-sources) and obtaining historical and live data
@@ -187,14 +187,14 @@ pfeed docker-compose down
 
 
 ## Supported Data Sources
-| Data Source               | Get Historical Data | Download Historical Data | Get Live/Paper Data | Stream Live/Paper Data |
+| Data Source               | Get Historical Data | Download Historical Data | Get Live Data | Stream Live Data |
 | ------------------------- | ------------------- | ------------------------ | ------------------- | ---------------------- |
 | Yahoo Finance             | 🟢                  | ⚪                        | ⚪                  | ⚪                     |
 | Bybit                     | 🟢                  | 🟢                        | 🟡                  | 🔴                     |
-| *Interactive Brokers (IB) | 🔴                  | ⚪                        | 🔴                  | 🔴                     |
+| *Interactive Brokers | 🔴                  | ⚪                        | 🔴                  | 🔴                     |
 | *[FirstRate Data]         | 🔴                  | 🔴                        | ⚪                  | ⚪                     |
-| [Databento]               | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
-| [Polygon]                 | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
+| *[Databento]               | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
+| *[Polygon]                 | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
 | Binance                   | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
 | OKX                       | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
 

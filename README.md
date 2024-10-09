@@ -9,36 +9,32 @@
 
 [MinIO]: https://min.io/
 [PFund]: https://github.com/PFund-Software-Ltd/pfund
-[Ray]: https://github.com/ray-project/ray
 [Polars]: https://github.com/pola-rs/polars
-[Prefect]: https://www.prefect.io
-[Timescaledb]: https://www.timescale.com/
 [Dask]: https://www.dask.org/
 [Spark]: https://spark.apache.org/docs/latest/api/python/index.html
 [PyTrade.org]: https://pytrade.org
+[Yahoo Finance]: https://github.com/ranaroussi/yfinance
+[Bybit]: https://public.bybit.com
+[Binance]: https://data.binance.vision
+[OKX]: https://www.okx.com/data-download
 [Databento]: https://databento.com/
 [Polygon]: https://polygon.io/
-[Bybit]: https://bybit.com/
 [FirstRate Data]: https://firstratedata.com
 
 ## Problem
 Starting algo-trading requires reliable, clean data. However, the time-consuming and mundane tasks of data cleaning and storage often discourage traders from embarking on their algo-trading journey.
 
 ## Solution
-By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, accelerating traders to get to the strategy development phase.
+By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, allowing traders to focus on strategy development.
 
 ---
 PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a bridge between raw data sources and traders. It automates the processes of data collection, cleaning, transformation, and storage, loading clean data into a **local data lake for quantitative analysis**, with support for **downloading historical data**, as well as **live data streaming and recording**.
 
 ## Core Features
-- [x] Unified approach for interacting with various [data sources](#supported-data-sources) and obtaining historical and live data
-- [x] ETL data pipline for transforming raw data to clean data and storing it in [MinIO] (optional)
-- [x] Fast data downloading, utilizing [Ray] for parallelization
-- [x] Supports multiple data tools (e.g. Pandas, [Polars], [Dask], [Spark])
-- [ ] Integrates with [Prefect] to control data flows
-- [ ] Listens to PFund's trade engine and adds trade history to a local database [Timescaledb] (optional)
-
-> It is designed to be used alongside [PFund] — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready.
+- [x] Download or stream reliable, validated and clean data for research, backtesting, or live trading
+- [x] Get historical data (dataframe) or live data in standardized formats by just calling a single function
+- [x] Own your data by storing them locally using [MinIO], with the option to connect to the cloud
+- [x] Interact with different kinds of data (including TradFi, CeFi and DeFi) using a unified interface
 
 ---
 
@@ -50,30 +46,23 @@ PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a br
     - [Main Usage: Data Feed](#main-usage-data-feed)
     - [Download Historical Data on Command Line](#download-historical-data-on-command-line)
     - [Download Historical Data in Python](#download-historical-data-in-python)
-    - [List Current Config](#list-current-config)
-    - [Run PFeed's docker-compose.yml](#run-pfeeds-docker-composeyml)
 - [Supported Data Sources](#supported-data-sources)
-- [Supported Data Tools](#supported-data-tools)
 - [Related Projects](#related-projects)
 - [Disclaimer](#disclaimer)
 
 </details>
 
 
+
 ## Installation
+> For more installation options, please refer to the [documentation](https://pfeed-docs.pfund.ai/installation).
 ### Using [Poetry](https://python-poetry.org) (Recommended)
 ```bash
-# [RECOMMENDED]: Download data (e.g. Bybit and Yahoo Finance) + Data tools (e.g. pandas, polars) + Data storage (e.g. MinIO) + Boosted performance (e.g. Ray)
+# [RECOMMENDED]: Full Features, choose this if you do not care about the package size
 poetry add "pfeed[all]"
 
-# [Download data + Data tools + Data storage]
-poetry add "pfeed[df,data]"
-
-# [Download data + Data tools]
-poetry add "pfeed[df]"
-
-# [Download data only]:
-poetry add pfeed
+# Minimal Features, only supports downloading and storing data locally
+poetry add "pfeed[default]"
 
 # update to the latest version:
 poetry update pfeed
@@ -81,7 +70,7 @@ poetry update pfeed
 
 ### Using Pip
 ```bash
-# same as above, you can choose to install "pfeed[all]", "pfeed[df,data]", "pfeed[df]" or "pfeed"
+# same as above, you can choose to install "pfeed[all]", "pfeed[default]"
 pip install "pfeed[all]"
 
 # install the latest version:
@@ -92,6 +81,8 @@ pip install -U pfeed
 ```bash
 $ pfeed --version
 ```
+
+
 
 ## Quick Start
 ### 1. Get Historical Data in Dataframe (No storage)
@@ -117,29 +108,16 @@ Printing the first few rows of `df`:
 |  1 | 2024-03-01 00:01:00 | BTC_USDT_PERP | 1m           | 61245.3 | 61276.5 | 61200.7 | 61232.2 |  227.242 |
 |  2 | 2024-03-01 00:02:00 | BTC_USDT_PERP | 1m           | 61232.2 | 61249   | 61180   | 61184.2 |   91.446 |
 
-> By using pfeed, you are just a few lines of code away from a standardized dataframe, how convenient!
-
-
+> By using pfeed, you are just a few lines of code away from getting a standardized dataframe, how convenient!
 
 ### 2. Download Historical Data on the Command Line Interface (CLI)
+> For more CLI commands, please refer to the [documentation](https://pfeed-docs.pfund.ai/cli-commands).
 ```bash
 # download data, default data type (dtype) is 'raw' data
 pfeed download -d BYBIT -p BTC_USDT_PERP --start-date 2024-03-01 --end-date 2024-03-08
 
-# download multiple products BTC_USDT_PERP and ETH_USDT_PERP and minute data
-pfeed download -d BYBIT -p BTC_USDT_PERP -p ETH_USDT_PERP --dtypes minute
-
-# download all perpetuals data from bybit
-pfeed download -d BYBIT --ptypes PERP
-
-# download all the data from bybit (CAUTION: your local machine probably won't have enough space for this!)
-pfeed download -d BYBIT
-
-# store data into MinIO (need to start MinIO by running `pfeed docker-compose up -d` first)
-pfeed download -d BYBIT -p BTC_USDT_PERP --use-minio
-
-# enable debug mode and turn off using Ray
-pfeed download -d BYBIT -p BTC_USDT_PERP --debug --no-ray
+# download multiple products BTC_USDT_PERP and ETH_USDT_PERP as minute data and store them locally
+pfeed download -d BYBIT -p BTC_USDT_PERP -p ETH_USDT_PERP --dtypes minute --use-minio
 ```
 
 ### 3. Download Historical Data in Python
@@ -161,42 +139,19 @@ pe.download(
 )
 ```
 
-### List Current Config
-```bash
-# list the current config:
-pfeed config --list
-
-# change the data storage location to your local project's 'data' folder:
-pfeed config --data-path ./data
-
-# for more commands:
-pfeed --help
-```
-
-### Run PFeed's docker-compose.yml
-```bash
-# same as 'docker-compose', only difference is it has pointed to pfeed's docker-compose.yml file
-pfeed docker-compose [COMMAND]
-
-# e.g. start services
-pfeed docker-compose up -d
-
-# e.g. stop services
-pfeed docker-compose down
-```
 
 
 ## Supported Data Sources
-| Data Source               | Get Historical Data | Download Historical Data | Get Live Data | Stream Live Data |
-| ------------------------- | ------------------- | ------------------------ | ------------------- | ---------------------- |
-| Yahoo Finance             | 🟢                  | ⚪                        | ⚪                  | ⚪                     |
-| Bybit                     | 🟢                  | 🟢                        | 🟡                  | 🔴                     |
-| *Interactive Brokers | 🔴                  | ⚪                        | 🔴                  | 🔴                     |
-| *[FirstRate Data]         | 🔴                  | 🔴                        | ⚪                  | ⚪                     |
-| *[Databento]               | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
-| *[Polygon]                 | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
-| Binance                   | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
-| OKX                       | 🔴                  | 🔴                        | 🔴                  | 🔴                     |
+| Data Source          | Get Historical Data | Download Historical Data | Get Live Data | Stream Live Data |
+| -------------------- | ------------------- | ------------------------ | --------------| ---------------- |
+| [Yahoo Finance]      | 🟢                  | ⚪                        | ⚪            | ⚪               |
+| [Bybit]              | 🟢                  | 🟢                        | 🟡            | 🔴               |
+| *Interactive Brokers | 🔴                  | ⚪                        | 🔴            | 🔴               |
+| *[FirstRate Data]    | 🔴                  | 🔴                        | ⚪            | ⚪               |
+| *[Databento]         | 🔴                  | 🔴                        | 🔴            | 🔴               |
+| *[Polygon]           | 🔴                  | 🔴                        | 🔴            | 🔴               |
+| [Binance]            | 🔴                  | 🔴                        | 🔴            | 🔴               |
+| [OKX]                | 🔴                  | 🔴                        | 🔴            | 🔴               |
 
 🟢 = finished \
 🟡 = in progress \
@@ -205,18 +160,11 @@ pfeed docker-compose down
 \* = paid data
 
 
-## Supported Data Tools
-| Data Tools               | Supported |
-| ------------------------ | --------- |
-| Pandas                   | 🟢        |
-| [Polars]                 | 🟢        |
-| [Dask]                   | 🔴        |
-| [Spark]                  | 🔴        |
-
 
 ## Related Projects
 - [PFund] — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
 - [PyTrade.org] - A curated list of Python libraries and resources for algorithmic trading.
+
 
 
 ## Disclaimer

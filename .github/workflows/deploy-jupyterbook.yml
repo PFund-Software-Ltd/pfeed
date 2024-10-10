@@ -1,18 +1,19 @@
+# DEPRECATED, use deploy-mystmd.yml instead
 name: Deploy Jupyter Book to GitHub Pages
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'docs/**'
-      - '.github/workflows/deploy-jupyterbook.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'docs/**'
-      - '.github/workflows/deploy-jupyterbook.yml'
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'docs/**'
+  #     - '.github/workflows/deploy-jupyterbook.yml'
+  # pull_request:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'docs/**'
+  #     - '.github/workflows/deploy-jupyterbook.yml'
   workflow_dispatch:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages

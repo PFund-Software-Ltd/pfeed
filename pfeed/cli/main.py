@@ -6,6 +6,7 @@ from pfeed.cli.commands.config import config
 from pfeed.cli.commands.download import download
 # from pfeed.cli.commands.stream import stream
 from pfeed.cli.commands.open import open
+from pfeed.cli.commands.doc import doc
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -22,3 +23,4 @@ pfeed_group.add_command(config)
 pfeed_group.add_command(download)
 # pfeed_group.add_command(stream)
 pfeed_group.add_command(open)
+pfeed_group.add_command(doc)

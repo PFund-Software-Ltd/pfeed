@@ -12,5 +12,6 @@ fi
 pip install jupyter-book "pfeed[all]"
 
 # Clear Cache, Build HTML Assets and Execute Notebooks
-myst clean docs/ --all
-myst build docs/ --html --execute
+cd docs/
+myst clean --all
+myst build --html --execute

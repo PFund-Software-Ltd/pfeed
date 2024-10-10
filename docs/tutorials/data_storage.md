@@ -1,4 +1,4 @@
-# Storage
+# Data Storage
 
 ## Local Storage
 see Data Lake in concepts

@@ -1,1 +1,1 @@
-## Integration with Quadratic
+# Integration with Quadratic

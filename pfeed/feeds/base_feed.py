@@ -1,9 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_STORAGES
+    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_STORAGES, tSUPPORTED_DATA_TYPES
     from pfeed.types.core import tDataFrame
-    from pfeed.sources.bybit.types import tSUPPORTED_DATA_TYPES
     from pfeed.resolution import ExtendedResolution
     
 import os
@@ -159,6 +158,7 @@ class BaseFeed:
                 Default is '1w' = 1 week.
             resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
                 Also supports raw resolution such as 'r1m', where 'r' stands for raw.            
+                If resolution is 'raw', the default raw resolution of the data type will be used.
                 Default is '1d' = 1 day.
             start_date: Start date.
             end_date: End date.
@@ -175,6 +175,10 @@ class BaseFeed:
         if storage:
             assert storage in SUPPORTED_STORAGES, f"Invalid {storage=}, {SUPPORTED_STORAGES=}"
         self._prepare_temp_dir()
+        if resolution == 'raw':
+            assert self.const.SUPPORTED_DATA_TYPES[0].startswith('raw_')
+            default_raw_dtype = self.const.SUPPORTED_DATA_TYPES[0]
+            resolution = self.const.DTYPES_TO_RAW_RESOLUTIOS[default_raw_dtype]
         resolution = ExtendedResolution(resolution)
         trading_venue = trading_venue or derive_trading_venue(self.name)
         dates: list[datetime.date] = self._prepare_dates(start_date, end_date, rollback_period)

@@ -14,25 +14,25 @@ keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "dat
 python = "^3.10"
 pfund = "^0.0.1"
 yfinance = "^0.2.43"
-pydantic = "^2.9.2"
-fastparquet = "^2024.5.0"
+pydantic = "^2.7.0"
+fastparquet = "^2024.2.0"
 beautifulsoup4 = "^4.12.3"
+pandas = "^2.2.0"
 pyarrow = {version = "^17.0.0", optional = true}
-pandas = {version = "^2.2.2", optional = true}
 modin = {extras = ["all"], version = "^0.32.0", optional = true}
 dask = {extras = ["complete"], version = "^2024.9.1", optional = true}
-coiled = {version = "^1.53.0", optional = true}
+coiled = {version = "^1.54.0", optional = true}
 pyspark = {version = "^3.5.3", optional = true}
 databricks-connect = {version = "^15.4.2", optional = true}
 polars = {version = "^1.7.1", optional = true}
 polars-xdt = {version = "^0.16.0", optional = true}
 psutil = {version = "^6.0.0", optional = true}
 ray = {version = "^2.35.0", optional = true}
-prefect = {version = "^3.0.4", optional = true}
+prefect = {version = "^3.0.5", optional = true}
 minio = {version = "^7.2.8", optional = true}
 s3fs = {version = "^2024.9.0", optional = true}
 adlfs = {version = "^2024.7.0", optional = true}
-gcsfs = {version = "^2024.9.0.post1", optional = true}
+gcsfs = {version = "^2024.9.0", optional = true}
 databento = {version = "^0.42.0", optional = true}
 polygon-api-client = {version = "^1.14.2", optional = true}
 connectorx = {version = "^0.3.3", optional = true}
@@ -41,21 +41,18 @@ confluent-kafka = {version = "^2.5.3", optional = true}
 bytewax = {version = "^0.21.0", optional = true}
 
 [tool.poetry.extras]
-default = ["pandas", "pyarrow", "polars", "psutil", "ray", "minio", "databento", "polygon-api-client"]
-pandas = ["pandas", "pyarrow", "dask", "modin", "coiled"]
-spark = ["pyspark", "databricks-connect"]
+core = ["modin", "pyarrow", "psutil", "ray", "minio", "databento", "polygon-api-client"]
 polars = ["polars", "polars-xdt"]
-df = ["pandas", "pyarrow", "dask", "modin", "coiled", "polars", "polars-xdt", "pyspark", "databricks-connect"]
-ops = ["psutil", "ray", "prefect"]
-store = ["minio", "s3fs", "adlfs", "gcsfs"]
-data = ["databento", "polygon-api-client"]
-collect = ["connectorx", "psycopg2", "confluent-kafka", "bytewax"]
+dask = ["dask", "coiled"]
+spark = ["pyspark", "databricks-connect"]
+dfs = ["polars", "polars-xdt", "dask", "coiled", "pyspark", "databricks-connect"]
+storage = ["s3fs", "adlfs", "gcsfs", "connectorx", "psycopg2"]
+dataops = ["prefect", "confluent-kafka", "bytewax"]
 all = [
-    "pandas", "pyarrow", "dask", "modin", "coiled", "polars", "polars-xdt", "pyspark", "databricks-connect",
-    "psutil", "ray", "prefect",
-    "minio", "fsspec", "s3fs", "adlfs", "gcsfs",
-    "databento", "polygon-api-client",
-    "connectorx", "psycopg2", "confluent-kafka", "bytewax",
+    "modin", "pyarrow", "psutil", "ray", "minio", "databento", "polygon-api-client", # core dependencies
+    "polars", "polars-xdt", "dask", "coiled", "pyspark", "databricks-connect", # data tools
+    "fsspec", "s3fs", "adlfs", "gcsfs", "connectorx", "psycopg2", # storage
+    "prefect", "confluent-kafka", "bytewax", # DataOps
 ]
 
 [tool.poetry.scripts]

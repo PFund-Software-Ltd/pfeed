@@ -24,7 +24,7 @@ Data types prefixed with `raw_` represent **raw data types**. These are the data
 For example, the data granularity of [Bybit Data] is `tick` data (tick-level trade data), so the corresponding raw data type for Bybit data in pfeed is `raw_tick`. Attempting to fetch data using a raw data type that is unsupported by the data source will result in errors. Here is the example of Bybit raw data:
 
 ### Raw Tick Data
-```{code-cell}
+```{code-block} python
 df = feed.get_historical_data(
     'BTC_USDT_PERP',
     resolution='raw_tick',  # or use 'raw' implicitly
@@ -41,7 +41,7 @@ print(df.head())
 Aggregated Data Types are the data types that are aggregated from raw data types. The aggregation process includes data cleaning, data transformation, and data aggregation. The following are some examples:
 
 ### Tick Data
-```{code-cell}
+```{code-block} python
 df = feed.get_historical_data(
     'BTC_USDT_PERP',
     # resolution = period + timeframe, e.g. 1t (1tick), 2s (2second), 3m (3minute) etc.
@@ -54,7 +54,7 @@ print(df.head())
 ```
 
 ### Minute Data
-```{code-cell}
+```{code-block} python
 df = feed.get_historical_data(
     'BTC_USDT_PERP',
     resolution='2m',  # 2-minute data

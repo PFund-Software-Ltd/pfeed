@@ -1,10 +1,11 @@
 # PFeed: Data Pipeline for Algo-Trading, Getting and Storing Real-Time and Historical Data Made Easy.
 
+[![Twitter Follow](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)
 ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfeed?style=social)
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfeed?label=downloads)
 [![PyPI](https://img.shields.io/pypi/v/pfeed.svg)](https://pypi.org/project/pfeed)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfeed)
-[![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfeed/main/docs/images/jupyterbook.svg)](https://jupyterbook.org)
+<!-- [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfeed/main/docs/images/jupyterbook.svg)](https://jupyterbook.org) -->
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
 
 [MinIO]: https://min.io/
@@ -28,13 +29,13 @@ Starting algo-trading requires reliable, clean data. However, the time-consuming
 By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, allowing traders to focus on strategy development.
 
 ---
-PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a bridge between raw data sources and traders. It automates the processes of data collection, cleaning, transformation, and storage, loading clean data into a **local data lake for quantitative analysis**, with support for **downloading historical data**, as well as **live data streaming and recording**.
+PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a bridge between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, by automating the processes of data collection, cleaning, transformation, and storage.
 
 ## Core Features
-- [x] Download or stream reliable, validated and clean data for research, backtesting, or live trading
-- [x] Get historical data (dataframe) or live data in standardized formats by just calling a single function
-- [x] Own your data by storing them locally using [MinIO], with the option to connect to the cloud
-- [x] Interact with different kinds of data (including TradFi, CeFi and DeFi) using a unified interface
+- [x] Download or stream reliable, validated and **clean data** for research, backtesting, or live trading
+- [x] Get historical data (**dataframe**) or live data in standardized formats by just calling a **single** function
+- [x] **Own your data** by storing them locally using [MinIO], with the option to connect to the cloud
+- [x] Interact with different kinds of data (including TradFi, CeFi and DeFi) using a **unified interface**
 
 ---
 
@@ -43,9 +44,9 @@ PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a br
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-    - [Main Usage: Data Feed](#main-usage-data-feed)
-    - [Download Historical Data on Command Line](#download-historical-data-on-command-line)
-    - [Download Historical Data in Python](#download-historical-data-in-python)
+    - [Get Historical Data in Dataframe](#1-get-historical-data-in-dataframe-no-storage)
+    - [Download Historical Data on Command Line](#2-download-historical-data-on-the-command-line-interface-cli)
+    - [Download Historical Data in Python](#3-download-historical-data-in-python)
 - [Supported Data Sources](#supported-data-sources)
 - [Related Projects](#related-projects)
 - [Disclaimer](#disclaimer)
@@ -56,30 +57,12 @@ PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a br
 
 ## Installation
 > For more installation options, please refer to the [documentation](https://pfeed-docs.pfund.ai/installation).
-### Using [Poetry](https://python-poetry.org) (Recommended)
 ```bash
 # [RECOMMENDED]: Full Features, choose this if you do not care about the package size
-poetry add "pfeed[all]"
+pip install -U "pfeed[all]"
 
-# Minimal Features, only supports downloading and storing data locally
-poetry add "pfeed[default]"
-
-# update to the latest version:
-poetry update pfeed
-```
-
-### Using Pip
-```bash
-# same as above, you can choose to install "pfeed[all]", "pfeed[default]"
-pip install "pfeed[all]"
-
-# install the latest version:
-pip install -U pfeed
-```
-
-### Checking your installation
-```bash
-$ pfeed --version
+# Minimal Features, only supports getting, downloading and streaming data
+pip install -U "pfeed[core]"
 ```
 
 

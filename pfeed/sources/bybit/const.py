@@ -2,6 +2,7 @@
 DATA_SOURCE = 'BYBIT'
 SUPPORTED_PRODUCT_TYPES = ['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT']
 SUPPORTED_DATA_TYPES = ['raw_tick', 'tick', 'second', 'minute', 'hour', 'daily']
+# this specifies the raw resolution of the data type, e.g. 'raw_minute': 'r5m', meaning raw_minute is 5-minute data
 DTYPES_TO_RAW_RESOLUTIOS = {
     'raw_tick': 'r1tick',
 }

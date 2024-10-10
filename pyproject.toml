@@ -12,7 +12,7 @@ keywords = ["trading", "algo-trading", "data pipeline", "ETL", "data lake", "dat
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pfund = "^0.0.1"
+pfund = "^0.0.2.dev1"
 yfinance = "^0.2.43"
 pydantic = "^2.7.0"
 fastparquet = "^2024.2.0"

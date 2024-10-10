@@ -76,7 +76,7 @@ site:
     favicon: images/favicon-dark.ico
     logo: images/logo-dark.svg
     logo_text: democratize algo-trading
-    # analytics_google: 
+    analytics_google: {GA_TRACKING_ID_PLACEHOLDER}
   actions:
     - title: Join Our Community
       url: https://pfund.ai

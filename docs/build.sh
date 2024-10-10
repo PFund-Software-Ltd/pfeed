@@ -1,18 +1,16 @@
 #!/bin/bash
 
-CONFIG_PATH="docs/_config.yml"
+# write the GA_TRACKING_ID (secret already set on github) to the myst.yml file
+CONFIG_PATH="docs/myst.yml"
+if [[ "$OSTYPE" == "darwin"* ]]; then  # sed in macos is different
+  sed -i '' "s/{GA_TRACKING_ID_PLACEHOLDER}/$GA_TRACKING_ID/" $CONFIG_PATH
+else
+  sed -i "s/{GA_TRACKING_ID_PLACEHOLDER}/$GA_TRACKING_ID/" $CONFIG_PATH
+fi
 
-# echo "Google Analytics ID: $GA_TRACKING_ID"
-# echo "Current Directory: $(pwd)"
+# install python dependencies so that jupyter notebooks can be executed
+pip install jupyter-book "pfeed[all]"
 
-# echo "Before replacement:"
-# grep "google_analytics_id" $CONFIG_PATH
-
-# Replace the placeholder in the YAML file with the actual Google Analytics ID
-sed -i "s/{GA_TRACKING_ID_PLACEHOLDER}/$GA_TRACKING_ID/" $CONFIG_PATH
-
-# echo "After replacement:"
-# grep "google_analytics_id" $CONFIG_PATH
-
-# Build
-jupyter-book build docs/ --all
+# Clear Cache, Build HTML Assets and Execute Notebooks
+myst clean docs/ --all
+myst build docs/ --html --execute

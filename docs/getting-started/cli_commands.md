@@ -79,3 +79,11 @@ pfeed open --docker-file
 # open the logging.yml file with default editor
 pfeed open --config-file -e
 ```
+
+## Start/Build Docs
+> useful for developers to preview the docs locally
+```bash
+# --execute: execute the jupyter notebooks
+pfeed doc --start [--execute]
+pfeed doc --build [--execute]
+```

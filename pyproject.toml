@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pfeed"
-version = "0.0.2.dev3"
+version = "0.0.2"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 license = "Apache-2.0"
 authors = ["Stephen Yau <softwareentrepreneer+pfeed@gmail.com>"]

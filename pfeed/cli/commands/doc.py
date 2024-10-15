@@ -1,4 +1,5 @@
 import subprocess
+import webbrowser
 
 import click
 
@@ -27,6 +28,13 @@ def _execute_notebooks(docs_path: str):
 def doc(build, start, execute):
     if build and start:
         raise click.UsageError("You can only specify either --build or --start, not both.")
+    elif not build and not start:
+        if execute:
+            raise click.UsageError("You must specify either --build or --start.")
+        else:
+            webbrowser.open('https://pfeed-docs.pfund.ai')
+            return
+            
     docs_path = str(MAIN_PATH / 'docs')
     
     try:    

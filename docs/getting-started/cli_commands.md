@@ -81,9 +81,16 @@ pfeed open --config-file -e
 ```
 
 ## Start/Build Docs
-> useful for developers to preview the docs locally
+> need to have `mystmd` installed to start/build docs locally: `npm install -g mystmd`
 ```bash
+# open the docs in browser
+pfeed doc
 # --execute: execute the jupyter notebooks
 pfeed doc --start [--execute]
 pfeed doc --build [--execute]
+```
+
+## Open Terminal UI
+```bash
+pfeed tui
 ```

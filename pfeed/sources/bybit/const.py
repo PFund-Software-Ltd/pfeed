@@ -15,10 +15,10 @@ DATA_SOURCE_URLS = {
     'SPOT': 'https://public.bybit.com/spot',
 }
 DATA_NAMING_REGEX_PATTERNS = {
-    'PERP': '(USDT\/|PERP\/)$',  # USDT perp or USDC perp;
-    'FUT': '-\d{2}[A-Z]{3}\d{2}\/$',  # USDC futures e.g. BTC-10NOV23/
-    'IPERP': 'USD\/$',  # inverse perps;
-    'IFUT': 'USD[A-Z]\d{2}\/$',  # inverse futures e.g. BTCUSDH24/
+    'PERP': r'(USDT\/|PERP\/)$',  # USDT perp or USDC perp;
+    'FUT': r'-\d{2}[A-Z]{3}\d{2}\/$',  # USDC futures e.g. BTC-10NOV23/
+    'IPERP': r'USD\/$',  # inverse perps;
+    'IFUT': r'USD[A-Z]\d{2}\/$',  # inverse futures e.g. BTCUSDH24/
     # match everything since everything from https://public.bybit.com/spot is spot
     'SPOT': '.*',
 }

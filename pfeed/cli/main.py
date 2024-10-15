@@ -1,4 +1,5 @@
 import click
+from trogon import tui
 
 from pfeed.config_handler import get_config
 from pfeed.cli.commands.docker_compose import docker_compose
@@ -9,6 +10,7 @@ from pfeed.cli.commands.open import open
 from pfeed.cli.commands.doc import doc
 
 
+@tui(command='tui', help="Open terminal UI")
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.pass_context
 @click.version_option()

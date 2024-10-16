@@ -34,11 +34,11 @@ project:
     - file: concepts/concepts.md
       children:
         - file: concepts/data_lake.md
-        - file: concepts/data_types.md
         - file: concepts/etl_elt.md
+        - file: concepts/data_types.md
+        - file: concepts/data_feed.md
     - title: Tutorials
       children:
-        - file: tutorials/data_feed.md
         - file: tutorials/download.md
         - file: tutorials/data_storage.md
         - file: tutorials/stream.md

@@ -184,3 +184,6 @@ docs/_build/*
 
 # MyST build outputs
 docs/_build/*
+
+# tests data
+tests/data/

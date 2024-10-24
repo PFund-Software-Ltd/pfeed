@@ -1,0 +1,19 @@
+data_origin: >
+  For stock data, we obtain data directly from Security Information Processors (SIPs) 
+  which includes every single trade and NBBO quote that occurs on any of the 19 US exchanges, 
+  in the form of raw binary feeds, rather than through retransmission or intermediaries.
+  For option data, we source directly from the Options Price Reporting Authority (OPRA).
+  For forex data, we connect directly to a variety of institutional-level banks and liquidity providers.
+  For indice data, we source from CME Group, CBOE, and Nasdaq. 
+  For crypto data, we connect to some of the highest volume exchanges to consume the level 1 
+  and level 2 order books. These currently include Coinbase, Kraken, BitFinex, and BitStamp.
+api_urls: https://api.polygon.io
+trade_data:
+  resolutions:
+provider_type: data_distributor
+api_key_required: true
+free_access: true
+rate_limits: null
+github_repo: https://github.com/polygon-io/client-python
+is_repo_official: true
+docs_url: https://polygon-api-client.readthedocs.io/en/latest/

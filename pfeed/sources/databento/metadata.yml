@@ -1,0 +1,14 @@
+data_origin: >
+  Databento is a licensed distributor for 40+ trading venues. 
+  All data is sourced directly from raw feeds at our Equinix NY4 and Aurora I colocation sites, 
+  with no third-party data providers in between.
+api_urls: https://hist.databento.com
+trade_data: 
+  resolutions:
+provider_type: data_distributor
+api_key_required: true
+free_access: true  # free $125 credits
+rate_limits: null
+github_repo: https://github.com/databento/databento-python
+is_repo_official: true
+docs_url: https://databento.com/docs

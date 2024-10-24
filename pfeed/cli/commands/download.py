@@ -4,12 +4,11 @@ import click
 
 import pfeed as pe
 from pfeed.const.common import (
-    ALIASES, 
     SUPPORTED_DOWNLOAD_DATA_SOURCES, 
     SUPPORTED_DATA_TYPES,
     SUPPORTED_PRODUCT_TYPES,
 )
-
+from pfeed.const.aliases import ALIASES
 
 # add aliases to supported download data sources
 SUPPORTED_DOWNLOAD_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DOWNLOAD_DATA_SOURCES + [k for k, v in ALIASES.items() if v in SUPPORTED_DOWNLOAD_DATA_SOURCES]
@@ -32,6 +31,7 @@ SUPPORTED_DATA_TYPES_IMPLICIT_RAW_ALLOWED = SUPPORTED_DATA_TYPES + ['raw']
 @click.option('--env-file', 'env_file_path', type=click.Path(exists=True), help='Path to the .env file')
 @click.option('--debug', is_flag=True, help='if enabled, debug mode will be enabled where logs at DEBUG level will be printed')
 def download(data_source, products, dtypes, ptypes, start_date, end_date, num_cpus, no_ray, use_minio, env_file_path, debug):
+    """Download historical data from a data source"""
     pe.configure(env_file_path=env_file_path, debug=debug)
     data_source = ALIASES.get(data_source, data_source)
     pipeline = importlib.import_module(f'pfeed.sources.{data_source.lower()}.download')

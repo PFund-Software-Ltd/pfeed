@@ -1,0 +1,4 @@
+ALIASES = {
+    'YF': 'YAHOO_FINANCE',
+    'FRD': 'FIRSTRATE_DATA'
+}

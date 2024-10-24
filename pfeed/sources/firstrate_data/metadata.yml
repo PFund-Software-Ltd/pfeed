@@ -1,0 +1,31 @@
+data_origin: >
+  Where possible we source data directly from the exchanges, 
+  in some cases where we cannot source directly from the exchanges (such as delisted ticker data) 
+  we source from upstream enterprise data vendors.
+api_urls: 
+  1_minute: https://firstratedata.com/api/data_file
+  1_quote_L1: https://tick.firstratedata.com/c/
+  1_tick: https://tick.firstratedata.com/c/
+trade_data:
+  resolutions:
+    1_quote_L1:
+      - STK
+      - ETF
+    1_tick:
+      - STK
+      - ETF
+    1_minute:
+      - STK
+      - ETF
+      - FUT
+      - OPT
+      - CRYPTO
+      - FX
+      - INDEX
+provider_type: data_vendor  # data is not as raw as data provided from data distributors
+api_key_required: true
+free_access: false
+rate_limits: null
+github_repo: null
+is_repo_official: null
+docs_url: https://firstratedata.com/about/api-docs

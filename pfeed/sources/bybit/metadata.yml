@@ -1,0 +1,23 @@
+data_origin: https://www.bybit.com
+api_urls:
+  perp: https://public.bybit.com/trading
+  iperp: https://public.bybit.com/trading
+  fut: https://public.bybit.com/trading
+  ifut: https://public.bybit.com/trading
+  spot: https://public.bybit.com/spot
+trade_data:
+  resolutions:
+    1_tick:
+      - PERP
+      - IPERP
+      - FUT
+      - IFUT
+      - SPOT
+      - OPT
+provider_type: exchange
+api_key_required: false
+free_access: true
+rate_limits: null
+github_repo: null
+is_repo_official: null
+docs_url: null

@@ -7,7 +7,7 @@ api_urls:
   spot: https://public.bybit.com/spot
 trade_data:
   resolutions:
-    1_tick:
+    tick:
       - PERP
       - IPERP
       - FUT

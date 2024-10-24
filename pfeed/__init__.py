@@ -8,7 +8,7 @@ import importlib
 from importlib.metadata import version
 
 from pfeed.config_handler import configure, get_config
-from pfeed.const.common import ALIASES as aliases
+from pfeed.const.aliases import ALIASES as aliases
 from pfeed.sources import bybit
 from pfeed.feeds import BybitFeed, YahooFinanceFeed
 

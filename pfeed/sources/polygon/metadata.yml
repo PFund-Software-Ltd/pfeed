@@ -8,11 +8,12 @@ data_origin: >
   For crypto data, we connect to some of the highest volume exchanges to consume the level 1 
   and level 2 order books. These currently include Coinbase, Kraken, BitFinex, and BitStamp.
 api_urls: https://api.polygon.io
-trade_data:
-  resolutions:
+data_categories:
+  trade_data:
+    resolutions:
 provider_type: data_distributor
 api_key_required: true
-free_access: true
+has_free_access: true
 rate_limits: null
 github_repo: https://github.com/polygon-io/client-python
 is_repo_official: true

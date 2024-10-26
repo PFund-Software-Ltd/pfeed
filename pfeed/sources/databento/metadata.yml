@@ -2,12 +2,30 @@ data_origin: >
   Databento is a licensed distributor for 40+ trading venues. 
   All data is sourced directly from raw feeds at our Equinix NY4 and Aurora I colocation sites, 
   with no third-party data providers in between.
-api_urls: https://hist.databento.com
-trade_data: 
-  resolutions:
+api_urls: https://hist.databento.com  # not used, it has a client library
+data_categories:
+  trade_data:
+    quote_L3:  # MBO (Market by order)
+      - STK
+      - FUT
+      - OPT
+    # NOTE: MBP-1 is NOT L1, it is NOT a snapshot of the top best bid and ask.
+    quote_L2:  # MBP-10, MBP-1 (Market by price level)
+      - STK
+      - FUT
+      - OPT
+    quote_L1:  # BBO on Interval
+      - STK
+      - FUT
+      - OPT
+    # NOTE: TBBO is a mix of quote_L1 and tick
+    tick:  # TBBO, Trades
+      - STK
+      - FUT
+      - OPT
 provider_type: data_distributor
 api_key_required: true
-free_access: true  # free $125 credits
+has_free_access: true  # free $125 credits
 rate_limits: null
 github_repo: https://github.com/databento/databento-python
 is_repo_official: true

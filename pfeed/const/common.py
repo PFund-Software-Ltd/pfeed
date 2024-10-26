@@ -1,3 +1,8 @@
+from pfund.const.common import (
+    SUPPORTED_CRYPTO_PRODUCT_TYPES, 
+    SUPPORTED_TRADFI_PRODUCT_TYPES
+)
+
 from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS, tSUPPORTED_DATA_ENGINES
 
 
@@ -20,6 +25,8 @@ SUPPORTED_DATA_ENGINES: dict[tSUPPORTED_DATA_ENGINES, list[str]] = {
     'ray': ['aws'],
 }
 SUPPORTED_DATA_TYPES = [
-    'raw_tick', 'raw_second', 'raw_minute', 'raw_hour', 'raw_daily',
-    'tick', 'second', 'minute', 'hour', 'daily',
+    'quote_L1', 'quote_L2', 'quote_L3',
+    'tick', 'second', 'minute', 'hour',
+    'daily', 'weekly', 'monthly', 'yearly'
 ]
+SUPPORTED_PRODUCT_TYPES = SUPPORTED_CRYPTO_PRODUCT_TYPES + SUPPORTED_TRADFI_PRODUCT_TYPES

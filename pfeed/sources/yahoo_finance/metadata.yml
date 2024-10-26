@@ -1,10 +1,10 @@
 data_origin: https://www.csidata.com
 api_urls: null
-trade_data:
-
+data_categories:
+  trade_data:
 provider_type: data_aggregator
 api_key_required: false
-free_access: true
+has_free_access: true
 rate_limits: null
 github_repo: https://github.com/ranaroussi/yfinance
 is_repo_official: false

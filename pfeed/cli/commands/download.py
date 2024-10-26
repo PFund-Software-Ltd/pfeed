@@ -2,19 +2,14 @@ import importlib
 
 import click
 
-from pfund.const.common import (
-    SUPPORTED_CRYPTO_PRODUCT_TYPES, 
-    SUPPORTED_TRADFI_PRODUCT_TYPES
-)
-
 import pfeed as pe
 from pfeed.const.common import (
     SUPPORTED_DOWNLOAD_DATA_SOURCES, 
     SUPPORTED_DATA_TYPES,
+    SUPPORTED_PRODUCT_TYPES,
 )
 from pfeed.const.aliases import ALIASES
 
-SUPPORTED_PRODUCT_TYPES = set(SUPPORTED_CRYPTO_PRODUCT_TYPES + SUPPORTED_TRADFI_PRODUCT_TYPES)
 
 # add aliases to supported download data sources
 SUPPORTED_DOWNLOAD_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DOWNLOAD_DATA_SOURCES + [k for k, v in ALIASES.items() if v in SUPPORTED_DOWNLOAD_DATA_SOURCES]

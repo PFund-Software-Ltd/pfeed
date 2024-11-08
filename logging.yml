@@ -13,16 +13,16 @@ loggers:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  minio:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
   # NOTE: avoid name conflict with pfund, add "_data" suffix to e.g. bybit
   yahoo_finance_data:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
   bybit_data:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  databento_data:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False

@@ -2,9 +2,8 @@ data_origin: >
   Databento is a licensed distributor for 40+ trading venues. 
   All data is sourced directly from raw feeds at our Equinix NY4 and Aurora I colocation sites, 
   with no third-party data providers in between.
-api_urls: https://hist.databento.com  # not used, it has a client library
 data_categories:
-  trade_data:
+  market_data:
     quote_L3:  # MBO (Market by order)
       - STK
       - FUT

@@ -15,7 +15,7 @@ pip install jupyter-book "pfeed[all]"
 cd docs/
 myst clean --all --yes
 
-# somehow --execute in myst doesn't work, use "jupyter nbconvert" instead to manually execute notebooks
+# somehow --execute in myst doesn't work, use "jupyter nbconvert" instead to execute notebooks
 # myst build --html --execute
 
 # clear outputs in notebooks

@@ -1,4 +1,5 @@
 ALIASES = {
     'YF': 'YAHOO_FINANCE',
-    'FRD': 'FIRSTRATE_DATA'
+    'FRD': 'FIRSTRATE_DATA',
+    'DBT': 'DATABENTO',
 }

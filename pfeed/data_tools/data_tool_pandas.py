@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.resolution import ExtendedResolution
-    from pfeed.types.common_literals import tSUPPORTED_STORAGES
+    from pfund.datas.resolution import Resolution
+    from pfeed.types.literals import tSTORAGE
 
 import os
 import io
@@ -10,19 +10,18 @@ import io
 import s3fs
 import pandas as pd
 
-from pfeed.const.common import SUPPORTED_STORAGES
-
+from pfeed.const.enums import DataStorage
 
 name = 'pandas'
 
 
-def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSUPPORTED_STORAGES='local', **kwargs) -> pd.DataFrame:
-    assert storage in SUPPORTED_STORAGES, f'{storage=} not in {SUPPORTED_STORAGES}'
+def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE='local', **kwargs) -> pd.DataFrame:
+    storage = DataStorage[storage.upper()]
     if isinstance(paths_or_obj, bytes):
         obj = io.BytesIO(paths_or_obj)
         return pd.read_parquet(obj, *args, **kwargs)
     else:
-        if storage == 'minio':
+        if storage == DataStorage.MINIO:
             if 'filesystem' not in kwargs:
                 fs = s3fs.S3FileSystem(
                     endpoint_url="http://"+os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
@@ -41,17 +40,17 @@ def estimate_memory_usage(df: pd.DataFrame) -> float:
     
 def organize_time_series_columns(
     pdt: str, 
-    resolution: str | ExtendedResolution, 
+    resolution: str | Resolution, 
     df: pd.DataFrame,
     override_resolution: bool=False,
 ) -> pd.DataFrame:
     """Standardize the columns of a pandas DataFrame.
     Moving 'ts', 'product', 'resolution' to the leftmost side.
     """
-    from pfeed.resolution import ExtendedResolution
+    from pfund.datas.resolution import Resolution
     assert 'ts' in df.columns, "'ts' column not found"
     if isinstance(resolution, str):
-        resolution = ExtendedResolution(resolution)
+        resolution = Resolution(resolution)
     if 'product' not in df.columns:
         df['product'] = pdt
     if 'resolution' not in df.columns or override_resolution:

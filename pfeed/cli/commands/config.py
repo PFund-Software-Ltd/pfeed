@@ -31,6 +31,7 @@ def reset(ctx):
 @config.command()
 @click.option('--data-path', '--dp', type=click.Path(resolve_path=True), help='Set the data path')
 @click.option('--log-path', '--lp', type=click.Path(resolve_path=True), help='Set the log path')
+@click.option('--cache-path', '--cp', type=click.Path(resolve_path=True), help='Set the cache path')
 @click.option('--logging-file', '-l', 'logging_config_file_path', type=click.Path(resolve_path=True, exists=True), help='Set the logging config file path')
 @click.option('--docker-file', '-d', 'docker_compose_file_path', type=click.Path(exists=True), help='Set the docker-compose.yml file path')
 @click.option('--env-file', '-e', 'env_file_path', type=click.Path(resolve_path=True, exists=True), help='Path to the .env file')
@@ -56,20 +57,20 @@ def set(**kwargs):
 @click.option('--default-editor', '-E', is_flag=True, help='Use default editor')
 def open(config_file, env_file, log_file, docker_file, default_editor):
     """Opens the config files, e.g. logging.yml, docker-compose.yml, .env."""
-    from pfeed.const.paths import USER_CONFIG_FILE_PATH, USER_CONFIG_PATH
+    from pfeed.const.paths import CONFIG_FILE_PATH, CONFIG_PATH
     
     if sum([config_file, env_file, log_file, docker_file]) > 1:
         click.echo('Please specify only one file to open')
         return
     else:
         if config_file:
-            file_path = USER_CONFIG_FILE_PATH
+            file_path = CONFIG_FILE_PATH
         elif env_file:
-            file_path = USER_CONFIG_PATH / '.env'
+            file_path = CONFIG_PATH / '.env'
         elif log_file:
-            file_path = USER_CONFIG_PATH / 'logging.yml'
+            file_path = CONFIG_PATH / 'logging.yml'
         elif docker_file:
-            file_path = USER_CONFIG_PATH / 'docker-compose.yml'
+            file_path = CONFIG_PATH / 'docker-compose.yml'
         else:
             click.echo(f'Please specify a file to open, run "{PROJ_NAME} config open --help" for more info')
             return

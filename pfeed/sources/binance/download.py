@@ -55,7 +55,7 @@ def run_etl(product: BaseProduct, date, dtypes, use_minio):
             'second': second_data,
             'minute': minute_data,
             'hour': hour_data,
-            'daily': daily_data,
+            'day': daily_data,
         }
         for dtype in dtypes:
             data: bytes = resampled_datas[dtype]

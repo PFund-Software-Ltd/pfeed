@@ -1,18 +1,14 @@
+---
 data_origin: https://www.bybit.com
-api_urls:
-  perp: https://public.bybit.com/trading
-  iperp: https://public.bybit.com/trading
-  fut: https://public.bybit.com/trading
-  ifut: https://public.bybit.com/trading
-  spot: https://public.bybit.com/spot
-trade_data:
-  tick:
-    - PERP
-    - IPERP
-    - FUT
-    - IFUT
-    - SPOT
-    - OPT
+data_categories:
+  market_data:
+    tick:
+      - PERP
+      - IPERP
+      - FUT
+      - IFUT
+      - SPOT
+      - OPT
 provider_type: exchange
 api_key_required: false
 has_free_access: true
@@ -20,3 +16,5 @@ rate_limits: null
 github_repo: null
 is_repo_official: null
 docs_url: null
+---
+start_date: 2020-01-01  # do not need to be precise, if data on that date doesn't exist, it will be skipped

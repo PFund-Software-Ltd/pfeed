@@ -1,4 +1,4 @@
-SUPPORTED_DATASETS = {
+DATASETS = {
     # dataset: (exchange, [product types])
     'DBEQ.BASIC': (
         ('IEX TOPS', 'Equities'),

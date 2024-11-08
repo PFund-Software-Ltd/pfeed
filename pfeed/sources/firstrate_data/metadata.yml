@@ -2,12 +2,8 @@ data_origin: >
   Where possible we source data directly from the exchanges, 
   in some cases where we cannot source directly from the exchanges (such as delisted ticker data) 
   we source from upstream enterprise data vendors.
-api_urls: 
-  1_minute: https://firstratedata.com/api/data_file
-  1_quote_L1: https://tick.firstratedata.com/c/
-  1_tick: https://tick.firstratedata.com/c/
 data_categories:
-  trade_data:
+  market_data:
     resolutions:
       1_quote_L1:
         - STK

@@ -1,11 +1,10 @@
 import os
 import datetime
 
-from typing import Any
+from typing import Any, Literal
 
-from pfeed.sources.databento.types import tSUPPORTED_DATASETS
 from pfeed.sources.base_data_source import BaseDataSource
-from pfeed.sources.databento.const import SUPPORTED_DATASETS
+from pfeed.sources.databento.const import DATASETS
 
 import databento
 # from databento_dbn import SType
@@ -13,6 +12,17 @@ from databento.common.publishers import Dataset, Publisher
 from databento.common.dbnstore import DBNStore
 
 
+tDATASET = Literal[
+    'DBEQ.BASIC', 
+    'GLBX.MDP3', 
+    'NDEX.IMPACT', 
+    'IFEU.IMPACT', 
+    'OPRA.PILLAR', 
+    'XNAS.ITCH'
+]
+
+
+# NOTE: 2024-10-26, best free llm for deriving databento dataset and start date is 'mistral'
 class DatabentoDataSource(BaseDataSource):
     def __init__(self):
         super().__init__('databento')
@@ -37,6 +47,7 @@ class DatabentoDataSource(BaseDataSource):
         except:
             return None
 
+    @require_plugin(LlmPlugin)
     def derive_start_date_using_llm(self, symbol: str) -> str | None:
         '''Derive the start date for a symbol using LLM.'''
         # start=(datetime.datetime.now() - datetime.timedelta(days=2)).strftime('%Y-%m-%d'),
@@ -56,15 +67,16 @@ class DatabentoDataSource(BaseDataSource):
         '''Derive the end date to be the day after the start date.'''
         return (datetime.datetime.strptime(start_date, '%Y-%m-%d') + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
 
-    def _derive_dataset(self, symbol: str) -> tSUPPORTED_DATASETS | None:
+    def _derive_dataset(self, symbol: str) -> tDATASET | None:
         try:
             dataset = self.derive_dataset_using_llm(symbol)
-            if dataset in SUPPORTED_DATASETS:
+            if dataset in DATASETS:
                 return dataset
         except:
             return None
     
-    def derive_dataset_using_llm(self, symbol: str) -> tSUPPORTED_DATASETS | None:
+    @require_plugin(LlmPlugin)
+    def derive_dataset_using_llm(self, symbol: str) -> tDATASET | None:
         '''Derive the dataset for a symbol using LLM.
         e.g. symbol=AAPL, use LLM to get the corresponding dataset
         '''
@@ -72,12 +84,16 @@ class DatabentoDataSource(BaseDataSource):
         context = f'''
         You are a financial data expert. 
         Given a symbol, you are asked to determine the corresponding dataset.
-        {SUPPORTED_DATASETS}
+        {DATASETS}
         only return the dataset name, which must be one of the dictionary keys above, nothing else, no explanation.
         '''
         return llm.ask(symbol, context=context).strip().replace('"', '').replace("'", '')
+
+    # TODO: extend databento's Dataset enum by adding product types to it?    
+    def get_datasets(self):
+        return DATASETS
     
-    def get_dataset_description(self, dataset: tSUPPORTED_DATASETS) -> str:
+    def get_dataset_description(self, dataset: tDATASET) -> str:
         return Dataset(dataset).description
     
     def list_publishers(self):
@@ -105,10 +121,10 @@ class DatabentoDataSource(BaseDataSource):
     def get_child_instruments(self, parent_symbol: str, dataset: Dataset | str | None = None, start_date: str | None = None, end_date: str | None = None) -> DBNStore:
         dataset = dataset or self._derive_dataset(parent_symbol)
         if not dataset:
-            raise ValueError('Failed to derive dataset, please specify "dataset"')
+            raise ValueError('Failed to derive dataset, please specify "dataset" or call pe.add_plugin(LlmPlugin(...))() to set up for LLM usage if you haven not done so')
         start_date = start_date or self._derive_start_date(parent_symbol)
         if not start_date:
-            raise ValueError('Failed to derive start date, please specify "start_date"')
+            raise ValueError('Failed to derive start date, please specify "start_date" or call pe.add_plugin(LlmPlugin(...))() to set up for LLM usage if you haven not done so')
         data = self.hist_api.timeseries.get_range(
             dataset=dataset,
             stype_in="parent",
@@ -129,10 +145,10 @@ class DatabentoDataSource(BaseDataSource):
         '''Get a brief definition of a symbol.'''
         dataset = dataset or self._derive_dataset(symbol)
         if not dataset:
-            raise ValueError('Failed to derive dataset, please specify "dataset"')
+            raise ValueError('Failed to derive dataset, please specify "dataset" or call pe.add_plugin(LlmPlugin(...))() to set up for LLM usage if you haven not done so')
         start_date = start_date or self._derive_start_date(symbol)
         if not start_date:
-            raise ValueError('Failed to derive start date, please specify "start_date"')
+            raise ValueError('Failed to derive start date, please specify "start_date" or call pe.add_plugin(LlmPlugin(...))() to set up for LLM usage if you haven not done so')
         raw_definition: DBNStore = self.hist_api.timeseries.get_range(
             dataset=dataset,
             schema='definition',

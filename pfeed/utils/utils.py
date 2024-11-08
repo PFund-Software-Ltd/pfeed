@@ -1,40 +1,32 @@
-from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfeed.types.common_literals import (
-        tSUPPORTED_DOWNLOAD_DATA_SOURCES, 
-        tSUPPORTED_STORAGES,
-    )
+from typing import Callable
 
 import re
+import inspect
 import datetime
 import calendar
 import pytz
 
-from pfeed.const.common import SUPPORTED_CRYPTO_EXCHANGES, SUPPORTED_STORAGES
+
+def generate_color(name: str) -> str:
+    import hashlib
+    # Hash the feed name using MD5 (or any other hashing algorithm)
+    hash_object = hashlib.md5(name.encode())
+    hash_digest = hash_object.hexdigest()
+    # Use the first 6 characters of the hash to create a hex color code
+    color_code = f'#{hash_digest[:6]}'
+    return color_code
 
 
-def derive_trading_venue(data_source: tSUPPORTED_DOWNLOAD_DATA_SOURCES) -> str:
-    if data_source.upper() in SUPPORTED_CRYPTO_EXCHANGES:
-        trading_venue = data_source.upper()
-    else:
-        trading_venue = 'SMART'
-    return trading_venue
+def lambda_with_name(name: str, lambda_func: Callable):
+    lambda_func.__name__ = name
+    return lambda_func
+    
 
-
-def get_available_data_storages() -> list[tSUPPORTED_STORAGES]:
-    from pfeed.datastore import check_if_minio_running
-    available_storages = ['local']
-    for storage in SUPPORTED_STORAGES:
-        if storage == 'local':
-            continue
-        elif storage == 'minio':
-            if check_if_minio_running():
-                available_storages.append('minio')
-        else:
-            raise ValueError(f"Unsupported {storage=}")
-    return available_storages
-
+def get_args_and_kwargs(func):
+    signature = inspect.signature(func)
+    args = [param.name for param in signature.parameters.values() if param.default == inspect.Parameter.empty]
+    kwargs = {param.name: param.default for param in signature.parameters.values() if param.default != inspect.Parameter.empty}
+    return args, kwargs
 
 def separate_number_and_chars(input_string):
     """Separates the number and characters from a string.
@@ -74,17 +66,20 @@ def get_x_days_before_in_UTC(x=0) -> str:
     return (datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=x)).strftime('%Y-%m-%d')
 
 
-def get_dates_in_between(start_date: str | datetime.date, end_date: str | datetime.date) -> list[datetime.date]:
+def get_dates_in_between(
+    start_date: str | datetime.date, 
+    end_date: str | datetime.date,
+    return_str: bool=False,
+) -> list[datetime.date] | list[str]:
     if type(start_date) is str:
         start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
     if type(end_date) is str:
         end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
     date_delta = end_date - start_date
-    return [start_date + datetime.timedelta(i) for i in range(date_delta.days + 1)]
-
-
-def create_filename(pdt: str, date: str, file_extension: str) -> str:
-    return pdt + '_' + date + file_extension
+    dates = [start_date + datetime.timedelta(i) for i in range(date_delta.days + 1)]
+    if return_str:
+        dates = [date.strftime('%Y-%m-%d') for date in dates]
+    return dates
 
 
 def extract_date_from_filename(filename: str) -> str | None:

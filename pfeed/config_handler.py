@@ -13,8 +13,9 @@ from pfeed.const.paths import (
     PROJ_NAME, 
     LOG_PATH, 
     DATA_PATH,
-    USER_CONFIG_PATH, 
-    USER_CONFIG_FILE_PATH
+    CACHE_PATH,
+    CONFIG_PATH, 
+    CONFIG_FILE_PATH
 )
 
 
@@ -34,11 +35,12 @@ def _custom_excepthook(exception_class: type[BaseException], exception: BaseExce
 class ConfigHandler:
     data_path: str = str(DATA_PATH)
     log_path: str = str(LOG_PATH)
-    logging_config_file_path: str = f'{USER_CONFIG_PATH}/logging.yml'
-    docker_compose_file_path: str = f'{USER_CONFIG_PATH}/docker-compose.yml'
+    cache_path: str = str(CACHE_PATH)
+    logging_config_file_path: str = f'{CONFIG_PATH}/logging.yml'
+    docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
     fork_process: bool = True
     custom_excepthook: bool = False
-    env_file_path: str = f'{USER_CONFIG_PATH}/.env'
+    env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
     
     _logging_config = {}
@@ -58,12 +60,12 @@ class ConfigHandler:
     @classmethod
     def load(cls):
         '''Loads user's config file and returns a ConfigHandler object'''
-        USER_CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        if USER_CONFIG_FILE_PATH.is_file():
-            with open(USER_CONFIG_FILE_PATH, 'r') as f:
+        CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if CONFIG_FILE_PATH.is_file():
+            with open(CONFIG_FILE_PATH, 'r') as f:
                 config = yaml.safe_load(f) or {}
                 if cls._verbose:
-                    print(f"{PROJ_NAME} config loaded from {USER_CONFIG_FILE_PATH}.")
+                    print(f"{PROJ_NAME} config loaded from {CONFIG_FILE_PATH}.")
         else:
             config = {}
         config_handler = cls(**config)
@@ -74,16 +76,16 @@ class ConfigHandler:
     @classmethod
     def reset(cls):
         '''Resets the config by deleting the user config directory and reloading the config'''
-        shutil.rmtree(USER_CONFIG_PATH)
+        shutil.rmtree(CONFIG_PATH)
         if cls._verbose:
             print(f"{PROJ_NAME} config successfully reset.")
         return cls.load()
     
     def dump(self):
-        with open(USER_CONFIG_FILE_PATH, 'w') as f:
+        with open(CONFIG_FILE_PATH, 'w') as f:
             yaml.dump(asdict(self), f, default_flow_style=False)
             if self._verbose:
-                print(f"{PROJ_NAME} config saved to {USER_CONFIG_FILE_PATH}.")
+                print(f"{PROJ_NAME} config saved to {CONFIG_FILE_PATH}.")
     
     @property
     def logging_config(self):
@@ -107,12 +109,12 @@ class ConfigHandler:
                     if path.name == '.env':
                         path.touch(exist_ok=True)
                     else:
-                        shutil.copy(package_dir / path.name, USER_CONFIG_PATH)
+                        shutil.copy(package_dir / path.name, CONFIG_PATH)
             except Exception as e:
                 print(f'Error creating or copying {path.name}: {e}')
     
     def _initialize_configs(self):
-        for path in [self.data_path]:
+        for path in [self.data_path, self.cache_path]:
             if not os.path.exists(path):
                 os.makedirs(path)
                 if self._verbose:
@@ -161,6 +163,7 @@ class ConfigHandler:
 def configure(
     data_path: str | None = None,
     log_path: str | None = None,
+    cache_path: str | None = None,
     logging_config_file_path: str | None = None,
     logging_config: dict | None = None,
     docker_compose_file_path: str | None = None,

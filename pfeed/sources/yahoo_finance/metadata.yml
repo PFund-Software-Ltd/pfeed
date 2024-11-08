@@ -1,7 +1,6 @@
 data_origin: https://www.csidata.com
-api_urls: null
 data_categories:
-  trade_data:
+  market_data:
 provider_type: data_aggregator
 api_key_required: false
 has_free_access: true

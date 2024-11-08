@@ -7,9 +7,8 @@ data_origin: >
   For indice data, we source from CME Group, CBOE, and Nasdaq. 
   For crypto data, we connect to some of the highest volume exchanges to consume the level 1 
   and level 2 order books. These currently include Coinbase, Kraken, BitFinex, and BitStamp.
-api_urls: https://api.polygon.io
 data_categories:
-  trade_data:
+  market_data:
     resolutions:
 provider_type: data_distributor
 api_key_required: true

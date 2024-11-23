@@ -28,7 +28,8 @@ class BaseStorage(ABC):
             self._init_using_market_data_model()
         else:
             raise ValueError(f'{type(self.data_model)} is not supported')
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(self.file_path, Path):
+            self.file_path.parent.mkdir(parents=True, exist_ok=True)
     
     @staticmethod
     def _create_data_path() -> Path:
@@ -51,7 +52,10 @@ class BaseStorage(ABC):
             / self.month 
             / self.filename
         )
-        self.file_path = self.data_path / self.storage_path
+        if isinstance(self.data_path, str):  # e.g. for MinIO, data_path is a string because s3:// doesn't work with pathlib
+            self.file_path = self.data_path + '/' + str(self.storage_path)
+        else:
+            self.file_path = self.data_path / self.storage_path
 
     def exists(self) -> bool:
         return self.file_path.exists()

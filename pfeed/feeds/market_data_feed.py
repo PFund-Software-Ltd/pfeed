@@ -48,7 +48,7 @@ class MarketDataFeed(BaseFeed):
             data_model = self.create_market_data_model(product, resolution, date, unique_identifier=unique_identifier)
             if file_path := etl.extract_data(data_model, storage=storage):
                 file_paths.append(file_path)
-        return self.data_tool.read_parquet(file_paths) if file_paths else None
+        return self.data_tool.read_parquet(file_paths, storage=storage) if file_paths else None
     
     def _get_historical_data_from_source(
         self, 

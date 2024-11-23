@@ -56,8 +56,9 @@ class MinioStorage(BaseStorage):
         if not self.minio.bucket_exists(self.BUCKET_NAME):
             self.minio.make_bucket(self.BUCKET_NAME)
     
-    def _create_data_path(self) -> Path:
-        return Path("s3://" + self.BUCKET_NAME)
+    # s3:// doesn't work with pathlib, so we need to return a string
+    def _create_data_path(self) -> str:
+        return "s3://" + self.BUCKET_NAME
 
     def exists(self) -> bool:
         object_name = str(self.storage_path)

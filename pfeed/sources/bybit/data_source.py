@@ -7,7 +7,7 @@ __all__ = ["BybitDataSource"]
 class BybitDataSource(BaseDataSource):
     def __init__(self):
         from pfeed.sources.bybit.api import BybitAPI
-        super().__init__('bybit')
+        super().__init__('BYBIT')
         self.start_date = self.specific_metadata['start_date']
         exchange = self._create_exchange()
         self.adapter = exchange.adapter

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from pfeed.types.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfeed.types.literals import tSTORAGE, tDATA_TOOL
     try:
         import pandas as pd
     except ImportError:
@@ -16,7 +16,7 @@ except ImportError:
 
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.utils.utils import separate_number_and_chars
-
+from pfeed.const.enums import DataTool
 
 __all__ = ["YahooFinanceFeed"]
 
@@ -45,7 +45,7 @@ class YahooFinanceFeed(BaseFeed):
         "M": [1, 3],
     }
 
-    def __init__(self, data_tool: tSUPPORTED_DATA_TOOLS = "pandas"):
+    def __init__(self, data_tool: tDATA_TOOL = "pandas"):
         import yfinance
         super().__init__("yahoo_finance", data_tool=data_tool)
         self.api = yfinance
@@ -180,7 +180,7 @@ class YahooFinanceFeed(BaseFeed):
             left_cols = ["ts", "symbol", "resolution"]
         df = df[left_cols + [col for col in df.columns if col not in left_cols]]
         
-        if self.data_tool.name == "pandas":
+        if self.data_tool.name == DataTool.PANDAS:
             return df
-        elif self.data_tool.name == "polars":
+        elif self.data_tool.name == DataTool.POLARS:
             return pl.from_pandas(df)

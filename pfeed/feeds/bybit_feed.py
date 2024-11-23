@@ -29,6 +29,8 @@ class BybitFeed(CryptoFeed):
         use_ray: bool=True,
         use_prefect: bool=False,
         pipeline_mode: bool=False,
+        ray_kwargs: dict | None=None,
+        prefect_kwargs: dict | None=None,
     ):
         from pfeed.sources.bybit.data_source import BybitDataSource
         super().__init__(
@@ -37,6 +39,8 @@ class BybitFeed(CryptoFeed):
             use_ray=use_ray,
             use_prefect=use_prefect,
             pipeline_mode=pipeline_mode, 
+            ray_kwargs=ray_kwargs,
+            prefect_kwargs=prefect_kwargs,
         )
     
     def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:

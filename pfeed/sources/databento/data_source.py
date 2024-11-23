@@ -25,7 +25,7 @@ tDATASET = Literal[
 # NOTE: 2024-10-26, best free llm for deriving databento dataset and start date is 'mistral'
 class DatabentoDataSource(BaseDataSource):
     def __init__(self):
-        super().__init__('databento')
+        super().__init__('DATABENTO')
         if not os.getenv('DATABENTO_API_KEY'):
             raise ValueError('"DATABENTO_API_KEY" is not set in .env file')
         api_key = os.getenv('DATABENTO_API_KEY')

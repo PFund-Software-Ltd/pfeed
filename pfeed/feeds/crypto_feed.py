@@ -1,28 +1,13 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
-    import datetime
     from pfeed.types.core import tDataFrame
     from pfeed.types.literals import tSTORAGE
-    from pfund.datas.resolution import Resolution
-    from pfeed.data_models.market_data_model import MarketDataModel
 
 from pfeed.feeds.market_data_feed import MarketDataFeed
 
 
 class CryptoFeed(MarketDataFeed):
-    def create_market_data_model(
-        self,
-        product: str,
-        resolution: str | Resolution,
-        date: datetime.date,
-    ) -> MarketDataModel:
-        return super().create_market_data_model(
-            product=product,
-            resolution=resolution,
-            date=date,
-        )
-        
     def get_historical_data(
         self,
         product: str,

@@ -27,11 +27,11 @@ from pfeed.utils.utils import lambda_with_name
 
 
 __all__ = ["BaseFeed"]
-
+        
 
 def clear_current_dataflows(func):
     def wrapper(feed: BaseFeed, *args, **kwargs):
-        feed.clear_current_dataflows()
+        feed._clear_current_dataflows()
         return func(feed, *args, **kwargs)
     return wrapper
     
@@ -44,11 +44,15 @@ class BaseFeed:
         use_ray: bool=True,
         use_prefect: bool=False,
         pipeline_mode: bool=False,
+        ray_kwargs: dict | None=None,
+        prefect_kwargs: dict | None=None,
     ):
         from pfund.plogging import set_up_loggers
         self._pipeline_mode = pipeline_mode
         self._use_ray = use_ray
         self._use_prefect = use_prefect
+        self._ray_kwargs = ray_kwargs or {}
+        self._prefect_kwargs = prefect_kwargs or {}
         self._printed_hint = False
         self._dataflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
@@ -58,6 +62,19 @@ class BaseFeed:
         self.name: DataSource = data_source.name
         assert data_tool.upper() in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
         self.data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool.lower()}')
+        
+        if self.data_tool.name == DataTool.POLARS:
+            import multiprocessing
+            # RuntimeWarning: Using fork() can cause Polars to deadlock in the child process.
+            multiprocessing.set_start_method('spawn', force=True)
+        else:
+            import warnings
+            # Suppress RuntimeWarnings containing the specific message
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Using fork\(\) can cause Polars to deadlock.*",
+                category=RuntimeWarning
+            )
         self.config = get_config()
         is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
         if not is_loggers_set_up:
@@ -67,8 +84,14 @@ class BaseFeed:
     def download(self, *args, **kwargs) -> BaseFeed:
         raise NotImplementedError(f"{self.name} download() is not implemented")
     
+    def download_historical_data(self, *args, **kwargs) -> BaseFeed:
+        return self.download(*args, **kwargs)
+    
     def stream(self, *args, **kwargs) -> BaseFeed:
         raise NotImplementedError(f"{self.name} stream() is not implemented")
+    
+    def stream_realtime_data(self, *args, **kwargs) -> BaseFeed:
+        return self.stream(*args, **kwargs)
     
     def _execute_download(self, data_model: tDataModel) -> tData:
         raise NotImplementedError(f"{self.name} _execute_download() is not implemented")
@@ -125,7 +148,7 @@ class BaseFeed:
         self._dataflows.append(dataflow)
         return dataflow
     
-    def clear_current_dataflows(self):
+    def _clear_current_dataflows(self):
         '''Clear current dataflows
         This is necessary to allow the following behaviour:
         download(...).transform(...).load(...).stream(...).transform(...).load(...)
@@ -140,7 +163,7 @@ class BaseFeed:
         if op_type == 'download':
             if not self._printed_hint:
                 print(f'''Hint:
-                    You can use the command "pfeed config set --data-path {{your_path}}" to set your data path that stores downloaded data.
+                    You can run command "pfeed config set --data-path {{your_path}}" to set your data path that stores downloaded data.
                     The current data path is: {self.config.data_path}.
                 ''')
                 self._printed_hint = True
@@ -174,19 +197,27 @@ class BaseFeed:
             dataflow.add_operation('load', _create_load_function(dataflow.data_model))
         return self
     
-    def run(self, ray_init_kwargs: dict | None=None, prefect_kwargs: dict | None=None):
+    def run(self):
         from tqdm import tqdm
         from pfeed.utils.utils import generate_color
-        ray_init_kwargs, prefect_kwargs = ray_init_kwargs or {}, prefect_kwargs or {}
         color = generate_color(self.name.value)
-        dataflows = self._dataflows if not self._use_prefect else self.to_prefect_flows(**prefect_kwargs)
+        dataflows = self._dataflows if not self._use_prefect else self.to_prefect_flows()
+        prefect_error_msg = 'Error in running {name} prefect dataflows: {err}, did you forget to run "prefect server run" to start prefect\'s server?'
         
-        # REVIEW: prefect only supports running tasks (not flows) in parallel using prefect-ray
-        if self._use_ray and self._use_prefect:
-            self._use_ray = False
-            Console().print('Prefect flows cannot be run in parallel using Ray, Ray will be disabled.', style='bold')
-            
+        def _handle_result(res: tData | None) -> bool:
+            if not self._use_prefect:
+                success = False if res is None else True
+            else:
+                # for prefect, use dashboard to check failed dataflows
+                success = True
+            return success
+        
+        
         if self._use_ray:
+            print('''Note:
+                    If Ray seems to be running sequentially, it might be because you don't have enough network bandwidth to download data in parallel.
+            ''')
+            
             import atexit
             import ray
             from ray.util.queue import Queue
@@ -199,20 +230,26 @@ class BaseFeed:
                         self.logger.addHandler(QueueHandler(log_queue))
                         self.logger.setLevel(logging.DEBUG)
                     res = dataflow()
-                    success = False if res is None else True
+                    success = _handle_result(res)
                     return success, dataflow
+                except RuntimeError as err:
+                    if self._use_prefect:
+                        self.logger.error(prefect_error_msg.format(name=self.name, err=err))
+                    else:
+                        raise err
+                    return False, dataflow
                 except Exception:
                     self.logger.exception(f'Error in running {dataflow}:')
                     return False, dataflow
             
-            try:            
-                if 'num_cpus' not in ray_init_kwargs:
-                    ray_init_kwargs['num_cpus'] = os.cpu_count()
-                ray.init(**ray_init_kwargs)
+            try:
+                if 'num_cpus' not in self._ray_kwargs:
+                    self._ray_kwargs['num_cpus'] = os.cpu_count()
+                ray.init(**self._ray_kwargs)
                 log_queue = Queue()
                 log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
                 log_listener.start()
-                batch_size = ray_init_kwargs['num_cpus']
+                batch_size = self._ray_kwargs['num_cpus']
                 dataflow_batches = [dataflows[i: i + batch_size] for i in range(0, len(dataflows), batch_size)]
                 for dataflow_batch in tqdm(dataflow_batches, desc=f'Running {self.name} dataflows', colour=color):
                     futures = [ray_task.remote(dataflow) for dataflow in dataflow_batch]
@@ -229,20 +266,26 @@ class BaseFeed:
                     log_listener.stop()
                 ray.shutdown()
         else:
-            for dataflow in tqdm(dataflows, desc=f'Running {self.name} dataflows', colour=color):
-                res = dataflow()
-                # for prefect, use dashboard to check failed dataflows
+            try:
+                for dataflow in tqdm(dataflows, desc=f'Running {self.name} dataflows', colour=color):
+                    res = dataflow()
+                    success = _handle_result(res)
+                    if not success:
+                        self._failed_dataflows.append(dataflow)
+            except RuntimeError as err:
                 if self._use_prefect:
-                    continue
-                success = False if res is None else True
-                if not success:
-                    self._failed_dataflows.append(dataflow)
+                    self.logger.error(prefect_error_msg.format(name=self.name, err=err))
+                else:
+                    raise err
+            except Exception:
+                self.logger.exception(f'Error in running {self.name} dataflows:')
         if self._failed_dataflows:
             self.logger.warning(f'some {self.name} dataflows failed\n{pformat([str(dataflow) for dataflow in self._failed_dataflows])}\ncheck {self.logger.name}.log for details')
                     
     
     def to_prefect_flows(self, **kwargs) -> list[PrefectFlow]:
         prefect_flows = []
+        kwargs = self._prefect_kwargs or kwargs
         for dataflow in self._dataflows:
             prefect_flow = dataflow.to_prefect_flow(**kwargs)
             prefect_flows.append(prefect_flow)
@@ -260,7 +303,3 @@ class BaseFeed:
 
     def get_historical_data(self, *args, **kwargs) -> tData | None:
         raise NotImplementedError(f'{self.name} get_historical_data() is not implemented')
-
-
-    download_historical_data = download
-    stream_realtime_data = stream

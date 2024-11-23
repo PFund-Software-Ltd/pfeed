@@ -20,7 +20,7 @@ class BybitAPI:
     def __init__(self, exchange):
         self.adapter = exchange.adapter
         self.PTYPE_TO_CATEGORY = exchange.PTYPE_TO_CATEGORY
-        self.efilenames = {}
+        # self.efilenames = {}
     
     @staticmethod
     def _get(url, frequency=1, num_retry=3):
@@ -35,6 +35,12 @@ class BybitAPI:
 
         while num_retry:
             try:
+                # TEMP
+                import logging
+                from multiprocessing import current_process
+                logger = logging.getLogger('bybit_data')
+                logger.warning(f'calling {url=} from {current_process().name}')
+
                 res = requests.get(url)
                 if res.status_code == 200:
                     return res
@@ -83,13 +89,13 @@ class BybitAPI:
             else:
                 return f'{epdt}{date}.csv.gz'
         # used to check if the efilename created by the date exists in the efilenames (files on the data server)
-        if pdt not in self.efilenames:
-            self.efilenames[pdt] = self.get_efilenames(pdt)
+        # if pdt not in self.efilenames:
+        #     self.efilenames[pdt] = self.get_efilenames(pdt)
         ptype = pdt.split('_')[-1].upper()
         epdt = self.adapter(pdt, ref_key=self.PTYPE_TO_CATEGORY[ptype])
         efilename = _create_efilename(ptype, epdt, date)
-        if efilename not in self.efilenames[pdt]:
-            return None
+        # if efilename not in self.efilenames[pdt]:
+        #     return None
         url = f"{self.URLS[ptype]}/{epdt}/{efilename}"
         if res := self._get(url, frequency=1, num_retry=3):
             data = res.content

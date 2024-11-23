@@ -7,12 +7,11 @@ if TYPE_CHECKING:
 import os
 import io
 
-import s3fs
 import pandas as pd
 
-from pfeed.const.enums import DataStorage
+from pfeed.const.enums import DataStorage, DataTool
 
-name = 'pandas'
+name = DataTool.PANDAS
 
 
 def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE='local', **kwargs) -> pd.DataFrame:
@@ -22,6 +21,7 @@ def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE
         return pd.read_parquet(obj, *args, **kwargs)
     else:
         if storage == DataStorage.MINIO:
+            import s3fs
             if 'filesystem' not in kwargs:
                 fs = s3fs.S3FileSystem(
                     endpoint_url="http://"+os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),

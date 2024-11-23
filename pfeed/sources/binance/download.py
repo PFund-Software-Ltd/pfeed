@@ -85,7 +85,7 @@ def download_historical_data(
         config = ConfigHandler.load_config()
         
     print(f'''Hint: 
-        You can use the command "pfeed config --data-path ..." to set your data path that stores downloaded data.
+        You can run command "pfeed config --data-path ..." to set your data path that stores downloaded data.
         The current data path is: {config.data_path}.
     ''')
     

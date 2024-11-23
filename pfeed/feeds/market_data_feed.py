@@ -5,9 +5,10 @@ if TYPE_CHECKING:
     from pfeed.types.core import tDataFrame
     from pfeed.types.literals import tSTORAGE
 
+from pathlib import Path
+
 from pfund.datas.resolution import Resolution
 from pfeed.feeds.base_feed import BaseFeed
-from pfeed.storages.base_storage import BaseStorage
 from pfeed.data_models.market_data_model import MarketDataModel
 
 
@@ -29,8 +30,6 @@ class MarketDataFeed(BaseFeed):
             date=date,
         )
     
-    # NOTE: this is conceptually the reader for storage
-    # since different data have different formats, the read method is handled here
     def _get_historical_data_from_storage(
         self,
         product: str,
@@ -44,19 +43,12 @@ class MarketDataFeed(BaseFeed):
         from pfeed.utils.utils import get_dates_in_between
 
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
-        stoarge_literal = storage
-        storages: list[BaseStorage] = []
+        file_paths: list[Path] = []
         for date in dates:
             data_model = self.create_market_data_model(product, resolution, date, unique_identifier=unique_identifier)
-            if storage := etl.extract_data(data_model, storage=stoarge_literal):
-                storages.append(storage)
-                
-        file_paths = [storage.file_path for storage in storages]
-        if file_paths:
-            df = self.data_tool.read_parquet(file_paths)
-            return df
-        else:
-            return None
+            if file_path := etl.extract_data(data_model, storage=storage):
+                file_paths.append(file_path)
+        return self.data_tool.read_parquet(file_paths) if file_paths else None
     
     def _get_historical_data_from_source(
         self, 

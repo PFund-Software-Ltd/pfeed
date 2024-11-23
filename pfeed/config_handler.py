@@ -1,13 +1,14 @@
 import os
 import sys
 from pathlib import Path
-import yaml
 import multiprocessing
 import logging
 import shutil
 import importlib.resources
 from types import TracebackType
 from dataclasses import dataclass, asdict
+
+import yaml
 
 from pfeed.const.paths import (
     PROJ_NAME, 

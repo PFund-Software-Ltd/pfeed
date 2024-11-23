@@ -2,9 +2,7 @@ from __future__ import annotations
 from typing import Literal, Callable, TYPE_CHECKING
 if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
-    
     from pfeed.types.core import tDataModel, tData
-    from pfeed.storages.base_storage import BaseStorage
     from pfeed.const.enums import DataSource
 
 
@@ -15,7 +13,6 @@ class DataFlow:
         self.data_source: DataSource = data_model.source.name
         self.name = f'{self.data_source}_DataFlow'
         self.operations = []
-        self.storages: list[BaseStorage] = []
         self._has_extract_operation = False
         self._has_load_operation = False
     
@@ -68,11 +65,9 @@ class DataFlow:
         self.logger.info(f"transformed {self.data_model} data by '{func_name}'")
         return data
     
-    def _load(self, func: Callable, data: tData) -> BaseStorage:
-        storage: BaseStorage = func(data)
-        self.storages.append(storage)
+    def _load(self, func: Callable, data: tData):
+        storage = func(data)
         self.logger.info(f'loaded {self.data_source} data to {type(storage).__name__} {storage.file_path}')
-        return storage
 
     def to_prefect_flow(self, log_prints: bool = True, **kwargs) -> PrefectFlow:
         from prefect import flow, task

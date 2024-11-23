@@ -1,11 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.types.literals import tSTORAGE, tDATA_TOOL
+    from pfeed.types.literals import tSTORAGE
     from pfeed.types.core import tDataFrame, tData, tDataModel
     from pfeed.storages.base_storage import BaseStorage
 
 import os
+from pathlib import Path
+
 import pandas as pd
 
 try:
@@ -27,26 +29,25 @@ except ImportError:
         
 from pfund.datas.resolution import Resolution
 
-from pfeed.const.enums import DataStorage
+from pfeed.const.enums import DataStorage, DataTool
+from pfeed.storages.minio_storage import check_if_minio_running
 
 
 def extract_data(
     data_model: tDataModel,
     storage: tSTORAGE | None=None,
-) -> BaseStorage | None:
+) -> Path | None:
     '''
     Args:
         storage: if specified, only search for data in the specified storage.
     '''
-    if storage is None:
-        for storage in DataStorage:
-            storage: BaseStorage = _get_storage(data_model, storage)
-            if storage.exists():
-                return storage
-    else:
+    storages = [_storage for _storage in DataStorage] if storage is None else [DataStorage[storage.upper()]]
+    for storage in storages:
+        if storage == DataStorage.MINIO:
+            if not check_if_minio_running():
+                continue
         storage: BaseStorage = _get_storage(data_model, storage)
-        if storage.exists():
-            return storage
+        return storage.file_path if storage.exists() else None
 
     
 def filter_non_standard_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -123,14 +124,12 @@ def resample_data(
     return resampled_df
 
 
-def _get_storage(data_model: tDataModel, storage: tSTORAGE | DataStorage, **kwargs) -> BaseStorage:
+def _get_storage(data_model: tDataModel, storage: DataStorage, **kwargs) -> BaseStorage:
     from pfeed.storages import LocalStorage, MinioStorage, CacheStorage
-    if not isinstance(storage, DataStorage):
-        storage = DataStorage[storage.upper()]
     if storage == DataStorage.LOCAL:
         return LocalStorage(data_model=data_model)
     elif storage == DataStorage.MINIO:
-        return MinioStorage(data_model=data_model, minio_kwargs=kwargs)
+        return MinioStorage(data_model=data_model, kwargs=kwargs)
     elif storage == DataStorage.CACHE:
         cache_storage = CacheStorage(data_model=data_model)
         cache_storage.clear_caches()
@@ -157,6 +156,9 @@ def load_data(
     except ImportError:
         print_disk_usage = None
     storage = DataStorage[storage.upper()]
+    if storage == DataStorage.MINIO:
+        if not check_if_minio_running():
+            raise Exception("MinIO is not running")
     storage = _get_storage(data_model, storage, **kwargs)
     storage.load(data)
     if print_disk_usage:
@@ -182,14 +184,14 @@ def convert_to_pandas_df(data: tData) -> pd.DataFrame:
         raise ValueError(f'{type(data)=}')
 
 
-def convert_to_user_df(df: pd.DataFrame, data_tool: tDATA_TOOL) -> tDataFrame:
-    if data_tool == 'pandas':
+def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
+    if data_tool == DataTool.PANDAS:
         return df
-    elif data_tool == 'polars':
+    elif data_tool == DataTool.POLARS:
         return pl.from_pandas(df)
-    elif data_tool == 'dask':
+    elif data_tool == DataTool.DASK:
         return dd.from_pandas(df, npartitions=1)
-    elif data_tool == 'spark':
+    elif data_tool == DataTool.SPARK:
         return ps.from_pandas(df)
     else:
         raise ValueError(f'{data_tool=}')

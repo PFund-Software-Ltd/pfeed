@@ -5,7 +5,7 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pfeed.data_models.market_data_model import MarketDataModel
 
@@ -18,6 +18,8 @@ class BaseStorage(ABC):
     file_extension: str = ''
     storage_path: Path | None = None
     file_path: Path | None = None
+    # kwargs for the storage class, e.g. for MinIO, kwargs will be passed to Minio()
+    kwargs: dict = field(default_factory=dict)
     
     def __post_init__(self):
         self.file_extension = self.data_model.file_extension

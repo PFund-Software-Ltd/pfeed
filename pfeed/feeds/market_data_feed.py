@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 from collections import defaultdict
 
 import pandas as pd
+from rich.console import Console
 
 from pfeed import etl
 from pfeed.utils.utils import get_dates_in_between
@@ -20,8 +21,14 @@ from pfeed.const.enums import DataRawLevel
 
 class MarketDataFeed(BaseFeed):
     def _print_download_msg(self, resolution: Resolution, start_date: datetime.date, end_date: datetime.date):
-        from rich.console import Console
         Console().print(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC)', style='bold yellow')
+    
+    def _print_original_raw_level_msg(self):
+        Console().print(
+            f'Warning: {self.name} data with raw_level="original" will NOT be compatible with pfund backtesting. \n'
+            'Use it only for data exploration or if you plan to use other backtesting frameworks.',
+            style='bold magenta'
+        )
     
     def create_market_data_model(
         self,
@@ -154,13 +161,12 @@ class MarketDataFeed(BaseFeed):
         assert not self._pipeline_mode, 'get_historical_data() is not supported in pipeline context'
         start_date, end_date = self._standardize_dates(start_date, end_date) if start_date else rollback_date_range(rollback_period)
         raw_level = DataRawLevel[raw_level.upper()]
-        raw_level_str = raw_level.value.lower()
         if not isinstance(resolution, Resolution):
             resolution = Resolution(resolution)
 
-        df_from_storage, missing_dates = self._get_historical_data_from_storage(product, resolution, start_date, end_date, raw_level_str, unique_identifier=unique_identifier, from_storage=from_storage)
+        df_from_storage, missing_dates = self._get_historical_data_from_storage(product, resolution, start_date, end_date, raw_level.name, unique_identifier=unique_identifier, from_storage=from_storage)
         if missing_dates:
-            df_from_source = self._get_historical_data_from_source(product, resolution, missing_dates[0], missing_dates[-1], raw_level_str, unique_identifier=unique_identifier)
+            df_from_source = self._get_historical_data_from_source(product, resolution, missing_dates[0], missing_dates[-1], raw_level.name, unique_identifier=unique_identifier)
         else:
             df_from_source = None
         

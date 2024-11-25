@@ -91,7 +91,7 @@ class BybitFeed(CryptoMarketDataFeed):
         start_date, end_date = self._standardize_dates(start_date, end_date)
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         raw_level = DataRawLevel[raw_level.upper()]
-        metadata = self._create_metadata(raw_level.value)
+        metadata = self._create_metadata(raw_level.name)
         is_raw_data = resolution >= self.data_source.lowest_resolution
         if not is_raw_data:
             raw_level = DataRawLevel.CLEANED
@@ -114,6 +114,9 @@ class BybitFeed(CryptoMarketDataFeed):
                         lambda_with_name('etl.resample_data', lambda df: etl.resample_data(df, resolution))
                     )
             self.transform(*transformations)
+        else:
+            self._print_original_raw_level_msg()
+            
         if not self._pipeline_mode:
             self.load(to_storage)
             self.run()

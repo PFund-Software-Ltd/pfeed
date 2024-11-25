@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow as pa
     import pyarrow.parquet as pq
-    
+    from pfund.datas.resolution import Resolution
     from pfeed.types.literals import tSTORAGE
     from pfeed.types.core import tDataFrame, tData, tDataModel
     from pfeed.storages.base_storage import BaseStorage
@@ -29,8 +29,7 @@ except ImportError:
     ps = None
     
         
-from pfund.datas.resolution import Resolution
-from pfeed.const.enums import DataStorage, DataTool
+from pfeed.const.enums import DataStorage, DataTool, DataRawLevel
 
 
 def write_data(data: tData, storage: BaseStorage, metadata: dict | None = None, compression: str = 'zstd'):
@@ -119,12 +118,21 @@ def extract_data(
     storage: tSTORAGE | None = None,
     metadata: dict | None = None,
 ) -> BaseStorage | None:
+    from pfeed.data_models.market_data_model import MarketDataModel
     local_storages = ['cache', 'local', 'minio']
     storages = local_storages if storage is None else [storage]  # search through all local storages if not specified
     for storage in storages:
         storage: BaseStorage | None = get_storage(data_model, storage)
         if storage and storage.exists():
             _, metadata_from_storage = read_data(storage, compression=data_model.compression)
+            if isinstance(storage.data_model, MarketDataModel):
+                raw_level_from_storage = DataRawLevel[metadata_from_storage['raw_level'].upper()]
+                raw_level_from_metadata = DataRawLevel[metadata['raw_level'].upper()]
+                no_original_raw_level = DataRawLevel.ORIGINAL not in (raw_level_from_storage, raw_level_from_metadata)
+                # since raw_level 'cleaned' is compatible with 'normalized' ('cleaned' filtered out unnecessary columns),
+                # allow using data with raw_level='cleaned' even the specified raw_level in metadata is 'normalized'
+                if no_original_raw_level and raw_level_from_metadata >= raw_level_from_storage:
+                    return storage
             if metadata_from_storage == metadata:
                 return storage
     return None

@@ -1,7 +1,7 @@
-from enum import StrEnum
+from enum import IntEnum
 
 
-class DataRawLevel(StrEnum):
-    CLEANED = 'CLEANED'
-    NORMALIZED = 'NORMALIZED'
-    ORIGINAL = 'ORIGINAL'
+class DataRawLevel(IntEnum):
+    CLEANED = 0
+    NORMALIZED = 1
+    ORIGINAL = 2

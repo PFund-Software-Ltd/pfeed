@@ -31,12 +31,11 @@ pfund = "^0.0.2"
 pandas = "^2.2.0"
 pydantic = "^2.7.0"
 yfinance = "^0.2.43"
+pyarrow = "^17.0.0"
 zstandard = "^0.23.0"
-fastparquet = "^2024.2.0"
 beautifulsoup4 = "^4.12.3"
 psutil = {version = "^6.0.0", optional = true}
 modin = {extras = ["all"], version = "^0.32.0", optional = true}
-pyarrow = {version = "^17.0.0", optional = true}
 minio = {version = "^7.2.8", optional = true}
 connectorx = {version = "^0.3.3", optional = true}
 ray = {version = "^2.35.0", optional = true}
@@ -49,16 +48,12 @@ polars = {version = "^1.14.0", optional = true}
 dask = {extras = ["complete", "dataframe"], version = "^2024.10.0", optional = true}
 pyspark = {extras = ["connect", "pandas-on-spark", "sql"], version = "^3.5.3", optional = true}
 duckdb = {version = "^1.0.0", optional = true}
-s3fs = {version = "^2024.9.0", optional = true}
-adlfs = {version = "^2024.7.0", optional = true}
-gcsfs = {version = "^2024.9.0", optional = true}
 psycopg2 = {version = "^2.9.9", optional = true}
 litellm = {version = "^1.51.0", optional = true}
 
 [tool.poetry.extras]
 core = [
-    "psutil", "modin", "pyarrow",
-    "minio", "connectorx",
+    "psutil", "modin", "minio", "connectorx",
     "ray", "prefect", "bytewax", "confluent-kafka", 
 ]
 databento = ["databento"]
@@ -68,17 +63,12 @@ dask = ["dask"]
 pyspark = ["pyspark"]
 duckdb = ["duckdb"]
 postgres = ["psycopg2"]
-s3 = ["s3fs"]
-aws = ["s3fs"]
-azure = ["adlfs"]
-gcp = ["gcsfs"]
 llm = ["litellm"]
 all = [
     "psutil", "modin", "pyarrow", "minio", "connectorx", "ray", "prefect", "bytewax", "confluent-kafka",  # core
     "databento", "polygon-api-client",  # data sources
     "polars", "dask", "pyspark",  # dataframes
     "duckdb", "psycopg2",  # databases
-    "s3fs", "adlfs", "gcsfs",  # cloud storages
     "litellm"  # plugins
 ]
 

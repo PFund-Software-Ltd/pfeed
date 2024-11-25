@@ -14,24 +14,32 @@ from pfeed.const.enums import DataStorage, DataTool
 name = DataTool.POLARS
 
 
-def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE='local', **kwargs) -> pl.DataFrame | pl.LazyFrame:
-    storage = DataStorage[storage.upper()]
+def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE, **kwargs) -> pl.DataFrame | pl.LazyFrame:
     if isinstance(paths_or_obj, bytes):
         obj = paths_or_obj
         return pl.read_parquet(obj, *args, **kwargs)
     else:
         paths = paths_or_obj if isinstance(paths_or_obj, list) else [paths_or_obj]
-        if storage == DataStorage.LOCAL:
-            return pl.scan_parquet(paths, *args, **kwargs)
-        elif storage == DataStorage.MINIO:
-            storage_options = {
-                "endpoint_url": "http://"+os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
-                "access_key_id": os.getenv('MINIO_ROOT_USER', 'pfunder'),
-                "secret_access_key": os.getenv('MINIO_ROOT_PASSWORD', 'password'),
-            }
-            return pl.scan_parquet(paths, *args, storage_options=storage_options, **kwargs)
-        else:
-            raise NotImplementedError(f'{storage=}')
+        storage = DataStorage[storage.upper()]
+        if storage not in [DataStorage.LOCAL, DataStorage.CACHE] and 'storage_options' not in kwargs:
+            if storage == DataStorage.MINIO:
+                from pfeed.storages.minio_storage import MinioStorage
+                kwargs['storage_options'] = {
+                    "endpoint_url": MinioStorage.create_endpoint(),
+                    "access_key_id": os.getenv('MINIO_ROOT_USER', 'pfunder'),
+                    "secret_access_key": os.getenv('MINIO_ROOT_PASSWORD', 'password'),
+                }
+            else:
+                raise NotImplementedError(f"read_parquet() for storage {storage} is not implemented")
+        return pl.scan_parquet(paths, *args, **kwargs)
+
+
+def concat(dfs: list[pl.DataFrame | pl.LazyFrame]) -> pl.DataFrame | pl.LazyFrame:
+    return pl.concat(dfs)
+
+
+def sort_by_ts(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
+    return df.sort(by='ts', descending=False)
 
 
 def estimate_memory_usage(df: pl.DataFrame | pl.LazyFrame) -> float:

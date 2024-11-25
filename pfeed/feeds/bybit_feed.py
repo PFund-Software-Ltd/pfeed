@@ -7,10 +7,9 @@ if TYPE_CHECKING:
     from pfeed.types.literals import tSTORAGE, tDATA_TOOL
 
 import pandas as pd
-from rich.console import Console
 
 from pfeed.feeds.base_feed import clear_current_dataflows
-from pfeed.feeds.crypto_feed import CryptoFeed
+from pfeed.feeds.crypto_market_data_feed import CryptoMarketDataFeed
 from pfeed import etl
 from pfeed.utils.utils import lambda_with_name
 
@@ -19,10 +18,7 @@ __all__ = ['BybitFeed']
 tPRODUCT_TYPE = Literal['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT', 'OPT']
 
 
-class BybitFeed(CryptoFeed):
-    MAPPING_COLS = {'Buy': 1, 'Sell': -1}
-    RENAMING_COLS = {'timestamp': 'ts', 'size': 'volume'}
-    
+class BybitFeed(CryptoMarketDataFeed):
     def __init__(
         self, 
         data_tool: tDATA_TOOL='pandas', 
@@ -48,8 +44,11 @@ class BybitFeed(CryptoFeed):
         Normalizes raw data by renaming columns, mapping columns, and converting timestamp.
         bytes (any format, e.g. csv.gzip) in, bytes (parquet file) out.
         '''
-        df = df.rename(columns=self.RENAMING_COLS)
-        df['side'] = df['side'].map(self.MAPPING_COLS)
+        MAPPING_COLS = {'Buy': 1, 'Sell': -1}
+        RENAMING_COLS = {'timestamp': 'ts', 'size': 'volume'}
+        
+        df = df.rename(columns=RENAMING_COLS)
+        df['side'] = df['side'].map(MAPPING_COLS)
             
         # standardize `ts` column
         # NOTE: for ptype SPOT, unit is 'ms', e.g. 1671580800123, in milliseconds
@@ -81,7 +80,7 @@ class BybitFeed(CryptoFeed):
         start_date: str='',
         end_date: str='',
         raw_level: Literal['normalized', 'cleaned', 'original']='normalized',
-        storage: tSTORAGE='local',
+        to_storage: tSTORAGE='local',
     ) -> BybitFeed:
         from pfund.datas.resolution import Resolution
         from pfeed.const.enums import DataRawLevel
@@ -92,16 +91,17 @@ class BybitFeed(CryptoFeed):
         start_date, end_date = self._standardize_dates(start_date, end_date)
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         raw_level = DataRawLevel[raw_level.upper()]
+        metadata = self._create_metadata(raw_level.value)
         is_raw_data = resolution >= self.data_source.lowest_resolution
         if not is_raw_data:
             raw_level = DataRawLevel.CLEANED
          
-        Console().print(f'Downloading historical {resolution} data from {self.name}, {start_date=} {end_date=}', style='bold yellow')
+        self._print_download_msg(resolution, start_date, end_date)
         for pdt in pdts:
             for date in dates:
                 data_model = self.create_market_data_model(pdt, resolution, date)
                 # create a dataflow that will schedule _execute_download()
-                super().extract('download', data_model)
+                super().extract('download', data_model, metadata=metadata)
         if raw_level != DataRawLevel.ORIGINAL:
             transformations = [
                 self._normalize_raw_data,
@@ -115,7 +115,7 @@ class BybitFeed(CryptoFeed):
                     )
             self.transform(*transformations)
         if not self._pipeline_mode:
-            self.load(storage)
+            self.load(to_storage)
             self.run()
         else:
             self.transform(

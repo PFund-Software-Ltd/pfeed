@@ -40,7 +40,7 @@ def download(data_source, products, ptypes, dtype, start_date, end_date, raw_lev
     feed.download_historical_data(
         products=products,
         product_types=ptypes,
-        data_type=str(feed.data_source.lowest_resolution.timeframe) if not dtype else dtype.value,
+        data_type=str(feed.data_source.highest_resolution.timeframe) if not dtype else dtype.value,
         start_date=start_date.date().strftime('%Y-%m-%d') if start_date else start_date,
         end_date=end_date.date().strftime('%Y-%m-%d') if end_date else end_date,
         raw_level=raw_level.value,

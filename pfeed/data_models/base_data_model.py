@@ -26,6 +26,7 @@ class BaseDataModel(BaseModel):
     source: BaseDataSource
     file_extension: str = ''
     unique_identifier: str = ''
+    compression: str = ''
 
     def model_post_init(self, __context: Any) -> None:
         if not self.unique_identifier:
@@ -36,3 +37,6 @@ class BaseDataModel(BaseModel):
             return f'{self.source.name.value}_{self.unique_identifier}'
         else:
             return f'{self.source.name.value}'
+
+    def __hash__(self):
+        return hash((self.source.name, self.unique_identifier))

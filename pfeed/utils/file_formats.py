@@ -54,9 +54,19 @@ def is_likely_csv(data: bytes, sample_size: int = 4096) -> bool:
         return False
 
 
+def compress_gzip(data: bytes, compression_level: int = 9) -> bytes:
+    import gzip
+    return gzip.compress(data, compresslevel=compression_level)
+
+
 def decompress_gzip(data: bytes) -> bytes:
     import gzip
     return gzip.decompress(data)
+
+
+def compress_bz2(data: bytes, compression_level: int = 9) -> bytes:
+    import bz2
+    return bz2.compress(data, compresslevel=compression_level)
 
 
 def decompress_bz2(data: bytes) -> bytes:
@@ -64,16 +74,36 @@ def decompress_bz2(data: bytes) -> bytes:
     return bz2.decompress(data)
 
 
+def compress_xz(data: bytes, compression_level: int = 6) -> bytes:
+    import lzma
+    return lzma.compress(data, preset=compression_level)
+
+
 def decompress_xz(data: bytes) -> bytes:
     import lzma
     return lzma.decompress(data)
+
+
+def compress_zstd(data: bytes) -> bytes:
+    import zstandard as zstd
+    cctx = zstd.ZstdCompressor()
+    return cctx.compress(data)
 
 
 def decompress_zstd(data: bytes) -> bytes:
     import zstandard as zstd
     dctx = zstd.ZstdDecompressor()
     return dctx.decompress(data)
+
     
+def compress_zip(data: bytes, filename: str = "file.txt", compression_level: int = 6) -> bytes:
+    import zipfile
+    import io
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED, compresslevel=compression_level) as zf:
+        zf.writestr(filename, data)
+    return buffer.getvalue()
+
     
 def decompress_zip(data: bytes) -> bytes:
     import zipfile
@@ -113,3 +143,21 @@ def convert_raw_data_to_pandas_df(data: bytes) -> pd.DataFrame:
         return pd.read_csv(io.BytesIO(data))
     else:
         raise ValueError("Unknown or unsupported format")
+
+
+compression_methods = {
+    'zstd': compress_zstd,
+    'gzip': compress_gzip,
+    'bz2': compress_bz2,
+    'xz': compress_xz,
+    'zip': compress_zip,
+}
+
+
+decompression_methods = {
+    'zstd': decompress_zstd,
+    'gzip': decompress_gzip,
+    'bz2': decompress_bz2,
+    'xz': decompress_xz,
+    'zip': decompress_zip,
+}

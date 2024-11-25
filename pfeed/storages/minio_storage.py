@@ -6,36 +6,13 @@ if TYPE_CHECKING:
     except ImportError:
         pass
     from typing import Generator
-    from pfeed.types.core import tData
 
 import os
 import io
-from pathlib import Path
 
-from minio import S3Error, Minio
+from minio import S3Error, ServerError, Minio
 
-from pfeed.types.core import is_dataframe
 from pfeed.storages.base_storage import BaseStorage
-
-
-def check_if_minio_running():
-    import requests
-    from requests.exceptions import RequestException, ReadTimeout
-
-    endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
-    if not endpoint.startswith('http'):
-        if any(local in endpoint for local in ['localhost:', '127.0.0.1:']):
-            endpoint = f'http://{endpoint}'
-        else:
-            endpoint = f'https://{endpoint}'
-    try:
-        response = requests.get(f'{endpoint}/minio/health/live', timeout=3)
-        if response.status_code != 200:
-            print(f"Unhandled response from MinIO: {response.status_code=} {response.content} {response}")
-            return False
-    except (ReadTimeout, RequestException) as e:
-        return False
-    return True
 
 
 class MinioStorage(BaseStorage):
@@ -44,17 +21,42 @@ class MinioStorage(BaseStorage):
     
     def __post_init__(self):
         super().__post_init__()
-        endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
-        self.minio = Minio(
-            endpoint=endpoint,
-            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
-            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
-            # turn off TLS, i.e. not using HTTPS
-            secure=True if os.getenv('MINIO_HOST', 'localhost') not in ['localhost', '127.0.0.1'] else False,
-            **self.kwargs,
-        )
+        self.endpoint = self.create_endpoint()
+        if not self.check_if_server_running():
+            raise ServerError(f"{self.name} is not running", 503)
+        self.minio = self._create_minio()
         if not self.minio.bucket_exists(self.BUCKET_NAME):
             self.minio.make_bucket(self.BUCKET_NAME)
+        
+    @staticmethod
+    def create_endpoint() -> str:
+        '''Creates endpoint, e.g. http://localhost:9000'''
+        endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
+        if not endpoint.startswith('http'):
+            endpoint = 'http://' + endpoint if 'localhost' in endpoint or '127.0.0.1' in endpoint else 'https://' + endpoint
+        return endpoint
+    
+    def _create_minio(self) -> Minio:
+        return Minio(
+            endpoint=self.endpoint.replace('http://', '').replace('https://', ''),
+            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
+            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
+            secure=self.endpoint.startswith('https://'),  # turn off TLS, i.e. not using HTTPS
+            **self.kwargs,
+        )
+    
+    def check_if_server_running(self) -> bool:
+        import requests
+        from requests.exceptions import RequestException, ReadTimeout
+        
+        try:
+            response = requests.get(f'{self.endpoint}/minio/health/live', timeout=3)
+            if response.status_code != 200:
+                print(f"Unhandled response from MinIO: {response.status_code=} {response.content} {response}")
+                return False
+        except (ReadTimeout, RequestException) as err:
+            return False
+        return True
     
     # s3:// doesn't work with pathlib, so we need to return a string
     def _create_data_path(self) -> str:
@@ -64,18 +66,6 @@ class MinioStorage(BaseStorage):
         object_name = str(self.storage_path)
         return self.exist_object(object_name)
     
-    def load(self, data: tData):
-        if is_dataframe(data):
-            from pfeed.etl import convert_to_pandas_df
-            df = convert_to_pandas_df(data)
-            data: bytes = df.to_parquet(compression='zstd')
-        elif isinstance(data, bytes):
-            pass
-        else:
-            raise NotImplementedError(f'{type(data)=}')
-        object_name = str(self.storage_path)
-        self.put_object(object_name, data)
-
     def get_object(self, object_name: str) -> bytes | None:
         try:
             res = self.minio.get_object(self.BUCKET_NAME, object_name)

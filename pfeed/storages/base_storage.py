@@ -1,17 +1,19 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.types.core import tDataModel, tData
+    import datetime
+    from pfeed.types.core import tDataModel
 
-from abc import ABC, abstractmethod
 from pathlib import Path
 from dataclasses import dataclass, field
 
 from pfeed.data_models.market_data_model import MarketDataModel
+from pfeed.const.enums import DataStorage
 
 
 @dataclass
-class BaseStorage(ABC):
+class BaseStorage:
+    name: DataStorage
     data_model: tDataModel
     data_path: Path | None = None
     filename: str = ''
@@ -37,9 +39,16 @@ class BaseStorage(ABC):
         config = get_config()
         return Path(config.data_path)
     
+    @property
+    def date(self) -> datetime.date:
+        if hasattr(self.data_model, 'date'):
+            return self.data_model.date
+        else:
+            raise ValueError(f'{type(self.data_model)} does not have a date attribute')
+    
     def _init_using_market_data_model(self):
         date = str(self.data_model.date)
-        self.year, self.month, self.day = date.split('-')
+        year, month, day = date.split('-')
         self.filename = self.data_model.product + '_' + date + self.file_extension
         self.storage_path = (
             Path(self.data_model.env.value)
@@ -48,8 +57,8 @@ class BaseStorage(ABC):
             / self.data_model.product_type
             / self.data_model.product
             / str(self.data_model.resolution)
-            / self.year
-            / self.month 
+            / year
+            / month 
             / self.filename
         )
         if isinstance(self.data_path, str):  # e.g. for MinIO, data_path is a string because s3:// doesn't work with pathlib
@@ -59,7 +68,6 @@ class BaseStorage(ABC):
 
     def exists(self) -> bool:
         return self.file_path.exists()
-    
-    @abstractmethod
-    def load(self, data: tData, *args, **kwargs) -> None:
-        pass
+
+    def __str__(self):
+        return f'{self.name} {self.data_model}'

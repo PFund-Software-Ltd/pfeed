@@ -1,12 +1,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    
     from pfeed.types.literals import tSTORAGE
     from pfeed.types.core import tDataFrame, tData, tDataModel
     from pfeed.storages.base_storage import BaseStorage
 
 import os
-from pathlib import Path
 
 import pandas as pd
 
@@ -28,28 +30,106 @@ except ImportError:
     
         
 from pfund.datas.resolution import Resolution
-
 from pfeed.const.enums import DataStorage, DataTool
-from pfeed.storages.minio_storage import check_if_minio_running
+
+
+def write_data(data: tData, storage: BaseStorage, metadata: dict | None = None, compression: str = 'zstd'):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from pfeed.types.core import is_dataframe
+    from pfeed.utils.file_formats import compression_methods
+    
+    metadata = metadata or {}
+    file_path = str(storage.file_path)
+    fs = get_filesystem(storage.name)
+
+    # Write data based on its type
+    if is_dataframe(data):
+        table = pa.Table.from_pandas(convert_to_pandas_df(data))
+        schema = table.schema.with_metadata(metadata)
+        table = table.replace_schema_metadata(schema.metadata)
+        with fs.open_output_stream(file_path) as f:
+            pq.write_table(table, f, compression=compression)
+    elif isinstance(data, (bytes, str)):
+        if isinstance(data, str):
+            data: bytes = data.encode('utf-8')
+        data: bytes = compression_methods[compression](data)
+        with fs.open_output_stream(file_path) as f:
+            f.write(data)
+    else:
+        raise NotImplementedError(f'{type(data)=}')
+    
+
+def get_filesystem(storage: DataStorage) -> pa.fs.FileSystem:
+    from pyarrow import fs as pa_fs
+    if storage == DataStorage.MINIO:
+        from pfeed.storages.minio_storage import MinioStorage
+        fs = pa_fs.S3FileSystem(
+            endpoint_override=MinioStorage.create_endpoint(),
+            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
+            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
+        )
+    elif storage == DataStorage.S3:
+        fs = pa_fs.S3FileSystem(
+            endpoint_override=os.getenv('S3_ENDPOINT'),
+            access_key=os.getenv("S3_ACCESS_KEY"),
+            secret_key=os.getenv("S3_SECRET_KEY"),
+        )
+    elif storage == DataStorage.AZURE:
+        fs = pa_fs.AzureFileSystem(
+            account_name=os.getenv("AZURE_ACCOUNT_NAME"),
+            account_key=os.getenv("AZURE_ACCOUNT_KEY"),
+        )
+    elif storage == DataStorage.GCP:
+        fs = pa_fs.GcsFileSystem(
+            access_token=os.getenv("GCP_ACCESS_TOKEN")  # For GCP OAuth tokens
+        )
+    else:
+        fs = pa_fs.LocalFileSystem()
+    return fs
+
+
+def read_data(storage: BaseStorage, compression: str = 'zstd') -> tuple[pq.ParquetFile | bytes | str, dict | None]:
+    import pyarrow.parquet as pq
+    from pfeed.utils.file_formats import decompression_methods
+    
+    file_path = str(storage.file_path)
+    fs = get_filesystem(storage.name)
+    with fs.open_input_file(file_path) as f:
+        if file_path.endswith('.parquet'):
+            parquet_file = pq.ParquetFile(f)
+            metadata = parquet_file.schema.to_arrow_schema().metadata
+            metadata = {k.decode(): v.decode() for k, v in metadata.items()}
+            return parquet_file, metadata
+        else:
+            raw_data = f.read()
+            raw_data = decompression_methods[compression](raw_data)
+
+            # Attempt to decode as UTF-8 to return text
+            try:
+                text_data = raw_data.decode('utf-8')
+                return text_data, None
+            except UnicodeDecodeError:
+                # Return as raw bytes if not UTF-8 decodable
+                return raw_data, None
 
 
 def extract_data(
     data_model: tDataModel,
-    storage: tSTORAGE | None=None,
-) -> Path | None:
-    '''
-    Args:
-        storage: if specified, only search for data in the specified storage.
-    '''
-    storages = [_storage for _storage in DataStorage] if storage is None else [DataStorage[storage.upper()]]
+    storage: tSTORAGE | None = None,
+    metadata: dict | None = None,
+) -> BaseStorage | None:
+    local_storages = ['cache', 'local', 'minio']
+    storages = local_storages if storage is None else [storage]  # search through all local storages if not specified
     for storage in storages:
-        if storage == DataStorage.MINIO:
-            if not check_if_minio_running():
-                continue
-        storage: BaseStorage = _get_storage(data_model, storage)
-        return storage.file_path if storage.exists() else None
-
+        storage: BaseStorage | None = get_storage(data_model, storage)
+        if storage and storage.exists():
+            _, metadata_from_storage = read_data(storage, compression=data_model.compression)
+            if metadata_from_storage == metadata:
+                return storage
+    return None
     
+
 def filter_non_standard_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Filter out unnecessary columns from raw data."""
     assert 'ts' in df.columns, '"ts" column not found'
@@ -124,16 +204,34 @@ def resample_data(
     return resampled_df
 
 
-def _get_storage(data_model: tDataModel, storage: DataStorage, **kwargs) -> BaseStorage:
-    from pfeed.storages import LocalStorage, MinioStorage, CacheStorage
+def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStorage | None:
+    from pfeed.storages import LocalStorage, MinioStorage, CacheStorage, S3Storage
+    from minio import ServerError
+    storage = DataStorage[storage.upper()]
     if storage == DataStorage.LOCAL:
-        return LocalStorage(data_model=data_model)
+        return LocalStorage(name=storage, data_model=data_model)
     elif storage == DataStorage.MINIO:
-        return MinioStorage(data_model=data_model, kwargs=kwargs)
+        try:
+            return MinioStorage(name=storage, data_model=data_model, kwargs=kwargs)
+        except ServerError:
+            return None
     elif storage == DataStorage.CACHE:
-        cache_storage = CacheStorage(data_model=data_model)
+        cache_storage = CacheStorage(name=storage, data_model=data_model)
         cache_storage.clear_caches()
         return cache_storage
+    # TODO:
+    elif storage == DataStorage.S3:
+        pass
+        # try:
+        #     return S3Storage(name=storage, data_model=data_model, kwargs=kwargs)
+        # except ServerError:
+        #     return None
+    # TODO:
+    elif storage == DataStorage.AZURE:
+        pass
+    # TODO:
+    elif storage == DataStorage.GCP:
+        pass
     else:
         raise NotImplementedError(f'{storage=}')
 
@@ -142,6 +240,7 @@ def load_data(
     data_model: tDataModel,
     data: tData,
     storage: tSTORAGE,
+    metadata: dict | None = None,
     **kwargs,
 ) -> BaseStorage:
     """
@@ -150,17 +249,13 @@ def load_data(
         storage: The destination where the data will be loaded. 
     Returns:
         None
-    """
+    """    
     try:
         from pfeed.utils.monitor import print_disk_usage
     except ImportError:
         print_disk_usage = None
-    storage = DataStorage[storage.upper()]
-    if storage == DataStorage.MINIO:
-        if not check_if_minio_running():
-            raise Exception("MinIO is not running")
-    storage = _get_storage(data_model, storage, **kwargs)
-    storage.load(data)
+    storage: BaseStorage = get_storage(data_model, storage, **kwargs)
+    write_data(data, storage, metadata=metadata, compression=data_model.compression)
     if print_disk_usage:
         print_disk_usage(storage.data_path)
     return storage

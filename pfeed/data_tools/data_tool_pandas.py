@@ -4,33 +4,35 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfeed.types.literals import tSTORAGE
 
-import os
 import io
 
 import pandas as pd
 
 from pfeed.const.enums import DataStorage, DataTool
 
+
 name = DataTool.PANDAS
 
 
-def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE='local', **kwargs) -> pd.DataFrame:
-    storage = DataStorage[storage.upper()]
+def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE, **kwargs) -> pd.DataFrame:
     if isinstance(paths_or_obj, bytes):
         obj = io.BytesIO(paths_or_obj)
         return pd.read_parquet(obj, *args, **kwargs)
     else:
-        if storage == DataStorage.MINIO:
-            import s3fs
-            if 'filesystem' not in kwargs:
-                fs = s3fs.S3FileSystem(
-                    endpoint_url="http://"+os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000'),
-                    key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
-                    secret=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
-                )
-                kwargs['filesystem'] = fs
+        from pfeed.etl import get_filesystem
         paths = paths_or_obj if isinstance(paths_or_obj, list) else [paths_or_obj]
+        storage = DataStorage[storage.upper()]
+        if storage not in [DataStorage.LOCAL, DataStorage.CACHE] and 'filesystem' not in kwargs:
+            kwargs['filesystem'] = get_filesystem(storage)
         return pd.read_parquet(paths, *args, **kwargs)
+
+
+def concat(dfs: list[pd.DataFrame], ignore_index: bool=True) -> pd.DataFrame:
+    return pd.concat(dfs, ignore_index=ignore_index)
+
+
+def sort_by_ts(df: pd.DataFrame) -> pd.DataFrame:
+    return df.sort_values(by='ts', ignore_index=True, ascending=True)
 
 
 def estimate_memory_usage(df: pd.DataFrame) -> float:

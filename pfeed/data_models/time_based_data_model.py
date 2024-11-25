@@ -8,3 +8,6 @@ class TimeBasedDataModel(BaseDataModel):
 
     def __str__(self):
         return '_'.join([super().__str__(), str(self.date)])
+
+    def __hash__(self):
+        return hash((self.source.name, self.unique_identifier, self.date))

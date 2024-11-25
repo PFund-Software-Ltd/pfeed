@@ -12,9 +12,9 @@ class BaseDataSource:
         self.rate_limits = self.generic_metadata['rate_limits']
         self.docs_url = self.generic_metadata['docs_url']
         self.data_categories = list(self.generic_metadata['data_categories'].keys())
-        self.data_types = self._extract_data_types()
+        self.dtypes = self.data_types = self._extract_data_types()
         self.highest_resolution, self.lowest_resolution = self._get_highest_and_lowest_resolutions(self.data_types)
-        self.product_types = self._extract_product_types()
+        self.ptypes = self.product_types = self._extract_product_types()
     
     @staticmethod
     def _get_highest_and_lowest_resolutions(data_types: list[str]):

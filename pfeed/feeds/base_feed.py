@@ -1,8 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    import pandas as pd
     from prefect import Flow as PrefectFlow
-
+    
     from pfeed.types.core import tData, tDataModel
     from pfeed.types.literals import tSTORAGE, tDATA_TOOL
     from pfeed.const.enums import DataSource
@@ -10,6 +11,8 @@ if TYPE_CHECKING:
 
 import os    
 import sys
+from collections import defaultdict
+from abc import ABC, abstractmethod
 import importlib
 import datetime
 import logging
@@ -36,7 +39,7 @@ def clear_current_dataflows(func):
     return wrapper
     
     
-class BaseFeed:
+class BaseFeed(ABC):
     def __init__(
         self, 
         data_source: BaseDataSource, 
@@ -58,6 +61,7 @@ class BaseFeed:
         self._failed_dataflows: list[DataFlow] = []
         self._current_dataflows: list[DataFlow] = []
         
+        self._metadata = defaultdict(dict)  # {data_model: metadata}
         self.data_source: BaseDataSource = data_source
         self.name: DataSource = data_source.name
         assert data_tool.upper() in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
@@ -80,6 +84,10 @@ class BaseFeed:
         if not is_loggers_set_up:
             set_up_loggers(self.config.log_path, self.config.logging_config_file_path, user_logging_config=self.config.logging_config)
         self.logger = logging.getLogger(self.name.lower() + '_data')
+
+    @abstractmethod
+    def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
 
     def download(self, *args, **kwargs) -> BaseFeed:
         raise NotImplementedError(f"{self.name} download() is not implemented")
@@ -158,13 +166,14 @@ class BaseFeed:
         '''
         self._current_dataflows.clear()
     
-    def extract(self, op_type: Literal['download', 'stream'], data_model: tDataModel):
+    def extract(self, op_type: Literal['download', 'stream'], data_model: tDataModel, metadata: dict | None=None):
         dataflow = self.create_dataflow(data_model)
+        self._metadata[data_model] = metadata
         if op_type == 'download':
             if not self._printed_hint:
                 print(f'''Hint:
                     You can run command "pfeed config set --data-path {{your_path}}" to set your data path that stores downloaded data.
-                    The current data path is: {self.config.data_path}.
+                    The current data path is: {self.config.data_path}
                 ''')
                 self._printed_hint = True
             dataflow.add_operation(
@@ -189,9 +198,10 @@ class BaseFeed:
             kwargs: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
         def _create_load_function(data_model):
+            metadata = self._metadata.pop(data_model)
             return lambda_with_name(
                 'etl.load_data', 
-                lambda data: etl.load_data(data_model, data, storage, **kwargs)
+                lambda data: etl.load_data(data_model, data, storage, metadata=metadata, **kwargs)
             )
         for dataflow in self._current_dataflows:
             dataflow.add_operation('load', _create_load_function(dataflow.data_model))

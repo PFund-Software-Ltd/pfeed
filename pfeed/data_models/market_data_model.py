@@ -17,7 +17,8 @@ class MarketDataModel(TimeBasedDataModel):
     product: str
     resolution: Resolution
     product_type: str = ''
-    file_extension: str = '.parquet.zst'
+    file_extension: str = '.parquet'
+    compression: str = 'zstd'
     
     def model_post_init(self, __context: Any) -> None:
         super().model_post_init(__context)
@@ -45,3 +46,6 @@ class MarketDataModel(TimeBasedDataModel):
         if not match or match.group(1) not in self.source.product_types:
             raise ValueError(f'{self.product} is not a valid product for {self.source.name}')
         return self.product
+
+    def __hash__(self):
+        return hash((self.source.name, self.unique_identifier, self.date, self.product, self.resolution))

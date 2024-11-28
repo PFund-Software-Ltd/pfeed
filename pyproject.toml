@@ -48,7 +48,6 @@ polars = {version = "^1.14.0", optional = true}
 dask = {extras = ["complete", "dataframe"], version = "^2024.10.0", optional = true}
 pyspark = {extras = ["connect", "pandas-on-spark", "sql"], version = "^3.5.3", optional = true}
 duckdb = {version = "^1.0.0", optional = true}
-psycopg2 = {version = "^2.9.9", optional = true}
 litellm = {version = "^1.51.0", optional = true}
 
 [tool.poetry.extras]
@@ -62,13 +61,12 @@ polars = ["polars"]
 dask = ["dask"]
 pyspark = ["pyspark"]
 duckdb = ["duckdb"]
-postgres = ["psycopg2"]
 llm = ["litellm"]
 all = [
     "psutil", "modin", "pyarrow", "minio", "connectorx", "ray", "prefect", "bytewax", "confluent-kafka",  # core
     "databento", "polygon-api-client",  # data sources
     "polars", "dask", "pyspark",  # dataframes
-    "duckdb", "psycopg2",  # databases
+    "duckdb",  # databases
     "litellm"  # plugins
 ]
 
@@ -82,7 +80,6 @@ optional = true
 pfund = {path = "../pfund", develop = true}
 mypy = "^1.11.2"
 ruff = "^0.6.9"
-grayskull = "^2.7.3"
 
 [tool.poetry.group.test]
 optional = true

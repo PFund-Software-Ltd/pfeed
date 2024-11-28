@@ -1,5 +1,3 @@
-import importlib
-
 import click
 
 import pfeed as pe
@@ -19,7 +17,7 @@ SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [k for k, v i
 @click.option('--data-type', '--dt', 'dtype', type=click.Choice(DataType, case_sensitive=False), help='Data type, e.g. "tick", "second". If not provided, the lowest resolution of the data source will be used')
 @click.option('--start-date', '-s', type=click.DateTime(formats=["%Y-%m-%d"]), help='Start date in YYYY-MM-DD format')
 @click.option('--end-date', '-e', type=click.DateTime(formats=["%Y-%m-%d"]), help='End date in YYYY-MM-DD format')
-@click.option('--raw-level', '--rl', 'raw_level', default='normalized', type=click.Choice(DataRawLevel, case_sensitive=False), help='Data raw level, e.g. "original" (raw), "normalized" (standard names), or "cleaned" (standard columns only)')
+@click.option('--raw-level', '--rl', 'raw_level', default='normalized', type=click.Choice([level.name for level in DataRawLevel], case_sensitive=False), help='Data raw level, e.g. "original" (raw), "normalized" (standard names), or "cleaned" (standard columns only)')
 @click.option('--storage', '--store', '--destination', 'storage', default='local', type=click.Choice(DataStorage, case_sensitive=False), help='Storage destination')
 @click.option('--num-cpus', '-n', type=int, help="number of logical CPUs used in Ray")
 @click.option('--no-ray', is_flag=True, help='if enabled, Ray will not be used')
@@ -43,6 +41,6 @@ def download(data_source, products, ptypes, dtype, start_date, end_date, raw_lev
         data_type=str(feed.data_source.highest_resolution.timeframe) if not dtype else dtype.value,
         start_date=start_date.date().strftime('%Y-%m-%d') if start_date else start_date,
         end_date=end_date.date().strftime('%Y-%m-%d') if end_date else end_date,
-        raw_level=raw_level.name,
-        storage=storage,
+        raw_level=raw_level,
+        to_storage=storage,
     )

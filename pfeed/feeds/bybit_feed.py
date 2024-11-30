@@ -40,13 +40,32 @@ class BybitFeed(CryptoMarketDataFeed):
         )
     
     def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        '''
-        Normalizes raw data by renaming columns, mapping columns, and converting timestamp.
-        bytes (any format, e.g. csv.gzip) in, bytes (parquet file) out.
-        '''
+        """Normalize raw data from Bybit API into standardized format.
+
+        This method performs the following normalizations:
+        - Renames columns to standard names (timestamp -> ts, size -> volume)
+        - Maps trade side values from Buy/Sell to 1/-1
+        - Converts timestamp to pandas datetime, handling both millisecond and second formats
+        - Corrects reverse-ordered data if detected
+
+        Args:
+            df (pd.DataFrame): Raw DataFrame from Bybit API containing trade data
+
+        Returns:
+            pd.DataFrame: Normalized DataFrame with standardized column names and values
+
+        Raises:
+            IndexError: If input DataFrame is empty
+            KeyError: If required columns are missing
+        """
         MAPPING_COLS = {'Buy': 1, 'Sell': -1}
         RENAMING_COLS = {'timestamp': 'ts', 'size': 'volume'}
         
+        required_columns = {'timestamp', 'size', 'side'}
+        missing_columns = required_columns - set(df.columns)
+        if missing_columns:
+            raise KeyError(f"Required columns missing from DataFrame: {missing_columns}")
+
         df = df.rename(columns=RENAMING_COLS)
         df['side'] = df['side'].map(MAPPING_COLS)
             
@@ -56,7 +75,7 @@ class BybitFeed(CryptoMarketDataFeed):
         # NOTE: somehow some data is in reverse order, e.g. BTC_USDT_PERP in 2020-03-25
         is_in_reverse_order = df['ts'][0] > df['ts'][1]
         if is_in_reverse_order:
-            df['ts'] = df['ts'][::-1].values
+            df = df.iloc[::-1].reset_index(drop=True)
         # NOTE: this may make the `ts` value inaccurate, e.g. 1671580800.9906 -> 1671580800.990600192
         df['ts'] = pd.to_datetime(df['ts'], unit=unit)
         return df
@@ -81,7 +100,14 @@ class BybitFeed(CryptoMarketDataFeed):
         end_date: str='',
         raw_level: Literal['normalized', 'cleaned', 'original']='normalized',
         to_storage: tSTORAGE='local',
+        filename_prefix: str='',
+        filename_suffix: str='',
     ) -> BybitFeed:
+        '''
+        Args:
+            filename_prefix: The prefix of the filename.
+            filename_suffix: The suffix of the filename.
+        '''
         from pfund.datas.resolution import Resolution
         from pfeed.const.enums import DataRawLevel
         from pfeed.utils.utils import get_dates_in_between
@@ -96,10 +122,10 @@ class BybitFeed(CryptoMarketDataFeed):
         if not is_raw_data:
             raw_level = DataRawLevel.CLEANED
          
-        self._print_download_msg(resolution, start_date, end_date)
+        self._print_download_msg(resolution, start_date, end_date, raw_level)
         for pdt in pdts:
             for date in dates:
-                data_model = self.create_market_data_model(pdt, resolution, date)
+                data_model = self.create_market_data_model(pdt, resolution, date, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
                 # create a dataflow that will schedule _execute_download()
                 super().extract('download', data_model, metadata=metadata)
         if raw_level != DataRawLevel.ORIGINAL:

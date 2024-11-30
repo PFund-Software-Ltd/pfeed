@@ -1,4 +1,5 @@
 from typing import Any
+from pathlib import Path
 
 from pydantic import model_validator
 from pfund.datas.resolution import Resolution
@@ -49,3 +50,26 @@ class MarketDataModel(TimeBasedDataModel):
 
     def __hash__(self):
         return hash((self.source.name, self.unique_identifier, self.date, self.product, self.resolution))
+
+    def create_filename(self) -> str:
+        filename = self.product + '_' + str(self.date)
+        if self.filename_prefix:
+            filename = self.filename_prefix + '_' + filename
+        if self.filename_suffix:
+            filename += '_' + self.filename_suffix
+        filename += self.file_extension
+        return filename
+
+    def create_storage_path(self) -> Path:
+        year, month, day = str(self.date).split('-')
+        return (
+            Path(self.env.value)
+            / self.source.name
+            / self.unique_identifier
+            / self.product_type
+            / self.product
+            / str(self.resolution)
+            / year
+            / month 
+            / self.filename
+        )

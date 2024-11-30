@@ -168,7 +168,10 @@ class BaseFeed(ABC):
     
     def extract(self, op_type: Literal['download', 'stream'], data_model: tDataModel, metadata: dict | None=None):
         dataflow = self.create_dataflow(data_model)
-        self._metadata[data_model] = metadata
+        if data_model not in self._metadata:
+            self._metadata[data_model] = metadata
+        else:
+            raise Exception(f'{data_model} is duplicated')
         if op_type == 'download':
             if not self._printed_hint:
                 print(f'''Hint:
@@ -187,12 +190,13 @@ class BaseFeed(ABC):
             )
         return self
     
-    def transform(self, *funcs):
-        for dataflow in self._current_dataflows:
+    def transform(self, *funcs, dataflows: list[DataFlow] | None=None):
+        dataflows = dataflows or self._current_dataflows
+        for dataflow in dataflows:
             dataflow.add_operation('transform', *funcs)
         return self
-
-    def load(self, storage: tSTORAGE='local', **kwargs):
+    
+    def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs):
         '''
         Args:
             kwargs: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
@@ -200,17 +204,23 @@ class BaseFeed(ABC):
         def _create_load_function(data_model):
             metadata = self._metadata.pop(data_model)
             return lambda_with_name(
-                'etl.load_data', 
+                'etl.load_data',
                 lambda data: etl.load_data(data_model, data, storage, metadata=metadata, **kwargs)
             )
-        for dataflow in self._current_dataflows:
+        dataflows = dataflows or self._current_dataflows
+        for dataflow in dataflows:
             dataflow.add_operation('load', _create_load_function(dataflow.data_model))
+        if dataflows == self._current_dataflows:
+            self._clear_current_dataflows()
         return self
     
     def run(self):
         from tqdm import tqdm
         from pfeed.utils.utils import generate_color
         color = generate_color(self.name.value)
+        # if dataflow has no load operation, load to local storage by default
+        if dataflows_with_no_load_operation := [dataflow for dataflow in self._dataflows if not dataflow.has_load_operation()]:
+            self.load(storage='local', dataflows=dataflows_with_no_load_operation)
         dataflows = self._dataflows if not self._use_prefect else self.to_prefect_flows()
         prefect_error_msg = 'Error in running {name} prefect dataflows: {err}, did you forget to run "prefect server run" to start prefect\'s server?'
         

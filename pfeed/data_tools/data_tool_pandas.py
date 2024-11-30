@@ -35,6 +35,10 @@ def sort_by_ts(df: pd.DataFrame) -> pd.DataFrame:
     return df.sort_values(by='ts', ignore_index=True, ascending=True)
 
 
+def is_empty(df: pd.DataFrame) -> bool:
+    return df.empty
+
+
 def estimate_memory_usage(df: pd.DataFrame) -> float:
     """Estimate the memory usage of a pandas DataFrame in GB."""
     return df.memory_usage(deep=True).sum() / (1024 ** 3)

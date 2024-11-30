@@ -42,6 +42,12 @@ def sort_by_ts(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
     return df.sort(by='ts', descending=False)
 
 
+def is_empty(df: pl.DataFrame | pl.LazyFrame) -> bool:
+    if isinstance(df, pl.LazyFrame):
+        return df.limit(1).collect().is_empty()
+    return df.is_empty()
+
+
 def estimate_memory_usage(df: pl.DataFrame | pl.LazyFrame) -> float:
     """Estimate the memory usage of a polars DataFrame in GB."""
     if isinstance(df, pl.LazyFrame):

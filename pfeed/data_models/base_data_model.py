@@ -1,4 +1,6 @@
 from typing import Any
+from abc import ABC, abstractmethod
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
@@ -6,7 +8,7 @@ from pfeed.const.enums.env import Environment
 from pfeed.sources.base_data_source import BaseDataSource
 
 
-class BaseDataModel(BaseModel):
+class BaseDataModel(BaseModel, ABC):
     '''
     Args:
         env: trading environment, e.g. 'PAPER' | 'LIVE'.
@@ -24,14 +26,20 @@ class BaseDataModel(BaseModel):
 
     env: Environment
     source: BaseDataSource
+    filename: str = ''
+    filename_prefix: str = ''
+    filename_suffix: str = ''
     file_extension: str = ''
+    storage_path: Path | None = None
     unique_identifier: str = ''
     compression: str = ''
 
     def model_post_init(self, __context: Any) -> None:
         if not self.unique_identifier:
             self.unique_identifier = self.source.name.value
-
+        self.filename = self.create_filename()
+        self.storage_path = self.create_storage_path()
+        
     def __str__(self):
         if self.unique_identifier:
             return f'{self.source.name.value}_{self.unique_identifier}'
@@ -40,3 +48,11 @@ class BaseDataModel(BaseModel):
 
     def __hash__(self):
         return hash((self.source.name, self.unique_identifier))
+
+    @abstractmethod
+    def create_filename(self) -> str:
+        pass
+    
+    @abstractmethod
+    def create_storage_path(self) -> Path:
+        pass

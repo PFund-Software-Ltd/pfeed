@@ -217,14 +217,14 @@ def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStor
     from minio import ServerError
     storage = DataStorage[storage.upper()]
     if storage == DataStorage.LOCAL:
-        return LocalStorage(name=storage, data_model=data_model)
+        return LocalStorage(name=storage, data_model=data_model, **kwargs)
     elif storage == DataStorage.MINIO:
         try:
-            return MinioStorage(name=storage, data_model=data_model, kwargs=kwargs)
+            return MinioStorage(name=storage, data_model=data_model, **kwargs)
         except ServerError:
             return None
     elif storage == DataStorage.CACHE:
-        cache_storage = CacheStorage(name=storage, data_model=data_model)
+        cache_storage = CacheStorage(name=storage, data_model=data_model, **kwargs)
         cache_storage.clear_caches()
         return cache_storage
     # TODO:

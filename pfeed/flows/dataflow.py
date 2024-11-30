@@ -22,6 +22,12 @@ class DataFlow:
         elif op_type == 'load':
             self._has_load_operation = True
         self.operations.append((op_type, funcs))
+    
+    def has_extract_operation(self) -> bool:
+        return self._has_extract_operation
+    
+    def has_load_operation(self) -> bool:
+        return self._has_load_operation
 
     def __str__(self):
         return f'{self.data_model}_DataFlow'

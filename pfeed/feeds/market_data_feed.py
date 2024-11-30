@@ -20,8 +20,8 @@ from pfeed.const.enums import DataRawLevel
 
 
 class MarketDataFeed(BaseFeed):
-    def _print_download_msg(self, resolution: Resolution, start_date: datetime.date, end_date: datetime.date):
-        Console().print(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC)', style='bold yellow')
+    def _print_download_msg(self, resolution: Resolution, start_date: datetime.date, end_date: datetime.date, raw_level: DataRawLevel):
+        Console().print(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), raw_level={raw_level.name}', style='bold yellow')
     
     def _print_original_raw_level_msg(self):
         Console().print(
@@ -37,6 +37,8 @@ class MarketDataFeed(BaseFeed):
         date: datetime.date,
         unique_identifier: str = '',
         compression: str = 'zstd',
+        filename_prefix: str = '',
+        filename_suffix: str = '',
     ) -> MarketDataModel:
         from pfeed.const.enums import Environment
         return MarketDataModel(
@@ -47,6 +49,8 @@ class MarketDataFeed(BaseFeed):
             resolution=resolution if isinstance(resolution, Resolution) else Resolution(resolution),
             date=date,
             compression=compression,
+            filename_prefix=filename_prefix,
+            filename_suffix=filename_suffix,
         )
     
     def _create_metadata(self, raw_level: Literal['cleaned', 'normalized', 'original']) -> dict:

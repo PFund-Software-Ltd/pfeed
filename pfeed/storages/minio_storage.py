@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 import os
 import io
+from pathlib import Path
 
 from minio import S3Error, ServerError, Minio
 
@@ -18,6 +19,10 @@ from pfeed.storages.base_storage import BaseStorage
 class MinioStorage(BaseStorage):
     # DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
     BUCKET_NAME: str = 'pfeed'
+
+    endpoint: str
+    minio: Minio
+    local_data_path: Path  # data_path is s3://pfeed/..., not the actual local path
     
     def __post_init__(self):
         super().__post_init__()
@@ -60,6 +65,7 @@ class MinioStorage(BaseStorage):
     
     # s3:// doesn't work with pathlib, so we need to return a string
     def _create_data_path(self) -> str:
+        self.local_data_path = super()._create_data_path()
         return "s3://" + self.BUCKET_NAME
 
     def exists(self) -> bool:

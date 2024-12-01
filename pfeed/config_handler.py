@@ -43,6 +43,7 @@ class ConfigHandler:
     custom_excepthook: bool = False
     env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
+    print_msg: bool = True
     
     _logging_config = {}
     _instance = None
@@ -62,15 +63,37 @@ class ConfigHandler:
     def load(cls):
         '''Loads user's config file and returns a ConfigHandler object'''
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # Create default config from dataclass fields
+        default_config = {
+            field.name: field.default 
+            for field in cls.__dataclass_fields__.values()
+            if not field.name.startswith('_')  # Skip private fields
+        }
+        needs_update = False
         if CONFIG_FILE_PATH.is_file():
             with open(CONFIG_FILE_PATH, 'r') as f:
-                config = yaml.safe_load(f) or {}
+                saved_config = yaml.safe_load(f) or {}
                 if cls._verbose:
                     print(f"{PROJ_NAME} config loaded from {CONFIG_FILE_PATH}.")
+                # Check for new or removed fields
+                new_fields = set(default_config.keys()) - set(saved_config.keys())
+                removed_fields = set(saved_config.keys()) - set(default_config.keys())
+                needs_update = bool(new_fields or removed_fields)
+                
+                if cls._verbose and needs_update:
+                    if new_fields:
+                        print(f"New config fields detected: {new_fields}")
+                    if removed_fields:
+                        print(f"Removed config fields detected: {removed_fields}")
+                        
+                # Filter out removed fields and merge with defaults
+                saved_config = {k: v for k, v in saved_config.items() if k in default_config}
+                config = {**default_config, **saved_config}
         else:
-            config = {}
+            config = default_config
+            needs_update = True
         config_handler = cls(**config)
-        if not config:
+        if needs_update:
             config_handler.dump()
         return config_handler
     
@@ -172,12 +195,15 @@ def configure(
     fork_process: bool | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
+    print_msg: bool | None = None,
     verbose: bool = False,
     write: bool = False,
 ):
     '''Configures the global config object.
     It will override the existing config values from the existing config file or the default values.
     Args:
+        print_msg: If False, all the hints, notes or warnings will not be printed.
+            Only turn it off when you are already familiar with how pfeed works
         write: If True, the config will be saved to the config file.
     '''
     NON_CONFIG_KEYS = ['verbose', 'write']

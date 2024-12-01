@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.datas.resolution import Resolution
     from pfeed.types.literals import tSTORAGE
     
 import os
@@ -48,35 +47,13 @@ def is_empty(df: pl.DataFrame | pl.LazyFrame) -> bool:
     return df.is_empty()
 
 
-def estimate_memory_usage(df: pl.DataFrame | pl.LazyFrame) -> float:
-    """Estimate the memory usage of a polars DataFrame in GB."""
+def to_datetime(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
+    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
     if isinstance(df, pl.LazyFrame):
-        df = df.collect()
-    return df.estimated_size(unit='gb')
-
-
-def organize_time_series_columns(
-    pdt: str, 
-    resolution: str | Resolution, 
-    df: pl.DataFrame | pl.LazyFrame,
-    override_resolution: bool=False,
-) -> pl.DataFrame | pl.LazyFrame:
-    from pfund.datas.resolution import Resolution
-    if isinstance(df, pl.LazyFrame):
-        cols = df.collect_schema().names()
+        first_ts = df.select(pl.col("ts").first()).collect().item()
     else:
-        cols = df.columns
-    assert 'ts' in cols, "'ts' column not found"
-    if isinstance(resolution, str):
-        resolution = Resolution(resolution)
-    if 'product' not in cols:
-        df = df.with_columns(
-            pl.lit(pdt).alias('product'),
-        )
-    if 'resolution' not in cols or override_resolution:
-        df = df.with_columns(
-            pl.lit(repr(resolution)).alias('resolution')
-        )
-    left_cols = ['ts', 'product', 'resolution']
-    df = df.select(left_cols + [col for col in cols if col not in left_cols])
-    return df
+        first_ts = df[0, "ts"]
+    ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
+    return df.with_columns(
+        (pl.col("ts") * scaling_factor).cast(pl.Datetime(time_unit=ts_unit))
+    )

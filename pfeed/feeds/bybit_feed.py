@@ -5,16 +5,16 @@ if TYPE_CHECKING:
     import datetime
     from pfeed.types.core import tDataModel
     from pfeed.types.literals import tSTORAGE, tDATA_TOOL
+    from pfeed.flows.dataflow import DataFlow
 
 import pandas as pd
 
 from pfeed.feeds.base_feed import clear_current_dataflows
 from pfeed.feeds.crypto_market_data_feed import CryptoMarketDataFeed
 from pfeed import etl
-from pfeed.utils.utils import lambda_with_name
+
 
 __all__ = ['BybitFeed']
-
 tPRODUCT_TYPE = Literal['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT', 'OPT']
 
 
@@ -45,7 +45,6 @@ class BybitFeed(CryptoMarketDataFeed):
         This method performs the following normalizations:
         - Renames columns to standard names (timestamp -> ts, size -> volume)
         - Maps trade side values from Buy/Sell to 1/-1
-        - Converts timestamp to pandas datetime, handling both millisecond and second formats
         - Corrects reverse-ordered data if detected
 
         Args:
@@ -53,31 +52,14 @@ class BybitFeed(CryptoMarketDataFeed):
 
         Returns:
             pd.DataFrame: Normalized DataFrame with standardized column names and values
-
-        Raises:
-            IndexError: If input DataFrame is empty
-            KeyError: If required columns are missing
         """
         MAPPING_COLS = {'Buy': 1, 'Sell': -1}
         RENAMING_COLS = {'timestamp': 'ts', 'size': 'volume'}
-        
-        required_columns = {'timestamp', 'size', 'side'}
-        missing_columns = required_columns - set(df.columns)
-        if missing_columns:
-            raise KeyError(f"Required columns missing from DataFrame: {missing_columns}")
-
         df = df.rename(columns=RENAMING_COLS)
         df['side'] = df['side'].map(MAPPING_COLS)
-            
-        # standardize `ts` column
-        # NOTE: for ptype SPOT, unit is 'ms', e.g. 1671580800123, in milliseconds
-        unit = 'ms' if df['ts'][0] > 10**12 else 's'  # REVIEW
-        # NOTE: somehow some data is in reverse order, e.g. BTC_USDT_PERP in 2020-03-25
         is_in_reverse_order = df['ts'][0] > df['ts'][1]
         if is_in_reverse_order:
             df = df.iloc[::-1].reset_index(drop=True)
-        # NOTE: this may make the `ts` value inaccurate, e.g. 1671580800.9906 -> 1671580800.990600192
-        df['ts'] = pd.to_datetime(df['ts'], unit=unit)
         return df
     
     # TODO
@@ -116,40 +98,25 @@ class BybitFeed(CryptoMarketDataFeed):
         resolution = Resolution(data_type)
         start_date, end_date = self._standardize_dates(start_date, end_date)
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
-        raw_level = DataRawLevel[raw_level.upper()]
-        metadata = self._create_metadata(raw_level.name)
         is_raw_data = resolution >= self.data_source.lowest_resolution
         if not is_raw_data:
             raw_level = DataRawLevel.CLEANED
-         
-        self._print_download_msg(resolution, start_date, end_date, raw_level)
-        for pdt in pdts:
-            for date in dates:
-                data_model = self.create_market_data_model(pdt, resolution, date, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
-                # create a dataflow that will schedule _execute_download()
-                super().extract('download', data_model, metadata=metadata)
-        if raw_level != DataRawLevel.ORIGINAL:
-            transformations = [
-                self._normalize_raw_data,
-                lambda_with_name('etl.organize_columns', lambda df: etl.organize_columns(df, pdt, resolution)),
-            ]
-            if raw_level == DataRawLevel.CLEANED:
-                transformations.append(etl.filter_non_standard_columns)
-                if not resolution.is_tick():
-                    transformations.append(
-                        lambda_with_name('etl.resample_data', lambda df: etl.resample_data(df, resolution))
-                    )
-            self.transform(*transformations)
         else:
-            self._print_original_raw_level_msg()
-            
+            raw_level = DataRawLevel[raw_level.upper()]
+        if self.config.print_msg:
+            self._print_download_msg(resolution, start_date, end_date, raw_level)
+        dataflows_per_pdt: dict[str, list[DataFlow]] = {}
+        for pdt in pdts:
+            dataflows_per_pdt[pdt] = []
+            for date in dates:
+                data_model = self.create_market_data_model(pdt, resolution, date, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+                # create a dataflow that schedules _execute_download()
+                dataflow: DataFlow = super().extract('download', data_model)
+                dataflows_per_pdt[pdt].append(dataflow)
+        self._add_default_transformations_to_download(dataflows_per_pdt, resolution, raw_level)
         if not self._pipeline_mode:
             self.load(to_storage)
             self.run()
-        else:
-            self.transform(
-                lambda_with_name('etl.convert_to_user_df', lambda df: etl.convert_to_user_df(df, self.data_tool.name))
-            )
         return self
 
     def _execute_download(self, data_model: tDataModel) -> pd.DataFrame | None:

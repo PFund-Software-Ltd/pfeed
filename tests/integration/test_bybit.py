@@ -4,6 +4,7 @@ import pytest
 
 from pfeed.feeds import BybitFeed
 from pfeed.storages.base_storage import BaseStorage
+from pfeed.const.enums import DataRawLevel
 
 
 @pytest.fixture
@@ -32,29 +33,30 @@ class TestDownload:
             product=pdt, 
             resolution=Resolution(data_type), 
             date=datetime.datetime.strptime(date, '%Y-%m-%d').date(), 
+            raw_level=raw_level,
             filename_prefix=filename_prefix, 
             filename_suffix=filename_suffix
         )
-        return extract_data(data_model, storage=to_storage, metadata=feed._create_metadata(raw_level))
+        return extract_data(data_model, storage=to_storage)
 
     @pytest.mark.parametrize('feed', [
         {'data_tool': 'pandas', 'use_ray': True, 'use_prefect': False, 'pipeline_mode': False},
         {'data_tool': 'polars', 'use_ray': False, 'use_prefect': True, 'pipeline_mode': False},
-        # {'data_tool': 'dask', 'use_ray': True, 'use_prefect': True, 'pipeline_mode': False},
-        # {'data_tool': 'pyspark', 'use_ray': False, 'use_prefect': False, 'pipeline_mode': False},
+        {'data_tool': 'dask', 'use_ray': True, 'use_prefect': True, 'pipeline_mode': False},
+        {'data_tool': 'spark', 'use_ray': False, 'use_prefect': False, 'pipeline_mode': False},
     ], indirect=True)
     def test_download(self, feed):
         raw_level_by_data_tool = {
             'pandas': 'normalized',
             'polars': 'cleaned',
-            # 'dask': 'original',
-            # 'pyspark': 'original',
+            'dask': 'original',
+            'spark': 'original',
         }
-        raw_level = raw_level_by_data_tool[str(feed.data_tool.name.value.lower())]
+        raw_level = DataRawLevel[raw_level_by_data_tool[str(feed.data_tool.name.value.lower())].upper()]
         params = self.get_params_for_download()
         pdt, data_type, date, to_storage = params['products'][0], params['data_type'], params['start_date'], params['to_storage']
         filename_prefix = self.test_download.__name__
-        filename_suffix = raw_level
+        filename_suffix = raw_level.name.lower()
         storage: BaseStorage | None = self.extract_downloaded_data(feed, pdt, data_type, date, to_storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
         # only download if the data is not already downloaded
         if storage is None or not storage.exists():
@@ -79,14 +81,15 @@ class TestDownload:
     def test_download_with_custom_transforms(self, feed):
         assert feed._pipeline_mode
         pdt, data_type, date, raw_level, storage = 'BTC_USDT_PERP', 'tick', '2024-01-01', 'normalized', 'local'
+        raw_level = DataRawLevel[raw_level.upper()]
         filename_prefix = self.test_download_with_custom_transforms.__name__
-        filename_suffix = raw_level
+        filename_suffix = raw_level.name.lower()
         storage: BaseStorage | None = self.extract_downloaded_data(feed, pdt, data_type, date, storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
         if storage is None or not storage.exists():
             # only download if the data is not already downloaded
             (
                 feed
-                .download(products=[pdt], data_type=data_type, start_date=date, end_date=date, raw_level=raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+                .download(products=[pdt], data_type=data_type, start_date=date, end_date=date, raw_level=raw_level.name, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
                 .transform(lambda df: df.assign(ma5=df['price'].rolling(window=5).mean()))
                 .transform(lambda df: df.assign(price_pct_change=df['price'].pct_change() * 100))
                 .run()

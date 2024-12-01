@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
 import os    
 import sys
-from collections import defaultdict
 from abc import ABC, abstractmethod
 import importlib
 import datetime
@@ -61,7 +60,6 @@ class BaseFeed(ABC):
         self._failed_dataflows: list[DataFlow] = []
         self._current_dataflows: list[DataFlow] = []
         
-        self._metadata = defaultdict(dict)  # {data_model: metadata}
         self.data_source: BaseDataSource = data_source
         self.name: DataSource = data_source.name
         assert data_tool.upper() in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
@@ -87,6 +85,14 @@ class BaseFeed(ABC):
 
     @abstractmethod
     def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+    
+    @abstractmethod
+    def _assert_standards(self, df: pd.DataFrame) -> pd.DataFrame:
+        '''
+        Assert that the data conforms to the pfeed's internal standards.
+        Different data feeds have different standards.
+        '''
         pass
 
     def download(self, *args, **kwargs) -> BaseFeed:
@@ -166,12 +172,9 @@ class BaseFeed(ABC):
         '''
         self._current_dataflows.clear()
     
-    def extract(self, op_type: Literal['download', 'stream'], data_model: tDataModel, metadata: dict | None=None):
+    def extract(self, op_type: Literal['download', 'stream'], data_model: tDataModel) -> DataFlow:
         dataflow = self.create_dataflow(data_model)
-        if data_model not in self._metadata:
-            self._metadata[data_model] = metadata
-        else:
-            raise Exception(f'{data_model} is duplicated')
+        
         if op_type == 'download':
             if not self._printed_hint:
                 print(f'''Hint:
@@ -180,7 +183,7 @@ class BaseFeed(ABC):
                 ''')
                 self._printed_hint = True
             dataflow.add_operation(
-                'extract', 
+                'extract',
                 lambda_with_name(op_type, lambda: self._execute_download(data_model))
             )
         elif op_type == 'stream':
@@ -188,27 +191,35 @@ class BaseFeed(ABC):
                 'extract', 
                 lambda_with_name(op_type, lambda: self._execute_stream(data_model))
             )
-        return self
+        return dataflow
     
-    def transform(self, *funcs, dataflows: list[DataFlow] | None=None):
+    def transform(self, *funcs, dataflows: list[DataFlow] | None=None) -> BaseFeed:
         dataflows = dataflows or self._current_dataflows
         for dataflow in dataflows:
             dataflow.add_operation('transform', *funcs)
         return self
     
-    def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs):
+    def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs) -> BaseFeed:
         '''
         Args:
             kwargs: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
         def _create_load_function(data_model):
-            metadata = self._metadata.pop(data_model)
             return lambda_with_name(
                 'etl.load_data',
-                lambda data: etl.load_data(data_model, data, storage, metadata=metadata, **kwargs)
+                lambda data: etl.load_data(data_model, data, storage, **kwargs)
+            )
+        def _create_assert_standards_function(data_model):
+            return lambda_with_name(
+                'assert_standards',
+                lambda df: self._assert_standards(df, data_model.metadata)
             )
         dataflows = dataflows or self._current_dataflows
+        # NOTE: remember when looping, if you pass in e.g. dataflow to lambda dataflow: ..., due to python lambda's late binding, you are passing in the last dataflow object to all lambdas
+        # so this is wrong: dataflow.add_operation('transform', lambda df: self._assert_standards(df, dataflow.data_model.metadata)) <- dataflow object is always the last one in the loop
         for dataflow in dataflows:
+            # assert data standards before loading into storage
+            dataflow.add_operation('transform', _create_assert_standards_function(dataflow.data_model))
             dataflow.add_operation('load', _create_load_function(dataflow.data_model))
         if dataflows == self._current_dataflows:
             self._clear_current_dataflows()
@@ -234,9 +245,10 @@ class BaseFeed(ABC):
         
         
         if self._use_ray:
-            print('''Note:
-                    If Ray seems to be running sequentially, it might be because you don't have enough network bandwidth to download data in parallel.
-            ''')
+            if self.config.print_msg:
+                print('''Note:
+                        If Ray seems to be running sequentially, it might be because you don't have enough network bandwidth to download data in parallel.
+                ''')
             
             import atexit
             import ray

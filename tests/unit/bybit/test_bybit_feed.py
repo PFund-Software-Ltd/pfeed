@@ -51,30 +51,6 @@ class TestNormalizeRawData:
         assert 'volume' in result.columns  # size -> volume
         assert set(result.columns) == {'ts', 'volume', 'side'}
 
-    def test_millisecond_timestamp(self, feed):
-        """Test timestamp conversion when input is in milliseconds"""
-        timestamps = [1671580800123, 1671580801123]
-        df = pd.DataFrame({
-            'timestamp': timestamps,  # milliseconds
-            'size': [100, 200],
-            'side': ['Buy', 'Buy']
-        })
-        result = feed._normalize_raw_data(df)
-        expected_ts = pd.Series(pd.to_datetime(timestamps, unit='ms'))
-        pd.testing.assert_series_equal(result['ts'], expected_ts, check_names=False)
-
-    def test_second_timestamp(self, feed):
-        """Test timestamp conversion when input is in seconds"""
-        timestamps = [1671580800, 1671580801]
-        df = pd.DataFrame({
-            'timestamp': timestamps,  # seconds
-            'size': [100, 200],
-            'side': ['Buy', 'Buy']
-        })
-        result = feed._normalize_raw_data(df)
-        expected_ts = pd.Series(pd.to_datetime(timestamps, unit='s'))
-        pd.testing.assert_series_equal(result['ts'], expected_ts, check_names=False)
-
     def test_reverse_order_detection(self, feed):
         """Test detection and correction of reverse-ordered data"""
         df = pd.DataFrame({

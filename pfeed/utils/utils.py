@@ -7,6 +7,77 @@ import calendar
 import pytz
 
 
+def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):
+    """
+    Determines the nearest integer timestamp unit and scaling factor for a given timestamp value.
+
+    Problem: pd.to_datetime([1704067200.2353], unit='s') will return '2024-01-01 00:00:00.235300064', 
+    which is not what we want. We want to preserve all decimal digits.
+    Solution: we can convert the timestamp to an integer using a scaling factor, in this case, in order to get 1704067200235300,
+    we need to use this function to determine the integer unit is 'us' and the scaling factor is 10**6,
+    so that we can do pd.to_datetime([1704067200235300], unit='us') and get '2024-01-01 00:00:00.235300'.
+    
+    Parameters:
+        ts (float | int): The timestamp value to analyze.
+
+    Returns:
+        tuple[str, int]: A tuple containing:
+            - str: The target timestamp unit ('s', 'ms', 'us', or 'ns')
+            - int: The scaling factor to convert from current unit to target unit
+
+    Examples:
+        >>> determine_timestamp_integer_unit_and_scaling_factor(1704067200.2353)
+        ('us', 1000000)
+        >>> determine_timestamp_integer_unit_and_scaling_factor(1704067200235.312)
+        ('us', 1000)
+    """
+    def infer_ts_unit(ts: float | int) -> str:
+        """
+        Infers the time unit of a timestamp based on its value.
+
+        Parameters:
+            ts (float or int): The timestamp value.
+
+        Returns:
+            str: The inferred unit ('s', 'ms', 'us', or 'ns').
+        """
+        if ts < 1e10:
+            return 's'  # Seconds
+        elif ts < 1e13:
+            return 'ms'  # Milliseconds
+        elif ts < 1e16:
+            return 'us'  # Microseconds
+        else:
+            return 'ns'  # Nanoseconds
+    # Infer the unit of the timestamp
+    unit = infer_ts_unit(ts)
+    unit_multipliers = {'s': 0, 'ms': 3, 'us': 6, 'ns': 9}
+    unit_multiplier = unit_multipliers[unit]
+    unit_multipliers_list = [0, 3, 6, 9]
+
+    # Get the number of decimal places in the timestamp
+    ts_str = str(ts)
+    if '.' in ts_str:
+        decimal_part = ts_str.split('.')[1].rstrip('0')  # Remove trailing zeros
+        num_decimal_places = len(decimal_part)
+    else:
+        num_decimal_places = 0
+
+    # Determine the required unit multiplier to preserve all decimal digits
+    required_multiplier = unit_multiplier + num_decimal_places
+    possible_multipliers = [m for m in unit_multipliers_list if m >= required_multiplier]
+    if not possible_multipliers:
+        raise ValueError("Timestamp precision exceeds nanoseconds.")
+
+    target_unit_multiplier = possible_multipliers[0]
+    target_unit = [k for k, v in unit_multipliers.items() if v == target_unit_multiplier][0]
+
+    # Calculate the scaling factor
+    scaling_factor = 10 ** (target_unit_multiplier - unit_multiplier)
+
+    return target_unit, scaling_factor
+
+
 def generate_color(name: str) -> str:
     import hashlib
     # Hash the feed name using MD5 (or any other hashing algorithm)
@@ -27,6 +98,7 @@ def get_args_and_kwargs(func):
     args = [param.name for param in signature.parameters.values() if param.default == inspect.Parameter.empty]
     kwargs = {param.name: param.default for param in signature.parameters.values() if param.default != inspect.Parameter.empty}
     return args, kwargs
+
 
 def separate_number_and_chars(input_string):
     """Separates the number and characters from a string.

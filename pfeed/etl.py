@@ -25,26 +25,33 @@ except ImportError:
 try:
     os.environ['PYARROW_IGNORE_TIMEZONE'] = '1'  # used to suppress warning
     import pyspark.pandas as ps
+    from pyspark.sql import DataFrame as SparkDataFrame, SparkSession
 except ImportError:
     ps = None
+    SparkDataFrame = None
+    SparkSession = None
     
         
 from pfeed.const.enums import DataStorage, DataTool, DataRawLevel
 
 
-def write_data(data: tData, storage: BaseStorage, metadata: dict | None = None, compression: str = 'zstd'):
+def write_data(data: bytes | pd.DataFrame, storage: BaseStorage, metadata: dict | None = None, compression: str = 'zstd'):
     import pyarrow as pa
     import pyarrow.parquet as pq
-    from pfeed.types.core import is_dataframe
     from pfeed.utils.file_formats import compression_methods
     
     metadata = metadata or {}
-    file_path = str(storage.file_path)
+    if storage.name == DataStorage.LOCAL:
+        file_path = str(storage.file_path)
+    elif storage.name == DataStorage.MINIO:
+        file_path = str(storage.file_path).replace('s3://', '')
+    else:
+        raise NotImplementedError(f'{storage.name=}')
     fs = get_filesystem(storage.name)
 
     # Write data based on its type
-    if is_dataframe(data):
-        table = pa.Table.from_pandas(convert_to_pandas_df(data))
+    if isinstance(data, pd.DataFrame):
+        table = pa.Table.from_pandas(data)
         schema = table.schema.with_metadata(metadata)
         table = table.replace_schema_metadata(schema.metadata)
         with fs.open_output_stream(file_path) as f:
@@ -92,7 +99,12 @@ def read_data(storage: BaseStorage, compression: str = 'zstd') -> tuple[pq.Parqu
     import pyarrow.parquet as pq
     from pfeed.utils.file_formats import decompression_methods
     
-    file_path = str(storage.file_path)
+    if storage.name == DataStorage.LOCAL:
+        file_path = str(storage.file_path)
+    elif storage.name == DataStorage.MINIO:
+        file_path = str(storage.file_path).replace('s3://', '')
+    else:
+        raise NotImplementedError(f'{storage.name=}')
     fs = get_filesystem(storage.name)
     with fs.open_input_file(file_path) as f:
         if file_path.endswith('.parquet'):
@@ -113,11 +125,7 @@ def read_data(storage: BaseStorage, compression: str = 'zstd') -> tuple[pq.Parqu
                 return raw_data, None
 
 
-def extract_data(
-    data_model: tDataModel,
-    storage: tSTORAGE | None = None,
-    metadata: dict | None = None,
-) -> BaseStorage | None:
+def extract_data(data_model: tDataModel, storage: tSTORAGE | None = None) -> BaseStorage | None:
     from pfeed.data_models.market_data_model import MarketDataModel
     local_storages = ['cache', 'local', 'minio']
     storages = local_storages if storage is None else [storage]  # search through all local storages if not specified
@@ -127,13 +135,13 @@ def extract_data(
             _, metadata_from_storage = read_data(storage, compression=data_model.compression)
             if isinstance(storage.data_model, MarketDataModel):
                 raw_level_from_storage = DataRawLevel[metadata_from_storage['raw_level'].upper()]
-                raw_level_from_metadata = DataRawLevel[metadata['raw_level'].upper()]
+                raw_level_from_metadata = DataRawLevel[data_model.metadata['raw_level'].upper()]
                 no_original_raw_level = DataRawLevel.ORIGINAL not in (raw_level_from_storage, raw_level_from_metadata)
                 # since raw_level 'cleaned' is compatible with 'normalized' ('cleaned' filtered out unnecessary columns),
                 # allow using data with raw_level='cleaned' even the specified raw_level in metadata is 'normalized'
                 if no_original_raw_level and raw_level_from_metadata >= raw_level_from_storage:
                     return storage
-            if metadata_from_storage == metadata:
+            if metadata_from_storage == data_model.metadata:
                 return storage
     return None
     
@@ -157,7 +165,7 @@ def organize_columns(df: pd.DataFrame, pdt: str, resolution: Resolution) -> pd.D
     df['resolution'] = repr(resolution)
     left_cols = ['ts', 'product', 'resolution']
     return df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
-        
+    
 
 def resample_data(
     df: pd.DataFrame, 
@@ -244,13 +252,7 @@ def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStor
         raise NotImplementedError(f'{storage=}')
 
 
-def load_data(
-    data_model: tDataModel,
-    data: tData,
-    storage: tSTORAGE,
-    metadata: dict | None = None,
-    **kwargs,
-) -> BaseStorage:
+def load_data(data_model: tDataModel, data: tData, storage: tSTORAGE, **kwargs) -> BaseStorage:
     """
     Loads data into the specified data destination.
     Args:
@@ -263,9 +265,12 @@ def load_data(
     except ImportError:
         print_disk_usage = None
     storage: BaseStorage = get_storage(data_model, storage, **kwargs)
-    write_data(data, storage, metadata=metadata, compression=data_model.compression)
+    write_data(data, storage, metadata=data_model.metadata, compression=data_model.compression)
     if print_disk_usage:
-        print_disk_usage(storage.data_path)
+        if hasattr(storage, 'local_data_path'):
+            print_disk_usage(storage.local_data_path)
+        else:
+            print_disk_usage(storage.data_path)
     return storage
 
 
@@ -283,6 +288,8 @@ def convert_to_pandas_df(data: tData) -> pd.DataFrame:
         return data.compute()
     elif ps and isinstance(data, ps.DataFrame):
         return data.to_pandas()
+    elif SparkDataFrame and isinstance(data, SparkDataFrame):
+        return data.toPandas()
     else:
         raise ValueError(f'{type(data)=}')
 
@@ -295,6 +302,7 @@ def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
     elif data_tool == DataTool.DASK:
         return dd.from_pandas(df, npartitions=1)
     elif data_tool == DataTool.SPARK:
-        return ps.from_pandas(df)
+        spark = SparkSession.builder.getOrCreate()
+        return spark.createDataFrame(df)
     else:
         raise ValueError(f'{data_tool=}')

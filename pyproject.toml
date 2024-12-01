@@ -45,7 +45,7 @@ confluent-kafka = {version = "^2.5.3", optional = true}
 databento = {version = "^0.43.0", optional = true}
 polygon-api-client = {version = "^1.14.2", optional = true}
 polars = {version = "^1.14.0", optional = true}
-dask = {extras = ["complete", "dataframe"], version = "^2024.10.0", optional = true}
+dask = {extras = ["complete", "dataframe"], version = "^2024.11.2", optional = true}
 pyspark = {extras = ["connect", "pandas-on-spark", "sql"], version = "^3.5.3", optional = true}
 duckdb = {version = "^1.0.0", optional = true}
 litellm = {version = "^1.51.0", optional = true}
@@ -59,7 +59,7 @@ databento = ["databento"]
 polygon = ["polygon-api-client"]
 polars = ["polars"]
 dask = ["dask"]
-pyspark = ["pyspark"]
+spark = ["pyspark"]
 duckdb = ["duckdb"]
 llm = ["litellm"]
 all = [

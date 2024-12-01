@@ -7432,9 +7432,9 @@ duckdb = ["duckdb"]
 llm = ["litellm"]
 polars = ["polars"]
 polygon = ["polygon-api-client"]
-pyspark = ["pyspark"]
+spark = ["pyspark"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "81a0458f69b867b53eca4a6f007394c8c917d3bdc10c20cc205d83366f4e662f"
+content-hash = "8fe513b07f811566db16831bfbb454ae93e37c77e045870b4504dc37ad266601"

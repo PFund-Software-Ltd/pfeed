@@ -4,6 +4,8 @@ if TYPE_CHECKING:
     import datetime
     from pfeed.types.core import tDataFrame
     from pfeed.types.literals import tSTORAGE
+    from pfeed.flows.dataflow import DataFlow
+    
 
 from collections import defaultdict
 
@@ -17,6 +19,7 @@ from pfeed.feeds.base_feed import BaseFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
 from pfeed.const.enums import DataRawLevel
+from pfeed.utils.utils import lambda_with_name
 
 
 class MarketDataFeed(BaseFeed):
@@ -35,6 +38,7 @@ class MarketDataFeed(BaseFeed):
         product: str,
         resolution: str | Resolution,
         date: datetime.date,
+        raw_level: DataRawLevel,
         unique_identifier: str = '',
         compression: str = 'zstd',
         filename_prefix: str = '',
@@ -49,12 +53,61 @@ class MarketDataFeed(BaseFeed):
             resolution=resolution if isinstance(resolution, Resolution) else Resolution(resolution),
             date=date,
             compression=compression,
+            metadata=self._create_metadata(raw_level),
             filename_prefix=filename_prefix,
             filename_suffix=filename_suffix,
         )
     
-    def _create_metadata(self, raw_level: Literal['cleaned', 'normalized', 'original']) -> dict:
-        return {'raw_level': raw_level.lower()}
+    def _create_metadata(self, raw_level: DataRawLevel) -> dict:
+        return {'raw_level': raw_level.name.lower()}
+    
+    # TODO
+    def _assert_standards(self, df: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+        '''
+        Assert that the data conforms to the pfeed's internal standards.
+        For market data, the standards are:
+        - values in 'ts' column must be of unit 's', e.g. 1704067200.123, but not 1704067200123
+        - 'ts' column must be sorted in ascending order
+        - 'ts' must be of 'float' type
+        - 'ts', 'product', 'resolution' columns must exist
+        '''
+        raw_level = metadata['raw_level']
+        if raw_level == 'original':
+            return df
+        else:
+            # TODO: assert standards for 'cleaned' and 'normalized' raw_level
+            return df
+    
+    def _add_default_transformations_to_download(self, dataflows_per_pdt: dict[str, list[DataFlow]], resolution: Resolution, raw_level: DataRawLevel):
+        if raw_level != DataRawLevel.ORIGINAL:
+            transformations = [self._normalize_raw_data]
+            if raw_level == DataRawLevel.CLEANED:
+                transformations.append(etl.filter_non_standard_columns)
+                if resolution < self.data_source.lowest_resolution:
+                    transformations.append(
+                        lambda_with_name('etl.resample_data', lambda df: etl.resample_data(df, resolution))
+                    )
+            self.transform(*transformations)
+            for pdt in dataflows_per_pdt:
+                self.transform(
+                    lambda_with_name('etl.organize_columns', lambda df: etl.organize_columns(df, pdt, resolution)),
+                    dataflows=dataflows_per_pdt[pdt],
+                )
+        else:
+            if self.config.print_msg:
+                self._print_original_raw_level_msg()
+        if self._pipeline_mode:
+            self.transform(
+                lambda_with_name('etl.convert_to_user_df', lambda df: etl.convert_to_user_df(df, self.data_tool.name))
+            )
+    
+    def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs):
+        # convert back to pandas dataframe before calling etl.write_data() in load()
+        self.transform(
+            lambda_with_name('etl.convert_to_pandas_df', lambda df: etl.convert_to_pandas_df(df))
+        )
+        super().load(storage, dataflows=dataflows, **kwargs)
+    
     
     def _get_historical_data_from_storage(
         self,
@@ -62,18 +115,17 @@ class MarketDataFeed(BaseFeed):
         resolution: Resolution,
         start_date: datetime.date,
         end_date: datetime.date,
-        raw_level: Literal['cleaned', 'normalized', 'original'],
+        raw_level: DataRawLevel,
         unique_identifier: str = '',
         from_storage: tSTORAGE | None=None,
     ) -> tuple[tDataFrame | None, list[datetime.date]]:
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
         missing_dates: list[datetime.date] = []  # dates without data
         storages: defaultdict[tSTORAGE, list[BaseStorage]] = defaultdict(list)
-        metadata = self._create_metadata(raw_level)
 
         for date in dates:
-            data_model = self.create_market_data_model(product, resolution, date, unique_identifier=unique_identifier)
-            if storage := etl.extract_data(data_model, storage=from_storage, metadata=metadata):
+            data_model = self.create_market_data_model(product, resolution, date, raw_level, unique_identifier=unique_identifier)
+            if storage := etl.extract_data(data_model, storage=from_storage):
                 storages[storage.name.value].append(storage)
                 self.logger.info(f'loaded from {storage}')
             else:
@@ -99,7 +151,7 @@ class MarketDataFeed(BaseFeed):
         resolution: Resolution,
         start_date: datetime.date,
         end_date: datetime.date,
-        raw_level: Literal['cleaned', 'normalized', 'original'],
+        raw_level: DataRawLevel,
         unique_identifier: str = '',
     ) -> tDataFrame:
         self.download(
@@ -107,7 +159,7 @@ class MarketDataFeed(BaseFeed):
             products=product,
             start_date=start_date,
             end_date=end_date,
-            raw_level=raw_level,
+            raw_level=raw_level.name,
             to_storage='cache',
         )
         df, _ = self._get_historical_data_from_storage(
@@ -131,6 +183,7 @@ class MarketDataFeed(BaseFeed):
         raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
         from_storage: tSTORAGE | None=None,
         unique_identifier: str='',
+        to_datetime: bool=True,
     ) -> tDataFrame | None:
         """Get historical data from the data source, local storage or cache.
         Args:
@@ -159,6 +212,8 @@ class MarketDataFeed(BaseFeed):
             from_storage: try to load data from this storage.
                 If not specified, will search through all storages, e.g. local, minio, cache.
                 If no data is found, will try to download the missing data from the data source.
+            to_datetime: convert `ts` to datetime.
+                Default is True.
         """
         from pfeed.utils.utils import rollback_date_range
         
@@ -168,9 +223,9 @@ class MarketDataFeed(BaseFeed):
         if not isinstance(resolution, Resolution):
             resolution = Resolution(resolution)
 
-        df_from_storage, missing_dates = self._get_historical_data_from_storage(product, resolution, start_date, end_date, raw_level.name, unique_identifier=unique_identifier, from_storage=from_storage)
+        df_from_storage, missing_dates = self._get_historical_data_from_storage(product, resolution, start_date, end_date, raw_level, unique_identifier=unique_identifier, from_storage=from_storage)
         if missing_dates:
-            df_from_source = self._get_historical_data_from_source(product, resolution, missing_dates[0], missing_dates[-1], raw_level.name, unique_identifier=unique_identifier)
+            df_from_source = self._get_historical_data_from_source(product, resolution, missing_dates[0], missing_dates[-1], raw_level, unique_identifier=unique_identifier)
         else:
             df_from_source = None
         
@@ -185,8 +240,12 @@ class MarketDataFeed(BaseFeed):
         else:
             df = None
         
+        resample_required = resolution.is_day() and resolution.period != 1 and raw_level != DataRawLevel.ORIGINAL
+        if df is not None and (resample_required or to_datetime):
+            df = self.data_tool.to_datetime(df)
+        
         # resample daily data to e.g. '3d'
-        if df is not None and resolution.is_day() and resolution.period != 1 and raw_level != DataRawLevel.ORIGINAL:
+        if resample_required:
             if not isinstance(df, pd.DataFrame):
                 df = etl.convert_to_pandas_df(df)
             df = etl.resample_data(df, resolution)

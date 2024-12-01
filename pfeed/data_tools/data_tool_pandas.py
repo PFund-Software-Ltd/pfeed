@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.datas.resolution import Resolution
     from pfeed.types.literals import tSTORAGE
 
 import io
@@ -24,6 +23,10 @@ def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE
         storage = DataStorage[storage.upper()]
         if storage not in [DataStorage.LOCAL, DataStorage.CACHE] and 'filesystem' not in kwargs:
             kwargs['filesystem'] = get_filesystem(storage)
+            if storage == DataStorage.MINIO:
+                paths = [path.replace('s3://', '') for path in paths]
+            else:
+                raise NotImplementedError(f'read_parquet() for storage {storage} is not implemented')
         return pd.read_parquet(paths, *args, **kwargs)
 
 
@@ -39,28 +42,9 @@ def is_empty(df: pd.DataFrame) -> bool:
     return df.empty
 
 
-def estimate_memory_usage(df: pd.DataFrame) -> float:
-    """Estimate the memory usage of a pandas DataFrame in GB."""
-    return df.memory_usage(deep=True).sum() / (1024 ** 3)
-
-    
-def organize_time_series_columns(
-    pdt: str, 
-    resolution: str | Resolution, 
-    df: pd.DataFrame,
-    override_resolution: bool=False,
-) -> pd.DataFrame:
-    """Standardize the columns of a pandas DataFrame.
-    Moving 'ts', 'product', 'resolution' to the leftmost side.
-    """
-    from pfund.datas.resolution import Resolution
-    assert 'ts' in df.columns, "'ts' column not found"
-    if isinstance(resolution, str):
-        resolution = Resolution(resolution)
-    if 'product' not in df.columns:
-        df['product'] = pdt
-    if 'resolution' not in df.columns or override_resolution:
-        df['resolution'] = repr(resolution)
-    left_cols = ['ts', 'product', 'resolution']
-    df = df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
+def to_datetime(df: pd.DataFrame) -> pd.DataFrame:
+    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
+    first_ts = df.loc[0, 'ts']
+    ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
+    df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
     return df

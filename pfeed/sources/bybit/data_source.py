@@ -30,7 +30,3 @@ class BybitDataSource(BaseDataSource):
             # NOTE: if adapter(epdt, ref_key=category) == epdt, i.e. key is not found in pdt matching, meaning the product has been delisted
             if self.adapter(epdt, ref_key=self.PTYPE_TO_CATEGORY[ptype]) != epdt
         ]
-        
-    def download_market_data(self, pdt: str, date: str) -> bytes | None:
-        raw_data: bytes | None = self.api.get_data(pdt, date)
-        return raw_data

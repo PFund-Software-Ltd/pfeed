@@ -3,8 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow as pa
     import pyarrow.parquet as pq
-    from pfund.datas.resolution import Resolution
-    from pfeed.types.literals import tSTORAGE
+    from pfeed.types.literals import tSTORAGE, tPRODUCT_TYPE
     from pfeed.types.core import tDataFrame, tData, tDataModel
     from pfeed.storages.base_storage import BaseStorage
 
@@ -31,7 +30,7 @@ except ImportError:
     SparkDataFrame = None
     SparkSession = None
     
-        
+from pfund.datas.resolution import Resolution        
 from pfeed.const.enums import DataStorage, DataTool, DataRawLevel
 
 
@@ -148,32 +147,49 @@ def extract_data(data_model: tDataModel, storage: tSTORAGE | None = None) -> Bas
 
 def filter_non_standard_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Filter out unnecessary columns from raw data."""
-    assert 'ts' in df.columns, '"ts" column not found'
     is_tick_data = 'price' in df.columns
+    pdt = df['product'][0]
+    ptype: tPRODUCT_TYPE = pdt.split('_')[2]
     if is_tick_data:
         df = df.loc[:, ['ts', 'product', 'resolution', 'side', 'volume', 'price']]
     else:
-        df = df.loc[:, ['ts', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']]
+        if ptype == 'STK':
+            df = df.loc[:, ['ts', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume', 'dividends', 'splits']]
+        else:
+            df = df.loc[:, ['ts', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']]
     return df
 
 
-def organize_columns(df: pd.DataFrame, pdt: str, resolution: Resolution) -> pd.DataFrame:
+def organize_columns(df: pd.DataFrame, resolution: Resolution, product: str='', symbol: str='') -> pd.DataFrame:
     """Organizes the columns of a DataFrame.
-    Moving 'ts', 'product', 'resolution' to the leftmost side.
+    Moving 'ts', 'product', 'resolution', 'symbol' to the leftmost side.
     """
-    df['product'] = pdt
+    assert product or symbol, 'either product or symbol must be provided'
+    if product:
+        df['product'] = product.upper()
+    if symbol:
+        df['symbol'] = symbol.upper()
     df['resolution'] = repr(resolution)
-    left_cols = ['ts', 'product', 'resolution']
+    left_cols = ['ts', 'resolution']
+    if product:
+        left_cols.append('product')
+    if symbol:
+        left_cols.append('symbol')
     return df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
     
 
 def resample_data(
     df: pd.DataFrame, 
-    resolution: Resolution, 
+    target_resolution: str | Resolution, 
 ) -> pd.DataFrame:
     '''
     Resamples the input data based on the specified resolution and returns the resampled data in Parquet format.
     '''
+    if isinstance(target_resolution, str):
+        resolution = Resolution(target_resolution)
+    else:
+        resolution = target_resolution
+    
     # converts to pandas's resolution format
     eresolution = repr(resolution)
         
@@ -235,19 +251,12 @@ def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStor
         cache_storage = CacheStorage(name=storage, data_model=data_model, **kwargs)
         cache_storage.clear_caches()
         return cache_storage
-    # TODO:
-    elif storage == DataStorage.S3:
-        pass
-        # try:
-        #     return S3Storage(name=storage, data_model=data_model, kwargs=kwargs)
-        # except ServerError:
-        #     return None
-    # TODO:
-    elif storage == DataStorage.AZURE:
-        pass
-    # TODO:
-    elif storage == DataStorage.GCP:
-        pass
+    # elif storage == DataStorage.S3:
+    #     pass
+    # elif storage == DataStorage.AZURE:
+    #     pass
+    # elif storage == DataStorage.GCP:
+    #     pass
     else:
         raise NotImplementedError(f'{storage=}')
 
@@ -298,11 +307,11 @@ def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
     if data_tool == DataTool.PANDAS:
         return df
     elif data_tool == DataTool.POLARS:
-        return pl.from_pandas(df)
-    elif data_tool == DataTool.DASK:
-        return dd.from_pandas(df, npartitions=1)
-    elif data_tool == DataTool.SPARK:
-        spark = SparkSession.builder.getOrCreate()
-        return spark.createDataFrame(df)
+        return pl.from_pandas(df).lazy()
+    # elif data_tool == DataTool.DASK:
+    #     return dd.from_pandas(df, npartitions=1)
+    # elif data_tool == DataTool.SPARK:
+    #     spark = SparkSession.builder.getOrCreate()
+    #     return spark.createDataFrame(df)
     else:
         raise ValueError(f'{data_tool=}')

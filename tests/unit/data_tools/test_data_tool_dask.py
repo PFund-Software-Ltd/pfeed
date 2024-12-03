@@ -4,7 +4,10 @@ import dask.dataframe as dd
 import io
 
 from dask.dataframe.utils import assert_eq
-from pfeed.data_tools.data_tool_dask import read_parquet, concat, sort_by_ts, is_empty
+# from pfeed.data_tools.data_tool_dask import read_parquet, concat, sort_by_ts, is_empty
+
+
+pytestmark = pytest.mark.skip(reason="Dask is not supported yet")
 
 
 @pytest.fixture

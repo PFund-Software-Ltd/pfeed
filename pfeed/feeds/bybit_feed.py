@@ -4,14 +4,13 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import datetime
     from pfeed.types.core import tDataModel
-    from pfeed.types.literals import tSTORAGE, tDATA_TOOL
+    from pfeed.types.literals import tSTORAGE
     from pfeed.flows.dataflow import DataFlow
 
 import pandas as pd
 
 from pfeed.feeds.base_feed import clear_current_dataflows
 from pfeed.feeds.crypto_market_data_feed import CryptoMarketDataFeed
-from pfeed import etl
 
 
 __all__ = ['BybitFeed']
@@ -19,25 +18,10 @@ tPRODUCT_TYPE = Literal['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT', 'OPT']
 
 
 class BybitFeed(CryptoMarketDataFeed):
-    def __init__(
-        self, 
-        data_tool: tDATA_TOOL='pandas', 
-        use_ray: bool=True,
-        use_prefect: bool=False,
-        pipeline_mode: bool=False,
-        ray_kwargs: dict | None=None,
-        prefect_kwargs: dict | None=None,
-    ):
+    @staticmethod
+    def get_data_source():
         from pfeed.sources.bybit.data_source import BybitDataSource
-        super().__init__(
-            data_source=BybitDataSource(),
-            data_tool=data_tool, 
-            use_ray=use_ray,
-            use_prefect=use_prefect,
-            pipeline_mode=pipeline_mode, 
-            ray_kwargs=ray_kwargs,
-            prefect_kwargs=prefect_kwargs,
-        )
+        return BybitDataSource()
     
     def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.
@@ -119,10 +103,5 @@ class BybitFeed(CryptoMarketDataFeed):
             self.run()
         return self
 
-    def _execute_download(self, data_model: tDataModel) -> pd.DataFrame | None:
-        raw_data: bytes | None = self.data_source.download_market_data(data_model.product, data_model.date)
-        if raw_data is None:
-            return None
-        else:
-            df: pd.DataFrame = etl.convert_to_pandas_df(raw_data)
-            return df
+    def _execute_download(self, data_model: tDataModel) -> bytes | None:
+        return self.api.get_data(data_model.product, data_model.date)

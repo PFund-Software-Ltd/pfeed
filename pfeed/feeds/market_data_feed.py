@@ -80,22 +80,22 @@ class MarketDataFeed(BaseFeed):
     
     def _add_default_transformations_to_download(self, dataflows_per_pdt: dict[str, list[DataFlow]], resolution: Resolution, raw_level: DataRawLevel):
         if raw_level != DataRawLevel.ORIGINAL:
-            transformations = [self._normalize_raw_data]
+            self.transform(etl.convert_to_pandas_df, self._normalize_raw_data)
+            for pdt in dataflows_per_pdt:
+                self.transform(
+                    lambda_with_name('etl.organize_columns', lambda df: etl.organize_columns(df, resolution, product=pdt)),
+                    dataflows=dataflows_per_pdt[pdt],
+                )
             if raw_level == DataRawLevel.CLEANED:
-                transformations.append(etl.filter_non_standard_columns)
+                transformations = [etl.filter_non_standard_columns]
+                # only resample if raw_level is 'cleaned', otherwise, can't resample non-standard columns
                 if resolution < self.data_source.lowest_resolution:
                     transformations.append(
                         lambda_with_name('etl.resample_data', lambda df: etl.resample_data(df, resolution))
                     )
-            self.transform(*transformations)
-            for pdt in dataflows_per_pdt:
-                self.transform(
-                    lambda_with_name('etl.organize_columns', lambda df: etl.organize_columns(df, pdt, resolution)),
-                    dataflows=dataflows_per_pdt[pdt],
-                )
+                self.transform(*transformations)
         else:
-            if self.config.print_msg:
-                self._print_original_raw_level_msg()
+            self._print_original_raw_level_msg()
         if self._pipeline_mode:
             self.transform(
                 lambda_with_name('etl.convert_to_user_df', lambda df: etl.convert_to_user_df(df, self.data_tool.name))

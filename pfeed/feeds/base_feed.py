@@ -41,7 +41,6 @@ def clear_current_dataflows(func):
 class BaseFeed(ABC):
     def __init__(
         self, 
-        data_source: BaseDataSource, 
         data_tool: tDATA_TOOL='pandas', 
         use_ray: bool=True,
         use_prefect: bool=False,
@@ -60,8 +59,9 @@ class BaseFeed(ABC):
         self._failed_dataflows: list[DataFlow] = []
         self._current_dataflows: list[DataFlow] = []
         
-        self.data_source: BaseDataSource = data_source
-        self.name: DataSource = data_source.name
+        self.data_source: BaseDataSource = self.get_data_source()
+        self.api = self.data_source.api if hasattr(self.data_source, 'api') else None
+        self.name: DataSource = self.data_source.name
         assert data_tool.upper() in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
         self.data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool.lower()}')
         
@@ -82,7 +82,12 @@ class BaseFeed(ABC):
         if not is_loggers_set_up:
             set_up_loggers(self.config.log_path, self.config.logging_config_file_path, user_logging_config=self.config.logging_config)
         self.logger = logging.getLogger(self.name.lower() + '_data')
-
+    
+    @staticmethod
+    @abstractmethod
+    def get_data_source() -> BaseDataSource:
+        pass
+    
     @abstractmethod
     def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
         pass

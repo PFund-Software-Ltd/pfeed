@@ -1,6 +1,51 @@
 data_origin: https://www.csidata.com
 data_categories:
   market_data:
+    minute:
+      - STK
+      - ETF
+      - MTF
+      - OPT
+      - FUT
+      - FX
+      - CRYPTO
+      - BOND
+    hour:
+      - STK
+      - ETF
+      - MTF
+      - OPT
+      - FUT
+      - FX
+      - CRYPTO
+      - BOND
+    day:
+      - STK
+      - ETF
+      - MTF
+      - OPT
+      - FUT
+      - FX
+      - CRYPTO
+      - BOND
+    week:
+      - STK
+      - ETF
+      - MTF
+      - OPT
+      - FUT
+      - FX
+      - CRYPTO
+      - BOND
+    month:
+      - STK
+      - ETF
+      - MTF
+      - OPT
+      - FUT
+      - FX
+      - CRYPTO
+      - BOND
 provider_type: data_aggregator
 api_key_required: false
 has_free_access: true

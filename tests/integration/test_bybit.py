@@ -40,19 +40,19 @@ class TestDownload:
         return extract_data(data_model, storage=to_storage)
 
     @pytest.mark.parametrize('feed', [
-        {'data_tool': 'pandas', 'use_ray': True, 'use_prefect': False, 'pipeline_mode': False},
+        {'data_tool': 'pandas', 'use_ray': False, 'use_prefect': False, 'pipeline_mode': False},
+        {'data_tool': 'pandas', 'use_ray': True, 'use_prefect': True, 'pipeline_mode': False},
         {'data_tool': 'polars', 'use_ray': False, 'use_prefect': True, 'pipeline_mode': False},
-        {'data_tool': 'dask', 'use_ray': True, 'use_prefect': True, 'pipeline_mode': False},
-        {'data_tool': 'spark', 'use_ray': False, 'use_prefect': False, 'pipeline_mode': False},
+        {'data_tool': 'polars', 'use_ray': True, 'use_prefect': False, 'pipeline_mode': False},
     ], indirect=True)
     def test_download(self, feed):
-        raw_level_by_data_tool = {
-            'pandas': 'normalized',
-            'polars': 'cleaned',
-            'dask': 'original',
-            'spark': 'original',
+        raw_level_by_data_tool_and_use_ray = {
+            ('pandas', False): 'normalized',
+            ('polars', True): 'cleaned',
+            ('pandas', True): 'original',
+            ('polars', False): 'original',
         }
-        raw_level = DataRawLevel[raw_level_by_data_tool[str(feed.data_tool.name.value.lower())].upper()]
+        raw_level = DataRawLevel[raw_level_by_data_tool_and_use_ray[(feed.data_tool.name.value.lower(), feed._use_ray)].upper()]
         params = self.get_params_for_download()
         pdt, data_type, date, to_storage = params['products'][0], params['data_type'], params['start_date'], params['to_storage']
         filename_prefix = self.test_download.__name__
@@ -60,7 +60,7 @@ class TestDownload:
         storage: BaseStorage | None = self.extract_downloaded_data(feed, pdt, data_type, date, to_storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
         # only download if the data is not already downloaded
         if storage is None or not storage.exists():
-            feed.download(**params, raw_level=raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+            feed.download(**params, raw_level=raw_level.name, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
             storage: BaseStorage | None = self.extract_downloaded_data(feed, pdt, data_type, date, to_storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
             assert storage is not None
             assert storage.exists()

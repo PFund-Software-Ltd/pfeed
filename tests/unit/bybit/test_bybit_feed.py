@@ -25,17 +25,16 @@ class TestDownload:
         assert spy.call_count == 2
 
     def test_execute_download_return_none_if_download_fails(self, feed, mocker):
-        mocker.patch.object(feed.data_source, 'download_market_data', return_value=None)
+        mocker.patch.object(feed.api, 'get_data', return_value=None)
         data_model = mocker.Mock(product='BTC_USDT_PERP', date='2024-01-01')
         result = feed._execute_download(data_model)
         assert result is None
         
     def test_execute_download_return_df_if_download_succeeds(self, feed, mocker):
-        mocker.patch.object(feed.data_source, 'download_market_data', return_value=b"column1,column2\n1,2\n3,4\n5,6")
+        mocker.patch.object(feed.api, 'get_data', return_value=b"column1,column2\n1,2\n3,4\n5,6")
         data_model = mocker.Mock(product='BTC_USDT_PERP', date='2024-01-01')
         result = feed._execute_download(data_model)
-        assert isinstance(result, pd.DataFrame)
-        pd.testing.assert_frame_equal(result, pd.DataFrame({'column1': [1, 3, 5], 'column2': [2, 4, 6]}))
+        assert isinstance(result, bytes)
 
 
 class TestNormalizeRawData:

@@ -118,7 +118,7 @@ class BaseFeed(ABC):
     def _execute_stream(self, data_model: tDataModel) -> tData:
         raise NotImplementedError(f"{self.name} _execute_stream() is not implemented")
 
-    def _prepare_pdts(self, pdts: list[str], ptypes: list[str]) -> list[str]:
+    def _prepare_products(self, pdts: list[str], ptypes: list[str]) -> list[str]:
         '''Prepare products based on input products and product types
         If both "products" and "product_types" are provided, only "products" will be used.
         If "products" is not provided, use "product_types" to get products.

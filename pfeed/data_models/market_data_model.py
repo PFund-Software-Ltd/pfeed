@@ -23,7 +23,7 @@ class MarketDataModel(TimeBasedDataModel):
     
     def model_post_init(self, __context: Any) -> None:
         super().model_post_init(__context)
-        self.product_type = self.product.split('_')[-1]
+        self.product_type = self.product.split('_')[2]
     
     def __str__(self):
         return '_'.join([super().__str__(), self.product, str(self.resolution)])

@@ -40,7 +40,7 @@ adapters = {ptype: Exchange(env='LIVE', ptype=ptype).adapter for ptype in SUPPOR
 
 
 def create_efilename(pdt: str, date: str):
-    ptype = pdt.split('_')[-1].upper()  # REVIEW: is this always the case?
+    ptype = pdt.split('_')[2].upper()
     adapter = adapters[ptype]
     epdt = adapter(pdt, ref_key=PTYPE_TO_CATEGORY[ptype])
     return f'{epdt}-trades-{date}.zip'

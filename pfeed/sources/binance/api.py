@@ -72,7 +72,7 @@ def get_efilenames(pdt: str):
         soup = BeautifulSoup(res.text, 'html.parser')
         efilenames = [node.get('href') for node in soup.find_all('a')]
         return efilenames
-    ptype = pdt.split('_')[-1].upper()  # REVIEW: is this always the case?
+    ptype = pdt.split('_')[2].upper()
     exchange = Exchange(env='LIVE', ptype=ptype)
     adapter = exchange.adapter
     epdt = adapter(pdt, ref_key=PTYPE_TO_CATEGORY[ptype])
@@ -96,7 +96,7 @@ def get_data(pdt: str, date: str):
     def _handle_response(res):
         data = res.content
         return data
-    ptype = pdt.split('_')[-1].upper()  # REVIEW: is this always the case?
+    ptype = pdt.split('_')[2].upper()
     exchange = Exchange(env='LIVE', ptype=ptype)
     adapter = exchange.adapter
     epdt = adapter(pdt, ref_key=PTYPE_TO_CATEGORY[ptype])

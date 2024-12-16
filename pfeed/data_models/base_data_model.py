@@ -2,7 +2,7 @@ from typing import Any
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from pfeed.const.enums.env import Environment
 from pfeed.sources.base_data_source import BaseDataSource
@@ -33,7 +33,7 @@ class BaseDataModel(BaseModel, ABC):
     storage_path: Path | None = None
     unique_identifier: str = ''
     compression: str = ''
-    metadata: dict | None = None
+    metadata: dict = Field(default_factory=dict)
 
     def model_post_init(self, __context: Any) -> None:
         if not self.unique_identifier:

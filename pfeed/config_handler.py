@@ -138,7 +138,7 @@ class ConfigHandler:
                 print(f'Error creating or copying {path.name}: {e}')
     
     def _initialize_configs(self):
-        for path in [self.data_path, self.cache_path]:
+        for path in [self.data_path, self.cache_path, self.log_path]:
             if not os.path.exists(path):
                 os.makedirs(path)
                 if self._verbose:

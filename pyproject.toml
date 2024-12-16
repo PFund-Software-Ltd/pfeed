@@ -29,7 +29,6 @@ include = ['logging.yml', 'docker-compose.yml']
 python = "^3.10"
 pfund = "^0.0.2"
 pandas = "^2.2.0"
-pydantic = "^2.7.0"
 yfinance = "^0.2.50"
 pyarrow = "^17.0.0"
 zstandard = "^0.23.0"

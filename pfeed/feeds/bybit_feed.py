@@ -78,7 +78,7 @@ class BybitFeed(CryptoMarketDataFeed):
         from pfeed.const.enums import DataRawLevel
         from pfeed.utils.utils import get_dates_in_between
 
-        pdts = self._prepare_pdts(products, product_types)
+        pdts = self._prepare_products(products, product_types)
         resolution = Resolution(data_type)
         start_date, end_date = self._standardize_dates(start_date, end_date)
         dates: list[datetime.date] = get_dates_in_between(start_date, end_date)

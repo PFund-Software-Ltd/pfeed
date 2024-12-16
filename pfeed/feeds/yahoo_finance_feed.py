@@ -94,7 +94,8 @@ class YahooFinanceFeed(MarketDataFeed):
 
     def get_historical_data(
         self,
-        symbol: str,
+        product: str,
+        symbol: str = '',
         resolution: str = "1d",
         rollback_period: str | Literal["ytd", "max"] = "1M",
         start_date: str = "",
@@ -107,7 +108,9 @@ class YahooFinanceFeed(MarketDataFeed):
         For the details of args and kwargs, please refer to https://github.com/ranaroussi/yfinance
 
         Args:
+            product: e.g. AAPL_USD_STK, BTC_USDT_PERP
             symbol: yfinance's symbol, e.g. AAPL, TSLA
+                if not provided, the first part of `product` split by '_' will be used.
             rollback_period: Data resolution or 'ytd' or 'max'
                 Period to rollback from today, only used when `start_date` is not specified.
                 Default is '1M' = 1 month.
@@ -165,22 +168,17 @@ class YahooFinanceFeed(MarketDataFeed):
                 timeframe = repr(resolution.timeframe)
                 etimeframe = self._ADAPTER["timeframe"].get(timeframe, timeframe)
                 interval = str(resolution.period) + etimeframe    
+            assert timeframe in self.SUPPORTED_TIMEFRAMES_AND_PERIODS, f'timeframe={resolution.timeframe} is not supported'
             return interval, resolution, timeframe, etimeframe
         
-        def _adjust_interval_if_not_supported(interval: str, resolution: Resolution, timeframe: str, etimeframe: str) -> tuple[str, bool]:
-            # manipulate the input resolution and support e.g. '2d' resolution even it is not in the SUPPORTED_TIMEFRAMES_AND_PERIODS
-            is_period_not_supported = (
-                timeframe in self.SUPPORTED_TIMEFRAMES_AND_PERIODS
-                and resolution.period not in self.SUPPORTED_TIMEFRAMES_AND_PERIODS[timeframe]
-                and 1 in self.SUPPORTED_TIMEFRAMES_AND_PERIODS[timeframe]
-            )
-            if (use_pfeed_resample and resolution.period != 1) or is_period_not_supported:
-                # if resolution (e.g. '2d') is not supported in yfinance, using "1d" instead'
-                interval = "1" + etimeframe
+        def _is_resample_needed(use_pfeed_resample: bool, resolution: Resolution, timeframe: str) -> bool:
+            if resolution.period not in self.SUPPORTED_TIMEFRAMES_AND_PERIODS[timeframe]:
+                if not use_pfeed_resample:
+                    raise ValueError(f"yfinance does not support {repr(resolution)} as an interval, set use_pfeed_resample=True for auto-resampling")
                 is_resample = True
             else:
                 is_resample = False
-            return interval, is_resample
+            return is_resample
         
         def _get_yfinance_start_and_end_date(start_date: str, end_date: str) -> tuple[str, str]:
             if start_date:
@@ -194,10 +192,13 @@ class YahooFinanceFeed(MarketDataFeed):
             return start_date, end_date
             
         raw_level = DataRawLevel[raw_level.upper()]
+        symbol = symbol or product.split('_')[0]
+        start_date, end_date = _get_yfinance_start_and_end_date(start_date, end_date)
         period = _get_yfinance_period(rollback_period, kwargs)
         interval, resolution, timeframe, etimeframe = _get_yfinance_interval_and_pfund_resolution_and_timeframe(resolution, kwargs)
-        interval, is_resample = _adjust_interval_if_not_supported(interval, resolution, timeframe, etimeframe)
-        start_date, end_date = _get_yfinance_start_and_end_date(start_date, end_date)
+        if is_resample := _is_resample_needed(use_pfeed_resample, resolution, timeframe):
+            # if needs resampling, use "1" + etimeframe as the interval
+            interval = "1" + etimeframe
 
         ticker = self.api.Ticker(symbol)
         df = ticker.history(period=period, interval=interval, start=start_date, end=end_date, **kwargs)
@@ -206,15 +207,11 @@ class YahooFinanceFeed(MarketDataFeed):
                 return None
             if raw_level != DataRawLevel.ORIGINAL:
                 df = self._normalize_raw_data(df)
-                df = etl.organize_columns(df, resolution, symbol=symbol)
+                df = etl.organize_columns(df, resolution, product=product, symbol=symbol)
                 # only resample if raw_level is 'cleaned', otherwise, can't resample non-standard columns
                 if raw_level == DataRawLevel.CLEANED:
                     df = etl.filter_non_standard_columns(df)
                     if is_resample:
-                        if not use_pfeed_resample:
-                            self.logger.warning(
-                                f"yfinance does not support {repr(resolution)} as an interval, auto-resampling to {resolution=}"
-                            )
                         df = etl.resample_data(df, resolution)
             
             return etl.convert_to_user_df(df, self.data_tool.name)

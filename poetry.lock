@@ -4305,6 +4305,7 @@ ipython = "^8.23.0"
 joblib = "^1.4.2"
 orjson = "^3.10.1"
 platformdirs = "^4.3.6"
+pydantic = "^2.7.0"
 python-dotenv = "^1.0.1"
 python-telegram-bot = "^21.5"
 pyyaml = "^6.0.1"
@@ -7437,4 +7438,4 @@ spark = ["pyspark"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "4a158d985921f1b207a5f7f7e7fe6fb9916a7dc659e9b387c2ed96d45064d3f0"
+content-hash = "9959f1d80d2b4d460be9d0b3674fac5f9808809f94fcccb581d6d4eca0ca53cd"

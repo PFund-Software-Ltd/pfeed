@@ -23,7 +23,7 @@
 [FirstRate Data]: https://firstratedata.com
 
 ## Problem
-Starting algo-trading requires reliable, clean data. However, the time-consuming and mundane tasks of data cleaning and storage often discourage traders from embarking on their algo-trading journey.
+Starting algo-trading requires reliable and clean data. However, the time-consuming and mundane tasks of data cleaning and storage often discourage traders from embarking on their algo-trading journey.
 
 ## Solution
 By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, allowing traders to focus on strategy development.

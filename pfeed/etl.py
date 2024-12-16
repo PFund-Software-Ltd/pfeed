@@ -160,20 +160,15 @@ def filter_non_standard_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def organize_columns(df: pd.DataFrame, resolution: Resolution, product: str='', symbol: str='') -> pd.DataFrame:
+def organize_columns(df: pd.DataFrame, product: str, resolution: Resolution, symbol: str='') -> pd.DataFrame:
     """Organizes the columns of a DataFrame.
     Moving 'ts', 'product', 'resolution', 'symbol' to the leftmost side.
     """
-    assert product or symbol, 'either product or symbol must be provided'
-    if product:
-        df['product'] = product.upper()
+    df['product'] = product.upper()
+    df['resolution'] = repr(resolution)
+    left_cols = ['ts', 'resolution', 'product']
     if symbol:
         df['symbol'] = symbol.upper()
-    df['resolution'] = repr(resolution)
-    left_cols = ['ts', 'resolution']
-    if product:
-        left_cols.append('product')
-    if symbol:
         left_cols.append('symbol')
     return df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
     

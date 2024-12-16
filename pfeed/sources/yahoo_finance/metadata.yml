@@ -10,6 +10,7 @@ data_categories:
       - FX
       - CRYPTO
       - BOND
+      - INDEX
     hour:
       - STK
       - ETF
@@ -19,6 +20,7 @@ data_categories:
       - FX
       - CRYPTO
       - BOND
+      - INDEX
     day:
       - STK
       - ETF
@@ -28,6 +30,7 @@ data_categories:
       - FX
       - CRYPTO
       - BOND
+      - INDEX
     week:
       - STK
       - ETF
@@ -37,6 +40,7 @@ data_categories:
       - FX
       - CRYPTO
       - BOND
+      - INDEX
     month:
       - STK
       - ETF
@@ -46,6 +50,7 @@ data_categories:
       - FX
       - CRYPTO
       - BOND
+      - INDEX
 provider_type: data_aggregator
 api_key_required: false
 has_free_access: true

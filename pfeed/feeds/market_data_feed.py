@@ -176,6 +176,7 @@ class MarketDataFeed(BaseFeed):
     def get_historical_data(
         self,
         product: str,
+        symbol: str='',
         resolution: str="1d",
         rollback_period: str="1w",
         start_date: str="",
@@ -187,7 +188,9 @@ class MarketDataFeed(BaseFeed):
     ) -> tDataFrame | None:
         """Get historical data from the data source, local storage or cache.
         Args:
-            product: Product symbol, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
+            product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
+            symbol: Symbol, e.g. AAPL, TSLA
+                if provided, it will be the direct input to data sources that require a symbol, such as Yahoo Finance.
             rollback_period:
                 Period to rollback from today, only used when `start_date` is not specified.
                 Default is '1w' = 1 week.
@@ -246,8 +249,7 @@ class MarketDataFeed(BaseFeed):
         
         # resample daily data to e.g. '3d'
         if resample_required:
-            if not isinstance(df, pd.DataFrame):
-                df = etl.convert_to_pandas_df(df)
+            df = etl.convert_to_pandas_df(df)
             df = etl.resample_data(df, resolution)
             df = etl.convert_to_user_df(df, self.data_tool.name)
             self.logger.info(f'resampled {self.name} {product} daily data to {resolution=}')

@@ -18,8 +18,8 @@ class BybitAPI:
     }
 
     def __init__(self, exchange):
+        self._exchange = exchange
         self.adapter = exchange.adapter
-        self.PTYPE_TO_CATEGORY = exchange.PTYPE_TO_CATEGORY
         # self.efilenames = {}
     
     @staticmethod
@@ -35,12 +35,6 @@ class BybitAPI:
 
         while num_retry:
             try:
-                # TEMP
-                import logging
-                from multiprocessing import current_process
-                logger = logging.getLogger('bybit_data')
-                logger.warning(f'calling {url=} from {current_process().name}')
-
                 res = requests.get(url)
                 if res.status_code == 200:
                     return res
@@ -62,8 +56,9 @@ class BybitAPI:
         Get external file names (e.g. BTCUSDT2022-10-04.csv.gz)
         '''
         from bs4 import BeautifulSoup
-        ptype = pdt.split('_')[-1].upper()
-        epdt = self.adapter(pdt, ref_key=self.PTYPE_TO_CATEGORY[ptype])
+        ptype = pdt.split('_')[2].upper()
+        category = self._exchange._derive_product_category(ptype)
+        epdt = self.adapter(pdt, group=category)
         url = '/'.join([self.URLS[ptype], epdt])
         if res := self._get(url, frequency=1, num_retry=3):
             soup = BeautifulSoup(res.text, 'html.parser')
@@ -88,11 +83,12 @@ class BybitAPI:
                 return f'{epdt}_{date}.csv.gz'
             else:
                 return f'{epdt}{date}.csv.gz'
-        # used to check if the efilename created by the date exists in the efilenames (files on the data server)
+        # used to check if the efilename created by the date exists in the efilenames (files on the exchange's data server)
         # if pdt not in self.efilenames:
         #     self.efilenames[pdt] = self.get_efilenames(pdt)
-        ptype = pdt.split('_')[-1].upper()
-        epdt = self.adapter(pdt, ref_key=self.PTYPE_TO_CATEGORY[ptype])
+        ptype = pdt.split('_')[2].upper()
+        category = self._exchange._derive_product_category(ptype)
+        epdt = self.adapter(pdt, group=category)
         efilename = _create_efilename(ptype, epdt, date)
         # if efilename not in self.efilenames[pdt]:
         #     return None

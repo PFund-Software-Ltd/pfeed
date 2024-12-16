@@ -1,5 +1,5 @@
 # TODO
-def test_prepare_pdts():
+def test_prepare_products():
     pass
 
 # TODO

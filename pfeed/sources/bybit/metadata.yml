@@ -11,7 +11,7 @@ data_categories:
       - OPT
 provider_type: exchange
 api_key_required: false
-has_free_access: true
+access_type: free  # refer to enum DataAccessType
 rate_limits: null
 github_repo: null
 is_repo_official: null

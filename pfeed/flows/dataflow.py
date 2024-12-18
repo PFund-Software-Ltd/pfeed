@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
     from pfeed.types.core import tDataModel, tData
     from pfeed.const.enums import DataSource
+    from pfeed.storages.base_storage import BaseStorage
 
 
 class DataFlow:
@@ -72,8 +73,12 @@ class DataFlow:
         return data
     
     def _load(self, func: Callable, data: tData):
-        storage = func(data)
-        self.logger.info(f'loaded {self.data_source} data to {type(storage).__name__} {storage.file_path}')
+        storages: list[BaseStorage] = func(data)
+        if not storages:
+            self.logger.warning(f'failed to load {self.data_source} data to storage')
+        else:
+            for storage in storages:
+                self.logger.info(f'loaded {self.data_source} data to {type(storage).__name__} {storage.file_path}')
 
     def to_prefect_flow(self, log_prints: bool = True, **kwargs) -> PrefectFlow:
         from prefect import flow, task

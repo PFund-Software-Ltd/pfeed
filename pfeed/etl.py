@@ -40,7 +40,7 @@ def write_data(data: bytes | pd.DataFrame, storage: BaseStorage, metadata: dict 
     from pfeed.utils.file_formats import compression_methods
     
     metadata = metadata or {}
-    if storage.name == DataStorage.LOCAL:
+    if storage.name in [DataStorage.LOCAL, DataStorage.CACHE]:
         file_path = str(storage.file_path)
     elif storage.name == DataStorage.MINIO:
         file_path = str(storage.file_path).replace('s3://', '')
@@ -98,7 +98,7 @@ def read_data(storage: BaseStorage, compression: str = 'zstd') -> tuple[pq.Parqu
     import pyarrow.parquet as pq
     from pfeed.utils.file_formats import decompression_methods
     
-    if storage.name == DataStorage.LOCAL:
+    if storage.name in [DataStorage.LOCAL, DataStorage.CACHE]:
         file_path = str(storage.file_path)
     elif storage.name == DataStorage.MINIO:
         file_path = str(storage.file_path).replace('s3://', '')
@@ -160,12 +160,12 @@ def filter_non_standard_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def organize_columns(df: pd.DataFrame, product: str, resolution: Resolution, symbol: str='') -> pd.DataFrame:
+def organize_columns(df: pd.DataFrame, resolution: Resolution, product: str, symbol: str='') -> pd.DataFrame:
     """Organizes the columns of a DataFrame.
     Moving 'ts', 'product', 'resolution', 'symbol' to the leftmost side.
     """
-    df['product'] = product.upper()
     df['resolution'] = repr(resolution)
+    df['product'] = product.upper()
     left_cols = ['ts', 'resolution', 'product']
     if symbol:
         df['symbol'] = symbol.upper()
@@ -256,7 +256,12 @@ def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStor
         raise NotImplementedError(f'{storage=}')
 
 
-def load_data(data_model: tDataModel, data: tData, storage: tSTORAGE, **kwargs) -> BaseStorage:
+def load_data(
+    data_model: tDataModel, 
+    data: bytes | pd.DataFrame, 
+    storage: tSTORAGE, 
+    **kwargs
+) -> list[BaseStorage]:
     """
     Loads data into the specified data destination.
     Args:
@@ -268,14 +273,43 @@ def load_data(data_model: tDataModel, data: tData, storage: tSTORAGE, **kwargs) 
         from pfeed.utils.monitor import print_disk_usage
     except ImportError:
         print_disk_usage = None
-    storage: BaseStorage = get_storage(data_model, storage, **kwargs)
-    write_data(data, storage, metadata=data_model.metadata, compression=data_model.compression)
+    from pfeed.utils.utils import get_dates_in_between
+    storage_literal = storage
+    storages: list[BaseStorage] = []
+    if isinstance(data, pd.DataFrame):
+        is_data_include_multi_dates = data_model.end_date is not None
+        if not is_data_include_multi_dates:
+            if storage := get_storage(data_model, storage_literal, **kwargs):
+                write_data(data, storage, metadata=data_model.metadata, compression=data_model.compression)
+                storages.append(storage)
+        else:
+            dates = get_dates_in_between(data_model.start_date, data_model.end_date)
+            # storage is per date, set end_date to None, only start_date is used for the filename
+            data_model.update_end_date(None)
+            # split data into chunks by date
+            data_chunks = [group for _, group in data.groupby(data['ts'].dt.date)]
+            data_chunks_per_date = {data_chunk['ts'].dt.date.iloc[0]: data_chunk for data_chunk in data_chunks}
+            for date in dates:
+                metadata = data_model.metadata.copy()
+                if date in data_chunks_per_date:
+                    data_chunk = data_chunks_per_date[date]
+                else:   
+                    # Create an empty DataFrame with the same columns
+                    data_chunk = pd.DataFrame(columns=data.columns)
+                    # NOTE: used as an indicator for successful download, there is just no data on that date (e.g. weekends, holidays, etc.)
+                    metadata['is_placeholder'] = 'true'
+                data_model.update_start_date(date)
+                if storage := get_storage(data_model, storage_literal, **kwargs):
+                    write_data(data_chunk, storage, metadata=metadata, compression=data_model.compression)
+                    storages.append(storage)
+    else:
+        raise NotImplementedError(f'{type(data)=}')
     if print_disk_usage:
         if hasattr(storage, 'local_data_path'):
             print_disk_usage(storage.local_data_path)
         else:
             print_disk_usage(storage.data_path)
-    return storage
+    return storages
 
 
 def convert_to_pandas_df(data: tData) -> pd.DataFrame:

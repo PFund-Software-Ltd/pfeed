@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Literal
 
 import re
 import inspect
@@ -162,43 +162,47 @@ def extract_date_from_filename(filename: str) -> str | None:
         return date
 
 
-def rollback_date_range(rollback_period: str) -> tuple[datetime.date, datetime.date]:
+def rollback_date_range(rollback_period: str | Literal['ytd']) -> tuple[datetime.date, datetime.date]:
+    '''Returns start_date and end_date based on the rollback_period (e.g. '1w', '1M', 'ytd' (Year To Date)).'''
     from pfund.datas.resolution import Resolution
-    
-    # check if rollback_period is a valid Resolution
-    rollback_period = repr(Resolution(rollback_period))
-    
-    '''Returns start_date and end_date based on the rollback_period (e.g. '1w', '1M').'''
     def _nextmonth(year, month):
         if month == 12:
             return year+1, 1
         else:
             return year, month+1
+    
     utcnow = datetime.datetime.now(tz=datetime.timezone.utc)
-    period = int(rollback_period[:-1])
-    if rollback_period.endswith('d'):
-        timedelta = datetime.timedelta(days=period)
-    elif rollback_period.endswith('w'):
-        timedelta = datetime.timedelta(weeks=period)
-    elif rollback_period.endswith('M'):
-        year, month = utcnow.year, utcnow.month - period
-        while month <= 0:
-            month += 12  # Rollback to the previous year
-            year -= 1
-        total_days_in_month = 0
-        while not (year == utcnow.year and month == utcnow.month):
-            year, month = _nextmonth(year, month)
-            _, days_in_month = calendar.monthrange(year, month)
-            total_days_in_month += days_in_month
-        timedelta = datetime.timedelta(days=total_days_in_month)
-    elif rollback_period.endswith('y'):
-        year = utcnow.year - period
-        total_days_in_year = 0
-        for yr in range(year, utcnow.year):
-            total_days_in_year += 366 if calendar.isleap(yr) else 365
-        timedelta = datetime.timedelta(days=total_days_in_year)
-    else:
-        raise ValueError(f"Unsupported {rollback_period=}")
     end_date = utcnow - datetime.timedelta(days=1)  # Previous day
-    start_date = end_date - timedelta + datetime.timedelta(days=1)
+    
+    if rollback_period.lower() == 'ytd':
+        start_date = datetime.datetime(utcnow.year, 1, 1, tzinfo=datetime.timezone.utc)
+    else:
+        # check if rollback_period is a valid Resolution
+        rollback_period = repr(Resolution(rollback_period))
+        
+        period = int(rollback_period[:-1])
+        if rollback_period.endswith('d'):
+            timedelta = datetime.timedelta(days=period)
+        elif rollback_period.endswith('w'):
+            timedelta = datetime.timedelta(weeks=period)
+        elif rollback_period.endswith('M'):
+            year, month = utcnow.year, utcnow.month - period
+            while month <= 0:
+                month += 12  # Rollback to the previous year
+                year -= 1
+            total_days_in_month = 0
+            while not (year == utcnow.year and month == utcnow.month):
+                year, month = _nextmonth(year, month)
+                _, days_in_month = calendar.monthrange(year, month)
+                total_days_in_month += days_in_month
+            timedelta = datetime.timedelta(days=total_days_in_month)
+        elif rollback_period.endswith('y'):
+            year = utcnow.year - period
+            total_days_in_year = 0
+            for yr in range(year, utcnow.year):
+                total_days_in_year += 366 if calendar.isleap(yr) else 365
+            timedelta = datetime.timedelta(days=total_days_in_year)
+        else:
+            raise ValueError(f"Unsupported {rollback_period=}")
+        start_date = end_date - timedelta
     return start_date.date(), end_date.date()

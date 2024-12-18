@@ -3,9 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import datetime
+    from pfund.types.literals import tCEFI_PRODUCT_TYPE
+    from pfund.datas.resolution import Resolution
+    from pfund.products.product_base import BaseProduct
+
     from pfeed.types.core import tDataModel
     from pfeed.types.literals import tSTORAGE
     from pfeed.flows.dataflow import DataFlow
+    from pfeed.const.enums import DataRawLevel
 
 import pandas as pd
 
@@ -14,14 +19,13 @@ from pfeed.feeds.crypto_market_data_feed import CryptoMarketDataFeed
 
 
 __all__ = ['BybitFeed']
-tPRODUCT_TYPE = Literal['SPOT', 'PERP', 'IPERP', 'FUT', 'IFUT', 'OPT']
 
 
 class BybitFeed(CryptoMarketDataFeed):
     @staticmethod
     def get_data_source():
-        from pfeed.sources.bybit.data_source import BybitDataSource
-        return BybitDataSource()
+        from pfeed.sources.bybit.source import BybitSource
+        return BybitSource()
     
     def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.
@@ -56,52 +60,62 @@ class BybitFeed(CryptoMarketDataFeed):
     def _execute_stream(self, data_model: tDataModel):
         raise NotImplementedError(f'{self.name} _execute_stream() is not implemented')
 
-    @clear_current_dataflows
     def download(
         self,
         products: str | list[str] | None=None, 
-        product_types: tPRODUCT_TYPE | list[tPRODUCT_TYPE] | None=None, 
-        data_type: Literal['tick', 'second', 'minute', 'hour', 'day', 'week', 'month', 'year']='tick',
+        product_types: tCEFI_PRODUCT_TYPE | list[tCEFI_PRODUCT_TYPE] | None=None, 
+        data_type: Literal['tick', 'second', 'minute', 'hour', 'day']='tick',
+        rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        raw_level: Literal['normalized', 'cleaned', 'original']='normalized',
+        raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
         to_storage: tSTORAGE='local',
         filename_prefix: str='',
         filename_suffix: str='',
+        product_specs: dict[str, dict] | None=None,  # {'product_basis': {'attr': 'value', ...}}
     ) -> BybitFeed:
         '''
         Args:
             filename_prefix: The prefix of the filename.
             filename_suffix: The suffix of the filename.
+            product_specs: The specifications for the products.
+                'BTC_USDT_OPT' is in `products`, you need to provide the specifications of the option in `product_specs`:
+                e.g. {'BTC_USDT_OPT': {'strike_price': 10000, 'expiration': '2024-01-01', 'option_type': 'CALL'}}
+                The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
         '''
-        from pfund.datas.resolution import Resolution
-        from pfeed.const.enums import DataRawLevel
+        return super().download(
+            products=products,
+            symbols=None,
+            product_types=product_types,
+            data_type=data_type,
+            rollback_period=rollback_period,
+            start_date=start_date,
+            end_date=end_date,
+            raw_level=raw_level,
+            to_storage=to_storage,
+            filename_prefix=filename_prefix,
+            filename_suffix=filename_suffix,
+            product_specs=product_specs,
+        )
+    
+    def _create_download_dataflows(
+        self,
+        product: BaseProduct,
+        resolution: Resolution,
+        raw_level: DataRawLevel,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        filename_prefix: str,
+        filename_suffix: str,
+    ) -> list[DataFlow]:
         from pfeed.utils.utils import get_dates_in_between
-
-        pdts = self._prepare_products(products, product_types)
-        resolution = Resolution(data_type)
-        start_date, end_date = self._standardize_dates(start_date, end_date)
-        dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
-        is_raw_data = resolution >= self.data_source.lowest_resolution
-        if not is_raw_data:
-            raw_level = DataRawLevel.CLEANED
-        else:
-            raw_level = DataRawLevel[raw_level.upper()]
-        if self.config.print_msg:
-            self._print_download_msg(resolution, start_date, end_date, raw_level)
-        dataflows_per_pdt: dict[str, list[DataFlow]] = {}
-        for pdt in pdts:
-            dataflows_per_pdt[pdt] = []
-            for date in dates:
-                data_model = self.create_market_data_model(pdt, resolution, date, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
-                # create a dataflow that schedules _execute_download()
-                dataflow: DataFlow = super().extract('download', data_model)
-                dataflows_per_pdt[pdt].append(dataflow)
-        self._add_default_transformations_to_download(dataflows_per_pdt, resolution, raw_level)
-        if not self._pipeline_mode:
-            self.load(to_storage)
-            self.run()
-        return self
+        dataflows: list[DataFlow] = []
+        for date in get_dates_in_between(start_date, end_date):
+            data_model = self.create_market_data_model(product, resolution, raw_level, date, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+            # create a dataflow that schedules _execute_download()
+            dataflow: DataFlow = super().extract('download', data_model)
+            dataflows.append(dataflow)
+        return dataflows
 
     def _execute_download(self, data_model: tDataModel) -> bytes | None:
         return self.api.get_data(data_model.product, data_model.date)

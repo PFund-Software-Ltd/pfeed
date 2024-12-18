@@ -49,11 +49,17 @@ def is_empty(df: pl.DataFrame | pl.LazyFrame) -> bool:
 
 def to_datetime(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
     from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
-    if isinstance(df, pl.LazyFrame):
-        first_ts = df.select(pl.col("ts").first()).collect().item()
+    assert 'ts' in df.columns, '`ts` column is required'
+    if df['ts'].dtype == pl.Datetime:
+        return df
     else:
-        first_ts = df[0, "ts"]
-    ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
-    return df.with_columns(
-        (pl.col("ts") * scaling_factor).cast(pl.Datetime(time_unit=ts_unit))
-    )
+        if isinstance(df, pl.LazyFrame):
+            first_ts = df.select(pl.col("ts").first()).collect().item()
+        else:
+            first_ts = df[0, "ts"]
+        ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
+        return df.with_columns(
+            (pl.col("ts") * scaling_factor).cast(pl.Datetime(time_unit=ts_unit))
+        )
+
+# TODO: to_timestamp()

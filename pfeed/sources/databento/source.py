@@ -1,15 +1,18 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any, Literal
+if TYPE_CHECKING:
+    from pfund.products.product_base import BaseProduct
+
 import os
 import datetime
-
-from typing import Any, Literal
-
-from pfeed.sources.base_data_source import BaseDataSource
-from pfeed.sources.databento.const import DATASETS
 
 import databento
 # from databento_dbn import SType
 from databento.common.publishers import Dataset, Publisher
 from databento.common.dbnstore import DBNStore
+
+from pfeed.sources.tradfi_source import TradFiSource
+from pfeed.sources.databento.const import DATASETS
 
 
 tDATASET = Literal[
@@ -23,7 +26,7 @@ tDATASET = Literal[
 
 
 # NOTE: 2024-10-26, best free llm for deriving databento dataset and start date is 'mistral'
-class DatabentoDataSource(BaseDataSource):
+class DatabentoSource(TradFiSource):
     def __init__(self):
         super().__init__('DATABENTO')
         if not os.getenv('DATABENTO_API_KEY'):
@@ -33,6 +36,18 @@ class DatabentoDataSource(BaseDataSource):
         self.live_api = databento.Live(api_key)
         self.ref_api = self.reference_api = databento.Reference(api_key)
 
+    # TODO
+    def create_product(self, product_basis: str, symbol='', **product_specs) -> BaseProduct:
+        product = super().create_product(product_basis, symbol, **product_specs)
+        if not symbol:
+            symbol = self._create_symbol(product)
+            product.set_symbol(symbol)
+        return product
+    
+    # TODO
+    def _create_symbol(self, product: BaseProduct) -> str:
+        pass
+    
     def _derive_start_date(self, symbol: str) -> str | None:
         def is_valid_date(date_string):
             try:

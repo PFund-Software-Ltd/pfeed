@@ -5,7 +5,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from pfeed.const.enums.env import Environment
-from pfeed.sources.base_data_source import BaseDataSource
+from pfeed.sources.base_source import BaseSource
 
 
 class BaseDataModel(BaseModel, ABC):
@@ -25,7 +25,7 @@ class BaseDataModel(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     env: Environment
-    source: BaseDataSource
+    source: BaseSource
     filename: str = ''
     filename_prefix: str = ''
     filename_suffix: str = ''
@@ -43,7 +43,7 @@ class BaseDataModel(BaseModel, ABC):
 
     def __str__(self):
         if self.unique_identifier:
-            return f'{self.source.name.value}_{self.unique_identifier}'
+            return f'{self.source.name.value}:{self.unique_identifier}'
         else:
             return f'{self.source.name.value}'
 

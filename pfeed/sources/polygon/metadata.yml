@@ -10,9 +10,9 @@ data_origin: >
 data_categories:
   market_data:
     resolutions:
-provider_type: data_distributor
+provider_type: distributor  # refer to enum DataProviderType
+access_type: free_tier  # refer to enum DataAccessType
 api_key_required: true
-has_free_access: true
 rate_limits: null
 github_repo: https://github.com/polygon-io/client-python
 is_repo_official: true

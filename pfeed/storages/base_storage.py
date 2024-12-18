@@ -8,6 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 
 from pfeed.const.enums import DataStorage
+from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 
 @dataclass
@@ -20,6 +21,9 @@ class BaseStorage:
     kwargs: dict = field(default_factory=dict)
     
     def __post_init__(self):
+        if isinstance(self.data_model, TimeBasedDataModel):
+            assert not self.data_model.end_date, \
+                'data storage is per date, only start_date should be provided, end_date must be None'
         self.data_path = self._create_data_path()
         self.file_path: Path | str = self._create_file_path()
         if isinstance(self.file_path, Path):
@@ -62,4 +66,4 @@ class BaseStorage:
         return self.file_path.exists()
 
     def __str__(self):
-        return f'{self.name} {self.data_model}'
+        return f'{self.name}:{self.data_model}'

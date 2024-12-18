@@ -1,13 +1,22 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.products.product_base import BaseProduct
+
+from abc import ABC, abstractmethod
+
 from pfeed.types.literals import tDATA_SOURCE
-from pfeed.const.enums import DataSource
+from pfeed.const.enums import DataSource, DataProviderType, DataAccessType
 
 
-class BaseDataSource:
+class BaseSource(ABC):
     def __init__(self, name: tDATA_SOURCE):
         self.name = DataSource[name.upper()]
         self.generic_metadata, self.specific_metadata = self._load_metadata()
+        self.start_date = self.specific_metadata.get('start_date', None)
         self.api_key_required = self.generic_metadata['api_key_required']
-        self.has_free_access = self.generic_metadata['has_free_access']
+        self.access_type = DataAccessType[self.generic_metadata['access_type'].upper()]
+        self.provider_type = DataProviderType[self.generic_metadata['provider_type'].upper()]
         self.data_origin = self.generic_metadata['data_origin']
         self.rate_limits = self.generic_metadata['rate_limits']
         self.docs_url = self.generic_metadata['docs_url']
@@ -15,6 +24,10 @@ class BaseDataSource:
         self.dtypes = self.data_types = self._extract_data_types()
         self.highest_resolution, self.lowest_resolution = self._get_highest_and_lowest_resolutions(self.data_types)
         self.ptypes = self.product_types = self._extract_product_types()
+    
+    @abstractmethod
+    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
+        pass
     
     @staticmethod
     def _get_highest_and_lowest_resolutions(data_types: list[str]):

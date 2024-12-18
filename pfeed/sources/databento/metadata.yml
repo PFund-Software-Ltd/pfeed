@@ -22,9 +22,9 @@ data_categories:
       - STK
       - FUT
       - OPT
-provider_type: data_distributor
+provider_type: distributor  # refer to enum DataProviderType
 api_key_required: true
-has_free_access: true  # free $125 credits
+access_type: paid_by_usage  # refer to enum DataAccessType
 rate_limits: null
 github_repo: https://github.com/databento/databento-python
 is_repo_official: true

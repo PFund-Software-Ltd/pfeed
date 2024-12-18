@@ -43,8 +43,17 @@ def is_empty(df: pd.DataFrame) -> bool:
 
 
 def to_datetime(df: pd.DataFrame) -> pd.DataFrame:
+    # determine_timestamp_integer_unit_and_scaling_factor() is used to preserve the precision of the timestamp
+    from pandas.api.types import is_datetime64_any_dtype as is_datetime
     from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
-    first_ts = df.loc[0, 'ts']
-    ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
-    df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
-    return df
+    assert 'ts' in df.columns, '`ts` column is required'
+    if is_datetime(df['ts']):
+        return df
+    else:
+        first_ts = df.loc[0, 'ts']
+        ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
+        df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
+        return df
+
+
+# TODO: to_timestamp()

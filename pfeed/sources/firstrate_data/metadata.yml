@@ -19,9 +19,9 @@ data_categories:
         - CRYPTO
         - FX
         - INDEX
-provider_type: data_vendor  # data is not as raw as data provided from data distributors
+provider_type: vendor  # data is not as raw as data provided from data distributors
+access_type: paid  # refer to enum DataAccessType
 api_key_required: true
-has_free_access: false
 rate_limits: null
 github_repo: null
 is_repo_official: null

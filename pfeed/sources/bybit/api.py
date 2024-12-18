@@ -1,3 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund.products.product_base import BaseProduct
+
+
 class BybitAPI:
     '''Custom API for downloading data from Bybit'''
     URLS = {
@@ -13,8 +19,9 @@ class BybitAPI:
         'FUT': r'-\d{2}[A-Z]{3}\d{2}\/$',  # USDC futures e.g. BTC-10NOV23/
         'IPERP': r'USD\/$',  # inverse perps;
         'IFUT': r'USD[A-Z]\d{2}\/$',  # inverse futures e.g. BTCUSDH24/
-        # match everything since everything from https://public.bybit.com/spot is spot
-        'SPOT': '.*',
+        'SPOT': '.*',  # match everything since everything from https://public.bybit.com/spot is spot
+        # TODO: add options
+        # 'OPT': ...
     }
 
     def __init__(self, exchange):
@@ -76,7 +83,7 @@ class BybitAPI:
             epdts = [node.get('href').replace('/', '') for node in soup.find_all('a') if pattern.search(node.get('href'))]
             return epdts
 
-    def get_data(self, pdt: str, date: str) -> bytes | None:
+    def get_data(self, product: BaseProduct, date: str) -> bytes | None:
         def _create_efilename(ptype: str, epdt: str, date: str):
             is_spot = (ptype == 'SPOT')
             if is_spot:
@@ -86,9 +93,8 @@ class BybitAPI:
         # used to check if the efilename created by the date exists in the efilenames (files on the exchange's data server)
         # if pdt not in self.efilenames:
         #     self.efilenames[pdt] = self.get_efilenames(pdt)
-        ptype = pdt.split('_')[2].upper()
-        category = self._exchange._derive_product_category(ptype)
-        epdt = self.adapter(pdt, group=category)
+        ptype = product.type.value
+        epdt = product.symbol
         efilename = _create_efilename(ptype, epdt, date)
         # if efilename not in self.efilenames[pdt]:
         #     return None

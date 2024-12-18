@@ -24,13 +24,22 @@ class TestDownload:
             'start_date': '2024-01-01',
             'end_date': '2024-01-01',
             'to_storage': 'local',
+            'product_specs': {
+                # TODO: read from market config to get an actively traded option
+                # 'BTC_USDT_OPT': {
+                #     'strike_price': 10000,
+                #     'expiration': '2024-01-01',
+                #     'option_type': 'CALL',
+                # },
+            },
         }
     
-    def extract_downloaded_data(self, feed, pdt, data_type, date, to_storage, raw_level, filename_prefix: str='', filename_suffix: str='') -> BaseStorage | None:
+    def extract_downloaded_data(self, feed, pdt: str, data_type, date, to_storage, raw_level, filename_prefix: str='', filename_suffix: str='') -> BaseStorage | None:
         from pfeed.etl import extract_data
         from pfund.datas.resolution import Resolution
+        product = feed.create_product(pdt)
         data_model = feed.create_market_data_model(
-            product=pdt, 
+            product=product, 
             resolution=Resolution(data_type), 
             date=datetime.datetime.strptime(date, '%Y-%m-%d').date(), 
             raw_level=raw_level,

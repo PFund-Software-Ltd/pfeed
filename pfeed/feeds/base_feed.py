@@ -3,11 +3,12 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import pandas as pd
     from prefect import Flow as PrefectFlow
+    from pfund.products.product_base import BaseProduct
     
     from pfeed.types.core import tData, tDataModel
     from pfeed.types.literals import tSTORAGE, tDATA_TOOL
     from pfeed.const.enums import DataSource
-    from pfeed.sources.base_data_source import BaseDataSource
+    from pfeed.sources.base_source import BaseSource
 
 import os    
 import sys
@@ -25,7 +26,7 @@ from pfeed.config_handler import get_config
 from pfeed import etl
 from pfeed.const.enums import DataTool
 from pfeed.flows.dataflow import DataFlow
-from pfeed.utils.utils import lambda_with_name
+from pfeed.utils.utils import lambda_with_name, rollback_date_range
 
 
 __all__ = ["BaseFeed"]
@@ -59,7 +60,7 @@ class BaseFeed(ABC):
         self._failed_dataflows: list[DataFlow] = []
         self._current_dataflows: list[DataFlow] = []
         
-        self.data_source: BaseDataSource = self.get_data_source()
+        self.data_source: BaseSource = self.get_data_source()
         self.api = self.data_source.api if hasattr(self.data_source, 'api') else None
         self.name: DataSource = self.data_source.name
         assert data_tool.upper() in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
@@ -85,7 +86,7 @@ class BaseFeed(ABC):
     
     @staticmethod
     @abstractmethod
-    def get_data_source() -> BaseDataSource:
+    def get_data_source() -> BaseSource:
         pass
     
     @abstractmethod
@@ -118,7 +119,10 @@ class BaseFeed(ABC):
     def _execute_stream(self, data_model: tDataModel) -> tData:
         raise NotImplementedError(f"{self.name} _execute_stream() is not implemented")
 
-    def _prepare_products(self, pdts: list[str], ptypes: list[str]) -> list[str]:
+    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
+        return self.data_source.create_product(product_basis, symbol=symbol, **product_specs)
+
+    def _prepare_products(self, pdts: list[str], ptypes: list[str] | None=None) -> list[str]:
         '''Prepare products based on input products and product types
         If both "products" and "product_types" are provided, only "products" will be used.
         If "products" is not provided, use "product_types" to get products.
@@ -132,33 +136,55 @@ class BaseFeed(ABC):
                 pdts_or_ptypes = [pdts_or_ptypes]
             pdts_or_ptypes = [pdt.replace('-', '_').upper() for pdt in pdts_or_ptypes]
             return pdts_or_ptypes
+        ptypes = ptypes or []
         if pdts and ptypes:
             Console().print('Warning: both "products" and "product_types" provided, only "products" will be used', style='bold red')
         # no pdts -> use ptypes; no ptypes -> use data_source.product_types
         if not (pdts := _standardize_pdts_or_ptypes(pdts)):
             ptypes = _standardize_pdts_or_ptypes(ptypes)
-            if not ptypes and hasattr(self.data_source, 'get_products_by_ptypes'):
+            if not ptypes and hasattr(self.data_source, 'get_products_by_types'):
                 Console().print(f'Warning: no "products" or "product_types" provided, downloading ALL products with ALL product types {ptypes} from {self.name}', style='bold red')
                 if not click.confirm('Do you want to continue?', default=False):
                     sys.exit(1)
                 ptypes = self.data_source.product_types
-            if hasattr(self.data_source, 'get_products_by_ptypes'):
-                pdts = self.data_source.get_products_by_ptypes(ptypes)
+            if hasattr(self.data_source, 'get_products_by_types'):
+                pdts = self.data_source.get_products_by_types(ptypes)
             else:
                 raise ValueError(f'"products" cannot be empty for {self.name}')
         return pdts
     
-    def _standardize_dates(self, start_date: str, end_date: str) -> tuple[datetime.date, datetime.date]:
-        '''Standardize start_date and end_date
-        If start_date is not specified:
-            If the data source has a 'start_date' attribute, use it as the start date.
-            Otherwise, use yesterday's date as the default start date.
-        If end_date is not specified, use today's date as the end date.
+    def _standardize_dates(self, start_date: str, end_date: str, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
+        '''Standardize start_date and end_date based on input parameters.
+
+        Args:
+            start_date: Start date string in YYYY-MM-DD format.
+                If not provided, will be determined by rollback_period.
+            end_date: End date string in YYYY-MM-DD format.
+                If not provided and start_date is provided, defaults to yesterday.
+                If not provided and start_date is not provided, will be determined by rollback_period.
+            rollback_period: Period to rollback from today if start_date is not provided.
+                Can be a period string like '1d', '1w', '1m', '1y' etc.
+                Or 'ytd' to use the start date of the current year.
+                Or 'max' to use data source's start_date if available.
+
+        Returns:
+            tuple[datetime.date, datetime.date]: Standardized (start_date, end_date)
+
+        Raises:
+            ValueError: If rollback_period='max' but data source has no start_date attribute
         '''
-        today = datetime.datetime.now(tz=datetime.timezone.utc).date()
-        yesterday = today - datetime.timedelta(days=1)
-        start_date = start_date or getattr(self.data_source, 'start_date', yesterday)
-        end_date = end_date or today
+        if start_date:
+            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+            yesterday = datetime.datetime.now(tz=datetime.timezone.utc).date() - datetime.timedelta(days=1)
+            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date() or yesterday
+        else:
+            if rollback_period == 'max':
+                if self.data_source.start_date:
+                    start_date = self.data_source.start_date
+                else:
+                    raise ValueError(f'{self.name} {rollback_period=} is not supported')
+            else:
+                start_date, end_date = rollback_date_range(rollback_period)
         return start_date, end_date
     
     def create_dataflow(self, data_model: tDataModel) -> DataFlow:
@@ -340,3 +366,6 @@ class BaseFeed(ABC):
 
     def get_historical_data(self, *args, **kwargs) -> tData | None:
         raise NotImplementedError(f'{self.name} get_historical_data() is not implemented')
+
+    def get_realtime_data(self, *args, **kwargs) -> tData | None:
+        raise NotImplementedError(f'{self.name} get_realtime_data() is not implemented')

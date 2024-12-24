@@ -156,10 +156,11 @@ class MarketDataFeed(BaseFeed):
     
     def _create_metadata(self, raw_level: DataRawLevel) -> dict:
         # if is_placeholder is true, it means there is no data on that date
+        # without it, you can't know if the data is missing due to download failure or there is actually no data on that date
         return {'raw_level': raw_level.name.lower(), 'is_placeholder': 'false'}
     
     # TODO
-    def _assert_standards(self, df: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+    def _assert_data_standards(self, df: pd.DataFrame, metadata: dict) -> pd.DataFrame:
         '''
         Assert that the data conforms to the pfeed's internal standards.
         For market data, the standards are:

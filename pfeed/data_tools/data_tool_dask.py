@@ -11,7 +11,7 @@ import dask.dataframe as dd
 from pfeed.const.enums import DataStorage, DataTool
 
 
-name = DataTool.DASK
+name = DataTool.dask
 
 
 def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE, **kwargs) -> dd.DataFrame:

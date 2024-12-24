@@ -10,7 +10,7 @@ from pyspark.sql import DataFrame as SparkDataFrame, functions as F, SparkSessio
 from pfeed.const.enums import DataStorage, DataTool
 
 
-name = DataTool.SPARK
+name = DataTool.spark
 
 
 def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE, **kwargs) -> SparkDataFrame:

@@ -34,6 +34,9 @@ except ImportError:
 
         class Series:
             pass
+
+    class SparkDataFrame:
+        pass
            
 from pfeed.data_models import MarketDataModel, FundamentalDataModel
 

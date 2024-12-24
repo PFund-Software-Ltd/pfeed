@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import datetime
     from pfund.types.literals import tCEFI_PRODUCT_TYPE
+    from pfeed.types.core import tDataFrame
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
 
@@ -119,3 +120,25 @@ class BybitFeed(CryptoMarketDataFeed):
 
     def _execute_download(self, data_model: tDataModel) -> bytes | None:
         return self.api.get_data(data_model.product, data_model.date)
+
+    def get_historical_data(
+        self,
+        product: str,
+        resolution: str="1t",
+        rollback_period: str="1d",
+        start_date: str="",
+        end_date: str="",
+        raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
+        from_storage: tSTORAGE | None=None,
+        **product_specs
+    ) -> tDataFrame | None:
+        return super().get_historical_data(
+            product=product,
+            resolution=resolution,
+            rollback_period=rollback_period,
+            start_date=start_date,
+            end_date=end_date,
+            raw_level=raw_level,
+            from_storage=from_storage,
+            **product_specs
+        )

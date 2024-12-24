@@ -2,7 +2,7 @@
 
 
 
-# if resolution is quote/tick/second, download date by date to avoid memory issue 
-# since interval transformation is using pandas
+# download data date by date to avoid memory issue (pandas) 
+# and it is the least risky in case of download failure of bulk data
 def download(...):
     pass

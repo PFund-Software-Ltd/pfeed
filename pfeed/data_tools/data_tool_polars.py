@@ -10,7 +10,7 @@ import polars as pl
 from pfeed.const.enums import DataStorage, DataTool
 
 
-name = DataTool.POLARS
+name = DataTool.polars
 
 
 def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE, **kwargs) -> pl.DataFrame | pl.LazyFrame:

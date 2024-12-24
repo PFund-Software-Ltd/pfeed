@@ -172,14 +172,12 @@ def rollback_date_range(rollback_period: str | Literal['ytd']) -> tuple[datetime
             return year, month+1
     
     utcnow = datetime.datetime.now(tz=datetime.timezone.utc)
-    end_date = utcnow - datetime.timedelta(days=1)  # Previous day
-    
+
     if rollback_period.lower() == 'ytd':
         start_date = datetime.datetime(utcnow.year, 1, 1, tzinfo=datetime.timezone.utc)
     else:
         # check if rollback_period is a valid Resolution
         rollback_period = repr(Resolution(rollback_period))
-        
         period = int(rollback_period[:-1])
         if rollback_period.endswith('d'):
             timedelta = datetime.timedelta(days=period)
@@ -204,5 +202,6 @@ def rollback_date_range(rollback_period: str | Literal['ytd']) -> tuple[datetime
             timedelta = datetime.timedelta(days=total_days_in_year)
         else:
             raise ValueError(f"Unsupported {rollback_period=}")
-        start_date = end_date - timedelta
+        end_date = utcnow - datetime.timedelta(days=1)  # Previous day
+        start_date = end_date - timedelta + datetime.timedelta(days=1)
     return start_date.date(), end_date.date()

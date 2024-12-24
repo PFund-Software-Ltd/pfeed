@@ -10,7 +10,7 @@ import pandas as pd
 from pfeed.const.enums import DataStorage, DataTool
 
 
-name = DataTool.PANDAS
+name = DataTool.pandas
 
 
 def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE, **kwargs) -> pd.DataFrame:

@@ -333,13 +333,13 @@ def convert_to_pandas_df(data: tData) -> pd.DataFrame:
 
 
 def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
-    if data_tool == DataTool.PANDAS:
+    if data_tool == DataTool.pandas:
         return df
-    elif data_tool == DataTool.POLARS:
+    elif data_tool == DataTool.polars:
         return pl.from_pandas(df).lazy()
-    # elif data_tool == DataTool.DASK:
+    # elif data_tool == DataTool.dask:
     #     return dd.from_pandas(df, npartitions=1)
-    # elif data_tool == DataTool.SPARK:
+    # elif data_tool == DataTool.spark:
     #     spark = SparkSession.builder.getOrCreate()
     #     return spark.createDataFrame(df)
     else:

@@ -2,11 +2,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.plugins.base_plugin import BasePlugin
+    # need these imports to support IDE hints:
+    config = ...
+    configure = ...
+    aliases = ...
+    from pfeed.feeds import (
+        BybitFeed,
+        YahooFinanceFeed, 
+    )
 
 from importlib.metadata import version
-
-from pfeed.config_handler import configure, get_config
-from pfeed.const.aliases import ALIASES as aliases
 
 
 plugins = {}
@@ -15,16 +20,33 @@ def add_plugin(plugin: BasePlugin):
     
 
 def __getattr__(name: str):
+    if name == 'config':
+        from pfeed.config_handler import get_config
+        return get_config()
+    elif name == 'configure':
+        from pfeed.config_handler import configure
+        return configure
+    elif name == 'aliases':
+        from pfeed.const.aliases import ALIASES
+        from pfund.const.aliases import ALIASES as PFUND_ALIASES
+        return {**ALIASES, **PFUND_ALIASES}
+    elif name == 'YahooFinanceFeed':
+        from pfeed.feeds.yahoo_finance_feed import YahooFinanceFeed
+        return YahooFinanceFeed
+    elif name == 'BybitFeed':
+        from pfeed.feeds.bybit_feed import BybitFeed
+        return BybitFeed
     if name in plugins:
         return plugins[name]
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     
     
 def what_is(alias: str) -> str | None:
-    from pfund.const.aliases import ALIASES as pfund_aliases
-    if alias in pfund_aliases or alias.upper() in pfund_aliases:
-        return pfund_aliases.get(alias, pfund_aliases.get(alias.upper(), None))
-    elif alias in aliases or alias.upper() in aliases:
+    from pfeed.const.aliases import ALIASES
+    from pfund.const.aliases import ALIASES as PFUND_ALIASES
+    if alias in PFUND_ALIASES or alias.upper() in PFUND_ALIASES:
+        return PFUND_ALIASES.get(alias, PFUND_ALIASES.get(alias.upper(), None))
+    elif alias in ALIASES or alias.upper() in ALIASES:
         return aliases.get(alias, aliases.get(alias.upper(), None))
 
 

@@ -63,10 +63,11 @@ class BaseFeed(ABC):
         self.data_source: BaseSource = self.get_data_source()
         self.api = self.data_source.api if hasattr(self.data_source, 'api') else None
         self.name: DataSource = self.data_source.name
-        assert data_tool.upper() in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
-        self.data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool.lower()}')
+        data_tool = data_tool.lower()
+        assert data_tool in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
+        self.data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool}')
         
-        if self.data_tool.name == DataTool.POLARS:
+        if self.data_tool.name == DataTool.polars:
             import multiprocessing
             # RuntimeWarning: Using fork() can cause Polars to deadlock in the child process.
             multiprocessing.set_start_method('spawn', force=True)
@@ -94,7 +95,7 @@ class BaseFeed(ABC):
         pass
     
     @abstractmethod
-    def _assert_standards(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _assert_data_standards(self, df: pd.DataFrame) -> pd.DataFrame:
         '''
         Assert that the data conforms to the pfeed's internal standards.
         Different data feeds have different standards.
@@ -240,17 +241,17 @@ class BaseFeed(ABC):
                 'etl.load_data',
                 lambda data: etl.load_data(data_model, data, storage, **kwargs)
             )
-        def _create_assert_standards_function(data_model):
+        def _create_assert_data_standards_function(data_model):
             return lambda_with_name(
-                'assert_standards',
-                lambda df: self._assert_standards(df, data_model.metadata)
+                'assert_data_standards',
+                lambda df: self._assert_data_standards(df, data_model.metadata)
             )
         dataflows = dataflows or self._current_dataflows
         # NOTE: remember when looping, if you pass in e.g. dataflow to lambda dataflow: ..., due to python lambda's late binding, you are passing in the last dataflow object to all lambdas
-        # so this is wrong: dataflow.add_operation('transform', lambda df: self._assert_standards(df, dataflow.data_model.metadata)) <- dataflow object is always the last one in the loop
+        # so this is wrong: dataflow.add_operation('transform', lambda df: self._assert_data_standards(df, dataflow.data_model.metadata)) <- dataflow object is always the last one in the loop
         for dataflow in dataflows:
             # assert data standards before loading into storage
-            dataflow.add_operation('transform', _create_assert_standards_function(dataflow.data_model))
+            dataflow.add_operation('transform', _create_assert_data_standards_function(dataflow.data_model))
             dataflow.add_operation('load', _create_load_function(dataflow.data_model))
         if dataflows == self._current_dataflows:
             self._clear_current_dataflows()
@@ -278,7 +279,7 @@ class BaseFeed(ABC):
         if self._use_ray:
             if self.config.print_msg:
                 print('''Note:
-                        If Ray seems to be running sequentially, it might be because you don't have enough network bandwidth to download data in parallel.
+                    If Ray seems to be running sequentially, it might be because you don't have enough network bandwidth to download data in parallel.
                 ''')
             
             import atexit

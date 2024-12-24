@@ -2,7 +2,7 @@ from enum import StrEnum
 
 
 class DataTool(StrEnum):
-    PANDAS = 'PANDAS'
-    POLARS = 'POLARS'
-    # DASK = 'DASK'
-    # SPARK = 'SPARK'
+    pandas = 'pandas'
+    polars = 'polars'
+    # dask = 'dask'
+    # spark = 'spark'

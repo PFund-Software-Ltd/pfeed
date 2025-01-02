@@ -210,13 +210,14 @@ class YahooFinanceFeed(MarketDataFeed):
             if df is None:
                 closer_start_date = data_model.start_date + datetime.timedelta(days=1)
                 data_model.update_start_date(closer_start_date)
+                self.logger.info(f'failed to download {data_model.product} {data_model.resolution} data, retrying with start_date={closer_start_date}')
                 if data_model.start_date >= data_model.end_date:
                     break
                 time.sleep(0.1)
             else:
                 break
         else:
-            self.logger.warning(f'Failed to download {data_model.product} {data_model.resolution} data, '
+            self.logger.warning(f'failed to download {data_model.product} {data_model.resolution} data, '
                                 f'please check if start_date={original_start_date} and end_date={data_model.end_date} is within the valid range')
         self._yfinance_kwargs.clear()
         # TODO: better handling of rate limit control

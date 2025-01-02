@@ -9,7 +9,9 @@ if TYPE_CHECKING:
 
 import os
 import io
+import datetime
 from pathlib import Path
+from functools import lru_cache
 
 from minio import S3Error, ServerError, Minio
 
@@ -27,7 +29,8 @@ class MinioStorage(BaseStorage):
     def __post_init__(self):
         super().__post_init__()
         self.endpoint = self.create_endpoint()
-        if not self.check_if_server_running():
+        cache_time = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
+        if not self._check_if_server_running(cache_time, self.endpoint):
             raise ServerError(f"{self.name} is not running", 503)
         self.minio = self._create_minio()
         if not self.minio.bucket_exists(self.BUCKET_NAME):
@@ -50,18 +53,25 @@ class MinioStorage(BaseStorage):
             **self.kwargs,
         )
     
-    def check_if_server_running(self) -> bool:
+    @staticmethod
+    @lru_cache(maxsize=1)  # use it to avoid repeated checking
+    def _check_if_server_running(cache_time: datetime.datetime, endpoint: str) -> bool:
+        '''
+        Args:
+            cache_time: datetime.datetime (seconds removed), used to make the function signature unique
+                to make lru_cache's ttl (time to live) to be 1 minute
+        '''
         import requests
         from requests.exceptions import RequestException, ReadTimeout
         
         try:
-            response = requests.get(f'{self.endpoint}/minio/health/live', timeout=3)
-            if response.status_code != 200:
+            response = requests.get(f'{endpoint}/minio/health/live', timeout=1)
+            success = response.status_code == 200
+            if not success:
                 print(f"Unhandled response from MinIO: {response.status_code=} {response.content} {response}")
-                return False
+            return success
         except (ReadTimeout, RequestException) as err:
             return False
-        return True
     
     # s3:// doesn't work with pathlib, so we need to return a string
     def _create_data_path(self) -> str:

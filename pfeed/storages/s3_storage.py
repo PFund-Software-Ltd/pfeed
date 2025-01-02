@@ -1,4 +1,5 @@
 import os
+import datetime
 
 from minio import Minio
 
@@ -26,5 +27,6 @@ class S3Storage(MinioStorage):
         )
 
     # TODO: boto3? or just minio.bucket_exists()? ideally you want ServerError raised
-    def check_if_server_running(self) -> bool:
+    @staticmethod
+    def _check_if_server_running(cache_time: datetime.datetime, endpoint: str) -> bool:
         pass

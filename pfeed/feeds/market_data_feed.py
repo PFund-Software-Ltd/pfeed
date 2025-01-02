@@ -232,7 +232,7 @@ class MarketDataFeed(BaseFeed):
             data_model = self.create_market_data_model(product, unit_resolution, raw_level, date, unique_identifier=unique_identifier)
             if storage := etl.extract_data(data_model, storage=from_storage):
                 storages[storage.name.value].append(storage)
-                self.logger.info(f'loaded from {storage}')
+                self.logger.debug(f'loaded from {storage}')
             else:
                 missing_dates.append(date)
 
@@ -249,6 +249,7 @@ class MarketDataFeed(BaseFeed):
                 storage=from_storage
             ) for from_storage, storages in storages.items()
         ]
+        
         df: tDataFrame | None = self.data_tool.concat(dfs) if dfs else None
         return df, missing_dates
     

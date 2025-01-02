@@ -22,7 +22,7 @@ class CacheStorage(LocalStorage):
 
     def clear_caches(self):
         '''Clear old caches except the current date'''
-        from pfeed import print_error
+        from pfund import print_error
         from pfeed.config_handler import get_config
         config = get_config()
         cache_path = config.cache_path

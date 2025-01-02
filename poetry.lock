@@ -4256,7 +4256,7 @@ develop = true
 
 [package.dependencies]
 click = "^8.1.7"
-duckdb = "^1.0.0"
+duckdb = "^1.1.2"
 ipython = "^8.23.0"
 orjson = "^3.10.1"
 platformdirs = "^4.3.6"
@@ -4417,17 +4417,18 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "polars"
-version = "1.17.1"
+version = "1.18.0"
 description = "Blazingly fast DataFrame library"
-optional = true
+optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "polars-1.17.1-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:d3a2172f7cf332010f0b034345111e9c86d59b5a5b0fc5aa0509121f40d9e43c"},
-    {file = "polars-1.17.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:82e98c69197df0d8ddc341a6175008508ceaea88f723f32044027810bcdb43fa"},
-    {file = "polars-1.17.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:59abdab015ed2ecfa0c63862b960816c35096e1f4df057dde3c44cd973af5029"},
-    {file = "polars-1.17.1-cp39-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:6d2f922c403b8900b3ae3c23a27b2cae3a2db40ad790cc4fc368402b92629b11"},
-    {file = "polars-1.17.1-cp39-abi3-win_amd64.whl", hash = "sha256:d38156c8259554cbcb17874d91e6dfa9c404335f08a3307496aadfdee46baa31"},
-    {file = "polars-1.17.1.tar.gz", hash = "sha256:5a3dac3cb7cbe174d1fa898cba9afbede0c08e8728feeeab515554d762127019"},
+    {file = "polars-1.18.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:27a6c7e5d2d15afb5f06291433019411c9a28e59e49741442d11a6a945f21daa"},
+    {file = "polars-1.18.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:6431563aee2dfa6787b0debbed3f565ebb4322da32317d95c8eac3e48330bc28"},
+    {file = "polars-1.18.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a333ff578373e29e0cacc79c35afe42c0620813c9b0c832009ab8b330e421093"},
+    {file = "polars-1.18.0-cp39-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:3a3a65a3ad6b6b0bd61a33f215856cfdd3e3abc9942e69526b2b88c0ef8683a4"},
+    {file = "polars-1.18.0-cp39-abi3-win_amd64.whl", hash = "sha256:a79ef2542454d9cace63e8fa528cf808b6377077173be522df9b8c0e792ce96a"},
+    {file = "polars-1.18.0-cp39-abi3-win_arm64.whl", hash = "sha256:52b543da52f4f6a661a2fa3cdd4b499938bdb34eeae538ec3bcef6c8c41bfc33"},
+    {file = "polars-1.18.0.tar.gz", hash = "sha256:5c2f119555ae8d822a5322509c6abd91601a8931115d2e4c3fff13fadf39e877"},
 ]
 
 [package.extras]
@@ -4452,7 +4453,7 @@ pyarrow = ["pyarrow (>=7.0.0)"]
 pydantic = ["pydantic"]
 sqlalchemy = ["polars[pandas]", "sqlalchemy"]
 style = ["great-tables (>=0.8.0)"]
-timezone = ["backports-zoneinfo", "tzdata"]
+timezone = ["tzdata"]
 xlsx2csv = ["xlsx2csv (>=0.8.0)"]
 xlsxwriter = ["xlsxwriter"]
 
@@ -7156,13 +7157,13 @@ propcache = ">=0.2.0"
 
 [[package]]
 name = "yfinance"
-version = "0.2.50"
+version = "0.2.51"
 description = "Download market data from Yahoo! Finance API"
 optional = false
 python-versions = "*"
 files = [
-    {file = "yfinance-0.2.50-py2.py3-none-any.whl", hash = "sha256:0db13b19313043328fe88ded2ddc306ede7d901d0f5181462a1cce76acdbcd2a"},
-    {file = "yfinance-0.2.50.tar.gz", hash = "sha256:33b379cad4261313dc93bfe3148d2f6e6083210e6341f0c93dd3af853019b1a0"},
+    {file = "yfinance-0.2.51-py2.py3-none-any.whl", hash = "sha256:d5cc7a970bb4bb43e4deee853514cbaa3c2b070a0dee6b2861c1ab5076f21dc1"},
+    {file = "yfinance-0.2.51.tar.gz", hash = "sha256:7902cc9b23699a51efa50f1cc7a965220a56beccc00d189f929b4c7c5c189a60"},
 ]
 
 [package.dependencies]
@@ -7179,7 +7180,7 @@ pytz = ">=2022.5"
 requests = ">=2.31"
 
 [package.extras]
-nospam = ["requests-cache (>=1.0)", "requests-ratelimiter (>=0.3.1)"]
+nospam = ["requests_cache (>=1.0)", "requests_ratelimiter (>=0.3.1)"]
 repair = ["scipy (>=1.6.3)"]
 
 [[package]]
@@ -7325,16 +7326,15 @@ cffi = {version = ">=1.11", markers = "platform_python_implementation == \"PyPy\
 cffi = ["cffi (>=1.11)"]
 
 [extras]
-all = ["bytewax", "confluent-kafka", "connectorx", "dask", "databento", "litellm", "minio", "modin", "polars", "polygon-api-client", "prefect", "psutil", "pyarrow", "pyspark", "ray"]
+all = ["bytewax", "confluent-kafka", "connectorx", "dask", "databento", "litellm", "minio", "modin", "polygon-api-client", "prefect", "psutil", "pyarrow", "pyspark", "ray"]
 core = ["bytewax", "confluent-kafka", "connectorx", "minio", "modin", "prefect", "psutil", "ray"]
 dask = ["dask"]
 databento = ["databento"]
 llm = ["litellm"]
-polars = ["polars"]
 polygon = ["polygon-api-client"]
 spark = ["pyspark"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "8318314405527e6aee8890caaa9eccc731a20f953adde5fb0e9d26af4753a657"
+content-hash = "c632c3b498860f9a5f1baa9985781ff1806373af2c47477bef6ac2a65e20cec8"

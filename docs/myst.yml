@@ -30,7 +30,6 @@ project:
             - file: getting-started/quickstart/get_realtime_data.ipynb
             - file: getting-started/quickstart/stream_realtime_data.ipynb
             - file: getting-started/quickstart/store_realtime_data.ipynb
-        - file: getting-started/cli_commands.md
     - file: concepts/concepts.md
       children:
         - file: concepts/data_lake.md
@@ -57,6 +56,7 @@ project:
         - file: integrations/ibis.ipynb
     - file: supported-data-sources.md
     - file: supported-data-tools.md
+    - file: cli_commands.md
     - title: Reference
       children:
         - file: reference/api-reference.md
@@ -70,6 +70,8 @@ site:
       url: https://github.com/PFund-Software-Ltd/pfund
     - title: pfolio
       url: https://github.com/PFund-Software-Ltd/pfolio
+    - title: pfund-plot
+      url: https://github.com/PFund-Software-Ltd/pfund-plot
     - title: pytrade.org
       url: https://pytrade.org
   options:

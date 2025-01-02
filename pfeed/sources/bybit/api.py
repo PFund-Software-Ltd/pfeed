@@ -38,7 +38,7 @@ class BybitAPI:
         import requests
         from requests.exceptions import ConnectionError
         
-        from pfeed import print_error, print_warning
+        from pfund import print_error, print_warning
 
         while num_retry:
             try:

@@ -3,8 +3,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.plugins.base_plugin import BasePlugin
     # need these imports to support IDE hints:
-    config = ...
-    configure = ...
     aliases = ...
     from pfeed.feeds import (
         BybitFeed,
@@ -12,6 +10,7 @@ if TYPE_CHECKING:
     )
 
 from importlib.metadata import version
+from pfeed.config_handler import configure, get_config
 
 
 plugins = {}
@@ -20,13 +19,7 @@ def add_plugin(plugin: BasePlugin):
     
 
 def __getattr__(name: str):
-    if name == 'config':
-        from pfeed.config_handler import get_config
-        return get_config()
-    elif name == 'configure':
-        from pfeed.config_handler import configure
-        return configure
-    elif name == 'aliases':
+    if name == 'aliases':
         from pfeed.const.aliases import ALIASES
         from pfund.const.aliases import ALIASES as PFUND_ALIASES
         return {**ALIASES, **PFUND_ALIASES}
@@ -48,10 +41,6 @@ def what_is(alias: str) -> str | None:
         return PFUND_ALIASES.get(alias, PFUND_ALIASES.get(alias.upper(), None))
     elif alias in ALIASES or alias.upper() in ALIASES:
         return aliases.get(alias, aliases.get(alias.upper(), None))
-
-
-print_error = lambda msg: print(f'\033[91m{msg}\033[0m')
-print_warning = lambda msg: print(f'\033[93m{msg}\033[0m')
 
 
 __version__ = version("pfeed")

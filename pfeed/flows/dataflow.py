@@ -78,7 +78,7 @@ class DataFlow:
             self.logger.warning(f'failed to load {self.data_source} data to storage')
         else:
             for storage in storages:
-                self.logger.info(f'loaded {self.data_source} data to {type(storage).__name__} {storage.file_path}')
+                self.logger.debug(f'loaded {self.data_source} data to {type(storage).__name__} {storage.file_path}')
 
     def to_prefect_flow(self, log_prints: bool = True, **kwargs) -> PrefectFlow:
         from prefect import flow, task

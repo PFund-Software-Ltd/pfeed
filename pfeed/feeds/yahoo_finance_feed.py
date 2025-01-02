@@ -168,6 +168,7 @@ class YahooFinanceFeed(MarketDataFeed):
         filename_prefix: str,
         filename_suffix: str,
     ) -> list[DataFlow]:
+        # NOTE: one data model for the entire date range
         data_model = self.create_market_data_model(
             product,
             resolution,

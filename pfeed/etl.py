@@ -50,7 +50,7 @@ def write_data(data: bytes | pd.DataFrame, storage: BaseStorage, metadata: dict 
 
     # Write data based on its type
     if isinstance(data, pd.DataFrame):
-        table = pa.Table.from_pandas(data)
+        table = pa.Table.from_pandas(data, preserve_index=False)
         schema = table.schema.with_metadata(metadata)
         table = table.replace_schema_metadata(schema.metadata)
         with fs.open_output_stream(file_path) as f:
@@ -137,7 +137,7 @@ def extract_data(data_model: tDataModel, storage: tSTORAGE | None = None) -> Bas
                 raw_level_from_metadata = DataRawLevel[data_model.metadata['raw_level'].upper()]
                 no_original_raw_level = DataRawLevel.ORIGINAL not in (raw_level_from_storage, raw_level_from_metadata)
                 # since raw_level 'cleaned' is compatible with 'normalized' ('cleaned' filtered out unnecessary columns),
-                # allow using data with raw_level='cleaned' even the specified raw_level in metadata is 'normalized'
+                # allow using data in storage with raw_level='cleaned' even the specified raw_level in metadata is 'normalized'
                 if no_original_raw_level and raw_level_from_metadata >= raw_level_from_storage:
                     return storage
             if metadata_from_storage == data_model.metadata:

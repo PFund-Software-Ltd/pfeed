@@ -66,19 +66,6 @@ class BaseFeed(ABC):
         data_tool = data_tool.lower()
         assert data_tool in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
         self.data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool}')
-        
-        if self.data_tool.name == DataTool.polars:
-            import multiprocessing
-            # RuntimeWarning: Using fork() can cause Polars to deadlock in the child process.
-            multiprocessing.set_start_method('spawn', force=True)
-        else:
-            import warnings
-            # Suppress RuntimeWarnings containing the specific message
-            warnings.filterwarnings(
-                "ignore",
-                message=r"Using fork\(\) can cause Polars to deadlock.*",
-                category=RuntimeWarning
-            )
         self.config = get_config()
         is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
         if not is_loggers_set_up:
@@ -279,7 +266,7 @@ class BaseFeed(ABC):
         if self._use_ray:
             if self.config.print_msg:
                 print('''Note:
-                    If Ray seems to be running sequentially, it might be because you don't have enough network bandwidth to download data in parallel.
+                    If Ray appears to be running sequentially rather than in parallel, it may be due to insufficient network bandwidth for parallel downloads.
                 ''')
             
             import atexit

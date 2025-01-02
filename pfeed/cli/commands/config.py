@@ -35,7 +35,6 @@ def reset(ctx):
 @click.option('--logging-file', '-l', 'logging_config_file_path', type=click.Path(resolve_path=True, exists=True), help='Set the logging config file path')
 @click.option('--docker-file', '-d', 'docker_compose_file_path', type=click.Path(exists=True), help='Set the docker-compose.yml file path')
 @click.option('--env-file', '-e', 'env_file_path', type=click.Path(resolve_path=True, exists=True), help='Path to the .env file')
-@click.option('--fork-process', '-f', type=bool, help='If True, multiprocessing.set_start_method("fork")')
 @click.option('--custom-excepthook', '-c', type=bool, help='If True, log uncaught exceptions to file')
 @click.option('--debug', '-D', type=bool, help='If True, enable debug mode where logs at DEBUG level will be printed')
 def set(**kwargs):

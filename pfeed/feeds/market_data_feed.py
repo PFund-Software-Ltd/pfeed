@@ -395,9 +395,9 @@ class MarketDataFeed(BaseFeed):
             df = None
         
         # resample daily data to e.g. '3d'
-        if df is not None and is_resample_required:                
+        if df is not None and is_resample_required:
             df: pd.DataFrame = etl.resample_data(df, target_resolution)
             df = etl.convert_to_user_df(df, self.data_tool.name)
             self.logger.info(f'resampled {self.name} {product} {unit_resolution} data to {target_resolution=}')
-
-        return df
+        else:
+            return df.to_native()

@@ -39,7 +39,6 @@ class ConfigHandler:
     cache_path: str = str(CACHE_PATH)
     logging_config_file_path: str = f'{CONFIG_PATH}/logging.yml'
     docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
-    fork_process: bool = True
     custom_excepthook: bool = False
     env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
@@ -144,9 +143,6 @@ class ConfigHandler:
                 if self._verbose:
                     print(f'{PROJ_NAME} created {path}')
                 
-        if self.fork_process and sys.platform != 'win32':
-            multiprocessing.set_start_method('fork', force=True)
-        
         if self.custom_excepthook and sys.excepthook is sys.__excepthook__:
             sys.excepthook = _custom_excepthook
         
@@ -192,7 +188,6 @@ def configure(
     logging_config: dict | None = None,
     docker_compose_file_path: str | None = None,
     env_file_path: str | None = None,
-    fork_process: bool | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
     print_msg: bool | None = None,

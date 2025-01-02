@@ -7,5 +7,4 @@ tPRODUCT_TYPE = Literal[
     'PERP', 'IPERP', 'SPOT', 'IFUT'
 ]
 tSTORAGE = Literal['cache', 'local', 'minio']
-# tDATA_TOOL = Literal['pandas', 'polars', 'dask', 'spark']
-tDATA_TOOL = Literal['pandas', 'polars']
+tDATA_TOOL = Literal['pandas', 'polars', 'dask']

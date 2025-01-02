@@ -33,6 +33,7 @@ polars = "^1.18.0"
 yfinance = "^0.2.51"
 pyarrow = "^17.0.0"
 pydantic = "^2.9.2"
+narwhals = "^1.20.1"
 zstandard = "^0.23.0"
 beautifulsoup4 = "^4.12.3"
 psutil = {version = "^6.0.0", optional = true}

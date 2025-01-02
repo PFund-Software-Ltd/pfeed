@@ -30,30 +30,26 @@ def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE
         return pd.read_parquet(paths, *args, **kwargs)
 
 
-def concat(dfs: list[pd.DataFrame], ignore_index: bool=True) -> pd.DataFrame:
-    return pd.concat(dfs, ignore_index=ignore_index)
+# def concat(dfs: list[pd.DataFrame], ignore_index: bool=True) -> pd.DataFrame:
+#     return pd.concat(dfs, ignore_index=ignore_index)
 
 
-def sort_by_ts(df: pd.DataFrame) -> pd.DataFrame:
-    return df.sort_values(by='ts', ignore_index=True, ascending=True)
+# def sort_by_ts(df: pd.DataFrame) -> pd.DataFrame:
+#     return df.sort_values(by='ts', ignore_index=True, ascending=True)
 
 
-def is_empty(df: pd.DataFrame) -> bool:
-    return df.empty
+# def is_empty(df: pd.DataFrame) -> bool:
+#     return df.empty
 
 
-def to_datetime(df: pd.DataFrame) -> pd.DataFrame:
-    # determine_timestamp_integer_unit_and_scaling_factor() is used to preserve the precision of the timestamp
-    from pandas.api.types import is_datetime64_any_dtype as is_datetime
-    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
-    assert 'ts' in df.columns, '`ts` column is required'
-    if is_datetime(df['ts']):
-        return df
-    else:
-        first_ts = df.loc[0, 'ts']
-        ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
-        df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
-        return df
-
-
-# TODO: to_timestamp()
+# def to_datetime(df: pd.DataFrame) -> pd.DataFrame:
+#     # determine_timestamp_integer_unit_and_scaling_factor() is used to preserve the precision of the timestamp
+#     from pandas.api.types import is_datetime64_any_dtype as is_datetime
+#     from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
+#     if is_datetime(df['ts']):
+#         return df
+#     else:
+#         first_ts = df.loc[0, 'ts']
+#         ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
+#         df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
+#         return df

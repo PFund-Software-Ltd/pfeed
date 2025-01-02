@@ -33,33 +33,30 @@ def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE
         return pl.scan_parquet(paths, *args, **kwargs)
 
 
-def concat(dfs: list[pl.DataFrame | pl.LazyFrame]) -> pl.DataFrame | pl.LazyFrame:
-    return pl.concat(dfs)
+# def concat(dfs: list[pl.DataFrame | pl.LazyFrame]) -> pl.DataFrame | pl.LazyFrame:
+#     return pl.concat(dfs)
 
 
-def sort_by_ts(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
-    return df.sort(by='ts', descending=False)
+# def sort_by_ts(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
+#     return df.sort(by='ts', descending=False)
 
 
-def is_empty(df: pl.DataFrame | pl.LazyFrame) -> bool:
-    if isinstance(df, pl.LazyFrame):
-        return df.limit(1).collect().is_empty()
-    return df.is_empty()
+# def is_empty(df: pl.DataFrame | pl.LazyFrame) -> bool:
+#     if isinstance(df, pl.LazyFrame):
+#         return df.limit(1).collect().is_empty()
+#     return df.is_empty()
 
 
-def to_datetime(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
-    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
-    assert 'ts' in df.columns, '`ts` column is required'
-    if df['ts'].dtype == pl.Datetime:
-        return df
-    else:
-        if isinstance(df, pl.LazyFrame):
-            first_ts = df.select(pl.col("ts").first()).collect().item()
-        else:
-            first_ts = df[0, "ts"]
-        ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
-        return df.with_columns(
-            (pl.col("ts") * scaling_factor).cast(pl.Datetime(time_unit=ts_unit))
-        )
-
-# TODO: to_timestamp()
+# def to_datetime(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
+#     from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
+#     if df['ts'].dtype == pl.Datetime:
+#         return df
+#     else:
+#         if isinstance(df, pl.LazyFrame):
+#             first_ts = df.select(pl.col("ts").first()).collect().item()
+#         else:
+#             first_ts = df[0, "ts"]
+#         ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
+#         return df.with_columns(
+#             (pl.col("ts") * scaling_factor).cast(pl.Datetime(time_unit=ts_unit))
+#         )

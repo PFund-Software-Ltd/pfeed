@@ -44,18 +44,18 @@ def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE
         return spark.read.parquet(*paths, *args, **kwargs)
 
 
-def concat(dfs: list[SparkDataFrame]) -> SparkDataFrame:
-    from functools import reduce
-    return reduce(SparkDataFrame.union, dfs)
+# def concat(dfs: list[SparkDataFrame]) -> SparkDataFrame:
+#     from functools import reduce
+#     return reduce(SparkDataFrame.union, dfs)
 
 
-def sort_by_ts(df: SparkDataFrame) -> SparkDataFrame:
-    return df.orderBy('ts', ascending=True)
+# def sort_by_ts(df: SparkDataFrame) -> SparkDataFrame:
+#     return df.orderBy('ts', ascending=True)
 
 
-def is_empty(df: SparkDataFrame) -> bool:
-    return df.rdd.isEmpty()
+# def is_empty(df: SparkDataFrame) -> bool:
+#     return df.rdd.isEmpty()
 
 
-def to_datetime(df: SparkDataFrame) -> SparkDataFrame:
-    return df.withColumn("ts", F.to_timestamp(F.col("ts")))
+# def to_datetime(df: SparkDataFrame) -> SparkDataFrame:
+#     return df.withColumn("ts", F.to_timestamp(F.col("ts")))

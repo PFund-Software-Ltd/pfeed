@@ -2,16 +2,7 @@ from typing import TypeVar
 
 import os
 import pandas as pd
-try:
-    import polars as pl
-except ImportError:
-    class pl:
-        class DataFrame:
-            pass
-        class LazyFrame:
-            pass
-        class Series:
-            pass
+import polars as pl
 
 try:
     import dask.dataframe as dd

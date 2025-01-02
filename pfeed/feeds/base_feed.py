@@ -243,7 +243,7 @@ class BaseFeed(ABC):
             )
         def _create_assert_data_standards_function(data_model):
             return lambda_with_name(
-                'assert_data_standards',
+                '_assert_data_standards',
                 lambda df: self._assert_data_standards(df, data_model.metadata)
             )
         dataflows = dataflows or self._current_dataflows

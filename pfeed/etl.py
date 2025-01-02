@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow as pa
     import pyarrow.parquet as pq
+    from narwhals.typing import IntoFrame, Frame
     from pfeed.types.literals import tSTORAGE, tPRODUCT_TYPE
     from pfeed.types.core import tDataFrame, tData, tDataModel
     from pfeed.storages.base_storage import BaseStorage
@@ -10,11 +11,8 @@ if TYPE_CHECKING:
 import os
 
 import pandas as pd
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
+import polars as pl
+import narwhals as nw
 
 try:
     import dask.dataframe as dd
@@ -145,7 +143,7 @@ def extract_data(data_model: tDataModel, storage: tSTORAGE | None = None) -> Bas
     return None
     
 
-def filter_non_standard_columns(df: pd.DataFrame) -> pd.DataFrame:
+def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Filter out unnecessary columns from raw data."""
     is_tick_data = 'price' in df.columns
     pdt = df['product'][0]
@@ -160,26 +158,40 @@ def filter_non_standard_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def organize_columns(df: pd.DataFrame, resolution: Resolution, product: str, symbol: str='') -> pd.DataFrame:
-    """Organizes the columns of a DataFrame.
-    Moving 'ts', 'product', 'resolution', 'symbol' to the leftmost side.
+def standardize_columns(df: pd.DataFrame, resolution: Resolution, product: str, symbol: str='') -> pd.DataFrame:
+    """Standardizes the columns of a DataFrame.
+    Adds columns 'resolution', 'product', 'symbol', 
+    
+    and moves 'ts', 'product', 'resolution', 'symbol' to the leftmost side.
     """
+    from pandas.api.types import is_datetime64_any_dtype as is_datetime
+    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
     df['resolution'] = repr(resolution)
     df['product'] = product.upper()
     left_cols = ['ts', 'resolution', 'product']
     if symbol:
         df['symbol'] = symbol.upper()
         left_cols.append('symbol')
-    return df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
+    df = df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
+    if not is_datetime(df['ts']):
+        first_ts = df.loc[0, 'ts']
+        ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
+        df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
+    return df
     
 
 def resample_data(
-    df: pd.DataFrame, 
+    df: IntoFrame,
     target_resolution: str | Resolution, 
 ) -> pd.DataFrame:
     '''
     Resamples the input data based on the specified resolution and returns the resampled data in Parquet format.
     '''
+    df: Frame = nw.from_native(df)
+    if isinstance(df, nw.LazyFrame):
+        df = df.collect()
+    df = df.to_pandas()
+
     if isinstance(target_resolution, str):
         resolution = Resolution(target_resolution)
     else:
@@ -318,9 +330,9 @@ def convert_to_pandas_df(data: tData) -> pd.DataFrame:
         return convert_raw_data_to_pandas_df(data)
     elif isinstance(data, pd.DataFrame):
         return data
-    elif pl and isinstance(data, pl.DataFrame):
+    elif isinstance(data, pl.DataFrame):
         return data.to_pandas()
-    elif pl and isinstance(data, pl.LazyFrame):
+    elif isinstance(data, pl.LazyFrame):
         return data.collect().to_pandas()
     elif dd and isinstance(data, dd.DataFrame):
         return data.compute()
@@ -337,8 +349,8 @@ def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
         return df
     elif data_tool == DataTool.polars:
         return pl.from_pandas(df).lazy()
-    # elif data_tool == DataTool.dask:
-    #     return dd.from_pandas(df, npartitions=1)
+    elif data_tool == DataTool.dask:
+        return dd.from_pandas(df, npartitions=1)
     # elif data_tool == DataTool.spark:
     #     spark = SparkSession.builder.getOrCreate()
     #     return spark.createDataFrame(df)

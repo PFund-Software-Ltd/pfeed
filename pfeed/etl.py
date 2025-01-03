@@ -335,7 +335,7 @@ def convert_to_pandas_df(data: tData) -> pd.DataFrame:
     elif isinstance(data, pl.LazyFrame):
         return data.collect().to_pandas()
     elif dd and isinstance(data, dd.DataFrame):
-        return data.compute()
+        return data.compute(scheduler='synchronous')
     elif ps and isinstance(data, ps.DataFrame):
         return data.to_pandas()
     elif SparkDataFrame and isinstance(data, SparkDataFrame):

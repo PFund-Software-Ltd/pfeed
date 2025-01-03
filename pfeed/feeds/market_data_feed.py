@@ -187,8 +187,9 @@ class MarketDataFeed(BaseFeed):
         resolution: Resolution,
         raw_level: DataRawLevel,
     ):
+        self.transform(etl.convert_to_pandas_df)
         if raw_level != DataRawLevel.ORIGINAL:
-            self.transform(etl.convert_to_pandas_df, self._normalize_raw_data)
+            self.transform(self._normalize_raw_data)
             for product_name in dataflows_per_pdt:
                 self.transform(
                     lambda_with_name('standardize_columns', lambda df: etl.standardize_columns(df, resolution, product_name)),

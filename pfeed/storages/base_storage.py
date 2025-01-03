@@ -50,7 +50,7 @@ class BaseStorage:
         
     @staticmethod
     def _create_data_path() -> Path:
-        from pfeed.config_handler import get_config
+        from pfeed.config import get_config
         config = get_config()
         return Path(config.data_path)
     

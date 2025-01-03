@@ -1,7 +1,7 @@
 import click
 from trogon import tui
 
-from pfeed.config_handler import get_config
+from pfeed.config import get_config
 from pfeed.cli.commands.docker_compose import docker_compose
 from pfeed.cli.commands.config import config
 from pfeed.cli.commands.download import download

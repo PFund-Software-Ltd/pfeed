@@ -14,7 +14,7 @@ class CacheStorage(LocalStorage):
         return datetime.datetime.now(tz=datetime.timezone.utc).date()
     
     def _create_data_path(self) -> Path:
-        from pfeed.config_handler import get_config
+        from pfeed.config import get_config
         config = get_config()
         return Path(config.cache_path)
 
@@ -22,7 +22,7 @@ class CacheStorage(LocalStorage):
         '''Clear old caches except the current date'''
         from pfund import print_error
         from pfund.utils.utils import get_last_modified_time
-        from pfeed.config_handler import get_config
+        from pfeed.config import get_config
         config = get_config()
         cache_path = config.cache_path
         today = self._get_today()

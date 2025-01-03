@@ -9,7 +9,7 @@ from tqdm import tqdm
 from rich.console import Console
 
 from pfeed import etl
-from pfeed.config_handler import ConfigHandler
+from pfeed.config import Configuration
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
 from pfeed.const.common import SUPPORTED_DATA_TYPES
@@ -75,14 +75,14 @@ def download_historical_data(
     use_ray: bool=True,
     use_minio: bool=False,
     debug: bool=False,
-    config: ConfigHandler | None=None,
+    config: Configuration | None=None,
 ) -> None:
     # setup
     source = DATA_SOURCE
     
     # configure
     if not config:
-        config = ConfigHandler.load_config()
+        config = Configuration.load_config()
         
     print(f'''Hint: 
         You can run command "pfeed config --data-path ..." to set your data path that stores downloaded data.

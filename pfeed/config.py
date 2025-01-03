@@ -33,7 +33,7 @@ def _custom_excepthook(exception_class: type[BaseException], exception: BaseExce
 
 
 @dataclass
-class ConfigHandler:
+class Configuration:
     data_path: str = str(DATA_PATH)
     log_path: str = str(LOG_PATH)
     cache_path: str = str(CACHE_PATH)
@@ -60,7 +60,7 @@ class ConfigHandler:
     
     @classmethod
     def load(cls):
-        '''Loads user's config file and returns a ConfigHandler object'''
+        '''Loads user's config file and returns a Configuration object'''
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         # Create default config from dataclass fields
         default_config = {
@@ -91,10 +91,10 @@ class ConfigHandler:
         else:
             config = default_config
             needs_update = True
-        config_handler = cls(**config)
+        configuration = cls(**config)
         if needs_update:
-            config_handler.dump()
-        return config_handler
+            configuration.dump()
+        return configuration
     
     @classmethod
     def reset(cls):
@@ -221,6 +221,6 @@ def configure(
     return config
 
 
-def get_config(verbose: bool = False) -> ConfigHandler:
-    ConfigHandler.set_verbose(verbose)
-    return ConfigHandler.get_instance()
+def get_config(verbose: bool = False) -> Configuration:
+    Configuration.set_verbose(verbose)
+    return Configuration.get_instance()

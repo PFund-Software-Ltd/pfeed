@@ -22,7 +22,7 @@ from pprint import pformat
 import click
 from rich.console import Console
 
-from pfeed.config_handler import get_config
+from pfeed.config import get_config
 from pfeed import etl
 from pfeed.const.enums import DataTool
 from pfeed.flows.dataflow import DataFlow

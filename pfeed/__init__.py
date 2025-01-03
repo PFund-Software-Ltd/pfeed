@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     )
 
 from importlib.metadata import version
-from pfeed.config_handler import configure, get_config
+from pfeed.config import configure, get_config
 
 
 plugins = {}

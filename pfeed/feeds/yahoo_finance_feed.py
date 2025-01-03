@@ -18,6 +18,7 @@ from pfund.datas.resolution import Resolution
 from pfeed import etl
 from pfeed.feeds.base_feed import clear_current_dataflows
 from pfeed.feeds.market_data_feed import MarketDataFeed
+from pfeed.const.enums import MarketDataType
 
 
 __all__ = ["YahooFinanceFeed"]
@@ -41,19 +42,20 @@ class YahooFinanceFeed(MarketDataFeed):
         }
     }
     # yfinance's valid periods = pfund's rollback_periods
-    SUPPORTED_ROLLBACK_PERIODS = {
-        "d": [1, 5],
-        "M": [1, 3, 6],
-        "y": [1, 2, 5, 10],
-    }
+    # SUPPORTED_ROLLBACK_PERIODS = {
+    #     "d": [1, 5],
+    #     "M": [1, 3, 6],
+    #     "y": [1, 2, 5, 10],
+    # }
+    
     # yfinance's valid intervals = pfund's resolutions
-    SUPPORTED_RESOLUTIONS = {
-        "m": [1, 2, 5, 15, 30, 60, 90],
-        "h": [1],
-        "d": [1, 5],
-        "w": [1],
-        "M": [1, 3],
-    }
+    # SUPPORTED_RESOLUTIONS = {
+    #     "m": [1, 2, 5, 15, 30, 60, 90],
+    #     "h": [1],
+    #     "d": [1, 5],
+    #     "w": [1],
+    #     "M": [1, 3],
+    # }
     
     _yfinance_kwargs: dict | None = None
 
@@ -136,12 +138,12 @@ class YahooFinanceFeed(MarketDataFeed):
                 refer to kwargs in history() in yfinance/scrapers/history.py
         '''
         self._yfinance_kwargs = self._prepare_yfinance_kwargs(yfinance_kwargs)
-        data_type = data_type.lower()
         # makes rollback_period == 'max' more specific for different data types
         if rollback_period == 'max':
-            if data_type == 'hour':
+            dtype = MarketDataType[data_type.upper()]
+            if dtype == MarketDataType.HOUR:
                 rollback_period = '2y'  # max is 2 years for hourly data
-            elif data_type == 'minute':
+            elif dtype == MarketDataType.MINUTE:
                 rollback_period = '8d'  # max is 8 days for minute data
         return super().download(
             products=products,
@@ -186,7 +188,6 @@ class YahooFinanceFeed(MarketDataFeed):
         # convert pfund's resolution format to yfinance's interval
         resolution = data_model.resolution
         timeframe = repr(resolution.timeframe)
-        assert timeframe in self.SUPPORTED_RESOLUTIONS, f'timeframe={resolution.timeframe} is not supported'
         etimeframe = self._ADAPTER["timeframe"].get(timeframe, timeframe)
         eresolution = str(resolution.period) + etimeframe
         
@@ -198,6 +199,7 @@ class YahooFinanceFeed(MarketDataFeed):
         original_start_date = data_model.start_date
         while df is None and num_retries:
             num_retries -= 1
+            self.logger.debug(f'downloading {data_model}')
             # NOTE: yfinance's period is not used, only use start_date and end_date for data clarity in storage
             df: pd.DataFrame | None = ticker.history(
                 interval=eresolution,
@@ -215,6 +217,7 @@ class YahooFinanceFeed(MarketDataFeed):
                     break
                 time.sleep(0.1)
             else:
+                self.logger.debug(f'downloaded {data_model}')
                 break
         else:
             self.logger.warning(f'failed to download {data_model.product} {data_model.resolution} data, '

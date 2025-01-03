@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow as pa
     import pyarrow.parquet as pq
-    from narwhals.typing import IntoFrame, Frame
+    from narwhals.typing import IntoFrameT, Frame
     from pfeed.types.literals import tSTORAGE, tPRODUCT_TYPE
     from pfeed.types.core import tDataFrame, tData, tDataModel
     from pfeed.storages.base_storage import BaseStorage
@@ -180,13 +180,23 @@ def standardize_columns(df: pd.DataFrame, resolution: Resolution, product: str, 
     return df
     
 
-def resample_data(
-    df: IntoFrame,
-    target_resolution: str | Resolution, 
-) -> pd.DataFrame:
+def resample_data(df: IntoFrameT, target_resolution: str | Resolution) -> IntoFrameT:
+    '''Resamples the input dataframe based on the target resolution.
+    Args:
+        df: The input dataframe to be resampled.
+        target_resolution: The target resolution to resample the data to.
+    Returns:
+        The resampled dataframe.
     '''
-    Resamples the input data based on the specified resolution and returns the resampled data in Parquet format.
-    '''
+    if isinstance(df, pd.DataFrame):
+        data_tool = DataTool.pandas
+    elif isinstance(df, (pl.LazyFrame, pl.DataFrame)):
+        data_tool = DataTool.polars
+    elif isinstance(df, dd.DataFrame):
+        data_tool = DataTool.dask
+    else:
+        raise ValueError(f'{type(df)=}')
+    
     df: Frame = nw.from_native(df)
     if isinstance(df, nw.LazyFrame):
         df = df.collect()
@@ -224,7 +234,7 @@ def resample_data(
     if 'splits' in df.columns:
         resample_logic['splits'] = 'prod'
             
-    return (
+    resampled_df = (
         df
         .set_index('ts')
         .resample(eresolution)
@@ -234,6 +244,7 @@ def resample_data(
         .dropna()
         .reset_index()
     )
+    return convert_to_user_df(resampled_df, data_tool)
 
 
 def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStorage | None:
@@ -338,6 +349,14 @@ def convert_to_pandas_df(data: tData) -> pd.DataFrame:
 
 
 def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
+    '''Converts the input dataframe to the user's desired data tool.
+    Args:
+        df: The input dataframe to be converted.
+        data_tool: The data tool to convert the dataframe to.
+            e.g. if data_tool is 'pandas', the returned the dataframe is a pandas dataframe.
+    Returns:
+        The converted dataframe.
+    '''
     if data_tool == DataTool.pandas:
         return df
     elif data_tool == DataTool.polars:

@@ -5,6 +5,7 @@ from pfund.datas.resolution import Resolution
 from pfund.products.product_base import BaseProduct
 
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+from pfeed.const.enums import MarketDataType
 
 
 class MarketDataModel(TimeBasedDataModel):
@@ -34,7 +35,9 @@ class MarketDataModel(TimeBasedDataModel):
         return self
     
     def validate_resolution(self):
-        assert self.source.lowest_resolution <= self.resolution <= self.source.highest_resolution, f'{self.resolution=} is not supported for {self.source.name}'
+        # global lowest resolution is "1d" (daily data)
+        global_lowest_resolution = Resolution('1' + [dt.name for dt in MarketDataType][-1])
+        assert global_lowest_resolution <= self.resolution <= self.source.highest_resolution, f'{self.resolution=} is not supported for {self.source.name}'
         return self.resolution
 
     def __hash__(self):

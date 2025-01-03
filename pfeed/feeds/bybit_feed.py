@@ -120,7 +120,10 @@ class BybitFeed(CryptoMarketDataFeed):
         return dataflows
 
     def _execute_download(self, data_model: tDataModel) -> bytes | None:
-        return self.api.get_data(data_model.product, data_model.date)
+        self.logger.debug(f'downloading {data_model}')
+        data = self.api.get_data(data_model.product, data_model.date)
+        self.logger.debug(f'downloaded {data_model}')
+        return data
 
     def get_historical_data(
         self,

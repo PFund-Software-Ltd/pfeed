@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     aliases = ...
     from pfeed.feeds import (
-        BybitFeed,
-        YahooFinanceFeed, 
+        BybitFeed, Bybit,
+        YahooFinanceFeed, YahooFinance, YF,
     )
 
 from importlib.metadata import version
@@ -23,10 +23,10 @@ def __getattr__(name: str):
         from pfeed.const.aliases import ALIASES
         from pfund.const.aliases import ALIASES as PFUND_ALIASES
         return {**ALIASES, **PFUND_ALIASES}
-    elif name == 'YahooFinanceFeed':
+    elif name in ('YahooFinanceFeed', 'YahooFinance', 'YF'):
         from pfeed.feeds.yahoo_finance_feed import YahooFinanceFeed
         return YahooFinanceFeed
-    elif name == 'BybitFeed':
+    elif name in ('BybitFeed', 'Bybit'):
         from pfeed.feeds.bybit_feed import BybitFeed
         return BybitFeed
     if name in plugins:

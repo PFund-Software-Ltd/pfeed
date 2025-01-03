@@ -32,8 +32,8 @@ class BybitSource(BaseSource):
         '''
         pdts = []
         for ptype in ptypes:
-            category = self._exchange._derive_product_category(ptype)
-            for epdt in self.api.get_epdts(ptype):
+            category: str = self._exchange._derive_product_category(ptype)
+            for epdt in self.api.get_epdts_by_ptype(ptype):
                 pdt = self.adapter(epdt, group=category)
                 is_mapping_exists = (pdt != epdt)
                 # NOTE: mapping may not exist if the product has been delisted

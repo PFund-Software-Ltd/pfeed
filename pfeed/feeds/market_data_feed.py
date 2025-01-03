@@ -191,7 +191,7 @@ class MarketDataFeed(BaseFeed):
             self.transform(etl.convert_to_pandas_df, self._normalize_raw_data)
             for product_name in dataflows_per_pdt:
                 self.transform(
-                    lambda_with_name('etl.standardize_columns', lambda df: etl.standardize_columns(df, resolution, product_name)),
+                    lambda_with_name('standardize_columns', lambda df: etl.standardize_columns(df, resolution, product_name)),
                     dataflows=dataflows_per_pdt[product_name],
                 )
             if raw_level == DataRawLevel.CLEANED:
@@ -199,14 +199,14 @@ class MarketDataFeed(BaseFeed):
                 # only resample if raw_level is 'cleaned', otherwise, can't resample non-standard columns
                 if not self._is_resolution_supported(resolution):
                     transformations.append(
-                        lambda_with_name('etl.resample_data', lambda df: etl.resample_data(df, resolution))
+                        lambda_with_name('resample_data', lambda df: etl.resample_data(df, resolution))
                     )
                 self.transform(*transformations)
         else:
             self._print_original_raw_level_msg()
         if self._pipeline_mode:
             self.transform(
-                lambda_with_name('etl.convert_to_user_df', lambda df: etl.convert_to_user_df(df, self.data_tool.name))
+                lambda_with_name('convert_to_user_df', lambda df: etl.convert_to_user_df(df, self.data_tool.name))
             )
     
     def _get_historical_data_from_storage(

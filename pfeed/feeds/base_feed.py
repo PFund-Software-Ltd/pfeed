@@ -163,8 +163,11 @@ class BaseFeed(ABC):
         '''
         if start_date:
             start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-            yesterday = datetime.datetime.now(tz=datetime.timezone.utc).date() - datetime.timedelta(days=1)
-            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date() or yesterday
+            if end_date:
+                end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+            else:
+                yesterday = datetime.datetime.now(tz=datetime.timezone.utc).date() - datetime.timedelta(days=1)
+                end_date = yesterday
         else:
             if rollback_period == 'max':
                 if self.data_source.start_date:

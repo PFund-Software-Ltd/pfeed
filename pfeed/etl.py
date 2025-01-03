@@ -198,49 +198,42 @@ def resample_data(
         resolution = target_resolution
     
     # converts to pandas's resolution format
-    eresolution = repr(resolution)
-        
-    # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
-    eresolution = eresolution.replace('m', 'min')
-    eresolution = eresolution.replace('d', 'D')
+    eresolution = (
+        repr(resolution)
+        # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
+        .replace('m', 'min')
+        .replace('d', 'D')
+    )
     
     is_tick_data = 'price' in df.columns
     assert not df.empty, 'data is empty'
-    df.set_index('ts', inplace=True)
     
-    if is_tick_data:
-        resample_logic = {
-            'price': 'ohlc',
-            'volume': 'sum',
-        }
-    else:
-        resample_logic = {
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum',
-        }
+    resample_logic = {
+        'price': 'ohlc',
+        'volume': 'sum',
+    } if is_tick_data else {
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+        'volume': 'sum',
+    }
 
     if 'dividends' in df.columns:
         resample_logic['dividends'] = 'sum'
     if 'splits' in df.columns:
         resample_logic['splits'] = 'prod'
             
-    resampled_df = (
+    return (
         df
+        .set_index('ts')
         .resample(eresolution)
-        .apply(resample_logic)
-    )
-    
-    if is_tick_data:
+        .agg(resample_logic)
         # drop an unnecessary level created by 'ohlc' in the resample_logic
-        resampled_df = resampled_df.droplevel(0, axis=1)
-
-    resampled_df.dropna(inplace=True)
-    resampled_df.reset_index(inplace=True)
-    
-    return resampled_df
+        .pipe(lambda df: df.droplevel(0, axis=1) if is_tick_data else df)
+        .dropna()
+        .reset_index()
+    )
 
 
 def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStorage | None:

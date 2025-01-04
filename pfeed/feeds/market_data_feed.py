@@ -255,17 +255,50 @@ class MarketDataFeed(BaseFeed):
             # downloaded data will be consecutive, so need to make missing dates consecutive as well
             missing_dates = get_dates_in_between(missing_dates[0], missing_dates[-1])
         
-        # concatenate data from different storages
-        dfs = [
-            self.data_tool.read_parquet(
-                # exclude storage.date in missing_dates to avoid duplicated data when df_from_storage and df_from_source are concatenated
-                [storage.file_path for storage in storages if storage.date not in missing_dates], 
-                storage=_from_storage
-            ) for _from_storage, storages in data_storages.items()
-        ]
-        
-        if dfs and unit_resolution < storage_resolution:
-            dfs: list[tDataFrame] = [etl.resample_data(df, unit_resolution, self.data_tool.name) for df in dfs]
+        is_resample_required = unit_resolution < storage_resolution
+        file_paths_per_storage = {
+            # exclude storage.date in missing_dates to avoid duplicated data when df_from_storage and df_from_source are concatenated
+            _from_storage: [storage.file_path for storage in storages if storage.date not in missing_dates] 
+            for _from_storage, storages in data_storages.items()
+        }
+        if not (is_resample_required and self._use_ray):
+            dfs_per_storage: list[tDataFrame] = [
+                self.data_tool.read_parquet(file_paths, storage=_from_storage)
+                for _from_storage, file_paths in file_paths_per_storage.items()
+            ]
+            if is_resample_required:
+                if not self._use_ray:
+                    self.logger.warning('resampling is required but ray is not used, it could be very slow')
+                self.logger.info(f'resampling {product.name} {storage_resolution} data to {unit_resolution}')
+                dfs: list[tDataFrame] = [etl.resample_data(df, unit_resolution, self.data_tool.name) for df in dfs_per_storage]
+            else:
+                dfs: list[tDataFrame] = dfs_per_storage
+        else:  # resampling is required and ray is used
+            import atexit
+            import ray
+            atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
+
+            # read data date by date, so that ray can be used to resample each date as a task to speed up resampling
+            dfs_per_date = [
+                self.data_tool.read_parquet(file_path, storage=_from_storage)
+                for _from_storage, file_paths in file_paths_per_storage.items()
+                for file_path in file_paths
+            ]
+
+            @ray.remote
+            def ray_task(df: tDataFrame, unit_resolution: Resolution):
+                return etl.resample_data(df, unit_resolution, self.data_tool.name)
+            
+            try:
+                self._init_ray()
+                self.logger.info(f'resampling {product.name} {storage_resolution} data to {unit_resolution}')
+                futures = [ray_task.remote(df, unit_resolution) for df in dfs_per_date]
+                dfs = ray.get(futures)
+            except Exception:
+                self.logger.exception(f'Error in resampling {product.name} {storage_resolution} data to {unit_resolution}:')
+            finally:
+                self._shutdown_ray()
+
         dfs: list[Frame] = [nw.from_native(df) for df in dfs]
         df: Frame | None = nw.concat(dfs) if dfs else None
         return df, missing_dates
@@ -411,7 +444,8 @@ class MarketDataFeed(BaseFeed):
             df = None
         
         if df is not None:
-            if resolution < unit_resolution:
+            is_resample_required = resolution < unit_resolution
+            if is_resample_required:
                 df: tDataFrame = etl.resample_data(df, resolution, self.data_tool.name)
                 self.logger.debug(f'resampled {product.name} {unit_resolution} data to {resolution}')
             else:

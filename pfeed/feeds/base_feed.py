@@ -286,7 +286,7 @@ class BaseFeed(ABC):
             import atexit
             import ray
             from ray.util.queue import Queue
-            atexit.register(lambda: ray.shutdown())
+            atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             @ray.remote
             def ray_task(dataflow) -> bool:

@@ -196,7 +196,11 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution, data_tool: DataT
         # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
         .replace('m', 'min')
         .replace('d', 'D')
+        .replace('M', 'MS')  # MS = Month Start
+        .replace('y', 'YS')  # YS = Year Start
+        .replace('w', 'W-MON')  # W = Week, starting from Monday, otherwise, default is Sunday
     )
+    print(eresolution)
     
     is_tick_data = 'price' in df.columns
     assert not df.empty, 'data is empty'
@@ -216,11 +220,15 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution, data_tool: DataT
         resample_logic['dividends'] = 'sum'
     if 'splits' in df.columns:
         resample_logic['splits'] = 'prod'
-            
+          
     resampled_df = (
         df
         .set_index('ts')
-        .resample(eresolution)
+        .resample(
+            eresolution, 
+            label='left',
+            closed='left',  # closed is only default to be 'right' when resolution is week
+        )
         .agg(resample_logic)
         # drop an unnecessary level created by 'ohlc' in the resample_logic
         .pipe(lambda df: df.droplevel(0, axis=1) if is_tick_data else df)

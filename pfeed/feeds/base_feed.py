@@ -84,6 +84,7 @@ class BaseFeed(ABC):
     def get_data_source() -> BaseSource:
         pass
     
+    @staticmethod
     @abstractmethod
     def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
         pass

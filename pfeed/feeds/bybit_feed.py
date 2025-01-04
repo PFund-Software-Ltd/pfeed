@@ -28,7 +28,8 @@ class BybitFeed(CryptoMarketDataFeed):
         from pfeed.sources.bybit.source import BybitSource
         return BybitSource()
     
-    def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.
 
         This method performs the following normalizations:

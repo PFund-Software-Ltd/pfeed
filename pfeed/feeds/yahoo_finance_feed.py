@@ -64,7 +64,8 @@ class YahooFinanceFeed(MarketDataFeed):
         from pfeed.sources.yahoo_finance.source import YahooFinanceSource
         return YahooFinanceSource()
     
-    def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         # convert to UTC and reset index
         df.index = df.index.tz_convert("UTC").tz_localize(None)
         df.reset_index(inplace=True)

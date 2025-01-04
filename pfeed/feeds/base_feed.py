@@ -42,7 +42,7 @@ def clear_current_dataflows(func):
 class BaseFeed(ABC):
     def __init__(
         self, 
-        data_tool: tDATA_TOOL='pandas', 
+        data_tool: tDATA_TOOL='polars', 
         use_ray: bool=True,
         use_prefect: bool=False,
         pipeline_mode: bool=False,

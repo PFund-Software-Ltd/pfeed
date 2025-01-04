@@ -28,7 +28,7 @@ except ImportError:
     SparkDataFrame = None
     SparkSession = None
     
-from pfund.datas.resolution import Resolution        
+from pfund.datas.resolution import Resolution
 from pfeed.const.enums import DataStorage, DataTool, DataRawLevel
 
 
@@ -39,6 +39,7 @@ def write_data(data: bytes | pd.DataFrame, storage: BaseStorage, metadata: dict 
     
     metadata = metadata or {}
     if storage.name in [DataStorage.LOCAL, DataStorage.CACHE]:
+        storage.file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path = str(storage.file_path)
     elif storage.name == DataStorage.MINIO:
         file_path = str(storage.file_path).replace('s3://', '')
@@ -122,25 +123,22 @@ def read_data(storage: BaseStorage, compression: str = 'zstd') -> tuple[pq.Parqu
                 return raw_data, None
 
 
-def extract_data(data_model: tDataModel, storage: tSTORAGE | None = None) -> BaseStorage | None:
+def extract_data(data_model: tDataModel, storage: tSTORAGE) -> BaseStorage | None:
     from pfeed.data_models.market_data_model import MarketDataModel
-    local_storages = ['cache', 'local', 'minio']
-    storages = local_storages if storage is None else [storage]  # search through all local storages if not specified
-    for storage in storages:
-        storage: BaseStorage | None = get_storage(data_model, storage)
-        if storage and storage.exists():
-            _, metadata_from_storage = read_data(storage, compression=data_model.compression)
-            if isinstance(storage.data_model, MarketDataModel):
-                raw_level_from_storage = DataRawLevel[metadata_from_storage['raw_level'].upper()]
-                raw_level_from_metadata = DataRawLevel[data_model.metadata['raw_level'].upper()]
-                no_original_raw_level = DataRawLevel.ORIGINAL not in (raw_level_from_storage, raw_level_from_metadata)
-                # since raw_level 'cleaned' is compatible with 'normalized' ('cleaned' filtered out unnecessary columns),
-                # allow using data in storage with raw_level='cleaned' even the specified raw_level in metadata is 'normalized'
-                if no_original_raw_level and raw_level_from_metadata >= raw_level_from_storage:
-                    return storage
-            if metadata_from_storage == data_model.metadata:
-                return storage
-    return None
+    storage: BaseStorage | None = get_storage(data_model, storage)
+    if not (storage and storage.exists()):
+        return None
+    _, metadata_from_storage = read_data(storage, compression=data_model.compression)
+    if isinstance(storage.data_model, MarketDataModel):
+        raw_level_from_storage = DataRawLevel[metadata_from_storage['raw_level'].upper()]
+        raw_level_from_metadata = DataRawLevel[data_model.metadata['raw_level'].upper()]
+        no_original_raw_level = DataRawLevel.ORIGINAL not in (raw_level_from_storage, raw_level_from_metadata)
+        # since raw_level 'cleaned' is compatible with 'normalized' ('cleaned' filtered out unnecessary columns),
+        # allow using data in storage with raw_level='cleaned' even the specified raw_level in metadata is 'normalized'
+        if no_original_raw_level and raw_level_from_metadata >= raw_level_from_storage:
+            return storage
+    if metadata_from_storage == data_model.metadata:
+        return storage
     
 
 def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -180,33 +178,18 @@ def standardize_columns(df: pd.DataFrame, resolution: Resolution, product: str, 
     return df
     
 
-def resample_data(df: IntoFrameT, target_resolution: str | Resolution) -> IntoFrameT:
+def resample_data(df: IntoFrameT, resolution: str | Resolution, data_tool: DataTool) -> IntoFrameT:
     '''Resamples the input dataframe based on the target resolution.
     Args:
         df: The input dataframe to be resampled.
-        target_resolution: The target resolution to resample the data to.
+        resolution: The target resolution to resample the data to.
     Returns:
         The resampled dataframe.
     '''
-    if isinstance(df, pd.DataFrame):
-        data_tool = DataTool.pandas
-    elif isinstance(df, (pl.LazyFrame, pl.DataFrame)):
-        data_tool = DataTool.polars
-    elif isinstance(df, dd.DataFrame):
-        data_tool = DataTool.dask
-    else:
-        raise ValueError(f'{type(df)=}')
-    
-    df: Frame = nw.from_native(df)
-    if isinstance(df, nw.LazyFrame):
-        df = df.collect()
-    df = df.to_pandas()
-
-    if isinstance(target_resolution, str):
-        resolution = Resolution(target_resolution)
-    else:
-        resolution = target_resolution
-    
+    df = convert_to_pandas_df(df)
+    if isinstance(resolution, str):
+        resolution = Resolution(resolution)
+        
     # converts to pandas's resolution format
     eresolution = (
         repr(resolution)
@@ -330,20 +313,14 @@ def load_data(
 
 def convert_to_pandas_df(data: tData) -> pd.DataFrame:
     from pfeed.utils.file_formats import convert_raw_data_to_pandas_df
+    from pfeed.types.core import is_dataframe
     if isinstance(data, bytes):
         return convert_raw_data_to_pandas_df(data)
-    elif isinstance(data, pd.DataFrame):
-        return data
-    elif isinstance(data, pl.DataFrame):
-        return data.to_pandas()
-    elif isinstance(data, pl.LazyFrame):
-        return data.collect().to_pandas()
-    elif dd and isinstance(data, dd.DataFrame):
-        return data.compute(scheduler='synchronous')
-    elif ps and isinstance(data, ps.DataFrame):
-        return data.to_pandas()
-    elif SparkDataFrame and isinstance(data, SparkDataFrame):
-        return data.toPandas()
+    elif is_dataframe(data):
+        df: Frame = nw.from_native(data)
+        if isinstance(df, nw.LazyFrame):
+            df = df.collect()
+        return df.to_pandas()
     else:
         raise ValueError(f'{type(data)=}')
 
@@ -357,6 +334,7 @@ def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
     Returns:
         The converted dataframe.
     '''
+    data_tool = data_tool.lower()
     if data_tool == DataTool.pandas:
         return df
     elif data_tool == DataTool.polars:

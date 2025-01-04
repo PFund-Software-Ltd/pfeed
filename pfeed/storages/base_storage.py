@@ -26,8 +26,6 @@ class BaseStorage:
                 'data storage is per date, only start_date should be provided, end_date must be None'
         self.data_path = self._create_data_path()
         self.file_path: Path | str = self._create_file_path()
-        if isinstance(self.file_path, Path):
-            self.file_path.parent.mkdir(parents=True, exist_ok=True)
     
     @property
     def date(self) -> datetime.date:

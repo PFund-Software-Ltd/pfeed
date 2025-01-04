@@ -30,7 +30,7 @@ class MinioStorage(BaseStorage):
         super().__post_init__()
         self.endpoint = self.create_endpoint()
         cache_time = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
-        if not self._check_if_server_running(cache_time, self.endpoint):
+        if not MinioStorage._check_if_server_running(cache_time, self.endpoint):
             raise ServerError(f"{self.name} is not running", 503)
         self.minio = self._create_minio()
         if not self.minio.bucket_exists(self.BUCKET_NAME):

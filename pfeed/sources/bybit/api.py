@@ -4,8 +4,6 @@ if TYPE_CHECKING:
     from pfund.exchanges.exchange_base import BaseExchange
     from pfund.products.product_base import BaseProduct
 
-from functools import lru_cache
-
 
 # TODO: add orderbook data support, one snapshot has 500 levels...can pandas handle this?
 # url: e.g. https://quote-saver.bycsi.com/orderbook/linear/BTCUSDT/2025-01-01_BTCUSDT_ob500.data.zip
@@ -69,7 +67,6 @@ class BybitAPI:
         else:
             return f'{epdt}{date}.csv.gz'
         
-    # @lru_cache(maxsize=1)  # caching is not useful in multiprocessing
     # def get_efilenames(self, ptype: str, epdt: str):
     #     '''Get external file names (e.g. BTCUSDT2022-10-04.csv.gz)'''
     #     from bs4 import BeautifulSoup
@@ -79,7 +76,6 @@ class BybitAPI:
     #         efilenames = [node.get('href') for node in soup.find_all('a')]
     #         return efilenames
     
-    @lru_cache(maxsize=1)  # caching is not useful in multiprocessing
     def get_epdts_by_ptype(self, ptype: str):
         '''Get external products based on product type'''
         import re

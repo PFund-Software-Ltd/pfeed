@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
-    from narwhals.typing import IntoFrame, Frame
+    from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
     from pfeed.types.core import tDataFrame
     from pfeed.types.literals import tSTORAGE, tPRODUCT_TYPE
@@ -119,7 +119,10 @@ class MarketDataFeed(BaseFeed):
         is_resample_required = self._is_resample_required(resolution)
         if raw_level != DataRawLevel.CLEANED and is_resample_required:
             raw_level = DataRawLevel.CLEANED
-            self.logger.info(f'{self.name} raw_level is set to {raw_level.name} when resampling is required')
+            self.logger.info(
+                f'raw_level is set to {raw_level.name} when resampling is required, '
+                f'i.e. {resolution=} is not natively supported by {self.name}'
+            )
         if self.config.print_msg and start_date and end_date:
             self._print_download_msg(resolution, start_date, end_date, raw_level)
         dataflows_per_pdt: dict[str, list[DataFlow]] = {}
@@ -160,7 +163,7 @@ class MarketDataFeed(BaseFeed):
         return {'raw_level': raw_level.name.lower(), 'is_placeholder': 'false'}
     
     # TODO
-    def _assert_data_standards(self, df: IntoFrame, metadata: dict) -> pd.DataFrame:
+    def _assert_data_standards(self, df: pd.DataFrame, metadata: dict) -> pd.DataFrame:
         '''
         Assert that the data conforms to the pfeed's internal standards.
         For market data, the standards are:
@@ -169,16 +172,17 @@ class MarketDataFeed(BaseFeed):
         - 'ts' must be of 'float' type
         - 'ts', 'product', 'resolution' columns must exist
         '''
-        df: Frame = nw.from_native(df)
-        if isinstance(df, nw.LazyFrame):
-            df = df.collect()
-        df = df.to_pandas()
         raw_level = metadata['raw_level']
         if raw_level == 'original':
             return df
         else:
             # TODO: assert standards for 'cleaned' and 'normalized' raw_level
             return df
+    
+    def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs):
+        # convert back to pandas dataframe before calling etl.write_data() in load()
+        self.transform(etl.convert_to_pandas_df)
+        super().load(storage, dataflows=dataflows, **kwargs)
     
     def _add_default_transformations_to_download(
         self,
@@ -200,7 +204,7 @@ class MarketDataFeed(BaseFeed):
                 # only resample if raw_level is 'cleaned', otherwise, can't resample non-standard columns
                 if is_resample_required:
                     transformations.append(
-                        lambda_with_name('resample_data', lambda df: etl.resample_data(df, resolution))
+                        lambda_with_name('resample_data', lambda df: etl.resample_data(df, resolution, self.data_tool.name))
                     )
                 self.transform(*transformations)
         else:
@@ -221,21 +225,34 @@ class MarketDataFeed(BaseFeed):
         from_storage: tSTORAGE | None=None,
     ) -> tuple[Frame | None, list[datetime.date]]:
         from pfeed.utils.utils import get_dates_in_between
+        # e.g. search data in order e.g. '3m' converted to '1m' -> search '1m' -> search '1t'
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        missing_dates: list[datetime.date] = []  # dates without data
-        storages: defaultdict[tSTORAGE, list[BaseStorage]] = defaultdict(list)
-        
-        for date in get_dates_in_between(start_date, end_date):
-            data_model = self.create_market_data_model(product, unit_resolution, raw_level, date, unique_identifier=unique_identifier)
-            if storage := etl.extract_data(data_model, storage=from_storage):
-                storages[storage.name.value].append(storage)
-                self.logger.debug(f'loaded {data_model} from {storage}')
-            else:
-                missing_dates.append(date)
 
+        search_resolutions: set[Resolution] = {unit_resolution, self.data_source.highest_resolution}
+        storage_resolution: Resolution | None = None
+        all_dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
+        local_storages = ['cache', 'local', 'minio']
+        search_storages = local_storages if from_storage is None else [from_storage]  # search through all local storages if not specified
+        data_storages: defaultdict[tSTORAGE, list[BaseStorage]] = defaultdict(list)
+
+        for _resolution in search_resolutions:
+            for date in all_dates:
+                for _from_storage in search_storages:
+                    data_model = self.create_market_data_model(product, _resolution, raw_level, date, unique_identifier=unique_identifier)
+                    self.logger.debug(f'searching for {product.name} {date} {_resolution} data in storage {_from_storage}')
+                    if storage := etl.extract_data(data_model, storage=_from_storage):
+                        data_storages[storage.name.value].append(storage)
+                        self.logger.debug(f'loaded {data_model} from {storage}')
+            # breaks the resolution search loop if data is found using the current resolution
+            if data_storages:
+                storage_resolution = _resolution
+                break
+        
+        data_dates = [storage.date for _, storages in data_storages.items() for storage in storages]
+        missing_dates = list(set(all_dates) - set(data_dates))
         if missing_dates:
             # since data on missing dates will be downloaded from source using start_date and end_date,
-            # downloaded data will be consecutive, so need to make missing dates consecutive
+            # downloaded data will be consecutive, so need to make missing dates consecutive as well
             missing_dates = get_dates_in_between(missing_dates[0], missing_dates[-1])
         
         # concatenate data from different storages
@@ -243,9 +260,12 @@ class MarketDataFeed(BaseFeed):
             self.data_tool.read_parquet(
                 # exclude storage.date in missing_dates to avoid duplicated data when df_from_storage and df_from_source are concatenated
                 [storage.file_path for storage in storages if storage.date not in missing_dates], 
-                storage=from_storage
-            ) for from_storage, storages in storages.items()
+                storage=_from_storage
+            ) for _from_storage, storages in data_storages.items()
         ]
+        
+        if dfs and unit_resolution < storage_resolution:
+            dfs: list[tDataFrame] = [etl.resample_data(df, unit_resolution, self.data_tool.name) for df in dfs]
         dfs: list[Frame] = [nw.from_native(df) for df in dfs]
         df: Frame | None = nw.concat(dfs) if dfs else None
         return df, missing_dates
@@ -288,7 +308,7 @@ class MarketDataFeed(BaseFeed):
             from_storage='cache',
         )
         # after downloading, there should be no missing data
-        assert not missing_dates, f'{self.name} {product.name} {unit_resolution} data is missing for dates: {missing_dates}'
+        assert not missing_dates, f'{product.name} {unit_resolution} data is missing for dates: {missing_dates}'
         return df
 
     def get_historical_data(
@@ -347,35 +367,26 @@ class MarketDataFeed(BaseFeed):
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         raw_level = DataRawLevel[raw_level.upper()]
-        
-        target_resolution = Resolution(resolution)
-        unit_resolution = Resolution('1' + repr(target_resolution.timeframe))
-        global_lowest_resolution = Resolution('1' + [dt.name for dt in MarketDataType][-1])  # daily data
-        unit_resolution = max(unit_resolution, global_lowest_resolution)  # e.g. '1w' -> '1d'
-        highest_resolution = self.data_source.highest_resolution
-        resolutions_to_try_in_storage = {
-            resolution
-            for resolution in [target_resolution, unit_resolution, highest_resolution]
-            if resolution >= global_lowest_resolution
-        }
+        resolution = Resolution(resolution)
+        # make sure the resolution is at least '1d'
+        adjusted_resolution = max(resolution, Resolution('1d'))
+        # NOTE: all data in storage must be in unit resolution, i.e. no '3m' data in storage
+        unit_resolution = Resolution('1' + repr(adjusted_resolution.timeframe))
 
-        # if no data is found, try the next resolution
-        # e.g. '3m' -> '1m' -> '1t'
-        # e.g. '2w' (converted to '1d') -> '1d' -> '1t'
-        for resolution in resolutions_to_try_in_storage:
-            df_from_storage, missing_dates = self._get_historical_data_from_storage(
-                product,
-                resolution,
-                start_date,
-                end_date,
-                raw_level,
-                unique_identifier=unique_identifier,
-                from_storage=from_storage
-            )
-            if df_from_storage is not None:
-                unit_resolution = resolution
-                break
-
+        if from_storage is None:
+            print_warning('`from_storage` was not specified, will search through ALL storages. '
+                          'Consider specifying one in get_historical_data() to speed up the search.')
+        # NOTE: since _get_historical_data_from_storage() and _get_historical_data_from_source() both uses etl.resample_data(),
+        # the output resolution of df_from_storage and df_from_source must be both = unit_resolution
+        df_from_storage, missing_dates = self._get_historical_data_from_storage(
+            product,
+            unit_resolution,
+            start_date,
+            end_date,
+            raw_level,
+            unique_identifier=unique_identifier,
+            from_storage=from_storage
+        )
         if missing_dates:
             df_from_source: Frame = self._get_historical_data_from_source(
                 product,
@@ -400,10 +411,9 @@ class MarketDataFeed(BaseFeed):
             df = None
         
         if df is not None:
-            is_resample_required = (target_resolution < global_lowest_resolution)
-            if is_resample_required:  # e.g. target_resolution = '3d' / '1w' / '1M' / '1y'
-                df: tDataFrame = etl.resample_data(df, target_resolution)
-                self.logger.info(f'resampled {self.name} {product} {global_lowest_resolution} data to {target_resolution=}')
+            if resolution < unit_resolution:
+                df: tDataFrame = etl.resample_data(df, resolution, self.data_tool.name)
+                self.logger.debug(f'resampled {product.name} {unit_resolution} data to {resolution}')
             else:
                 df: tDataFrame = df.to_native()
         return df

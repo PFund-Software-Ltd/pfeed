@@ -3,6 +3,7 @@ from typing import TypeVar
 import os
 import pandas as pd
 import polars as pl
+import narwhals as nw
 
 try:
     import dask.dataframe as dd
@@ -31,15 +32,21 @@ except ImportError:
            
 from pfeed.data_models import MarketDataModel, FundamentalDataModel
 
-tDataFrame = TypeVar('tDataFrame', pd.DataFrame, pl.DataFrame, pl.LazyFrame, dd.DataFrame, SparkDataFrame)
+tDataFrame = TypeVar('tDataFrame', pd.DataFrame, pl.DataFrame, pl.LazyFrame, dd.DataFrame, ps.DataFrame, SparkDataFrame)
 tSeries = TypeVar('tSeries', pd.Series, pl.Series, dd.Series, ps.Series)
 tData = TypeVar('tData', tDataFrame, bytes)  # EXTEND
 tDataModel = TypeVar('tDataModel', MarketDataModel, FundamentalDataModel)  # EXTEND
 
 
-def is_dataframe(value) -> bool:
-    return isinstance(value, (pd.DataFrame, pl.DataFrame, pl.LazyFrame, dd.DataFrame, ps.DataFrame, SparkDataFrame))
+def is_dataframe(value, include_narwhals=True) -> bool:
+    return (
+        isinstance(value, (pd.DataFrame, pl.DataFrame, pl.LazyFrame, dd.DataFrame, ps.DataFrame, SparkDataFrame))
+        or (include_narwhals and isinstance(value, (nw.DataFrame, nw.LazyFrame)))
+    )
 
 
-def is_series(value) -> bool:
-    return isinstance(value, (pd.Series, pl.Series, dd.Series, ps.Series))
+def is_series(value, include_narwhals=True) -> bool:
+    return (
+        isinstance(value, (pd.Series, pl.Series, dd.Series, ps.Series))
+        or (include_narwhals and isinstance(value, (nw.Series)))
+    )

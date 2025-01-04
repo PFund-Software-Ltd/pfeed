@@ -20,8 +20,8 @@ from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
 import click
-from rich.console import Console
 
+from pfund import print_warning
 from pfeed.config import get_config
 from pfeed import etl
 from pfeed.const.enums import DataTool
@@ -54,8 +54,9 @@ class BaseFeed(ABC):
         self._use_ray = use_ray
         self._use_prefect = use_prefect
         self._ray_kwargs = ray_kwargs or {}
+        if 'num_cpus' not in self._ray_kwargs:
+            self._ray_kwargs['num_cpus'] = os.cpu_count()
         self._prefect_kwargs = prefect_kwargs or {}
-        self._printed_hint = False
         self._dataflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._current_dataflows: list[DataFlow] = []
@@ -71,6 +72,12 @@ class BaseFeed(ABC):
         if not is_loggers_set_up:
             set_up_loggers(self.config.log_path, self.config.logging_config_file_path, user_logging_config=self.config.logging_config)
         self.logger = logging.getLogger(self.name.lower() + '_data')
+
+        if self.config.print_msg:
+            print(f'''Hint:
+                You can run command "pfeed config set --data-path {{your_path}}" to set your data path that stores downloaded data.
+                The current data path is: {self.config.data_path}
+            ''')
     
     @staticmethod
     @abstractmethod
@@ -88,6 +95,16 @@ class BaseFeed(ABC):
         Different data feeds have different standards.
         '''
         pass
+
+    def _init_ray(self):
+        import ray
+        if not ray.is_initialized():
+            ray.init(**self._ray_kwargs)
+
+    def _shutdown_ray(self):
+        import ray
+        if ray.is_initialized():
+            ray.shutdown()
 
     def download(self, *args, **kwargs) -> BaseFeed:
         raise NotImplementedError(f"{self.name} download() is not implemented")
@@ -126,12 +143,12 @@ class BaseFeed(ABC):
             return pdts_or_ptypes
         ptypes = ptypes or []
         if pdts and ptypes:
-            Console().print('Warning: both "products" and "product_types" provided, only "products" will be used', style='bold red')
+            print_warning('Warning: both "products" and "product_types" provided, only "products" will be used')
         # no pdts -> use ptypes; no ptypes -> use data_source.product_types
         if not (pdts := _standardize_pdts_or_ptypes(pdts)):
             ptypes = _standardize_pdts_or_ptypes(ptypes)
             if not ptypes and hasattr(self.data_source, 'get_products_by_types'):
-                Console().print(f'Warning: no "products" or "product_types" provided, downloading ALL products with ALL product types {ptypes} from {self.name}', style='bold red')
+                print_warning(f'Warning: no "products" or "product_types" provided, downloading ALL products with ALL product types {ptypes} from {self.name}')
                 if not click.confirm('Do you want to continue?', default=False):
                     sys.exit(1)
                 ptypes = self.data_source.product_types
@@ -198,12 +215,6 @@ class BaseFeed(ABC):
         dataflow = self.create_dataflow(data_model)
         
         if op_type == 'download':
-            if not self._printed_hint:
-                print(f'''Hint:
-                    You can run command "pfeed config set --data-path {{your_path}}" to set your data path that stores downloaded data.
-                    The current data path is: {self.config.data_path}
-                ''')
-                self._printed_hint = True
             dataflow.add_operation(
                 'extract',
                 lambda_with_name(op_type, lambda: self._execute_download(data_model))
@@ -297,9 +308,7 @@ class BaseFeed(ABC):
                     return False, dataflow
             
             try:
-                if 'num_cpus' not in self._ray_kwargs:
-                    self._ray_kwargs['num_cpus'] = os.cpu_count()
-                ray.init(**self._ray_kwargs)
+                self._init_ray()
                 log_queue = Queue()
                 log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
                 log_listener.start()
@@ -318,7 +327,7 @@ class BaseFeed(ABC):
             finally:
                 if log_listener:
                     log_listener.stop()
-                ray.shutdown()
+                self._shutdown_ray()
         else:
             try:
                 for dataflow in tqdm(dataflows, desc=f'Running {self.name} dataflows', colour=color):

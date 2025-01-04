@@ -32,10 +32,10 @@ except ImportError:
            
 from pfeed.data_models import MarketDataModel, FundamentalDataModel
 
-tDataFrame = TypeVar('tDataFrame', pd.DataFrame, pl.DataFrame, pl.LazyFrame, dd.DataFrame, ps.DataFrame, SparkDataFrame)
-tSeries = TypeVar('tSeries', pd.Series, pl.Series, dd.Series, ps.Series)
-tData = TypeVar('tData', tDataFrame, bytes)  # EXTEND
-tDataModel = TypeVar('tDataModel', MarketDataModel, FundamentalDataModel)  # EXTEND
+tDataFrame = pd.DataFrame | pl.DataFrame | pl.LazyFrame | dd.DataFrame | ps.DataFrame | SparkDataFrame
+tSeries = pd.Series | pl.Series | dd.Series | ps.Series
+tData = tDataFrame | bytes
+tDataModel = MarketDataModel | FundamentalDataModel  # EXTEND
 
 
 def is_dataframe(value, include_narwhals=True) -> bool:

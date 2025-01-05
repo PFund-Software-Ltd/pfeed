@@ -257,6 +257,7 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution) -> IntoFrameT:
         .dropna()
         .reset_index()
     )
+    resampled_df['resolution'] = repr(resolution)
     # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
     # otherwise, polars will not be able to collect correctly
     resampled_df = organize_columns(resampled_df)

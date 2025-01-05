@@ -6426,9 +6426,9 @@ dask = ["dask"]
 databento = ["databento"]
 llm = ["litellm"]
 polygon = ["polygon-api-client"]
-spark = ["pyspark"]
+pyspark = ["pyspark"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "416318c08dfd729e3ff47e5b6b6c618bee75b2005c274669353fc183f1155c0c"
+content-hash = "c3ad0d5f1dcb364dda319cd120b26e5d8eb49df93181fd4946288d29284629a6"

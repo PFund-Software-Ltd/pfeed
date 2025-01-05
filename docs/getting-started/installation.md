@@ -27,10 +27,10 @@ pip install -U "pfeed[core]"
 | Command                           | Installed Features                                                |
 | --------------------------------- | ----------------------------------------------------------------- |
 | `pip install -U "pfeed[all]"`     | Download, Stream, All Data Tools, Storage (Local+Cloud), DataOps  |
-| `pip install -U "pfeed[core]"`    | Download, Stream, Data Tools (`pandas`, `modin`), Storage (Local) |
+| `pip install -U "pfeed[core]"`    | Download, Stream, Data Tools (`pandas`), Storage (Local) |
 | `pip install -U "pfeed[polars]"`  | Data Tools (`polars`, `polars-xdt`)                               |
 | `pip install -U "pfeed[dask]"`    | Data Tools (`dask`, `coiled`)                                     |
-| `pip install -U "pfeed[spark]"`   | Data Tools (`pyspark`, `databricks-connect`)                      |
+<!-- | `pip install -U "pfeed[pyspark]"` | Data Tools (`pyspark`, `databricks-connect`)                      | -->
 | `pip install -U "pfeed[dfs]"`     | All Data Tools                                                    |
 | `pip install -U "pfeed[storage]"` | Storage (MinIO, AWS, Azure, GCP)                                  |
 | `pip install -U "pfeed[dataops]"` | DataOps (data pipeline for data batching and processing)          |

@@ -59,7 +59,7 @@ core = [
 databento = ["databento"]
 polygon = ["polygon-api-client"]
 dask = ["dask"]
-spark = ["pyspark"]
+pyspark = ["pyspark"]
 llm = ["litellm"]
 all = [
     "psutil", "pyarrow", "minio", "connectorx", "ray", "prefect", "bytewax", "confluent-kafka",  # core

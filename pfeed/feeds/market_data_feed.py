@@ -438,6 +438,13 @@ class MarketDataFeed(BaseFeed):
             from_storage=from_storage
         )
         if missing_dates:
+            if self.config.print_msg:
+                print_warning('''
+                Hint:
+                    get_historical_data() will first try to load data from local storage (cache, local, minio). 
+                    If no data is found, it will download the missing data from the data source and save it to cache.
+                    Consider calling download() to download data to your desired storage before calling get_historical_data().
+                ''')
             df_from_source: Frame = self._get_historical_data_from_source(
                 product,
                 unit_resolution,
@@ -450,7 +457,6 @@ class MarketDataFeed(BaseFeed):
             df_from_source = None
         
         if df_from_storage is not None and df_from_source is not None:
-            print_warning('concatenating and sorting data from storage and data source could be slow, consider download() data before calling get_historical_data()')
             df: Frame = nw.concat([df_from_storage, df_from_source])
             df: Frame = df.sort(by='ts', descending=False)
         elif df_from_storage is not None:

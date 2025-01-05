@@ -139,7 +139,24 @@ def extract_data(data_model: tDataModel, storage: tSTORAGE) -> BaseStorage | Non
             return storage
     if metadata_from_storage == data_model.metadata:
         return storage
-    
+
+
+def standardize_columns(df: pd.DataFrame, resolution: Resolution, product: str, symbol: str='') -> pd.DataFrame:
+    """Standardizes the columns of a DataFrame.
+    Adds columns 'resolution', 'product', 'symbol', and convert 'ts' to datetime
+    """
+    from pandas.api.types import is_datetime64_any_dtype as is_datetime
+    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
+    df['resolution'] = repr(resolution)
+    df['product'] = product.upper()
+    if symbol:
+        df['symbol'] = symbol.upper()
+    if not is_datetime(df['ts']):
+        first_ts = df.loc[0, 'ts']
+        ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
+        df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
+    return df
+
 
 def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Filter out unnecessary columns from raw data."""
@@ -147,38 +164,31 @@ def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
     pdt = df['product'][0]
     ptype: tPRODUCT_TYPE = pdt.split('_')[2]
     if is_tick_data:
-        df = df.loc[:, ['ts', 'product', 'resolution', 'side', 'volume', 'price']]
+        standard_cols = ['ts', 'product', 'resolution', 'side', 'volume', 'price']
     else:
-        if ptype == 'STK':
-            df = df.loc[:, ['ts', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume', 'dividends', 'splits']]
-        else:
-            df = df.loc[:, ['ts', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']]
+        standard_cols = ['ts', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']
+    df_cols = df.columns
+    extra_cols = ['symbol']
+    # EXTEND
+    if ptype == 'STK':
+        extra_cols.extend(['dividends', 'splits'])
+    for extra_col in extra_cols:
+        if extra_col in df_cols:
+            standard_cols.append(extra_col)
+    df = df.loc[:, standard_cols]
     return df
 
 
-def standardize_columns(df: pd.DataFrame, resolution: Resolution, product: str, symbol: str='') -> pd.DataFrame:
-    """Standardizes the columns of a DataFrame.
-    Adds columns 'resolution', 'product', 'symbol', 
-    
-    and moves 'ts', 'product', 'resolution', 'symbol' to the leftmost side.
-    """
-    from pandas.api.types import is_datetime64_any_dtype as is_datetime
-    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
-    df['resolution'] = repr(resolution)
-    df['product'] = product.upper()
+def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    '''Moves 'ts', 'product', 'resolution', 'symbol' to the leftmost side.'''
     left_cols = ['ts', 'resolution', 'product']
-    if symbol:
-        df['symbol'] = symbol.upper()
+    if 'symbol' in df.columns:
         left_cols.append('symbol')
     df = df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
-    if not is_datetime(df['ts']):
-        first_ts = df.loc[0, 'ts']
-        ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
-        df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
     return df
     
 
-def resample_data(df: IntoFrameT, resolution: str | Resolution, data_tool: DataTool) -> IntoFrameT:
+def resample_data(df: IntoFrameT, resolution: str | Resolution) -> IntoFrameT:
     '''Resamples the input dataframe based on the target resolution.
     Args:
         df: The input dataframe to be resampled.
@@ -186,7 +196,17 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution, data_tool: DataT
     Returns:
         The resampled dataframe.
     '''
+    if isinstance(df, pd.DataFrame):
+        data_tool = DataTool.pandas
+    elif isinstance(df, (pl.LazyFrame, pl.DataFrame)):
+        data_tool = DataTool.polars
+    elif isinstance(df, dd.DataFrame):
+        data_tool = DataTool.dask
+    else:
+        raise ValueError(f'{type(df)=}')
+    
     df = convert_to_pandas_df(df)
+    
     if isinstance(resolution, str):
         resolution = Resolution(resolution)
         
@@ -200,7 +220,6 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution, data_tool: DataT
         .replace('y', 'YS')  # YS = Year Start
         .replace('w', 'W-MON')  # W = Week, starting from Monday, otherwise, default is Sunday
     )
-    print(eresolution)
     
     is_tick_data = 'price' in df.columns
     assert not df.empty, 'data is empty'
@@ -215,7 +234,10 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution, data_tool: DataT
         'close': 'last',
         'volume': 'sum',
     }
-
+    
+    for col in ['resolution', 'product', 'symbol']:
+        if col in df.columns:
+            resample_logic[col] = 'first'
     if 'dividends' in df.columns:
         resample_logic['dividends'] = 'sum'
     if 'splits' in df.columns:
@@ -235,6 +257,9 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution, data_tool: DataT
         .dropna()
         .reset_index()
     )
+    # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
+    # otherwise, polars will not be able to collect correctly
+    resampled_df = organize_columns(resampled_df)
     return convert_to_user_df(resampled_df, data_tool)
 
 

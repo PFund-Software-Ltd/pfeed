@@ -1,5 +1,3 @@
-from typing import TypeVar
-
 import os
 import pandas as pd
 import polars as pl

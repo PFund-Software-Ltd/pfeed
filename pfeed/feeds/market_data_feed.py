@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
-    import datetime
     from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
     from pfeed.types.core import tDataFrame
@@ -9,7 +8,12 @@ if TYPE_CHECKING:
     from pfeed.flows.dataflow import DataFlow
     from pfeed.storages.base_storage import BaseStorage
 
-from collections import defaultdict
+import os
+import datetime
+from threading import Thread
+from queue import Queue
+import logging
+from logging.handlers import QueueHandler, QueueListener
 
 import pandas as pd
 import narwhals as nw
@@ -162,22 +166,25 @@ class MarketDataFeed(BaseFeed):
         # without it, you can't know if the data is missing due to download failure or there is actually no data on that date
         return {'raw_level': raw_level.name.lower(), 'is_placeholder': 'false'}
     
-    # TODO
-    def _assert_data_standards(self, df: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-        '''
-        Assert that the data conforms to the pfeed's internal standards.
-        For market data, the standards are:
-        - values in 'ts' column must be of unit 's', e.g. 1704067200.123, but not 1704067200123
-        - 'ts' column must be sorted in ascending order
-        - 'ts' must be of 'float' type
-        - 'ts', 'product', 'resolution' columns must exist
-        '''
-        raw_level = metadata['raw_level']
-        if raw_level == 'original':
+    # EXTEND: this is some basic data quality checks, use sth like "pandera" to do more comprehensive checks
+    # e.g. "high" > "low", some columns must be positive and numeric, detect anomalous price movements to catch potentially erroneous data
+    def _assert_data_quality(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
+        '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''
+        metadata, resolution = data_model.metadata, data_model.resolution
+        raw_level = DataRawLevel[metadata['raw_level'].upper()]
+        if raw_level == DataRawLevel.ORIGINAL:
             return df
+        assert isinstance(df.loc[0, 'ts'], datetime.datetime), 'ts must be of datetime type'
+        assert df['ts'].is_monotonic_increasing, 'ts must be sorted in ascending order'
+        required_columns = {'ts', 'product', 'resolution'}
+        assert required_columns.issubset(df.columns), f'Missing required columns {required_columns}'
+        if resolution.is_quote():  # TODO: add support for quote data
+            raise NotImplementedError('quote data is not supported')
+        elif resolution.is_tick():
+            assert {'price', 'side', 'volume'}.issubset(df.columns), "Missing 'price', 'side', 'volume' columns"
         else:
-            # TODO: assert standards for 'cleaned' and 'normalized' raw_level
-            return df
+            assert {'open', 'high', 'low', 'close', 'volume'}.issubset(df.columns), "Missing 'open', 'high', 'low', 'close', 'volume' columns"
+        return df
     
     def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs):
         # convert back to pandas dataframe before calling etl.write_data() in load()
@@ -204,9 +211,10 @@ class MarketDataFeed(BaseFeed):
                 # only resample if raw_level is 'cleaned', otherwise, can't resample non-standard columns
                 if is_resample_required:
                     transformations.append(
-                        lambda_with_name('resample_data', lambda df: etl.resample_data(df, resolution, self.data_tool.name))
+                        lambda_with_name('resample_data', lambda df: etl.resample_data(df, resolution))
                     )
                 self.transform(*transformations)
+            self.transform(etl.organize_columns)
         else:
             self._print_original_raw_level_msg()
         if self._pipeline_mode:
@@ -227,76 +235,88 @@ class MarketDataFeed(BaseFeed):
         from pfeed.utils.utils import get_dates_in_between
         # e.g. search data in order e.g. '3m' converted to '1m' -> search '1m' -> search '1t'
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-
-        search_resolutions: set[Resolution] = {unit_resolution, self.data_source.highest_resolution}
-        storage_resolution: Resolution | None = None
         all_dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
-        local_storages = ['cache', 'local', 'minio']
-        search_storages = local_storages if from_storage is None else [from_storage]  # search through all local storages if not specified
-        data_storages: defaultdict[tSTORAGE, list[BaseStorage]] = defaultdict(list)
+        search_resolutions: set[Resolution] = set([unit_resolution] + unit_resolution.get_higher_resolutions(exclude_quote=True))
+        search_storages = ['cache', 'local', 'minio'] if from_storage is None else [from_storage]  
 
-        for _resolution in search_resolutions:
-            for date in all_dates:
+        def _search(date: datetime.date, queue: Queue) -> list[tuple[Resolution, BaseStorage]]:
+            '''Search for data across all resolutions and storages for a given date.
+            Stops searching once first valid result is found.
+            '''
+            for resolution in search_resolutions:
                 for _from_storage in search_storages:
-                    data_model = self.create_market_data_model(product, _resolution, raw_level, date, unique_identifier=unique_identifier)
-                    self.logger.debug(f'searching for {product.name} {date} {_resolution} data in storage {_from_storage}')
+                    data_model = self.create_market_data_model(product, resolution, raw_level, date, unique_identifier=unique_identifier)
                     if storage := etl.extract_data(data_model, storage=_from_storage):
-                        data_storages[storage.name.value].append(storage)
-                        self.logger.debug(f'loaded {data_model} from {storage}')
-            # breaks the resolution search loop if data is found using the current resolution
-            if data_storages:
-                storage_resolution = _resolution
-                break
+                        self.logger.debug(f'loaded {data_model} from {storage.name}')
+                        queue.put(storage)
+                        return
         
-        data_dates = [storage.date for _, storages in data_storages.items() for storage in storages]
-        missing_dates = list(set(all_dates) - set(data_dates))
+        num_dates = len(all_dates)
+        MAX_THREADS = 64
+        io_multiplier = 4
+        num_threads = min(os.cpu_count() * io_multiplier, num_dates, MAX_THREADS)
+        queue = Queue()
+        data_storages: list[BaseStorage] = []
+        for i in range(0, num_dates, num_threads):
+            batch_dates = all_dates[i:i + num_threads]
+            threads = []
+            for date in batch_dates:
+                # NOTE: set d=date to avoid lambda late binding issue
+                thread = Thread(target=lambda d=date: _search(d, queue))
+                thread.start()
+                threads.append(thread)
+            for thread in threads:
+                thread.join()
+            while not queue.empty():
+                data_storages.append(queue.get())
+        
+        data_dates = [storage.date for storage in data_storages]
+        missing_dates = sorted(list(set(all_dates) - set(data_dates)))
         if missing_dates:
             # since data on missing dates will be downloaded from source using start_date and end_date,
             # downloaded data will be consecutive, so need to make missing dates consecutive as well
             missing_dates = get_dates_in_between(missing_dates[0], missing_dates[-1])
+        data_storages = [storage for storage in data_storages if storage.date not in missing_dates]
+        data_storages.sort(key=lambda storage: storage.date)  # sort now so that final df doesn't need to be sorted
+        data_dates = [storage.date for storage in data_storages]
+        assert len(missing_dates) + len(data_dates) == num_dates, "Unexpected inconsistency in dates, please report this issue on github"
         
-        is_resample_required = unit_resolution < storage_resolution
-        file_paths_per_storage = {
-            # exclude storage.date in missing_dates to avoid duplicated data when df_from_storage and df_from_source are concatenated
-            _from_storage: [storage.file_path for storage in storages if storage.date not in missing_dates] 
-            for _from_storage, storages in data_storages.items()
-        }
-        if not (is_resample_required and self._use_ray):
-            dfs_per_storage: list[tDataFrame] = [
-                self.data_tool.read_parquet(file_paths, storage=_from_storage)
-                for _from_storage, file_paths in file_paths_per_storage.items()
-            ]
+        def _get_df(storage: BaseStorage) -> tDataFrame:
+            data_resolution = storage.data_model.resolution
+            is_resample_required = unit_resolution < data_resolution
+            df: tDataFrame = self.data_tool.read_parquet(storage.file_path, storage=storage.name.value)
             if is_resample_required:
-                if not self._use_ray:
-                    self.logger.warning('resampling is required but ray is not used, it could be very slow')
-                self.logger.info(f'resampling {product.name} {storage_resolution} data to {unit_resolution}')
-                dfs: list[tDataFrame] = [etl.resample_data(df, unit_resolution, self.data_tool.name) for df in dfs_per_storage]
-            else:
-                dfs: list[tDataFrame] = dfs_per_storage
-        else:  # resampling is required and ray is used
+                self.logger.debug(f'resampling {product.name} {storage.date} {data_resolution} data to {unit_resolution}')
+                df: tDataFrame = etl.resample_data(df, unit_resolution)
+            return df
+        
+        if not self._use_ray:
+            dfs = [_get_df(storage) for storage in data_storages]
+        else:
             import atexit
             import ray
+            from ray.util.queue import Queue as RayQueue
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
 
-            # read data date by date, so that ray can be used to resample each date as a task to speed up resampling
-            dfs_per_date = [
-                self.data_tool.read_parquet(file_path, storage=_from_storage)
-                for _from_storage, file_paths in file_paths_per_storage.items()
-                for file_path in file_paths
-            ]
-
             @ray.remote
-            def ray_task(df: tDataFrame, unit_resolution: Resolution):
-                return etl.resample_data(df, unit_resolution, self.data_tool.name)
+            def ray_task(storage: BaseStorage) -> tDataFrame:
+                if not self.logger.handlers:
+                    self.logger.addHandler(QueueHandler(log_queue))
+                    self.logger.setLevel(logging.DEBUG)
+                return _get_df(storage)
             
             try:
                 self._init_ray()
-                self.logger.info(f'resampling {product.name} {storage_resolution} data to {unit_resolution}')
-                futures = [ray_task.remote(df, unit_resolution) for df in dfs_per_date]
+                log_queue = RayQueue()
+                log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
+                log_listener.start()
+                futures = [ray_task.remote(storage) for storage in data_storages]
                 dfs = ray.get(futures)
             except Exception:
-                self.logger.exception(f'Error in resampling {product.name} {storage_resolution} data to {unit_resolution}:')
+                self.logger.exception(f'Error in getting {product.name} data from storage:')
             finally:
+                if log_listener:
+                    log_listener.stop()
                 self._shutdown_ray()
 
         dfs: list[Frame] = [nw.from_native(df) for df in dfs]
@@ -406,9 +426,6 @@ class MarketDataFeed(BaseFeed):
         # NOTE: all data in storage must be in unit resolution, i.e. no '3m' data in storage
         unit_resolution = Resolution('1' + repr(adjusted_resolution.timeframe))
 
-        if from_storage is None:
-            print_warning('`from_storage` was not specified, will search through ALL storages. '
-                          'Consider specifying one in get_historical_data() to speed up the search.')
         # NOTE: since _get_historical_data_from_storage() and _get_historical_data_from_source() both uses etl.resample_data(),
         # the output resolution of df_from_storage and df_from_source must be both = unit_resolution
         df_from_storage, missing_dates = self._get_historical_data_from_storage(
@@ -446,7 +463,7 @@ class MarketDataFeed(BaseFeed):
         if df is not None:
             is_resample_required = resolution < unit_resolution
             if is_resample_required:
-                df: tDataFrame = etl.resample_data(df, resolution, self.data_tool.name)
+                df: tDataFrame = etl.resample_data(df, resolution)
                 self.logger.debug(f'resampled {product.name} {unit_resolution} data to {resolution}')
             else:
                 df: tDataFrame = df.to_native()

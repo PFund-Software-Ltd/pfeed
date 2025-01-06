@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 import os
 import datetime
+from abc import abstractmethod
 from threading import Thread
 from queue import Queue
 import logging
@@ -48,7 +49,12 @@ class MarketDataFeed(BaseFeed):
             return True
         return False
     
-    def create_market_data_model(
+    def _create_metadata(self, raw_level: DataRawLevel) -> dict:
+        # if is_placeholder is true, it means there is no data on that date
+        # without it, you can't know if the data is missing due to download failure or there is actually no data on that date
+        return {'raw_level': raw_level.name.lower(), 'is_placeholder': 'false'}
+    
+    def create_data_model(
         self,
         product: BaseProduct,
         resolution: str | Resolution,
@@ -74,6 +80,19 @@ class MarketDataFeed(BaseFeed):
             filename_prefix=filename_prefix,
             filename_suffix=filename_suffix,
         )
+    
+    def _validate_schema(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
+        from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema
+        resolution = data_model.resolution
+        if resolution.is_quote():
+            raise NotImplementedError('quote data is not supported yet')
+        elif resolution.is_tick():
+            schema = TickDataSchema
+        elif resolution.is_bar():
+            schema = BarDataSchema
+        else:
+            schema = MarketDataSchema
+        return schema.validate(df)
     
     @clear_current_dataflows
     def download(
@@ -149,6 +168,7 @@ class MarketDataFeed(BaseFeed):
             self.run()
         return self
     
+    @abstractmethod
     def _create_download_dataflows(
         self,
         product: BaseProduct,
@@ -160,25 +180,6 @@ class MarketDataFeed(BaseFeed):
         filename_suffix: str,
     ) -> list[DataFlow]:
         raise NotImplementedError
-    
-    def _create_metadata(self, raw_level: DataRawLevel) -> dict:
-        # if is_placeholder is true, it means there is no data on that date
-        # without it, you can't know if the data is missing due to download failure or there is actually no data on that date
-        return {'raw_level': raw_level.name.lower(), 'is_placeholder': 'false'}
-    
-    
-    def _validate_schema(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
-        from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema
-        resolution = data_model.resolution
-        if resolution.is_quote():
-            raise NotImplementedError('quote data is not supported yet')
-        elif resolution.is_tick():
-            schema = TickDataSchema
-        elif resolution.is_bar():
-            schema = BarDataSchema
-        else:
-            schema = MarketDataSchema
-        return schema.validate(df)
     
     def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs):
         # convert back to pandas dataframe before calling etl.write_data() in load()
@@ -243,7 +244,7 @@ class MarketDataFeed(BaseFeed):
             '''
             for resolution in search_resolutions:
                 for _from_storage in search_storages:
-                    data_model = self.create_market_data_model(product, resolution, raw_level, date, unique_identifier=unique_identifier)
+                    data_model = self.create_data_model(product, resolution, raw_level, date, unique_identifier=unique_identifier)
                     if storage := etl.extract_data(data_model, storage=_from_storage):
                         self.logger.debug(f'loaded {data_model} from {storage.name}')
                         queue.put(storage)

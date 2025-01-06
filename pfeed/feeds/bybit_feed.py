@@ -114,7 +114,7 @@ class BybitFeed(CryptoMarketDataFeed):
         dataflows: list[DataFlow] = []
         # NOTE: one data model per date
         for date in get_dates_in_between(start_date, end_date):
-            data_model = self.create_market_data_model(product, resolution, raw_level, date, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+            data_model = self.create_data_model(product, resolution, raw_level, date, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
             # create a dataflow that schedules _execute_download()
             dataflow: DataFlow = super().extract('download', data_model)
             dataflows.append(dataflow)

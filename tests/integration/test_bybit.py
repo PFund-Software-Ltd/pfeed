@@ -38,7 +38,7 @@ class TestDownload:
         from pfeed.etl import extract_data
         from pfund.datas.resolution import Resolution
         product = feed.create_product(pdt)
-        data_model = feed.create_market_data_model(
+        data_model = feed.create_data_model(
             product=product, 
             resolution=Resolution(data_type), 
             date=datetime.datetime.strptime(date, '%Y-%m-%d').date(), 

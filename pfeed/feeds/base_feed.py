@@ -93,6 +93,14 @@ class BaseFeed(ABC):
     @abstractmethod
     def _validate_schema(self, df: pd.DataFrame, data_model: BaseDataModel) -> pd.DataFrame:
         pass
+
+    @abstractmethod
+    def create_data_model(self, *args, **kwargs) -> BaseDataModel:
+        pass
+
+    @abstractmethod
+    def _create_metadata(self, raw_level: DataRawLevel, *args, **kwargs) -> dict:
+        pass
     
     def _assert_data_quality(self, df: pd.DataFrame, data_model: BaseDataModel) -> pd.DataFrame:
         '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''

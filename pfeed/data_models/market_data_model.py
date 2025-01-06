@@ -34,6 +34,9 @@ class MarketDataModel(TimeBasedDataModel):
         return self
     
     def validate_resolution(self):
+        '''Validates the resolution of the data model.
+        Resolution must be >= '1d' and <= the highest resolution supported by the data source.
+        '''
         # lowest_supported_resolution = Resolution('1' + [dt.name for dt in MarketDataType][-1])
         lowest_supported_resolution = Resolution('1d')
         assert lowest_supported_resolution <= self.resolution <= self.source.highest_resolution, f'{self.resolution=} is not supported for {self.source.name}'

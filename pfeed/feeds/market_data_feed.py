@@ -170,26 +170,30 @@ class MarketDataFeed(BaseFeed):
     # e.g. "high" > "low", some columns must be positive and numeric, detect anomalous price movements to catch potentially erroneous data
     def _assert_data_quality(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
         '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''
-        metadata, resolution = data_model.metadata, data_model.resolution
+        from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema
+        metadata = data_model.metadata
         raw_level = DataRawLevel[metadata['raw_level'].upper()]
         if raw_level == DataRawLevel.ORIGINAL:
             return df
-        assert isinstance(df.loc[0, 'ts'], datetime.datetime), 'ts must be of datetime type'
-        assert df['ts'].is_monotonic_increasing, 'ts must be sorted in ascending order'
-        required_columns = {'ts', 'product', 'resolution'}
-        assert required_columns.issubset(df.columns), f'Missing required columns {required_columns}'
-        if resolution.is_quote():  # TODO: add support for quote data
-            raise NotImplementedError('quote data is not supported')
+        resolution = data_model.resolution
+        if resolution.is_quote():
+            raise NotImplementedError('quote data is not supported yet')
         elif resolution.is_tick():
-            assert {'price', 'side', 'volume'}.issubset(df.columns), "Missing 'price', 'side', 'volume' columns"
+            schema = TickDataSchema
+        elif resolution.is_bar():
+            schema = BarDataSchema
         else:
-            assert {'open', 'high', 'low', 'close', 'volume'}.issubset(df.columns), "Missing 'open', 'high', 'low', 'close', 'volume' columns"
-        return df
+            schema = MarketDataSchema
+        return schema.validate(df)
     
     def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs):
         # convert back to pandas dataframe before calling etl.write_data() in load()
         self.transform(etl.convert_to_pandas_df)
-        self.transform(etl.organize_columns)
+        for dataflow in dataflows:
+            metadata = dataflow.data_model.metadata
+            raw_level = DataRawLevel[metadata['raw_level'].upper()]
+            if raw_level != DataRawLevel.ORIGINAL:
+                self.transform(etl.organize_columns, dataflows=dataflow)
         super().load(storage, dataflows=dataflows, **kwargs)
     
     def _add_default_transformations_to_download(

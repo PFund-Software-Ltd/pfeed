@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
     from pfund.products.product_base import BaseProduct
     
-    from pfeed.types.core import tData, tDataModel
-    from pfeed.types.literals import tSTORAGE, tDATA_TOOL
+    from pfeed.typing.core import tData, tDataModel
+    from pfeed.typing.literals import tSTORAGE, tDATA_TOOL
     from pfeed.const.enums import DataSource
     from pfeed.sources.base_source import BaseSource
 
@@ -61,9 +61,9 @@ class BaseFeed(ABC):
         self._failed_dataflows: list[DataFlow] = []
         self._current_dataflows: list[DataFlow] = []
         
-        self.data_source: BaseSource = self.get_data_source()
-        self.api = self.data_source.api if hasattr(self.data_source, 'api') else None
-        self.name: DataSource = self.data_source.name
+        self.source: BaseSource = self.get_data_source()
+        self.api = self.source.api if hasattr(self.source, 'api') else None
+        self.name: DataSource = self.source.name
         data_tool = data_tool.lower()
         assert data_tool in DataTool.__members__, f"Invalid {data_tool=}, SUPPORTED_DATA_TOOLS={list(DataTool.__members__.keys())}"
         self.data_tool = importlib.import_module(f'pfeed.data_tools.data_tool_{data_tool}')
@@ -126,7 +126,7 @@ class BaseFeed(ABC):
         raise NotImplementedError(f"{self.name} _execute_stream() is not implemented")
 
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
-        return self.data_source.create_product(product_basis, symbol=symbol, **product_specs)
+        return self.source.create_product(product_basis, symbol=symbol, **product_specs)
 
     def _prepare_products(self, pdts: list[str], ptypes: list[str] | None=None) -> list[str]:
         '''Prepare products based on input products and product types
@@ -148,13 +148,13 @@ class BaseFeed(ABC):
         # no pdts -> use ptypes; no ptypes -> use data_source.product_types
         if not (pdts := _standardize_pdts_or_ptypes(pdts)):
             ptypes = _standardize_pdts_or_ptypes(ptypes)
-            if not ptypes and hasattr(self.data_source, 'get_products_by_types'):
+            if not ptypes and hasattr(self.source, 'get_products_by_types'):
                 print_warning(f'Warning: no "products" or "product_types" provided, downloading ALL products with ALL product types {ptypes} from {self.name}')
                 if not click.confirm('Do you want to continue?', default=False):
                     sys.exit(1)
-                ptypes = self.data_source.product_types
-            if hasattr(self.data_source, 'get_products_by_types'):
-                pdts = self.data_source.get_products_by_types(ptypes)
+                ptypes = self.source.product_types
+            if hasattr(self.source, 'get_products_by_types'):
+                pdts = self.source.get_products_by_types(ptypes)
             else:
                 raise ValueError(f'"products" cannot be empty for {self.name}')
         return pdts
@@ -188,8 +188,8 @@ class BaseFeed(ABC):
                 end_date = yesterday
         else:
             if rollback_period == 'max':
-                if self.data_source.start_date:
-                    start_date = self.data_source.start_date
+                if self.source.start_date:
+                    start_date = self.source.start_date
                 else:
                     raise ValueError(f'{self.name} {rollback_period=} is not supported')
             else:

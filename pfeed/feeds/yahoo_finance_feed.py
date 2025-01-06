@@ -2,9 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfeed.types.literals import tSTORAGE
-    from pfeed.types.core import tDataModel
-    from pfeed.types.core import tDataFrame
+    from pfeed.typing.literals import tSTORAGE
+    from pfeed.typing.core import tDataModel
+    from pfeed.typing.core import tDataFrame
     from pfeed.flows.dataflow import DataFlow
     from pfeed.const.enums import DataRawLevel
 

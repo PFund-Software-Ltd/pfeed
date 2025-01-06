@@ -4,8 +4,8 @@ if TYPE_CHECKING:
     import pyarrow as pa
     import pyarrow.parquet as pq
     from narwhals.typing import IntoFrameT, Frame
-    from pfeed.types.literals import tSTORAGE, tPRODUCT_TYPE
-    from pfeed.types.core import tDataFrame, tData, tDataModel
+    from pfeed.typing.literals import tSTORAGE, tPRODUCT_TYPE
+    from pfeed.typing.core import tDataFrame, tData, tDataModel
     from pfeed.storages.base_storage import BaseStorage
 
 import os
@@ -347,7 +347,7 @@ def load_data(
 
 def convert_to_pandas_df(data: tData) -> pd.DataFrame:
     from pfeed.utils.file_formats import convert_raw_data_to_pandas_df
-    from pfeed.types.core import is_dataframe
+    from pfeed.typing.core import is_dataframe
     if isinstance(data, bytes):
         return convert_raw_data_to_pandas_df(data)
     elif is_dataframe(data):

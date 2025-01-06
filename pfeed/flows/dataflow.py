@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Literal, Callable, TYPE_CHECKING
 if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
-    from pfeed.types.core import tDataModel, tData
+    from pfeed.typing.core import tDataModel, tData
     from pfeed.const.enums import DataSource
     from pfeed.storages.base_storage import BaseStorage
 

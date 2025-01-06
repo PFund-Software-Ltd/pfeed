@@ -3,8 +3,8 @@ from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
-    from pfeed.types.core import tDataFrame
-    from pfeed.types.literals import tSTORAGE, tPRODUCT_TYPE
+    from pfeed.typing.core import tDataFrame
+    from pfeed.typing.literals import tSTORAGE, tPRODUCT_TYPE
     from pfeed.flows.dataflow import DataFlow
     from pfeed.storages.base_storage import BaseStorage
 
@@ -40,9 +40,9 @@ class MarketDataFeed(BaseFeed):
         )
         
     def _is_resample_required(self, resolution: Resolution) -> bool:
-        if resolution > self.data_source.highest_resolution:
+        if resolution > self.source.highest_resolution:
             raise ValueError(f'{resolution=} is not supported for {self.name}')
-        elif resolution < self.data_source.lowest_resolution:
+        elif resolution < self.source.lowest_resolution:
             return True
         elif resolution.period != 1:
             return True
@@ -63,7 +63,7 @@ class MarketDataFeed(BaseFeed):
         from pfeed.const.enums import Environment
         return MarketDataModel(
             env=Environment.BACKTEST,
-            source=self.data_source,
+            source=self.source,
             unique_identifier=unique_identifier,
             product=product,
             resolution=resolution,
@@ -332,7 +332,7 @@ class MarketDataFeed(BaseFeed):
         raw_level: DataRawLevel,
         unique_identifier: str = '',
     ) -> Frame:
-        if self.data_source.access_type == DataAccessType.PAID_BY_USAGE:
+        if self.source.access_type == DataAccessType.PAID_BY_USAGE:
             raise Exception(
                 f'{self.name} data is paid by usage, '
                 f'you should use download() to download the data first '

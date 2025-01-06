@@ -4,12 +4,12 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import datetime
     from pfund.types.literals import tCEFI_PRODUCT_TYPE
-    from pfeed.types.core import tDataFrame
+    from pfeed.typing.core import tDataFrame
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
 
-    from pfeed.types.core import tDataModel
-    from pfeed.types.literals import tSTORAGE
+    from pfeed.typing.core import tDataModel
+    from pfeed.typing.literals import tSTORAGE
     from pfeed.flows.dataflow import DataFlow
     from pfeed.const.enums import DataRawLevel
 

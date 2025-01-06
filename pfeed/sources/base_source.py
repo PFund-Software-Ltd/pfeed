@@ -5,7 +5,7 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 
-from pfeed.types.literals import tDATA_SOURCE
+from pfeed.typing.literals import tDATA_SOURCE
 from pfeed.const.enums import DataSource, DataProviderType, DataAccessType
 
 

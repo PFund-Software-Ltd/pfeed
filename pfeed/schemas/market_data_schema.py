@@ -1,5 +1,6 @@
 import datetime
 
+import pandas as pd
 import pandera as pa
 from pandera.typing import Series
 
@@ -17,3 +18,23 @@ class MarketDataSchema(pa.DataFrameModel):
     @pa.check('ts', error='ts is not monotonic increasing')
     def validate_ts(cls, ts: Series[datetime.datetime]) -> bool:
         return ts.is_monotonic_increasing
+
+    @pa.dataframe_check
+    def validate_index_reset(cls, df: pd.DataFrame) -> bool:
+        return (
+            isinstance(df.index, pd.RangeIndex) and 
+            df.index.start == 0 and 
+            df.index.step == 1
+        )
+
+    @pa.check('resolution')
+    def validate_unique_resolution(cls, resolution: Series[str]) -> bool:
+        return resolution.nunique() == 1
+
+    @pa.check('product')
+    def validate_unique_product(cls, product: Series[str]) -> bool:
+        return product.nunique() == 1
+
+    @pa.check('symbol')
+    def validate_unique_symbol(cls, symbol: Series[str]) -> bool:
+        return symbol.nunique() == 1

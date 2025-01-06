@@ -166,8 +166,6 @@ class MarketDataFeed(BaseFeed):
         # without it, you can't know if the data is missing due to download failure or there is actually no data on that date
         return {'raw_level': raw_level.name.lower(), 'is_placeholder': 'false'}
     
-    # EXTEND: this is some basic data quality checks, use sth like "pandera" to do more comprehensive checks
-    # e.g. "high" > "low", some columns must be positive and numeric, detect anomalous price movements to catch potentially erroneous data
     def _assert_data_quality(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
         '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''
         from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema

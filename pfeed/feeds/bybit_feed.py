@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import datetime
-    from pfund.types.literals import tCEFI_PRODUCT_TYPE
+    from pfund.typing.literals import tCEFI_PRODUCT_TYPE
     from pfeed.typing.core import tDataFrame
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct

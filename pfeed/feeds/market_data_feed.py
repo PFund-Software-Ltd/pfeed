@@ -189,6 +189,7 @@ class MarketDataFeed(BaseFeed):
     def load(self, storage: tSTORAGE='local', dataflows: list[DataFlow] | None=None, **kwargs):
         # convert back to pandas dataframe before calling etl.write_data() in load()
         self.transform(etl.convert_to_pandas_df)
+        self.transform(etl.organize_columns)
         super().load(storage, dataflows=dataflows, **kwargs)
     
     def _add_default_transformations_to_download(
@@ -214,7 +215,6 @@ class MarketDataFeed(BaseFeed):
                         lambda_with_name('resample_data', lambda df: etl.resample_data(df, resolution))
                     )
                 self.transform(*transformations)
-            self.transform(etl.organize_columns)
         else:
             self._print_original_raw_level_msg()
         if self._pipeline_mode:

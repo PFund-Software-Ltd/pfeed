@@ -321,8 +321,7 @@ def load_data(
             # storage is per date, set end_date to None, only start_date is used for the filename
             data_model.update_end_date(None)
             # split data into chunks by date
-            data_chunks = [group for _, group in data.groupby(data['ts'].dt.date)]
-            data_chunks_per_date = {data_chunk['ts'].dt.date.iloc[0]: data_chunk for data_chunk in data_chunks}
+            data_chunks_per_date = {date: group for date, group in data.groupby(data['ts'].dt.date)}
             for date in dates:
                 metadata = data_model.metadata.copy()
                 if date in data_chunks_per_date:

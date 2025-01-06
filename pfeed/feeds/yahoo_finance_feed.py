@@ -75,6 +75,9 @@ class YahooFinanceFeed(MarketDataFeed):
         # if there are spaces in column names, they will be turned into some weird names like "_10" during "for row in df.itertuples()"
         df.columns = [col.replace(" ", "_").lower() for col in df.columns]
 
+        # convert volume (int) to float
+        df['volume'] = df['volume'].astype(float)
+        
         # somehow different column names "Date" and "Datetime" are used in yfinance depending on the resolution
         RENAMING_COLS = {'date': 'ts', 'datetime': 'ts', 'stock_splits': 'splits'}
         df = df.rename(columns=RENAMING_COLS)

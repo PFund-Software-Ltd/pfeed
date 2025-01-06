@@ -5,7 +5,8 @@ if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
     from pfund.products.product_base import BaseProduct
     
-    from pfeed.typing.core import tData, tDataModel
+    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.typing.core import tData
     from pfeed.typing.literals import tSTORAGE, tDATA_TOOL
     from pfeed.const.enums import DataSource
     from pfeed.sources.base_source import BaseSource
@@ -24,7 +25,7 @@ import click
 from pfund import print_warning
 from pfeed.config import get_config
 from pfeed import etl
-from pfeed.const.enums import DataTool
+from pfeed.const.enums import DataTool, DataRawLevel
 from pfeed.flows.dataflow import DataFlow
 from pfeed.utils.utils import lambda_with_name, rollback_date_range
 
@@ -90,12 +91,16 @@ class BaseFeed(ABC):
         pass
     
     @abstractmethod
-    def _assert_data_quality(self, df: pd.DataFrame, data_model: tDataModel) -> pd.DataFrame:
-        '''
-        Assert that the data conforms to the pfeed's internal standards.
-        Different data feeds have different standards.
-        '''
+    def _validate_schema(self, df: pd.DataFrame, data_model: BaseDataModel) -> pd.DataFrame:
         pass
+    
+    def _assert_data_quality(self, df: pd.DataFrame, data_model: BaseDataModel) -> pd.DataFrame:
+        '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''
+        metadata = data_model.metadata
+        raw_level = DataRawLevel[metadata['raw_level'].upper()]
+        if raw_level == DataRawLevel.ORIGINAL:
+            return df
+        return self._validate_schema(df, data_model)
 
     def _init_ray(self):
         import ray
@@ -119,10 +124,10 @@ class BaseFeed(ABC):
     def stream_realtime_data(self, *args, **kwargs) -> BaseFeed:
         return self.stream(*args, **kwargs)
     
-    def _execute_download(self, data_model: tDataModel) -> tData:
+    def _execute_download(self, data_model: BaseDataModel) -> tData:
         raise NotImplementedError(f"{self.name} _execute_download() is not implemented")
     
-    def _execute_stream(self, data_model: tDataModel) -> tData:
+    def _execute_stream(self, data_model: BaseDataModel) -> tData:
         raise NotImplementedError(f"{self.name} _execute_stream() is not implemented")
 
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
@@ -196,7 +201,7 @@ class BaseFeed(ABC):
                 start_date, end_date = rollback_date_range(rollback_period)
         return start_date, end_date
     
-    def create_dataflow(self, data_model: tDataModel) -> DataFlow:
+    def create_dataflow(self, data_model: BaseDataModel) -> DataFlow:
         dataflow = DataFlow(self.logger, data_model)
         self._current_dataflows.append(dataflow)
         self._dataflows.append(dataflow)
@@ -212,7 +217,7 @@ class BaseFeed(ABC):
         '''
         self._current_dataflows.clear()
     
-    def extract(self, op_type: Literal['download', 'stream'], data_model: tDataModel) -> DataFlow:
+    def extract(self, op_type: Literal['download', 'stream'], data_model: BaseDataModel) -> DataFlow:
         dataflow = self.create_dataflow(data_model)
         
         if op_type == 'download':

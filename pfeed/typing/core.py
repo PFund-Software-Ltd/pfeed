@@ -28,12 +28,10 @@ except ImportError:
     class SparkDataFrame:
         pass
            
-from pfeed.data_models import MarketDataModel, FundamentalDataModel
 
 tDataFrame = pd.DataFrame | pl.DataFrame | pl.LazyFrame | dd.DataFrame | ps.DataFrame | SparkDataFrame
 tSeries = pd.Series | pl.Series | dd.Series | ps.Series
 tData = tDataFrame | bytes
-tDataModel = MarketDataModel | FundamentalDataModel  # EXTEND
 
 
 def is_dataframe(value, include_narwhals=True) -> bool:

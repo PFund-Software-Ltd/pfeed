@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed.typing.literals import tSTORAGE
-    from pfeed.typing.core import tDataModel
     from pfeed.typing.core import tDataFrame
+    from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.flows.dataflow import DataFlow
     from pfeed.const.enums import DataRawLevel
 
@@ -93,9 +93,9 @@ class YahooFinanceFeed(MarketDataFeed):
     def stream(self) -> YahooFinanceFeed:
         raise NotImplementedError(f'{self.name} stream() is not implemented')
         return self
-    
+
     # TODO
-    def _execute_stream(self, data_model: tDataModel):
+    def _execute_stream(self, data_model: MarketDataModel):
         raise NotImplementedError(f'{self.name} _execute_stream() is not implemented')
     
     def download(
@@ -185,7 +185,7 @@ class YahooFinanceFeed(MarketDataFeed):
         dataflow: DataFlow = super().extract('download', data_model)
         return [dataflow]
 
-    def _execute_download(self, data_model: tDataModel) -> pd.DataFrame | None:
+    def _execute_download(self, data_model: MarketDataModel) -> pd.DataFrame | None:
         # convert pfund's resolution format to yfinance's interval
         resolution = data_model.resolution
         timeframe = repr(resolution.timeframe)

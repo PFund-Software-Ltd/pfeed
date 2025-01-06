@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
-    from pfeed.typing.core import tDataModel
+    from pfeed.data_models.base_data_model import BaseDataModel
 
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -14,7 +14,7 @@ from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 @dataclass
 class BaseStorage:
     name: DataStorage
-    data_model: tDataModel
+    data_model: BaseDataModel
     data_path: Path | None = None
     file_path: Path | None = None
     # kwargs for the storage class, e.g. for MinIO, kwargs will be passed to Minio()

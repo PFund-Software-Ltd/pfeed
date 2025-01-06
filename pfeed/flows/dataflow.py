@@ -2,13 +2,14 @@ from __future__ import annotations
 from typing import Literal, Callable, TYPE_CHECKING
 if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
-    from pfeed.typing.core import tDataModel, tData
+    from pfeed.typing.core import tData
     from pfeed.const.enums import DataSource
+    from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.base_storage import BaseStorage
 
 
 class DataFlow:
-    def __init__(self, logger, data_model: tDataModel):
+    def __init__(self, logger, data_model: BaseDataModel):
         self.logger = logger
         self.data_model = data_model
         self.data_source: DataSource = data_model.source.name

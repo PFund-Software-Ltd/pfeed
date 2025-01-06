@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
 
-    from pfeed.typing.core import tDataModel
+    from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing.literals import tSTORAGE
     from pfeed.flows.dataflow import DataFlow
     from pfeed.const.enums import DataRawLevel
@@ -59,7 +59,7 @@ class BybitFeed(CryptoMarketDataFeed):
         return self
     
     # TODO
-    def _execute_stream(self, data_model: tDataModel):
+    def _execute_stream(self, data_model: MarketDataModel):
         raise NotImplementedError(f'{self.name} _execute_stream() is not implemented')
 
     def download(
@@ -120,7 +120,7 @@ class BybitFeed(CryptoMarketDataFeed):
             dataflows.append(dataflow)
         return dataflows
 
-    def _execute_download(self, data_model: tDataModel) -> bytes | None:
+    def _execute_download(self, data_model: MarketDataModel) -> bytes | None:
         self.logger.debug(f'downloading {data_model}')
         data = self.api.get_data(data_model.product, data_model.date)
         self.logger.debug(f'downloaded {data_model}')

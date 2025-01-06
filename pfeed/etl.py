@@ -5,7 +5,8 @@ if TYPE_CHECKING:
     import pyarrow.parquet as pq
     from narwhals.typing import IntoFrameT, Frame
     from pfeed.typing.literals import tSTORAGE, tPRODUCT_TYPE
-    from pfeed.typing.core import tDataFrame, tData, tDataModel
+    from pfeed.typing.core import tDataFrame, tData
+    from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.base_storage import BaseStorage
 
 import os
@@ -123,7 +124,7 @@ def read_data(storage: BaseStorage, compression: str = 'zstd') -> tuple[pq.Parqu
                 return raw_data, None
 
 
-def extract_data(data_model: tDataModel, storage: tSTORAGE) -> BaseStorage | None:
+def extract_data(data_model: BaseDataModel, storage: tSTORAGE) -> BaseStorage | None:
     from pfeed.data_models.market_data_model import MarketDataModel
     storage: BaseStorage | None = get_storage(data_model, storage)
     if not (storage and storage.exists()):
@@ -264,7 +265,7 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution) -> IntoFrameT:
     return convert_to_user_df(resampled_df, data_tool)
 
 
-def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStorage | None:
+def get_storage(data_model: BaseDataModel, storage: tSTORAGE, **kwargs) -> BaseStorage | None:
     from pfeed.storages import LocalStorage, MinioStorage, CacheStorage, S3Storage
     from minio import ServerError
     storage = DataStorage[storage.upper()]
@@ -290,7 +291,7 @@ def get_storage(data_model: tDataModel, storage: tSTORAGE, **kwargs) -> BaseStor
 
 
 def load_data(
-    data_model: tDataModel, 
+    data_model: BaseDataModel, 
     data: bytes | pd.DataFrame, 
     storage: tSTORAGE, 
     **kwargs

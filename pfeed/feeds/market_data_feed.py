@@ -166,13 +166,9 @@ class MarketDataFeed(BaseFeed):
         # without it, you can't know if the data is missing due to download failure or there is actually no data on that date
         return {'raw_level': raw_level.name.lower(), 'is_placeholder': 'false'}
     
-    def _assert_data_quality(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
-        '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''
+    
+    def _validate_schema(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
         from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema
-        metadata = data_model.metadata
-        raw_level = DataRawLevel[metadata['raw_level'].upper()]
-        if raw_level == DataRawLevel.ORIGINAL:
-            return df
         resolution = data_model.resolution
         if resolution.is_quote():
             raise NotImplementedError('quote data is not supported yet')

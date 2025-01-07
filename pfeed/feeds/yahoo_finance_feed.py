@@ -111,8 +111,6 @@ class YahooFinanceFeed(MarketDataFeed):
         end_date: str='',
         raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
         to_storage: tSTORAGE='local',
-        filename_prefix: str='',
-        filename_suffix: str='',
         product_specs: dict[str, dict] | None=None,  # {'product_basis': {'attr': 'value', ...}}
         yfinance_kwargs: dict | None=None,
     ) -> YahooFinanceFeed:
@@ -123,8 +121,6 @@ class YahooFinanceFeed(MarketDataFeed):
         start_date and end_date (not including today) should be specified to avoid this issue.
         
         Args:
-            filename_prefix: The prefix of the filename.
-            filename_suffix: The suffix of the filename.
             product_specs: The specifications for the products.
                 'TSLA_USD_OPT' is in `products`, you need to provide the specifications of the option in `product_specs`:
                 e.g. {'TSLA_USD_OPT': {'strike_price': 500, 'expiration': '2024-01-01', 'option_type': 'CALL'}}
@@ -159,8 +155,6 @@ class YahooFinanceFeed(MarketDataFeed):
             end_date=end_date,
             raw_level=raw_level,
             to_storage=to_storage,
-            filename_prefix=filename_prefix,
-            filename_suffix=filename_suffix,
             product_specs=product_specs,
         )
     
@@ -171,8 +165,6 @@ class YahooFinanceFeed(MarketDataFeed):
         raw_level: DataRawLevel,
         start_date: datetime.date,
         end_date: datetime.date,
-        filename_prefix: str,
-        filename_suffix: str,
     ) -> list[DataFlow]:
         # NOTE: one data model for the entire date range
         data_model = self.create_data_model(
@@ -181,8 +173,6 @@ class YahooFinanceFeed(MarketDataFeed):
             raw_level,
             start_date=start_date,
             end_date=end_date,
-            filename_prefix=filename_prefix,
-            filename_suffix=filename_suffix,
         )
         # create a dataflow that schedules _execute_download()
         dataflow: DataFlow = super().extract('download', data_model)

@@ -27,8 +27,6 @@ class BaseDataModel(BaseModel, ABC):
     env: Environment
     source: BaseSource
     filename: str = ''
-    filename_prefix: str = ''
-    filename_suffix: str = ''
     file_extension: str = ''
     storage_path: Path | None = None
     unique_identifier: str = ''

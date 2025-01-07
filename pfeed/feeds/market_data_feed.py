@@ -63,8 +63,6 @@ class MarketDataFeed(BaseFeed):
         end_date: datetime.date | None = None,
         unique_identifier: str = '',
         compression: str = 'zstd',
-        filename_prefix: str = '',
-        filename_suffix: str = '',
     ) -> MarketDataModel:
         from pfeed.const.enums import Environment
         return MarketDataModel(
@@ -77,8 +75,6 @@ class MarketDataFeed(BaseFeed):
             end_date=end_date,
             compression=compression,
             metadata=self._create_metadata(raw_level),
-            filename_prefix=filename_prefix,
-            filename_suffix=filename_suffix,
         )
     
     def _validate_schema(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
@@ -106,16 +102,12 @@ class MarketDataFeed(BaseFeed):
         end_date: str='',
         raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
         to_storage: tSTORAGE='local',
-        filename_prefix: str='',
-        filename_suffix: str='',
         product_specs: dict[str, dict] | None=None,  # {'product_basis': {'attr': 'value', ...}}
     ) -> MarketDataFeed:
         '''
         Download historical data from data source.
         
         Args:
-            filename_prefix: The prefix of the filename.
-            filename_suffix: The suffix of the filename.
             product_specs: The specifications for the products.
                 'TSLA_USD_OPT' is in `products`, you need to provide the specifications of the option in `product_specs`:
                 e.g. {'TSLA_USD_OPT': {'strike_price': 500, 'expiration': '2024-01-01', 'option_type': 'CALL'}}
@@ -158,8 +150,6 @@ class MarketDataFeed(BaseFeed):
                 raw_level,
                 start_date,
                 end_date,
-                filename_prefix,
-                filename_suffix,
             )
             dataflows_per_pdt[product.name].extend(dataflows)
         self._add_default_transformations_to_download(dataflows_per_pdt, resolution, raw_level, is_resample_required)
@@ -176,8 +166,6 @@ class MarketDataFeed(BaseFeed):
         raw_level: DataRawLevel,
         start_date: datetime.date,
         end_date: datetime.date | None,
-        filename_prefix: str,
-        filename_suffix: str,
     ) -> list[DataFlow]:
         raise NotImplementedError
     

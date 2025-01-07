@@ -48,10 +48,6 @@ class MarketDataModel(TimeBasedDataModel):
     def create_filename(self) -> str:
         # NOTE: since storage is per date, only uses self.date (start_date) to create filename
         filename = '_'.join([self.product.basis, str(self.date)])
-        if self.filename_prefix:
-            filename = self.filename_prefix + '_' + filename
-        if self.filename_suffix:
-            filename += '_' + self.filename_suffix
         filename += self.file_extension
         return filename
 

@@ -72,14 +72,10 @@ class BybitFeed(CryptoMarketDataFeed):
         end_date: str='',
         raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
         to_storage: tSTORAGE='local',
-        filename_prefix: str='',
-        filename_suffix: str='',
         product_specs: dict[str, dict] | None=None,  # {'product_basis': {'attr': 'value', ...}}
     ) -> BybitFeed:
         '''
         Args:
-            filename_prefix: The prefix of the filename.
-            filename_suffix: The suffix of the filename.
             product_specs: The specifications for the products.
                 'BTC_USDT_OPT' is in `products`, you need to provide the specifications of the option in `product_specs`:
                 e.g. {'BTC_USDT_OPT': {'strike_price': 10000, 'expiration': '2024-01-01', 'option_type': 'CALL'}}
@@ -95,8 +91,6 @@ class BybitFeed(CryptoMarketDataFeed):
             end_date=end_date,
             raw_level=raw_level,
             to_storage=to_storage,
-            filename_prefix=filename_prefix,
-            filename_suffix=filename_suffix,
             product_specs=product_specs,
         )
     
@@ -107,14 +101,12 @@ class BybitFeed(CryptoMarketDataFeed):
         raw_level: DataRawLevel,
         start_date: datetime.date,
         end_date: datetime.date,
-        filename_prefix: str,
-        filename_suffix: str,
     ) -> list[DataFlow]:
         from pfeed.utils.utils import get_dates_in_between
         dataflows: list[DataFlow] = []
         # NOTE: one data model per date
         for date in get_dates_in_between(start_date, end_date):
-            data_model = self.create_data_model(product, resolution, raw_level, date, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+            data_model = self.create_data_model(product, resolution, raw_level, date)
             # create a dataflow that schedules _execute_download()
             dataflow: DataFlow = super().extract('download', data_model)
             dataflows.append(dataflow)

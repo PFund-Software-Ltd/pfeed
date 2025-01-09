@@ -191,7 +191,7 @@ class YahooFinanceFeed(MarketDataFeed):
         df = None
         num_retries = 5
         original_start_date = data_model.start_date
-        while df is None and num_retries:
+        while df is None or df.empty and num_retries:
             num_retries -= 1
             self.logger.debug(f'downloading {data_model}')
             # NOTE: yfinance's period is not used, only use start_date and end_date for data clarity in storage
@@ -203,12 +203,13 @@ class YahooFinanceFeed(MarketDataFeed):
             )
             # for some unknown reason, yfinance sometimes returns None even start_date and end_date are within the valid range
             # so we need to increment start_date by 1 day to shorten the date range and try again
-            if df is None:
+            if df is None or df.empty:
                 closer_start_date = data_model.start_date + datetime.timedelta(days=1)
-                data_model.update_start_date(closer_start_date)
-                self.logger.info(f'failed to download {data_model.product} {data_model.resolution} data, retrying with start_date={closer_start_date}')
-                if data_model.start_date >= data_model.end_date:
+                if closer_start_date >= data_model.end_date:
                     break
+                else:
+                    data_model.update_start_date(closer_start_date)
+                    self.logger.info(f'failed to download {data_model.product} {data_model.resolution} data, retrying with start_date={closer_start_date}')
                 time.sleep(0.1)
             else:
                 self.logger.debug(f'downloaded {data_model}')

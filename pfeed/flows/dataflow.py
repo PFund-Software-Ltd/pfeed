@@ -3,9 +3,11 @@ from typing import Literal, Callable, TYPE_CHECKING
 if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
     from pfeed.typing.core import tData
-    from pfeed.const.enums import DataSource
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.const.enums import DataSource
     from pfeed.storages.base_storage import BaseStorage
+
+import pandas as pd
 
 
 class DataFlow:
@@ -14,7 +16,7 @@ class DataFlow:
         self.data_model = data_model
         self.data_source: DataSource = data_model.source.name
         self.name = f'{self.data_source}_DataFlow'
-        self.operations = []
+        self.operations = {'extract': [], 'transform': [], 'load': []}
         self._has_extract_operation = False
         self._has_load_operation = False
     
@@ -23,7 +25,7 @@ class DataFlow:
             self._has_extract_operation = True
         elif op_type == 'load':
             self._has_load_operation = True
-        self.operations.append((op_type, funcs))
+        self.operations[op_type].extend(funcs)
     
     def has_extract_operation(self) -> bool:
         return self._has_extract_operation
@@ -39,16 +41,22 @@ class DataFlow:
         
     def run(self) -> tData | None:
         self._assert_operations()
-        for op_type, funcs in self.operations:
+        for op_type, funcs in self.operations.items():
             if op_type == 'extract':
+                assert len(funcs) == 1, f'{self.name} has multiple extract operations'
                 func = funcs[0]
-                data: tData | None = self._extract(func, func.__name__)
-                if data is None:
-                    return None
+                raw_data: tData | None = self._extract(func, func.__name__)
+                if raw_data is None:
+                    break
             elif op_type == 'transform':
+                data = raw_data
                 for func in funcs:
-                    data = self._transform(func, func.__name__, data)
+                    data: tData = self._transform(func, func.__name__, data)
+                    if isinstance(data, pd.DataFrame) and data.empty:
+                        self.logger.warning(f'dataframe is empty, skipping transformations for {self.data_model}')
+                        break
             elif op_type == 'load':
+                assert len(funcs) == 1, f'{self.name} has multiple load operations'
                 etl_load_data = funcs[0]
                 self._load(etl_load_data, data)
         else:
@@ -79,7 +87,7 @@ class DataFlow:
             self.logger.warning(f'failed to load {self.data_source} data to storage')
         else:
             for storage in storages:
-                self.logger.debug(f'loaded {self.data_source} data to {type(storage).__name__} {storage.file_path}')
+                self.logger.info(f'loaded {storage.data_model} data to {type(storage).__name__} {storage.file_path}')
 
     def to_prefect_flow(self, log_prints: bool = True, **kwargs) -> PrefectFlow:
         from prefect import flow, task
@@ -88,17 +96,22 @@ class DataFlow:
         def prefect_flow():
             self.logger = get_run_logger()
             self._assert_operations()
-            for op_type, funcs in self.operations:
+            for op_type, funcs in self.operations.items():
                 if op_type == 'extract':
+                    assert len(funcs) == 1, f'{self.name} has multiple extract operations'
                     func = funcs[0]
-                    extract_task = task(func)
-                    data: tData | None = self._extract(extract_task, func.__name__)
+                    raw_data: tData | None = self._extract(task(func), func.__name__)
+                    if raw_data is None:
+                        break
                 elif op_type == 'transform':
+                    data = raw_data
                     for func in funcs:
-                        transform_task = task(func)
-                        data: tData = self._transform(transform_task, func.__name__, data)
+                        data: tData = self._transform(task(func), func.__name__, data)
+                        if isinstance(data, pd.DataFrame) and data.empty:
+                            self.logger.warning(f'dataframe is empty, skipping transformations for {self.data_model}')
+                            break
                 elif op_type == 'load':
+                    assert len(funcs) == 1, f'{self.name} has multiple load operations'
                     etl_load_data = funcs[0]
-                    load_task = task(etl_load_data)
-                    self._load(load_task, data)
+                    self._load(task(etl_load_data), data)
         return prefect_flow

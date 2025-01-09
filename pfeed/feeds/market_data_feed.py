@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
     from pfeed.typing.core import tDataFrame
-    from pfeed.typing.literals import tSTORAGE, tPRODUCT_TYPE
+    from pfeed.typing.literals import tSTORAGE, tPRODUCT_TYPE, tENVIRONMENT
     from pfeed.flows.dataflow import DataFlow
     from pfeed.storages.base_storage import BaseStorage
 
@@ -25,7 +25,8 @@ from pfund.datas.resolution import Resolution
 from pfeed import etl
 from pfeed.feeds.base_feed import BaseFeed, clear_current_dataflows
 from pfeed.data_models.market_data_model import MarketDataModel
-from pfeed.const.enums import DataRawLevel, MarketDataType, DataAccessType
+from pfeed.const.enums import DataRawLevel, MarketDataType, DataAccessType, DataStorage, Environment
+from pfeed.const.common import LOCAL_STORAGES
 from pfeed.utils.utils import lambda_with_name
 
 
@@ -63,16 +64,16 @@ class MarketDataFeed(BaseFeed):
         end_date: datetime.date | None = None,
         unique_identifier: str = '',
         compression: str = 'zstd',
+        env: tENVIRONMENT = 'BACKTEST',
     ) -> MarketDataModel:
-        from pfeed.const.enums import Environment
         return MarketDataModel(
-            env=Environment.BACKTEST,
+            env=Environment[env.upper()],
             source=self.source,
             unique_identifier=unique_identifier,
             product=product,
             resolution=resolution,
             start_date=start_date,
-            end_date=end_date,
+            end_date=end_date or start_date,
             compression=compression,
             metadata=self._create_metadata(raw_level),
         )
@@ -121,6 +122,7 @@ class MarketDataFeed(BaseFeed):
             end_date: End date.
                 If not specified, use today's date as the end date.
         '''
+        self._print_minio_warning(to_storage)
         data_type = MarketDataType[data_type.upper()]
         resolution = Resolution(data_type.value)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
@@ -140,10 +142,10 @@ class MarketDataFeed(BaseFeed):
             )
         if self.config.print_msg and start_date and end_date:
             self._print_download_msg(resolution, start_date, end_date, raw_level)
-        dataflows_per_pdt: dict[str, list[DataFlow]] = {}
+        dataflows_per_product: dict[BaseProduct, list[DataFlow]] = {}
         for product_basis, symbol in zip(products, symbols):
             product = self.create_product(product_basis, symbol=symbol, **specs.get(product_basis, {}))
-            dataflows_per_pdt[product.name] = []
+            dataflows_per_product[product] = []
             dataflows: list[DataFlow] = self._create_download_dataflows(
                 product,
                 resolution,
@@ -151,8 +153,8 @@ class MarketDataFeed(BaseFeed):
                 start_date,
                 end_date,
             )
-            dataflows_per_pdt[product.name].extend(dataflows)
-        self._add_default_transformations_to_download(dataflows_per_pdt, resolution, raw_level, is_resample_required)
+            dataflows_per_product[product].extend(dataflows)
+        self._add_default_transformations_to_download(dataflows_per_product, resolution, raw_level, is_resample_required)
         if not self._pipeline_mode:
             self.load(to_storage)
             self.run()
@@ -176,7 +178,7 @@ class MarketDataFeed(BaseFeed):
     
     def _add_default_transformations_to_download(
         self,
-        dataflows_per_pdt: dict[str, list[DataFlow]],
+        dataflows_per_product: dict[BaseProduct, list[DataFlow]],
         resolution: Resolution,
         raw_level: DataRawLevel,
         is_resample_required: bool,
@@ -184,10 +186,13 @@ class MarketDataFeed(BaseFeed):
         self.transform(etl.convert_to_pandas_df)
         if raw_level != DataRawLevel.ORIGINAL:
             self.transform(self._normalize_raw_data)
-            for product_name in dataflows_per_pdt:
+            for product in dataflows_per_product:
                 self.transform(
-                    lambda_with_name('standardize_columns', lambda df: etl.standardize_columns(df, resolution, product_name)),
-                    dataflows=dataflows_per_pdt[product_name],
+                    lambda_with_name(
+                        'standardize_columns', 
+                        lambda df: etl.standardize_columns(df, resolution, product.name, symbol=product.symbol)
+                    ),
+                    dataflows=dataflows_per_product[product],
                 )
             if raw_level == DataRawLevel.CLEANED:
                 transformations = [etl.filter_columns]
@@ -215,12 +220,13 @@ class MarketDataFeed(BaseFeed):
         unique_identifier: str = '',
         from_storage: tSTORAGE | None=None,
     ) -> tuple[Frame | None, list[datetime.date]]:
-        from pfeed.utils.utils import get_dates_in_between
         # e.g. search data in order e.g. '3m' converted to '1m' -> search '1m' -> search '1t'
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        all_dates: list[datetime.date] = get_dates_in_between(start_date, end_date)
+        all_dates: list[datetime.date] = pd.date_range(start_date, end_date).date.tolist()
         search_resolutions: set[Resolution] = set([unit_resolution] + unit_resolution.get_higher_resolutions(exclude_quote=True))
-        search_storages = ['cache', 'local', 'minio'] if from_storage is None else [from_storage]  
+        # remove resolutions that are not supported by the data source
+        search_resolutions = [resolution for resolution in search_resolutions if resolution <= self.source.highest_resolution]
+        search_storages = LOCAL_STORAGES if from_storage is None else [from_storage]  
 
         def _search(date: datetime.date, queue: Queue) -> list[tuple[Resolution, BaseStorage]]:
             '''Search for data across all resolutions and storages for a given date.
@@ -258,7 +264,7 @@ class MarketDataFeed(BaseFeed):
         if missing_dates:
             # since data on missing dates will be downloaded from source using start_date and end_date,
             # downloaded data will be consecutive, so need to make missing dates consecutive as well
-            missing_dates = get_dates_in_between(missing_dates[0], missing_dates[-1])
+            missing_dates = pd.date_range(missing_dates[0], missing_dates[-1]).date.tolist()
         data_storages = [storage for storage in data_storages if storage.date not in missing_dates]
         data_storages.sort(key=lambda storage: storage.date)  # sort now so that final df doesn't need to be sorted
         data_dates = [storage.date for storage in data_storages]
@@ -267,7 +273,11 @@ class MarketDataFeed(BaseFeed):
         def _get_df(storage: BaseStorage) -> tDataFrame:
             data_resolution = storage.data_model.resolution
             is_resample_required = unit_resolution < data_resolution
-            df: tDataFrame = self.data_tool.read_parquet(storage.file_path, storage=storage.name.value)
+            if storage.name == DataStorage.DUCKDB:
+                df: pd.DataFrame = storage.get_table(full_table=False)
+                df: tDataFrame = etl.convert_to_user_df(df, self.data_tool.name)
+            else:
+                df: tDataFrame = self.data_tool.read_parquet(storage.file_path, storage=storage.name.value)
             if is_resample_required:
                 self.logger.debug(f'resampling {product.name} {storage.date} {data_resolution} data to {unit_resolution}')
                 df: tDataFrame = etl.resample_data(df, unit_resolution)

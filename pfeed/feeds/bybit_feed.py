@@ -102,10 +102,9 @@ class BybitFeed(CryptoMarketDataFeed):
         start_date: datetime.date,
         end_date: datetime.date,
     ) -> list[DataFlow]:
-        from pfeed.utils.utils import get_dates_in_between
         dataflows: list[DataFlow] = []
         # NOTE: one data model per date
-        for date in get_dates_in_between(start_date, end_date):
+        for date in pd.date_range(start_date, end_date).date:
             data_model = self.create_data_model(product, resolution, raw_level, date)
             # create a dataflow that schedules _execute_download()
             dataflow: DataFlow = super().extract('download', data_model)

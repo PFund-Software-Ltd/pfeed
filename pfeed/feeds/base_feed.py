@@ -79,7 +79,7 @@ class BaseFeed(ABC):
                 You can run command "pfeed config set --data-path {{your_path}}" to set your data path that stores downloaded data.
                 The current data path is: {self.config.data_path}
             ''')
-    
+            
     @staticmethod
     @abstractmethod
     def get_data_source() -> BaseSource:
@@ -101,6 +101,14 @@ class BaseFeed(ABC):
     @abstractmethod
     def _create_metadata(self, raw_level: DataRawLevel, *args, **kwargs) -> dict:
         pass
+    
+    def _print_minio_warning(self, to_storage: tSTORAGE):
+        if self.config.print_msg and to_storage.lower() not in ['minio', 'cache']:
+            print_warning('''
+                pfeed is designed to work natively with MinIO as a data lake.
+                It is recommended to use MinIO as your data storage solution.
+                You can do that by setting `to_storage='minio'`.
+            ''')
     
     def _assert_data_quality(self, df: pd.DataFrame, data_model: BaseDataModel) -> pd.DataFrame:
         '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''
@@ -261,6 +269,8 @@ class BaseFeed(ABC):
                 '_assert_data_quality',
                 lambda df: self._assert_data_quality(df, data_model)
             )
+        if self._use_ray:
+            assert storage.lower() != 'duckdb', 'DuckDB is not thread-safe, so cannot be used with Ray'
         dataflows = dataflows or self._current_dataflows
         # NOTE: remember when looping, if you pass in e.g. dataflow to lambda dataflow: ..., due to python lambda's late binding, you are passing in the last dataflow object to all lambdas
         # so this is wrong: dataflow.add_operation('transform', lambda df: self._assert_data_quality(df, dataflow.data_model)) <- dataflow object is always the last one in the loop
@@ -294,7 +304,7 @@ class BaseFeed(ABC):
         if self._use_ray:
             if self.config.print_msg:
                 print('''Note:
-                    If Ray appears to be running sequentially rather than in parallel, it may be due to insufficient network bandwidth for parallel downloads.
+                If Ray appears to be running sequentially rather than in parallel, it may be due to insufficient network bandwidth for parallel downloads.
                 ''')
             
             import atexit
@@ -308,7 +318,7 @@ class BaseFeed(ABC):
                     if not self.logger.handlers:
                         self.logger.addHandler(QueueHandler(log_queue))
                         self.logger.setLevel(logging.DEBUG)
-                    res = dataflow()
+                    res: tData | None = dataflow()
                     success = _handle_result(res)
                     return success, dataflow
                 except RuntimeError as err:
@@ -345,7 +355,7 @@ class BaseFeed(ABC):
         else:
             try:
                 for dataflow in tqdm(dataflows, desc=f'Running {self.name} dataflows', colour=color):
-                    res = dataflow()
+                    res: tData | None = dataflow()
                     success = _handle_result(res)
                     if not success:
                         self._failed_dataflows.append(dataflow)
@@ -357,7 +367,7 @@ class BaseFeed(ABC):
             except Exception:
                 self.logger.exception(f'Error in running {self.name} dataflows:')
         if self._failed_dataflows:
-            self.logger.warning(f'some {self.name} dataflows failed\n{pformat([str(dataflow) for dataflow in self._failed_dataflows])}\ncheck {self.logger.name}.log for details')
+            self.logger.warning(f'{self.name} failed dataflows:\n{pformat([str(dataflow) for dataflow in self._failed_dataflows])}\ncheck {self.logger.name}.log for details')
                     
     
     def to_prefect_flows(self, **kwargs) -> list[PrefectFlow]:

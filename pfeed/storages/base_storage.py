@@ -22,8 +22,7 @@ class BaseStorage:
     
     def __post_init__(self):
         if isinstance(self.data_model, TimeBasedDataModel):
-            assert not self.data_model.end_date, \
-                'data storage is per date, only start_date should be provided, end_date must be None'
+            assert not self.data_model.is_date_range(), 'data storage is per date, date range is not supported'
         self.data_path = self._create_data_path()
         self.file_path: Path | str = self._create_file_path()
     

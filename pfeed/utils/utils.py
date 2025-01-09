@@ -134,34 +134,6 @@ def get_TZ_abbrev_and_UTC_offset(date: str, tz_identifier='US/Eastern'):
     return local_date.strftime('%Z%z')
 
 
-def get_x_days_before_in_UTC(x=0) -> str:
-    return (datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=x)).strftime('%Y-%m-%d')
-
-
-def get_dates_in_between(
-    start_date: str | datetime.date, 
-    end_date: str | datetime.date,
-    return_str: bool=False,
-) -> list[datetime.date] | list[str]:
-    if type(start_date) is str:
-        start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-    if type(end_date) is str:
-        end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
-    date_delta = end_date - start_date
-    dates = [start_date + datetime.timedelta(i) for i in range(date_delta.days + 1)]
-    if return_str:
-        dates = [date.strftime('%Y-%m-%d') for date in dates]
-    return dates
-
-
-def extract_date_from_filename(filename: str) -> str | None:
-    date_pattern = r'\d{4}-\d{2}-\d{2}'
-    match = re.search(date_pattern, filename)
-    if match:
-        date = match.group(0)
-        return date
-
-
 def rollback_date_range(rollback_period: str | Literal['ytd']) -> tuple[datetime.date, datetime.date]:
     '''Returns start_date and end_date based on the rollback_period (e.g. '1w', '1M', 'ytd' (Year To Date)).'''
     from pfund.datas.resolution import Resolution

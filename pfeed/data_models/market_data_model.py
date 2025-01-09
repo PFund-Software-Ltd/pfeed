@@ -1,3 +1,4 @@
+import datetime
 from pathlib import Path
 
 from pydantic import model_validator
@@ -21,12 +22,7 @@ class MarketDataModel(TimeBasedDataModel):
     compression: str = 'zstd'
     
     def __str__(self):
-        if self.unique_identifier != self.source.name.value:
-            return ':'.join([super().__str__(), repr(self.product), str(self.resolution)])
-        elif not self.end_date:
-            return ':'.join([str(self.start_date), repr(self.product), str(self.resolution)])
-        else:
-            return ':'.join(['(from)' + str(self.start_date), '(to)' + str(self.end_date), repr(self.product), str(self.resolution)])
+        return ':'.join([super().__str__(), repr(self.product), str(self.resolution)])
     
     @model_validator(mode='after')
     def validate(self):
@@ -44,6 +40,12 @@ class MarketDataModel(TimeBasedDataModel):
 
     def __hash__(self):
         return hash((self.source.name, self.unique_identifier, self.start_date, self.end_date, self.product, self.resolution))
+    
+    def update_start_date(self, start_date: datetime.date) -> None:
+        super().update_start_date(start_date)
+        # update filename and storage path to reflect the new start date
+        self.filename = self.create_filename()
+        self.storage_path = self.create_storage_path()
 
     def create_filename(self) -> str:
         # NOTE: since storage is per date, only uses self.date (start_date) to create filename

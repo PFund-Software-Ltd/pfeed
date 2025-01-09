@@ -54,7 +54,7 @@ class MinioStorage(BaseStorage):
         )
     
     @staticmethod
-    @lru_cache(maxsize=1)  # use it to avoid repeated checking
+    @lru_cache(maxsize=1)  # cache the result to avoid repeated checking
     def _check_if_server_running(cache_time: datetime.datetime, endpoint: str) -> bool:
         '''
         Args:

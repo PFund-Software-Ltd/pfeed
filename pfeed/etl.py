@@ -28,7 +28,7 @@ except ImportError:
     ps = None
     SparkDataFrame = None
     SparkSession = None
-    
+
 from pfund.datas.resolution import Resolution
 from pfeed.const.enums import DataStorage, DataTool, DataRawLevel
 
@@ -44,6 +44,10 @@ def write_data(data: bytes | pd.DataFrame, storage: BaseStorage, metadata: dict 
         file_path = str(storage.file_path)
     elif storage.name == DataStorage.MINIO:
         file_path = str(storage.file_path).replace('s3://', '')
+    elif storage.name == DataStorage.DUCKDB:
+        with storage:
+            storage.write_table(data, metadata)
+            return
     else:
         raise NotImplementedError(f'{storage.name=}')
     fs = get_filesystem(storage.name)
@@ -94,14 +98,21 @@ def get_filesystem(storage: DataStorage) -> pa.fs.FileSystem:
     return fs
 
 
-def read_data(storage: BaseStorage, compression: str = 'zstd') -> tuple[pq.ParquetFile | bytes | str, dict | None]:
+def read_data(
+    storage: BaseStorage,
+    compression: str = 'zstd',
+) -> tuple[pq.ParquetFile | pd.DataFrame | bytes | str, dict]:
     import pyarrow.parquet as pq
     from pfeed.utils.file_formats import decompression_methods
     
+    metadata = {}
     if storage.name in [DataStorage.LOCAL, DataStorage.CACHE]:
         file_path = str(storage.file_path)
     elif storage.name == DataStorage.MINIO:
         file_path = str(storage.file_path).replace('s3://', '')
+    elif storage.name == DataStorage.DUCKDB:
+        metadata = storage.get_metadata()
+        return None, metadata
     else:
         raise NotImplementedError(f'{storage.name=}')
     fs = get_filesystem(storage.name)
@@ -118,10 +129,10 @@ def read_data(storage: BaseStorage, compression: str = 'zstd') -> tuple[pq.Parqu
             # Attempt to decode as UTF-8 to return text
             try:
                 text_data = raw_data.decode('utf-8')
-                return text_data, None
+                return text_data, metadata
             except UnicodeDecodeError:
                 # Return as raw bytes if not UTF-8 decodable
-                return raw_data, None
+                return raw_data, metadata
 
 
 def extract_data(data_model: BaseDataModel, storage: tSTORAGE) -> BaseStorage | None:
@@ -142,14 +153,16 @@ def extract_data(data_model: BaseDataModel, storage: tSTORAGE) -> BaseStorage | 
         return storage
 
 
-def standardize_columns(df: pd.DataFrame, resolution: Resolution, product: str, symbol: str='') -> pd.DataFrame:
+def standardize_columns(df: pd.DataFrame, resolution: Resolution, product_name: str, symbol: str='') -> pd.DataFrame:
     """Standardizes the columns of a DataFrame.
     Adds columns 'resolution', 'product', 'symbol', and convert 'ts' to datetime
+    Args:
+        product_name: Full name of the product, using the 'name' attribute of the product
     """
     from pandas.api.types import is_datetime64_any_dtype as is_datetime
     from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
     df['resolution'] = repr(resolution)
-    df['product'] = product.upper()
+    df['product'] = product_name.upper()
     if symbol:
         df['symbol'] = symbol.upper()
     if not is_datetime(df['ts']):
@@ -266,7 +279,12 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution) -> IntoFrameT:
 
 
 def get_storage(data_model: BaseDataModel, storage: tSTORAGE, **kwargs) -> BaseStorage | None:
-    from pfeed.storages import LocalStorage, MinioStorage, CacheStorage, S3Storage
+    '''
+    Args:
+        kwargs: kwargs specific to the storage
+            e.g. kwargs for Minio client, DuckDB connection, etc.
+    '''
+    from pfeed.storages import LocalStorage, MinioStorage, CacheStorage, S3Storage, DuckDBStorage
     from minio import ServerError
     storage = DataStorage[storage.upper()]
     if storage == DataStorage.LOCAL:
@@ -280,6 +298,8 @@ def get_storage(data_model: BaseDataModel, storage: tSTORAGE, **kwargs) -> BaseS
         cache_storage = CacheStorage(name=storage, data_model=data_model, **kwargs)
         cache_storage.clear_caches()
         return cache_storage
+    elif storage == DataStorage.DUCKDB:
+        return DuckDBStorage(name=storage, data_model=data_model, **kwargs)
     # elif storage == DataStorage.S3:
     #     pass
     # elif storage == DataStorage.AZURE:
@@ -291,9 +311,9 @@ def get_storage(data_model: BaseDataModel, storage: tSTORAGE, **kwargs) -> BaseS
 
 
 def load_data(
-    data_model: BaseDataModel, 
-    data: bytes | pd.DataFrame, 
-    storage: tSTORAGE, 
+    data_model: BaseDataModel,
+    data: bytes | pd.DataFrame,
+    storage: tSTORAGE,
     **kwargs
 ) -> list[BaseStorage]:
     """
@@ -307,34 +327,22 @@ def load_data(
         from pfeed.utils.monitor import print_disk_usage
     except ImportError:
         print_disk_usage = None
-    from pfeed.utils.utils import get_dates_in_between
     storage_literal = storage
     storages: list[BaseStorage] = []
     if isinstance(data, pd.DataFrame):
-        is_data_include_multi_dates = data_model.end_date is not None
-        if not is_data_include_multi_dates:
-            if storage := get_storage(data_model, storage_literal, **kwargs):
-                write_data(data, storage, metadata=data_model.metadata, compression=data_model.compression)
+        data_chunks_per_date = {} if data.empty else {date: group for date, group in data.groupby(data['ts'].dt.date)}
+        for date in pd.date_range(data_model.start_date, data_model.end_date).date:
+            data_model_copy = data_model.model_copy(deep=False)
+            # NOTE: create placeholder data if date is not in data_chunks_per_date, 
+            # used as an indicator for successful download, there is just no data on that date (e.g. weekends, holidays, etc.)
+            data_chunk = data_chunks_per_date.get(date, pd.DataFrame(columns=data.columns))
+            # make date range (start_date, end_date) to (date, date), since storage is per date
+            data_model_copy.update_start_date(date)
+            data_model_copy.update_end_date(date)
+            data_model_copy.update_metadata('is_placeholder', 'true' if data_chunk.empty else 'false')
+            if storage := get_storage(data_model_copy, storage_literal, **kwargs):
+                write_data(data_chunk, storage, metadata=data_model_copy.metadata, compression=data_model_copy.compression)
                 storages.append(storage)
-        else:
-            dates = get_dates_in_between(data_model.start_date, data_model.end_date)
-            # storage is per date, set end_date to None, only start_date is used for the filename
-            data_model.update_end_date(None)
-            # split data into chunks by date
-            data_chunks_per_date = {date: group for date, group in data.groupby(data['ts'].dt.date)}
-            for date in dates:
-                metadata = data_model.metadata.copy()
-                if date in data_chunks_per_date:
-                    data_chunk = data_chunks_per_date[date]
-                else:   
-                    # Create an empty DataFrame with the same columns
-                    data_chunk = pd.DataFrame(columns=data.columns)
-                    # NOTE: used as an indicator for successful download, there is just no data on that date (e.g. weekends, holidays, etc.)
-                    metadata['is_placeholder'] = 'true'
-                data_model.update_start_date(date)
-                if storage := get_storage(data_model, storage_literal, **kwargs):
-                    write_data(data_chunk, storage, metadata=metadata, compression=data_model.compression)
-                    storages.append(storage)
     else:
         raise NotImplementedError(f'{type(data)=}')
     if print_disk_usage:

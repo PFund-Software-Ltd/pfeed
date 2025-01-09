@@ -38,9 +38,18 @@ class BaseDataModel(BaseModel, ABC):
             self.unique_identifier = self.source.name.value
         self.filename = self.create_filename()
         self.storage_path = self.create_storage_path()
+    
+    def is_unique_identifier_effective(self) -> bool:
+        '''
+        A unique_identifier is not effective if it is the same as the source name.
+        '''
+        return self.unique_identifier != self.source.name.value
 
+    def update_metadata(self, key: str, value: Any) -> None:
+        self.metadata[key] = value
+    
     def __str__(self):
-        if self.unique_identifier:
+        if self.is_unique_identifier_effective():
             return f'{self.source.name.value}:{self.unique_identifier}'
         else:
             return f'{self.source.name.value}'

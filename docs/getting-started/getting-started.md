@@ -17,9 +17,9 @@ Download historical data that is **backtesting-ready**.
 :::
 
 :::{card}
-:link: store-historical-data
-:header: Store Historical Data
-Store historical data locally using **MinIO** or in the cloud.
+:link: retrieve-stored-data
+:header: Retrieve Stored Data
+Retrieve data from storage, e.g. **MinIO** or in the cloud.
 :::
 
 :::{card}
@@ -31,13 +31,13 @@ Get real-time data from **multiple trading venues**.
 :::{card}
 :link: stream-realtime-data
 :header: Stream Real-Time Data
-Stream real-time data in a **scalable** way.
+Receive **streaming data** via subscriptions.
 :::
 
 :::{card}
-:link: store-realtime-data
-:header: Store Real-Time Data
-Store real-time data using **TimescaleDB**.
+:link: fetch-general-data
+:header: Fetch General Data
+Fetch data without storage using **data source's API**.
 :::
 
 ::::

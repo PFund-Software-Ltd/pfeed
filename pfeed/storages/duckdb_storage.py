@@ -276,14 +276,8 @@ class DuckDBStorage(BaseStorage):
             self.conn.close()
 
     def write_data(self, data: bytes | pd.DataFrame, metadata: dict | None=None):
-        try:
-            from pfeed.utils.monitor import print_disk_usage
-        except ImportError:
-            print_disk_usage = None
         with self:
             self.write_table(data, metadata=metadata)
-            if print_disk_usage:
-                print_disk_usage()
     
     def read_data(self, data_tool: DataTool | tDATA_TOOL='pandas') -> tuple[tDataFrame | None, dict]:
         from pfeed.etl import convert_to_user_df

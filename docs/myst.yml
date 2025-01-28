@@ -26,10 +26,10 @@ project:
           children:
             - file: getting-started/quickstart/get_historical_data.ipynb
             - file: getting-started/quickstart/download_historical_data.ipynb
-            - file: getting-started/quickstart/store_historical_data.ipynb
+            - file: getting-started/quickstart/retrieve_stored_data.ipynb
             - file: getting-started/quickstart/get_realtime_data.ipynb
             - file: getting-started/quickstart/stream_realtime_data.ipynb
-            - file: getting-started/quickstart/store_realtime_data.ipynb
+            - file: getting-started/quickstart/fetch_general_data.ipynb
     - file: concepts/concepts.md
       children:
         - file: concepts/data_lake.md

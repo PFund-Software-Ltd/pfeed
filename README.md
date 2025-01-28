@@ -9,6 +9,7 @@
 <!-- [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/) -->
 
 [MinIO]: https://min.io/
+[Deltalake]: https://github.com/delta-io/delta-rs
 [PFund]: https://github.com/PFund-Software-Ltd/pfund
 [Polars]: https://github.com/pola-rs/polars
 [Dask]: https://www.dask.org/
@@ -21,6 +22,8 @@
 [Databento]: https://databento.com/
 [Polygon]: https://polygon.io/
 [FirstRate Data]: https://firstratedata.com
+[Prefect]: https://www.prefect.io/
+[Bytewax]: https://www.bytewax.io
 
 ## Problem
 Starting algo-trading requires reliable and clean data. However, the time-consuming and mundane tasks of data cleaning and storage often discourage traders from embarking on their algo-trading journey.
@@ -29,13 +32,14 @@ Starting algo-trading requires reliable and clean data. However, the time-consum
 By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, allowing traders to focus on strategy development.
 
 ---
-PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a bridge between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, by automating the processes of data collection, cleaning, transformation, and storage.
+PFeed (/piː fiːd/) is the data engine for algorithmic trading, serving as a bridge between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, supporting both **batch processing** and **streaming** workflows through streamlined data collection, cleaning, transformation, and storage.
 
 ## Core Features
 - [x] Download or stream reliable, validated and **clean data** for research, backtesting, or live trading
 - [x] Get historical data (**dataframe**) or live data in standardized formats by just calling a **single** function
-- [x] **Own your data** by storing them locally using [MinIO], with the option to connect to the cloud
+- [x] **Own your data** by storing them locally using [MinIO] + [Deltalake], or in the cloud
 - [x] Interact with different kinds of data (including TradFi, CeFi and DeFi) using a **unified interface**
+- [x] Scale using modern data tools (e.g. [Polars], [Dask]) and workflow orchestration frameworks ([Prefect] for batch processing, [Bytewax] for streaming)
 
 ---
 
@@ -58,11 +62,14 @@ PFeed (/piː fiːd/) is a data pipeline for algorithmic trading, serving as a br
 ## Installation
 > For more installation options, please refer to the [documentation](https://pfeed-docs.pfund.ai/installation).
 ```bash
-# [RECOMMENDED]: Full Features, choose this if you do not care about the package size
-pip install -U "pfeed[all]"
-
-# Minimal Features, only supports getting, downloading and streaming data
+# [RECOMMENDED]: Core Features, including Minio, Deltalake, Ray, etc.
 pip install -U "pfeed[core]"
+
+# add your desired data sources, e.g. databento, polygon, etc.
+pip install -U "pfeed[core,databento,polygon]"
+
+# Minimal Features
+pip install -U "pfeed"
 ```
 
 

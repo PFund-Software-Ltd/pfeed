@@ -13,41 +13,42 @@
 :::{tab-item} Standard
 :sync: tab1
 ```bash
-# [RECOMMENDED]: Full Features, choose this if you do not care about the package size
-pip install -U "pfeed[all]"
-```
-```bash
-# Minimal Features, only supports downloading and storing data locally
+# [RECOMMENDED]: Core Features, including Minio, Deltalake, Ray, etc.
 pip install -U "pfeed[core]"
 ```
+```bash
+# Minimal Features
+pip install -U "pfeed"
+```
+
 
 :::
 :::{tab-item} Advanced
 :sync: tab2
-| Command                           | Installed Features                                                |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `pip install -U "pfeed[all]"`     | Download, Stream, All Data Tools, Storage (Local+Cloud), DataOps  |
-| `pip install -U "pfeed[core]"`    | Download, Stream, Data Tools (`pandas`), Storage (Local) |
-| `pip install -U "pfeed[polars]"`  | Data Tools (`polars`, `polars-xdt`)                               |
-| `pip install -U "pfeed[dask]"`    | Data Tools (`dask`, `coiled`)                                     |
-<!-- | `pip install -U "pfeed[pyspark]"` | Data Tools (`pyspark`, `databricks-connect`)                      | -->
-| `pip install -U "pfeed[dfs]"`     | All Data Tools                                                    |
-| `pip install -U "pfeed[storage]"` | Storage (MinIO, AWS, Azure, GCP)                                  |
-| `pip install -U "pfeed[dataops]"` | DataOps (data pipeline for data batching and processing)          |
+| Command                             | Installed Features                                   |
+| ----------------------------------- | ---------------------------------------------------- |
+| `pip install -U "pfeed[core]"`      | Core Features, including Minio, Deltalake, Ray, etc. |
+| `pip install -U "pfeed[dask]"`      | Data Tools Dask                                      |
+| `pip install -U "pfeed[prefect]"`   | Workflow Orchestration Framework Prefect             |
+| `pip install -U "pfeed[bytewax]"`   | Stream Processing Framework Bytewax                  |
+| `pip install -U "pfeed[kafka]"`     | Confluent's Kafka Python Client                      |
+| `pip install -U "pfeed[databento]"` | Data Source Databento                              |
+| `pip install -U "pfeed[polygon]"`   | Data Source Polygon                                  |
+<!-- | `pip install -U "pfeed[spark]"`   | Data Tools PySpark | -->
 
 ---
 
 **Combinations** \
 You can create a combination of features based on your needs.
 ```bash
-# e.g. if you only want to use polars with data storage
-pip install -U "pfeed[core,polars,storage]"
+# e.g. if you only want to use prefect dataflows and databento's data
+pip install -U "pfeed[core,prefect,databento]"
 ```
 :::
 ::::
 
 
-````{important} WASM Usage
+<!-- ````{important} WASM Usage
 :class: dropdown
 Since {abbr}`WASM (Web Assembly)` is becoming more mature, `pfeed` has been designed to support WASM usage as well. \
 In other words, you can use `pfeed` in the browser on websites such as [Quadratic](https://quadratichq.com) (see [](../integrations/quadratic)). This is possible because `pfeed` is a **Pure Python package**.
@@ -64,5 +65,4 @@ pe.__version__
 ```{caution} Limitations
 In WASM, you can only install `pfeed`, not `pfeed[...]` or any other combinations since they include non-pure python packages.
 ```
-
-````
+```` -->

@@ -115,8 +115,8 @@ class BybitFeed(CryptoMarketDataFeed):
     def get_historical_data(
         self,
         product: str,
-        resolution: str="1t",
-        rollback_period: str="1d",
+        resolution: str="1tick",
+        rollback_period: str="1day",
         start_date: str="",
         end_date: str="",
         data_layer: tDATA_LAYER='cleaned',

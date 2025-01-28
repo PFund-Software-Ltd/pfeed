@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ModuleType
+from typing import TYPE_CHECKING
+from types import ModuleType
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame, Frame
     from pfeed.typing.literals import tPRODUCT_TYPE, tDATA_TOOL

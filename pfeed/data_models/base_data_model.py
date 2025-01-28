@@ -36,8 +36,8 @@ class BaseDataModel(BaseModel, ABC):
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
             self.data_origin = self.source.name.value
-        self.filename = self.create_filename()
-        self.storage_path = self.create_storage_path()
+        self.filename = self._create_filename()
+        self.storage_path = self._create_storage_path()
     
     def is_data_origin_effective(self) -> bool:
         '''

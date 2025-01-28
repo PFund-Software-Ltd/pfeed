@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from pfeed.typing.literals import tSTORAGE, tDATA_TOOL, tDATA_LAYER
     from pfeed.typing.core import tData
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -27,6 +28,7 @@ class BaseStorage(ABC):
         self.data_layer = DataLayer[data_layer.upper()]
         self.data_domain = data_domain
         self.use_deltalake = use_deltalake
+        self._logger: logging.Logger | None = None
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
         self._kwargs = kwargs
@@ -47,6 +49,7 @@ class BaseStorage(ABC):
             **kwargs
         )
         instance.attach_data_model(data_model)
+        instance.initialize_logger()
         instance.initialize_data_handler()
         return instance
     
@@ -78,6 +81,12 @@ class BaseStorage(ABC):
         if isinstance(self.data_model, MarketDataModel):
             data_handler_configs['use_deltalake'] = self.use_deltalake
             self._data_handler = MarketDataHandler(self.data_model, **data_handler_configs)
+        else:
+            raise NotImplementedError(f'No data handler is available for {type(self.data_model)}')
+    
+    def initialize_logger(self):
+        name = self._data_model.source.name.lower()
+        self._logger = logging.getLogger(f"{name}_data")
     
     @property
     def data_model(self) -> BaseDataModel:
@@ -112,7 +121,7 @@ class BaseStorage(ABC):
     def data_path(self) -> Path:
         from pfeed.config import get_config
         config = get_config()
-        return Path(config.data_path) / self.data_layer / self.data_domain
+        return Path(config.data_path) / self.data_layer.name.lower() / self.data_domain
     
     def __str__(self):
         if self._data_model:
@@ -120,19 +129,22 @@ class BaseStorage(ABC):
         else:
             return f'{self.name}'
     
-    def write_data(self, data: tData):
+    def write_data(self, data: tData) -> bool:
         try:
-            from pfeed.utils.monitor import print_disk_usage
-        except ImportError:
-            print_disk_usage = None
-        self.data_handler.write(data)
-        if print_disk_usage:
-            print_disk_usage()
+            self.data_handler.write(data)
+            return True
+        except Exception:
+            self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
+            return False
 
     def read_data(self, data_tool: tDATA_TOOL='pandas', delta_version: int | None=None) -> tuple[tData | None, dict]:
         '''
         Args:
             delta_version: version of the deltalake table to read, if None, read the latest version.
         '''
-        data, metadata = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
-        return data, metadata
+        try:
+            data, metadata = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
+            return data, metadata
+        except Exception:
+            self._logger.exception(f'Failed to read data ({data_tool=}, {delta_version=}) from {self.name}')
+            return None, {}

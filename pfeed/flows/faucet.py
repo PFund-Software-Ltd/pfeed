@@ -1,7 +1,6 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING
+from typing import Callable, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from bytewax.dataflow import Dataflow as BytewaxDataFlow
     from bytewax.dataflow import Stream as BytewaxStream
     from bytewax.inputs import Source as BytewaxSource
     from pfeed.data_models.base_data_model import BaseDataModel
@@ -28,15 +27,15 @@ class Faucet:
         self, 
         data_model: BaseDataModel, 
         execute_func: Callable,  # e.g. _execute_download(), _execute_stream(), _execute_retrieve(), _execute_fetch()
+        op_type: ExtractType | Literal['download', 'stream', 'retrieve', 'fetch'],
         name: str='',
-        streaming: bool=False,
     ):
         self.data_model = data_model
         self.data_source: BaseSource = data_model.source
-        self.op_type = ExtractType[self.execute_func.__name__.replace('_execute_', '')]
-        self.name = self._create_name(execute_func, name)
+        self.op_type = ExtractType[op_type.lower()] if isinstance(op_type, str) else op_type
+        self.name = self._create_name(name)
         self.execute_func = lambda_with_name(self.name, execute_func)
-        self._streaming = streaming
+        self._streaming = self.op_type == ExtractType.stream
 
     def _create_name(self, name: str):
         name_list = []

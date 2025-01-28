@@ -14,9 +14,16 @@ from enum import StrEnum
 import pandas as pd
 from prefect import flow, task
 from prefect.logging import get_run_logger
-from bytewax.dataflow import Dataflow as BytewaxDataFlow
-from bytewax.dataflow import Stream as BytewaxStream
-import bytewax.operators as op
+try:
+    from bytewax.dataflow import Dataflow as BytewaxDataFlow
+    from bytewax.dataflow import Stream as BytewaxStream
+    import bytewax.operators as bytewax_op
+except ImportError:
+    class BytewaxDataFlow:
+        pass
+    class BytewaxStream:
+        pass
+    bytewax_op = None
 
 
 class FlowType(StrEnum):
@@ -27,8 +34,9 @@ class FlowType(StrEnum):
 
 class DataFlow:
     def __init__(self, faucet: Faucet):
-        self.logger = logging.getLogger(f'{faucet.name.lower()}_data')
-        self.name = f'{faucet.name}_DataFlow'
+        data_source = faucet.data_source
+        self.logger = logging.getLogger(f'{data_source.name.lower()}_data')
+        self.name = f'{data_source.name}_DataFlow'
         self._faucet: Faucet = faucet
         self._transformations: list[Callable] = []
         self._storage: BaseStorage | None = None
@@ -80,7 +88,7 @@ class DataFlow:
     
     def _extract(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxStream:
         data = None
-        # self.logger.debug(f"extracting {self.data_model} data by '{faucet.name}'")
+        # self.logger.debug(f"extracting {self.data_model} data by '{self._faucet.name}'")
         if not self.is_streaming():
             extract = task(self._faucet.open) if flow_type == FlowType.prefect else self._faucet.open
             data: tData | None = extract()
@@ -93,7 +101,7 @@ class DataFlow:
                 assert self._bytewax_dataflow is not None, f'{self.name} has no bytewax dataflow'
                 source: BytewaxSource | BytewaxStream = self._faucet.open()
                 if isinstance(source, BytewaxSource):
-                    stream: BytewaxStream = op.input(self.name, self._bytewax_dataflow, source)
+                    stream: BytewaxStream = bytewax_op.input(self.name, self._bytewax_dataflow, source)
                 else:
                     stream = source
                 return stream
@@ -134,17 +142,16 @@ class DataFlow:
             return
         if not self.is_streaming():
             load = task(self._storage.write_data) if flow_type == FlowType.prefect else self._storage.write_data
-            storages: list[BaseStorage] = load(data)
-            if not storages:
+            success = load(data)
+            if not success:
                 self.logger.warning(f'failed to load {self._faucet.name} data to storage')
             else:
-                for storage in storages:
-                    self.logger.info(f'loaded {storage.data_model} data to {type(storage).__name__} {storage.file_path}')
+                self.logger.info(f'loaded {self._faucet.name} data to {self._storage.name}')
         else:
             stream = data
             if flow_type == FlowType.bytewax:
                 assert self._bytewax_sink is not None, f'{self.name} has no bytewax sink'
-                op.output(self._bytewax_sink.__name__, stream, self._bytewax_sink)
+                bytewax_op.output(self._bytewax_sink.__name__, stream, self._bytewax_sink)
             else:
                 # TODO: streaming without bytewax
                 self._storage.write_data(...)

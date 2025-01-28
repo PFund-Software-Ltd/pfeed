@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.dataflow import Stream as BytewaxStream
-    from bytewax.outputs import Sink as BytewaxSink
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.flows.dataflow import DataFlow
@@ -30,6 +29,8 @@ tDATA_TYPE = Literal['quote_l3', 'quote_l2', 'quote_l1', 'quote', 'tick', 'secon
 
 
 class MarketDataFeed(BaseFeed):
+    DATA_DOMAIN = 'market_data'
+    
     def _print_download_msg(self, resolution: Resolution, start_date: datetime.date, end_date: datetime.date, data_layer: tDATA_LAYER):
         Console().print(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
     
@@ -127,20 +128,20 @@ class MarketDataFeed(BaseFeed):
         if self.config.print_msg and start_date and end_date:
             self._print_download_msg(resolution, start_date, end_date, data_layer)
         self._create_download_dataflows(
-            product, 
-            adjusted_resolution, 
-            start_date, 
+            product,
+            adjusted_resolution,
+            start_date,
             end_date,
             data_origin=data_origin,
         )
         if auto_transform:
-            self._add_default_transformations_to_download(adjusted_resolution, resolution, product, data_layer)
+            self._add_default_transformations_to_download(resolution, product)
         if not self._pipeline_mode:
-            self.load(to_storage=to_storage, data_layer=data_layer, data_domain=data_domain)
+            self.load(to_storage=to_storage, data_layer=data_layer, data_domain=data_domain or self.DATA_DOMAIN)
             completed_dataflows, failed_dataflows = self.run()
             missing_dates = [dataflow.data_model.date for dataflow in failed_dataflows]
             dfs: dict[datetime.date, tDataFrame | None] = {}
-            for dataflow in completed_dataflows:
+            for dataflow in completed_dataflows + failed_dataflows:
                 date = dataflow.data_model.date
                 dfs[date] = dataflow.output if date not in missing_dates else None
             return dfs
@@ -162,13 +163,19 @@ class MarketDataFeed(BaseFeed):
         self.transform(
             etl.convert_to_pandas_df,
             self._normalize_raw_data,
-            lambda df: etl.standardize_columns(df, target_resolution, product.name, symbol=product.symbol),
+            lambda_with_name(
+                'standardize_columns',
+                lambda df: etl.standardize_columns(df, target_resolution, product.name, symbol=product.symbol),
+            ),
             lambda_with_name(
                 'resample_data_if_necessary', 
                 lambda df: etl.resample_data(df, target_resolution)
             ),
             etl.organize_columns,
-            lambda df: etl.convert_to_user_df(df, self.data_tool.name)
+            lambda_with_name(
+                'convert_to_user_df',
+                lambda df: etl.convert_to_user_df(df, self.data_tool.name)
+            )
         )
 
     @clear_subflows
@@ -239,12 +246,12 @@ class MarketDataFeed(BaseFeed):
             end_date,
             data_origin,
             data_layer,
-            data_domain,
+            data_domain or self.DATA_DOMAIN,
             from_storage=from_storage,
             storage_configs=storage_configs,
         )
         if auto_transform:
-            self._add_default_transformations_to_retrieve(unit_resolution, resolution)
+            self._add_default_transformations_to_retrieve(resolution)
         else:
             print_warning('Output data might not be in the desired resolution when auto_transform=False')
         if not self._pipeline_mode:
@@ -253,7 +260,7 @@ class MarketDataFeed(BaseFeed):
                 # fill gaps between missing dates since downloads will include all dates in range
                 missing_dates = pd.date_range(min(missing_dates), max(missing_dates)).date.tolist()
             dfs: dict[datetime.date, tDataFrame | None] = {}
-            for dataflow in completed_dataflows:
+            for dataflow in completed_dataflows + failed_dataflows:
                 date = dataflow.data_model.date
                 dfs[date] = dataflow.output if date not in missing_dates else None
             return dfs
@@ -266,6 +273,7 @@ class MarketDataFeed(BaseFeed):
         data_layer: tDATA_LAYER,
         data_domain: str,
         from_storage: tSTORAGE | None=None,
+        storage_configs: dict | None=None,
     ) -> tDataFrame | None:
         '''Retrieve data from storage.
         If data is not found, search for higher resolutions.
@@ -275,7 +283,7 @@ class MarketDataFeed(BaseFeed):
         # e.g. search '1m' -> search '1t'
         unit_resolution = data_model.resolution
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        search_resolutions = [
+        search_resolutions = [unit_resolution] + [
             resolution for resolution in unit_resolution.get_higher_resolutions(exclude_quote=True) 
             # remove resolutions that are not supported by the data source
             if resolution <= self.source.highest_resolution
@@ -288,6 +296,7 @@ class MarketDataFeed(BaseFeed):
                 data_layer,
                 data_domain,
                 from_storage=from_storage,
+                storage_configs=storage_configs,
             )
             if data is not None:
                 break
@@ -327,7 +336,10 @@ class MarketDataFeed(BaseFeed):
                 lambda df: etl.resample_data(df, target_resolution)
             ),
             etl.organize_columns,
-            lambda df: etl.convert_to_user_df(df, self.data_tool.name)
+            lambda_with_name(
+                'convert_to_user_df',
+                lambda df: etl.convert_to_user_df(df, self.data_tool.name)
+            )
         )
     
     def get_historical_data(
@@ -349,8 +361,7 @@ class MarketDataFeed(BaseFeed):
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         adjusted_resolution = max(resolution, self.global_min_resolution)
         # NOTE: returned dfs from retrieve-dataflows should be of adjusted_resolution
-        dfs_from_storage: dict[datetime.date, tDataFrame | None]
-        dfs_from_storage = self.retrieve(
+        dfs_from_storage_per_date: dict[datetime.date, tDataFrame | None] = self.retrieve(
             product,
             adjusted_resolution,
             rollback_period=rollback_period,
@@ -362,7 +373,8 @@ class MarketDataFeed(BaseFeed):
             from_storage=from_storage,
             **product_specs
         )
-        missing_dates = [date for date in dfs_from_storage if dfs_from_storage[date] is None]
+        missing_dates = [date for date in dfs_from_storage_per_date if dfs_from_storage_per_date[date] is None]
+        dfs_from_storage = [df for df in dfs_from_storage_per_date.values() if df is not None]
 
         dfs_from_source = []
         if missing_dates:
@@ -375,8 +387,7 @@ class MarketDataFeed(BaseFeed):
                         If no data is found, it will download the missing data from the data source and save it to cache.
                         Consider calling download() to download data to your desired storage before calling get_historical_data().
                     ''')
-                dfs_from_source: dict[datetime.date, tDataFrame | None]
-                dfs_from_source = self.download(
+                dfs_from_source_per_date = self.download(
                     product,
                     adjusted_resolution,
                     symbol=symbol,
@@ -388,7 +399,9 @@ class MarketDataFeed(BaseFeed):
                     to_storage='cache',
                     **product_specs
                 )
-                missing_dates = [date for date in dfs_from_source if dfs_from_source[date] is None]
+
+                missing_dates = [date for date in dfs_from_source_per_date if dfs_from_source_per_date[date] is None]
+                dfs_from_source = [df for df in dfs_from_source_per_date.values() if df is not None]
 
         if missing_dates:
             self.logger.warning(f'output data is INCOMPLETE, there are missing data when getting historical {resolution} data for {product}, missing dates: {missing_dates}')
@@ -433,7 +446,7 @@ class MarketDataFeed(BaseFeed):
     def _add_default_transformations_to_stream(self):
         pass
     
-    # TODO
+    # TODO: General-purpose data fetching without storage overhead
     @clear_subflows
     def fetch(self) -> tDataFrame | None:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
@@ -442,19 +455,3 @@ class MarketDataFeed(BaseFeed):
     def get_realtime_data(self) -> tDataFrame | None:
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_realtime_data()'
         self.fetch()
-
-    def load(
-        self,
-        to_storage: tSTORAGE='local',
-        data_layer: tDATA_LAYER='curated',
-        data_domain: str='market_data',
-        bytewax_sink: BytewaxSink | str | None=None,
-        metadata: dict | None=None,
-    ) -> MarketDataFeed:
-        return super().load(
-            to_storage=to_storage,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            metadata=metadata,
-            bytewax_sink=bytewax_sink,
-        )

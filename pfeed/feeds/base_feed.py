@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, ModuleType
+from typing import TYPE_CHECKING, Literal, Callable
+from types import ModuleType
 if TYPE_CHECKING:
     import pandas as pd
     from prefect import Flow as PrefectFlow
@@ -14,7 +15,6 @@ if TYPE_CHECKING:
     from pfeed.const.enums import DataSource
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
-    from pfeed.flows.faucet import Faucet
     
 import os
 from abc import ABC, abstractmethod
@@ -24,12 +24,10 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
-from bytewax.testing import run_main
-from bytewax.connectors.stdio import StdOutSink
-
 from pfund import print_warning
+from pfeed.flows.faucet import Faucet
 from pfeed.config import get_config
-from pfeed.const.enums import DataTool, DataLayer, DataStorage
+from pfeed.const.enums import DataTool, DataStorage
 from pfeed.flows.dataflow import DataFlow
 from pfeed.utils.utils import lambda_with_name, rollback_date_range
 
@@ -45,6 +43,8 @@ def clear_subflows(func):
     
     
 class BaseFeed(ABC):
+    DATA_DOMAIN = 'general_data'
+    
     def __init__(
         self, 
         data_tool: tDATA_TOOL='polars', 
@@ -69,6 +69,8 @@ class BaseFeed(ABC):
         self._storage_configs: dict[tSTORAGE, dict] = {}
         self._dataflows: list[DataFlow] = []
         self._subflows: list[DataFlow] = []
+        self._failed_dataflows: list[DataFlow] = []
+        self._completed_dataflows: list[DataFlow] = []
         self.source: BaseSource = self.get_data_source()
         self.api = self.source.api if hasattr(self.source, 'api') else None
         self.name: DataSource = self.source.name
@@ -122,10 +124,10 @@ class BaseFeed(ABC):
                 You can do that by setting `to_storage='minio'`.
             ''')
     
-    def _assert_data_quality(self, df: pd.DataFrame, data_model: BaseDataModel, data_layer: tDATA_LAYER) -> pd.DataFrame:
+    def _assert_data_quality(self, df: pd.DataFrame, data_model: BaseDataModel) -> pd.DataFrame:
         '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''
-        if data_layer == DataLayer.RAW:
-            return df
+        from pfeed.etl import convert_to_pandas_df
+        df = convert_to_pandas_df(df)
         return self._validate_schema(df, data_model)
 
     def _init_ray(self, **kwargs):
@@ -181,13 +183,14 @@ class BaseFeed(ABC):
         from_storage: tSTORAGE | None=None,
         include_metadata: bool=False,
         storage_configs: dict | None=None,
-    ) -> tuple[tData | None, dict]:
+    ) -> tuple[tData | None, dict] | tData | None:
         search_storages = ['cache', 'local', 'minio', 'duckdb'] if from_storage is None else [from_storage]
         data, metadata = None, {}
         storage_configs = storage_configs or {}
         if storage_configs:
             assert from_storage is not None, 'from_storage is required when storage_configs is provided'
         for search_storage in search_storages:
+            self.logger.debug(f'searching for data {data_model} in {search_storage.upper()}...')
             search_storage_configs = storage_configs or self._storage_configs.get(search_storage, {})
             Storage = DataStorage[search_storage.upper()].storage_class
             try:
@@ -200,6 +203,7 @@ class BaseFeed(ABC):
                 )
                 data, metadata = storage.read_data(data_tool=self.data_tool.name)
                 if data is not None:
+                    self.logger.debug(f'found data {data_model} in {search_storage.upper()}')
                     break
             except Exception as e:  # e.g. minio's ServerError if server is not running
                 continue
@@ -275,8 +279,8 @@ class BaseFeed(ABC):
         return dataflow
     
     @staticmethod
-    def create_faucet(data_model: BaseDataModel, extract_func: Callable) -> Faucet:
-        return Faucet(data_model, extract_func)
+    def create_faucet(data_model: BaseDataModel, execute_func: Callable, op_type: Literal['download', 'stream', 'retrieve', 'fetch']) -> Faucet:
+        return Faucet(data_model, execute_func, op_type)
     
     def _clear_subflows(self):
         '''Clear subflows
@@ -289,7 +293,7 @@ class BaseFeed(ABC):
         self._subflows.clear()
     
     def _extract_download(self, data_model: BaseDataModel) -> DataFlow:
-        faucet = self.create_faucet(data_model, lambda: self._execute_download(data_model))
+        faucet = self.create_faucet(data_model, lambda: self._execute_download(data_model), op_type='download')
         return self.create_dataflow(faucet)
     
     def _extract_stream(
@@ -300,7 +304,7 @@ class BaseFeed(ABC):
         faucet = self.create_faucet(
             data_model, 
             lambda: self._execute_stream(data_model, bytewax_source=bytewax_source), 
-            streaming=True,
+            op_type='stream',
         )
         return self.create_dataflow(faucet)
     
@@ -310,20 +314,23 @@ class BaseFeed(ABC):
         data_layer: tDATA_LAYER,
         data_domain: str,
         from_storage: tSTORAGE | None=None,
+        storage_configs: dict | None=None,
     ) -> DataFlow:
         faucet = self.create_faucet(
             data_model, 
             lambda: self._execute_retrieve(
-                data_model, 
-                data_layer, 
-                data_domain, 
+                data_model,
+                data_layer,
+                data_domain,
                 from_storage=from_storage,
-            )
+                storage_configs=storage_configs,
+            ),
+            op_type='retrieve',
         )
         return self.create_dataflow(faucet)
     
     def _extract_fetch(self, data_model: BaseDataModel) -> DataFlow:
-        faucet = self.create_faucet(data_model, lambda: self._execute_fetch(data_model))
+        faucet = self.create_faucet(data_model, lambda: self._execute_fetch(data_model), op_type='fetch')
         return self.create_dataflow(faucet)
     
     def transform(self, *funcs) -> BaseFeed:
@@ -335,7 +342,7 @@ class BaseFeed(ABC):
         self, 
         to_storage: tSTORAGE='local',   
         data_layer: tDATA_LAYER='curated',
-        data_domain: str='general_data',
+        data_domain: str='',
         metadata: dict | None=None,
         storage_configs: dict | None=None,
         bytewax_sink: BytewaxSink | str | None=None,
@@ -349,7 +356,7 @@ class BaseFeed(ABC):
         def _create_assert_data_quality_function(_data_model: BaseDataModel):
             return lambda_with_name(
                 '_assert_data_quality',
-                lambda df: self._assert_data_quality(df, _data_model, data_layer)
+                lambda df: self._assert_data_quality(df, _data_model)
             )
         if self._use_ray:
             assert to_storage.lower() != 'duckdb', 'DuckDB is not thread-safe, cannot be used with Ray'
@@ -366,27 +373,24 @@ class BaseFeed(ABC):
             storage: BaseStorage = Storage.from_data_model(
                 data_model,
                 data_layer,
-                data_domain,
+                data_domain or self.DATA_DOMAIN,
                 use_deltalake=self._use_deltalake,
                 **storage_configs,
             )
             dataflow.set_storage(storage)
             if self._use_bytewax:
+                from bytewax.connectors.stdio import StdOutSink
                 dataflow.set_bytewax_sink(bytewax_sink or StdOutSink())
         return self
     
-    def run(
-        self, 
-        dataflows: list[DataFlow] | None=None,
-        ray_kwargs: dict | None=None,
-    ) -> tDataFrame | None:
+    def run(self, ray_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
         '''Run dataflows'''
         from tqdm import tqdm
         from pfeed.utils.utils import generate_color
-        if dataflows is None:
-            dataflows = self.to_prefect_dataflows() if self._use_prefect else self._dataflows
-            if self._use_bytewax:
-                dataflows.append(self.to_bytewax_dataflow())
+        dataflows = self.to_prefect_dataflows() if self._use_prefect else self._dataflows
+        if self._use_bytewax:
+            dataflows.append(self.to_bytewax_dataflow())
+        completed_dataflows: list[DataFlow] = []
         failed_dataflows: list[DataFlow] = []
         color = generate_color(self.name.value)
         prefect_error_msg = 'Error in running {name} prefect dataflows: {err}, did you forget to run "prefect server start" to start prefect\'s server?'
@@ -418,10 +422,12 @@ class BaseFeed(ABC):
                     if not self.logger.handlers:
                         self.logger.addHandler(QueueHandler(log_queue))
                         self.logger.setLevel(logging.DEBUG)
+                    
                     if self._use_prefect:
                         res: tData | None = dataflow()
                     elif self._use_bytewax:
                         # REVIEW, using run_main() to execute the dataflow in the current thread, NOT for production
+                        from bytewax.testing import run_main
                         run_main(dataflow)
                     else:
                         res: tData | None = dataflow.run()
@@ -439,6 +445,7 @@ class BaseFeed(ABC):
                     return False, dataflow
             
             try:
+                ray_kwargs = ray_kwargs or {}
                 if 'num_cpus' not in ray_kwargs:
                     ray_kwargs['num_cpus'] = os.cpu_count()
                 self._init_ray(**ray_kwargs)
@@ -453,6 +460,8 @@ class BaseFeed(ABC):
                     for success, dataflow in returns:
                         if not success:
                             failed_dataflows.append(dataflow)
+                        else:
+                            completed_dataflows.append(dataflow)
             except KeyboardInterrupt:
                 print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
             except Exception:
@@ -464,10 +473,19 @@ class BaseFeed(ABC):
         else:
             try:
                 for dataflow in tqdm(dataflows, desc=f'Running {self.name} dataflows', colour=color):
-                    res: tData | None = dataflow()
+                    if self._use_prefect:
+                        res: tData | None = dataflow()
+                    elif self._use_bytewax:
+                        # REVIEW, using run_main() to execute the dataflow in the current thread, NOT for production
+                        from bytewax.testing import run_main
+                        run_main(dataflow)
+                    else:
+                        res: tData | None = dataflow.run()
                     success = _handle_result(res)
                     if not success:
                         failed_dataflows.append(dataflow)
+                    else:
+                        completed_dataflows.append(dataflow)
             except RuntimeError as err:
                 if self._use_prefect:
                     self.logger.error(prefect_error_msg.format(name=self.name, err=err))
@@ -475,17 +493,38 @@ class BaseFeed(ABC):
                     raise err
             except Exception:
                 self.logger.exception(f'Error in running {self.name} dataflows:')
-        if failed_dataflows:
-            self.logger.warning(f'{self.name} failed dataflows:\n{pformat([str(dataflow) for dataflow in self._failed_dataflows])}\ncheck {self.logger.name}.log for details')
 
-        completed_dataflows = [dataflow for dataflow in dataflows if dataflow not in failed_dataflows]
+        if failed_dataflows:
+            retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type == 'retrieve']
+            if retrieve_dataflows:
+                self.logger.debug(f'{self.name} failed dataflows (op_type=retrieve): {[str(dataflow) for dataflow in retrieve_dataflows]}')
+            non_retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type != 'retrieve']
+            if non_retrieve_dataflows:
+                self.logger.warning(
+                    f'{self.name} failed dataflows:\n'
+                    f'{pformat([str(dataflow) for dataflow in non_retrieve_dataflows])}\n'
+                    f'check {self.logger.name}.log for details'
+                )
+
+        self._completed_dataflows = completed_dataflows
+        self._failed_dataflows = failed_dataflows
         self._subflows.clear()
         self._dataflows.clear()
-        return completed_dataflows, failed_dataflows
+        return self._completed_dataflows, self._failed_dataflows
     
     @property
     def dataflows(self) -> list[DataFlow]:
         return self._dataflows
+    
+    @property 
+    def failed_dataflows(self) -> list[DataFlow]:
+        """Returns list of dataflows that failed in the last run"""
+        return self._failed_dataflows
+
+    @property
+    def completed_dataflows(self) -> list[DataFlow]:
+        """Returns list of dataflows that completed successfully in the last run"""
+        return self._completed_dataflows
     
     def to_prefect_dataflows(self, **kwargs) -> list[PrefectFlow]:
         '''

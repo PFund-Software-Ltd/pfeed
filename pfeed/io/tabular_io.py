@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ModuleType
+from typing import TYPE_CHECKING
+from types import ModuleType
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.typing.core import tDataFrame

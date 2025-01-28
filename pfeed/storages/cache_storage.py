@@ -3,11 +3,22 @@ import shutil
 import datetime
 from pathlib import Path
 
-from pfeed.storages.local_storage import LocalStorage
+from pfeed.typing.literals import tDATA_LAYER
+from pfeed.storages import LocalStorage
 
 
 class CacheStorage(LocalStorage):
     NUM_RETAINED_DAYS = 7
+
+    def __init__(
+        self,
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='general_data',
+        use_deltalake: bool=False, 
+        **kwargs
+    ):
+        super().__init__(name='cache', data_layer=data_layer, data_domain=data_domain, use_deltalake=use_deltalake, **kwargs)
+        self.clear_caches()
     
     @staticmethod
     def _get_today() -> datetime.date:

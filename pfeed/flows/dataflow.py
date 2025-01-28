@@ -1,117 +1,175 @@
 from __future__ import annotations
-from typing import Literal, Callable, TYPE_CHECKING
+from typing import Callable, TYPE_CHECKING
 if TYPE_CHECKING:
-    from prefect import Flow as PrefectFlow
+    from prefect import Flow as PrefectDataFlow
+    from bytewax.inputs import Source as BytewaxSource
+    from bytewax.outputs import Sink as BytewaxSink
     from pfeed.typing.core import tData
-    from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.const.enums import DataSource
     from pfeed.storages.base_storage import BaseStorage
+    from pfeed.flows.faucet import Faucet
+
+import logging
+from enum import StrEnum
 
 import pandas as pd
+from prefect import flow, task
+from prefect.logging import get_run_logger
+from bytewax.dataflow import Dataflow as BytewaxDataFlow
+from bytewax.dataflow import Stream as BytewaxStream
+import bytewax.operators as op
+
+
+class FlowType(StrEnum):
+    native = 'native'
+    prefect = 'prefect'
+    bytewax = 'bytewax'
 
 
 class DataFlow:
-    def __init__(self, logger, data_model: BaseDataModel):
-        self.logger = logger
-        self.data_model = data_model
-        self.data_source: DataSource = data_model.source.name
-        self.name = f'{self.data_source}_DataFlow'
-        self.operations = {'extract': [], 'transform': [], 'load': []}
-        self._has_extract_operation = False
-        self._has_load_operation = False
+    def __init__(self, faucet: Faucet):
+        self.logger = logging.getLogger(f'{faucet.name.lower()}_data')
+        self.name = f'{faucet.name}_DataFlow'
+        self._faucet: Faucet = faucet
+        self._transformations: list[Callable] = []
+        self._storage: BaseStorage | None = None
+        self._bytewax_sink: BytewaxSink | str | None = None
+        self._bytewax_dataflow: BytewaxDataFlow | None = None
+        self.output: tData | None = None
     
-    def add_operation(self, op_type: Literal['extract', 'transform', 'load'], *funcs: tuple[Callable, ...]):
-        if op_type == 'extract':
-            self._has_extract_operation = True
-        elif op_type == 'load':
-            self._has_load_operation = True
-        self.operations[op_type].extend(funcs)
-    
-    def has_extract_operation(self) -> bool:
-        return self._has_extract_operation
-    
-    def has_load_operation(self) -> bool:
-        return self._has_load_operation
-
-    def __str__(self):
-        return f'{self.data_model}_DataFlow'
-
-    def __call__(self):
-        return self.run()
+    def add_transformations(self, *funcs: tuple[Callable, ...]):
+        self._transformations.extend(funcs)
         
-    def run(self) -> tData | None:
-        self._assert_operations()
-        for op_type, funcs in self.operations.items():
-            if op_type == 'extract':
-                assert len(funcs) == 1, f'{self.name} has multiple extract operations'
-                func = funcs[0]
-                raw_data: tData | None = self._extract(func, func.__name__)
-                if raw_data is None:
-                    break
-            elif op_type == 'transform':
-                data = raw_data
-                for func in funcs:
-                    data: tData = self._transform(func, func.__name__, data)
-                    if isinstance(data, pd.DataFrame) and data.empty:
-                        self.logger.warning(f'dataframe is empty, skipping transformations for {self.data_model}')
-                        break
-            elif op_type == 'load':
-                assert len(funcs) == 1, f'{self.name} has multiple load operations'
-                etl_load_data = funcs[0]
-                self._load(etl_load_data, data)
-        else:
+    def set_storage(self, storage: BaseStorage):
+        assert self._storage is None, f'{self.name} already has a storage'
+        self._storage = storage
+
+    def set_bytewax_sink(self, bytewax_sink: BytewaxSink | str):
+        self._bytewax_sink = bytewax_sink
+
+    def set_bytewax_dataflow(self, bytewax_dataflow: BytewaxDataFlow):
+        self._bytewax_dataflow = bytewax_dataflow
+
+    @property
+    def faucet(self) -> Faucet:
+        return self._faucet
+
+    @property
+    def op_type(self) -> str:
+        return self._faucet.op_type
+    
+    @property
+    def data_model(self) -> str:
+        return self._faucet.data_model
+    
+    def __str__(self):
+        return f'{self.name}'
+    
+    def is_streaming(self) -> bool:
+        return self._faucet._streaming
+    
+    def run(self, flow_type: FlowType=FlowType.native) -> tData | None:
+        if (data := self._extract(flow_type=flow_type)) is not None:
+            data: tData | BytewaxStream = self._transform(data, flow_type=flow_type)
+            self._load(data, flow_type=flow_type)
+            # if use bytewax, return bytewax dataflow instead
+            if isinstance(data, BytewaxStream):
+                self.output = self._bytewax_dataflow
+            else:
+                self.output = data
             return data
     
-    def _assert_operations(self):
-        assert self._has_extract_operation, f'{self.name} has no extract operation'
-        assert self._has_load_operation, f'{self.name} has no load operation, please add load(storage=...) to the flow'
-        
-    def _extract(self, func: Callable, func_name: str) -> tData | None:
-        # self.logger.debug(f"extracting {self.data_model} data by '{func_name}'")
-        data: tData | None = func()
-        if data is None:
-            self.logger.warning(f'failed to extract {self.data_model} data by {func_name}')
+    def _extract(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxStream:
+        data = None
+        # self.logger.debug(f"extracting {self.data_model} data by '{faucet.name}'")
+        if not self.is_streaming():
+            extract = task(self._faucet.open) if flow_type == FlowType.prefect else self._faucet.open
+            data: tData | None = extract()
+            if data is not None:
+                self.logger.info(f"extracted {self.data_model} data by '{self._faucet.name}'")
+            else:
+                self.logger.debug(f'failed to extract {self.data_model} data by {self._faucet.name}')
         else:
-            self.logger.info(f"extracted {self.data_model} data by '{func_name}'")
-        return data
-                
-    def _transform(self, func: Callable, func_name: str, data: tData) -> tData:
-        # self.logger.debug(f"transforming {self.data_model} data using '{func_name}'")
-        data = func(data)
-        self.logger.info(f"transformed {self.data_model} data by '{func_name}'")
+            if flow_type == FlowType.bytewax:
+                assert self._bytewax_dataflow is not None, f'{self.name} has no bytewax dataflow'
+                source: BytewaxSource | BytewaxStream = self._faucet.open()
+                if isinstance(source, BytewaxSource):
+                    stream: BytewaxStream = op.input(self.name, self._bytewax_dataflow, source)
+                else:
+                    stream = source
+                return stream
+            else:
+                # TODO: streaming without bytewax
+                pass
         return data
     
-    def _load(self, func: Callable, data: tData):
-        storages: list[BaseStorage] = func(data)
-        if not storages:
-            self.logger.warning(f'failed to load {self.data_source} data to storage')
+    def _transform(
+        self, 
+        data: tData | BytewaxStream, 
+        flow_type: FlowType=FlowType.native,
+    ) -> tData | BytewaxStream:
+        if self.is_streaming():
+            stream = data
+        for func in self._transformations:
+            # self.logger.debug(f"transforming {self.data_model} data using '{func_name}'")
+            if not self.is_streaming():
+                transform = task(func) if flow_type == FlowType.prefect else func
+                data: tData = transform(data)
+                self.logger.info(f"transformed {self.data_model} data by '{func.__name__}'")
+                if isinstance(data, pd.DataFrame) and data.empty:
+                    self.logger.warning(f'dataframe is empty, skipping transformations for {self.data_model}')
+                    break
+            else:
+                if flow_type == FlowType.bytewax:
+                    # REVIEW: only supports passing in stream to the user's function
+                    stream: BytewaxStream = func(stream)
+                else:
+                    # TODO: streaming without bytewax
+                    pass
+        return data
+    
+    def _load(self, data: tData | BytewaxStream, flow_type: FlowType=FlowType.native):
+        if self._storage is None:
+            if self.op_type != "retrieve":
+                self.logger.warning(f'{self.name} has no destination storage, skipping load operation')
+            return
+        if not self.is_streaming():
+            load = task(self._storage.write_data) if flow_type == FlowType.prefect else self._storage.write_data
+            storages: list[BaseStorage] = load(data)
+            if not storages:
+                self.logger.warning(f'failed to load {self._faucet.name} data to storage')
+            else:
+                for storage in storages:
+                    self.logger.info(f'loaded {storage.data_model} data to {type(storage).__name__} {storage.file_path}')
         else:
-            for storage in storages:
-                self.logger.info(f'loaded {storage.data_model} data to {type(storage).__name__} {storage.file_path}')
+            stream = data
+            if flow_type == FlowType.bytewax:
+                assert self._bytewax_sink is not None, f'{self.name} has no bytewax sink'
+                op.output(self._bytewax_sink.__name__, stream, self._bytewax_sink)
+            else:
+                # TODO: streaming without bytewax
+                self._storage.write_data(...)
 
-    def to_prefect_flow(self, log_prints: bool = True, **kwargs) -> PrefectFlow:
-        from prefect import flow, task
-        from prefect.logging import get_run_logger
-        @flow(name=self.name, log_prints=log_prints, flow_run_name=str(self.data_model), **kwargs)
+    def to_prefect_dataflow(self, **kwargs) -> PrefectDataFlow:
+        '''
+        Converts dataflow to prefect flow
+        Args:
+            kwargs: kwargs specific to prefect @flow decorator
+        '''
+        if 'log_prints' not in kwargs:
+            kwargs['log_prints'] = True
+        @flow(name=self.name, flow_run_name=str(self.data_model), **kwargs)
         def prefect_flow():
             self.logger = get_run_logger()
-            self._assert_operations()
-            for op_type, funcs in self.operations.items():
-                if op_type == 'extract':
-                    assert len(funcs) == 1, f'{self.name} has multiple extract operations'
-                    func = funcs[0]
-                    raw_data: tData | None = self._extract(task(func), func.__name__)
-                    if raw_data is None:
-                        break
-                elif op_type == 'transform':
-                    data = raw_data
-                    for func in funcs:
-                        data: tData = self._transform(task(func), func.__name__, data)
-                        if isinstance(data, pd.DataFrame) and data.empty:
-                            self.logger.warning(f'dataframe is empty, skipping transformations for {self.data_model}')
-                            break
-                elif op_type == 'load':
-                    assert len(funcs) == 1, f'{self.name} has multiple load operations'
-                    etl_load_data = funcs[0]
-                    self._load(task(etl_load_data), data)
+            self.run(FlowType.prefect)
         return prefect_flow
+    
+    def to_bytewax_dataflow(self, **kwargs) -> BytewaxDataFlow:
+        '''
+        Args:
+            kwargs: kwargs specific to bytewax Dataflow()
+        '''
+        assert self.is_streaming(), f'{self.name} is not a streaming dataflow'
+        bytewax_dataflow = BytewaxDataFlow(self.name, **kwargs)
+        self.run(FlowType.bytewax)
+        self.set_bytewax_dataflow(bytewax_dataflow)
+        return bytewax_dataflow

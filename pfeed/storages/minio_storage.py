@@ -6,13 +6,14 @@ if TYPE_CHECKING:
     except ImportError:
         pass
     from typing import Generator
+    from pfeed.typing.literals import tDATA_LAYER
 
 import os
 import io
 import datetime
-from pathlib import Path
 from functools import lru_cache
 
+import pyarrow.fs as pa_fs
 from minio import S3Error, ServerError, Minio
 
 from pfeed.storages.base_storage import BaseStorage
@@ -21,20 +22,40 @@ from pfeed.storages.base_storage import BaseStorage
 class MinioStorage(BaseStorage):
     # DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
     BUCKET_NAME: str = 'pfeed'
-
-    endpoint: str
-    minio: Minio
-    local_data_path: Path  # data_path is s3://pfeed/..., not the actual local path
     
-    def __post_init__(self):
-        super().__post_init__()
-        self.endpoint = self.create_endpoint()
+    def __init__(
+        self,
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='general_data',
+        use_deltalake: bool=False, 
+        **kwargs
+    ):
+        '''
+        Args:
+            kwargs: kwargs specific to minio client
+        '''
+        super().__init__(name='minio', data_layer=data_layer, data_domain=data_domain, use_deltalake=use_deltalake, **kwargs)
+        self.endpoint: str = self.create_endpoint()
         cache_time = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
         if not MinioStorage._check_if_server_running(cache_time, self.endpoint):
             raise ServerError(f"{self.name} is not running", 503)
-        self.minio = self._create_minio()
+        self.minio: Minio = self._create_minio()
         if not self.minio.bucket_exists(self.BUCKET_NAME):
             self.minio.make_bucket(self.BUCKET_NAME)
+    
+    def get_file_system(self) -> pa_fs.S3FileSystem:
+        return pa_fs.S3FileSystem(
+            endpoint_override=self.endpoint,
+            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
+            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
+        )
+    
+    def get_storage_options(self) -> dict:
+        return {
+            "endpoint_url": self.endpoint,
+            "access_key_id": os.getenv('MINIO_ROOT_USER', 'pfunder'),
+            "secret_access_key": os.getenv('MINIO_ROOT_PASSWORD', 'password'),
+        }
         
     @staticmethod
     def create_endpoint() -> str:
@@ -50,7 +71,7 @@ class MinioStorage(BaseStorage):
             access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
             secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
             secure=self.endpoint.startswith('https://'),  # turn off TLS, i.e. not using HTTPS
-            **self.kwargs,
+            **self._kwargs,
         )
     
     @staticmethod
@@ -74,13 +95,12 @@ class MinioStorage(BaseStorage):
             return False
     
     # s3:// doesn't work with pathlib, so we need to return a string
-    def _create_data_path(self) -> str:
-        self.local_data_path = super()._create_data_path()
-        return "s3://" + self.BUCKET_NAME
-
-    def exists(self) -> bool:
-        object_name = str(self.storage_path)
-        return self.exist_object(object_name)
+    @property
+    def data_path(self) -> str:
+        data_path = "s3://" + self.BUCKET_NAME
+        if not self.use_deltalake:
+            data_path = data_path.replace('s3://', '')
+        return '/'.join([data_path, self.data_layer, self.data_domain])
     
     def get_object(self, object_name: str) -> bytes | None:
         try:

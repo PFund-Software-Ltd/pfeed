@@ -4,7 +4,7 @@ import pytest
 
 from pfeed.feeds import BybitFeed
 from pfeed.storages.base_storage import BaseStorage
-from pfeed.const.enums import DataRawLevel
+from pfeed.const.enums import DataLayer
 
 
 @pytest.fixture
@@ -61,16 +61,16 @@ class TestDownload:
             ('pandas', True): 'original',
             ('polars', False): 'original',
         }
-        raw_level = DataRawLevel[raw_level_by_data_tool_and_use_ray[(feed.data_tool.name.value.lower(), feed._use_ray)].upper()]
+        raw_level = DataLayer[raw_level_by_data_tool_and_use_ray[(feed.data_tool.name.value.lower(), feed._use_ray)].upper()]
         params = self.get_params_for_download()
         pdt, data_type, date, to_storage = params['products'][0], params['data_type'], params['start_date'], params['to_storage']
         filename_prefix = self.test_download.__name__
         filename_suffix = raw_level.name.lower()
-        storage: BaseStorage | None = self.extract_downloaded_data(feed, pdt, data_type, date, to_storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+        storage: BaseStorage | None = self._extract_downloaded_data(feed, pdt, data_type, date, to_storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
         # only download if the data is not already downloaded
         if storage is None or not storage.exists():
             feed.download(**params, raw_level=raw_level.name, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
-            storage: BaseStorage | None = self.extract_downloaded_data(feed, pdt, data_type, date, to_storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+            storage: BaseStorage | None = self._extract_downloaded_data(feed, pdt, data_type, date, to_storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
             assert storage is not None
             assert storage.exists()
         df = feed.data_tool.read_parquet(storage.file_path, storage=storage.name.value)
@@ -90,10 +90,10 @@ class TestDownload:
     def test_download_with_custom_transforms(self, feed):
         assert feed._pipeline_mode
         pdt, data_type, date, raw_level, storage = 'BTC_USDT_PERP', 'tick', '2024-01-01', 'normalized', 'local'
-        raw_level = DataRawLevel[raw_level.upper()]
+        raw_level = DataLayer[raw_level.upper()]
         filename_prefix = self.test_download_with_custom_transforms.__name__
         filename_suffix = raw_level.name.lower()
-        storage: BaseStorage | None = self.extract_downloaded_data(feed, pdt, data_type, date, storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+        storage: BaseStorage | None = self._extract_downloaded_data(feed, pdt, data_type, date, storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
         if storage is None or not storage.exists():
             # only download if the data is not already downloaded
             (
@@ -103,7 +103,7 @@ class TestDownload:
                 .transform(lambda df: df.assign(price_pct_change=df['price'].pct_change() * 100))
                 .run()
             )
-            storage: BaseStorage | None = self.extract_downloaded_data(feed, pdt, data_type, date, storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
+            storage: BaseStorage | None = self._extract_downloaded_data(feed, pdt, data_type, date, storage, raw_level, filename_prefix=filename_prefix, filename_suffix=filename_suffix)
             assert storage is not None
             assert storage.exists()
         df = feed.data_tool.read_parquet(storage.file_path, storage=storage.name.value)

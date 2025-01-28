@@ -19,51 +19,59 @@ class MarketDataModel(TimeBasedDataModel):
     product: BaseProduct
     resolution: Resolution
     file_extension: str = '.parquet'
-    compression: str = 'zstd'
+    compression: str = 'snappy'
     
     def __str__(self):
         return ':'.join([super().__str__(), repr(self.product), str(self.resolution)])
     
     @model_validator(mode='after')
     def validate(self):
-        self.validate_resolution()
+        self._validate_resolution()
         return self
     
-    def validate_resolution(self):
+    @property
+    def global_min_resolution(self) -> Resolution:
+        return Resolution('1d')
+    
+    def _validate_resolution(self):
         '''Validates the resolution of the data model.
         Resolution must be >= '1d' and <= the highest resolution supported by the data source.
         '''
         # lowest_supported_resolution = Resolution('1' + [dt.name for dt in MarketDataType][-1])
-        lowest_supported_resolution = Resolution('1d')
+        lowest_supported_resolution = self.global_min_resolution
         assert lowest_supported_resolution <= self.resolution <= self.source.highest_resolution, f'{self.resolution=} is not supported for {self.source.name}'
         return self.resolution
 
+    def update_resolution(self, resolution: Resolution) -> None:
+        self.resolution = resolution
+        self._validate_resolution()
+        self.storage_path = self._create_storage_path()
+
     def __hash__(self):
-        return hash((self.source.name, self.unique_identifier, self.start_date, self.end_date, self.product, self.resolution))
+        return hash((self.source.name, self.data_origin, self.start_date, self.end_date, self.product, self.resolution))
     
     def update_start_date(self, start_date: datetime.date) -> None:
         super().update_start_date(start_date)
         # update filename and storage path to reflect the new start date
-        self.filename = self.create_filename()
-        self.storage_path = self.create_storage_path()
+        self.filename = self._create_filename()
+        self.storage_path = self._create_storage_path()
 
-    def create_filename(self) -> str:
+    def _create_filename(self) -> str:
         # NOTE: since storage is per date, only uses self.date (start_date) to create filename
         filename = '_'.join([self.product.basis, str(self.date)])
-        filename += self.file_extension
-        return filename
+        return filename + self.file_extension
 
-    def create_storage_path(self) -> Path:
+    def _create_storage_path(self) -> Path:
         # NOTE: since storage is per date, only uses self.date (start_date) to create storage path
         year, month, day = str(self.date).split('-')
         return (
             Path(self.env.value)
             / self.source.name
-            / self.unique_identifier
+            / self.data_origin
             / self.product.type.value
             / self.product.name
             / str(self.resolution)
             / year
             / month 
-            / self.filename
+            / day
         )

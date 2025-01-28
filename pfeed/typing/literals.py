@@ -2,6 +2,7 @@ from typing import Literal
 
 
 tDATA_SOURCE = Literal['YAHOO_FINANCE', 'DATABENTO', 'BYBIT']
+tDATA_LAYER = Literal['raw', 'cleaned', 'curated']
 tPRODUCT_TYPE = Literal[
     'STK', 'FUT', 'ETF', 'OPT', 'FX', 'CRYPTO', 'BOND', 'MTF', 'CMDTY', 'INDEX',
     'PERP', 'IPERP', 'SPOT', 'IFUT'

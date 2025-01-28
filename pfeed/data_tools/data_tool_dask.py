@@ -1,30 +1,43 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from pfeed.typing.literals import tSTORAGE
+    import pyarrow.fs as pa_fs
     
 import io
 
 import pandas as pd
 import dask.dataframe as dd
+from deltalake import DeltaTable
 
-from pfeed.const.enums import DataStorage, DataTool
+from pfeed.const.enums import DataTool
 
 
 name = DataTool.dask
 
 
-def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE, **kwargs) -> dd.DataFrame:
+def read_parquet(
+    paths_or_obj: list[str] | str | bytes, 
+    *args, 
+    file_system: pa_fs.FileSystem | None=None, 
+    storage_options: dict[str, Any] | None=None,
+    **kwargs
+) -> dd.DataFrame:
     if isinstance(paths_or_obj, bytes):
         obj = io.BytesIO(paths_or_obj)
         return dd.from_pandas(pd.read_parquet(obj, *args, **kwargs))
     else:
-        from pfeed.etl import get_filesystem
         paths = paths_or_obj if isinstance(paths_or_obj, list) else [paths_or_obj]
-        storage = DataStorage[storage.upper()]
-        if storage not in [DataStorage.LOCAL, DataStorage.CACHE] and 'filesystem' not in kwargs:
-            kwargs['filesystem'] = get_filesystem(storage)
-        return dd.read_parquet(paths, *args, **kwargs)
+        return dd.read_parquet(
+            paths, 
+            *args, 
+            file_system=file_system, 
+            storage_options=storage_options, 
+            **kwargs
+        )
+
+
+def read_delta(delta_table: DeltaTable, **kwargs) -> dd.DataFrame:
+    return dd.from_pandas(delta_table.to_pandas(**kwargs))
 
 
 # def concat(dfs: list[dd.DataFrame]) -> dd.DataFrame:

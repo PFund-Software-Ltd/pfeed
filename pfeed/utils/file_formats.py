@@ -1,7 +1,5 @@
 import io
 
-import pandas as pd
-
 
 def is_parquet(data: bytes) -> bool:
     return data[:4] == b'PAR1'
@@ -118,31 +116,26 @@ def extract_tar(data: bytes) -> bytes:
         return tf.extractfile(first_file).read()
     
 
-def convert_raw_data_to_pandas_df(data: bytes) -> pd.DataFrame:
+def decompress_data(data: bytes) -> bytes:
     if is_gzip(data):
         decompressed = decompress_gzip(data)
-        return convert_raw_data_to_pandas_df(decompressed)  # Recursive call with decompressed data
+        return decompress_data(decompressed)
     elif is_zstd(data):
         decompressed = decompress_zstd(data)
-        return convert_raw_data_to_pandas_df(decompressed)
+        return decompress_data(decompressed)
     elif is_bz2(data):
         decompressed = decompress_bz2(data)
-        return convert_raw_data_to_pandas_df(decompressed)
+        return decompress_data(decompressed)
     elif is_xz(data):
         decompressed = decompress_xz(data)
-        return convert_raw_data_to_pandas_df(decompressed)
+        return decompress_data(decompressed)
     elif is_zip(data):
         decompressed = decompress_zip(data)
-        return convert_raw_data_to_pandas_df(decompressed)
+        return decompress_data(decompressed)
     elif is_tar(data):
-        extracted = extract_tar(data)
-        return convert_raw_data_to_pandas_df(extracted)
-    elif is_parquet(data):
-        return pd.read_parquet(io.BytesIO(data))
-    elif is_likely_csv(data):
-        return pd.read_csv(io.BytesIO(data))
-    else:
-        raise ValueError("Unknown or unsupported format")
+        decompressed = extract_tar(data)
+        return decompress_data(decompressed)
+    return data
 
 
 compression_methods = {

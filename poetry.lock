@@ -1244,6 +1244,31 @@ files = [
 ]
 
 [[package]]
+name = "deltalake"
+version = "0.24.0"
+description = "Native Delta Lake Python binding based on delta-rs with Pandas integration"
+optional = true
+python-versions = ">=3.9"
+files = [
+    {file = "deltalake-0.24.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:1c4c5b2d3b8d467fb35504ef5649344bf3ad4f656303101e463ece3db2843c79"},
+    {file = "deltalake-0.24.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:3d59e62305d42b76c78e0c3dcb479d9ad512a2bbe12867c24e3ed2d66492d2b4"},
+    {file = "deltalake-0.24.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:59487ae82c7de5950ec951e2dad7d4b2b281e81fac7b65d8187dac64b1506359"},
+    {file = "deltalake-0.24.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:05dc5ee8adb05cc4aaf8988335c14720b4e7b042d0d1976bde10c2a5cc3b9654"},
+    {file = "deltalake-0.24.0-cp39-abi3-win_amd64.whl", hash = "sha256:1c423bdab46fa3c01a9364ba5533167d3b58099fd4a0599e6d0c363e9ba64799"},
+    {file = "deltalake-0.24.0.tar.gz", hash = "sha256:0a33528b40067ee204b527efd88cc1a4cea4b61af4886ca57539d5b6b657e20f"},
+]
+
+[package.dependencies]
+pyarrow = ">=16"
+
+[package.extras]
+devel = ["azure-storage-blob (==12.20.0)", "mypy (==1.10.1)", "packaging (>=20)", "pip (>=24.0)", "pytest", "pytest-benchmark", "pytest-cov", "pytest-mock", "pytest-timeout", "ruff (==0.5.2)", "sphinx (<=4.5)", "sphinx-rtd-theme", "toml", "wheel"]
+lakefs = ["lakefs (==0.8.0)"]
+pandas = ["pandas"]
+polars = ["polars (==1.17.1)"]
+pyspark = ["delta-spark", "numpy (==1.26.4)", "pyspark"]
+
+[[package]]
 name = "deprecated"
 version = "1.2.15"
 description = "Python @deprecated decorator to deprecate old python classes, functions or methods."
@@ -3737,18 +3762,18 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "polars"
-version = "1.18.0"
+version = "1.21.0"
 description = "Blazingly fast DataFrame library"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "polars-1.18.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:27a6c7e5d2d15afb5f06291433019411c9a28e59e49741442d11a6a945f21daa"},
-    {file = "polars-1.18.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:6431563aee2dfa6787b0debbed3f565ebb4322da32317d95c8eac3e48330bc28"},
-    {file = "polars-1.18.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a333ff578373e29e0cacc79c35afe42c0620813c9b0c832009ab8b330e421093"},
-    {file = "polars-1.18.0-cp39-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:3a3a65a3ad6b6b0bd61a33f215856cfdd3e3abc9942e69526b2b88c0ef8683a4"},
-    {file = "polars-1.18.0-cp39-abi3-win_amd64.whl", hash = "sha256:a79ef2542454d9cace63e8fa528cf808b6377077173be522df9b8c0e792ce96a"},
-    {file = "polars-1.18.0-cp39-abi3-win_arm64.whl", hash = "sha256:52b543da52f4f6a661a2fa3cdd4b499938bdb34eeae538ec3bcef6c8c41bfc33"},
-    {file = "polars-1.18.0.tar.gz", hash = "sha256:5c2f119555ae8d822a5322509c6abd91601a8931115d2e4c3fff13fadf39e877"},
+    {file = "polars-1.21.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:063f8807f633f8fd15458a43971d930f6ee568b8e95936d7736c9054fc4f6f52"},
+    {file = "polars-1.21.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:519863e0990e3323e7a32fc66bac3ad9da51938a1ffce6c09a92e0b1adb026a5"},
+    {file = "polars-1.21.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bbecddca35c57efde99070517db5d2c63d4c6d0e3c992123ba3be93e86e7bfac"},
+    {file = "polars-1.21.0-cp39-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:d9ce8e6f0d8140e67b0f7c276d22bb5f3345ce7412558643c8b5c270db254b64"},
+    {file = "polars-1.21.0-cp39-abi3-win_amd64.whl", hash = "sha256:c4517abb008af890e4ca8fb6bb0372868381017af0ecadf9d062e2f91f50b276"},
+    {file = "polars-1.21.0-cp39-abi3-win_arm64.whl", hash = "sha256:6bb0ba805defb05b76fdca392e48d84d1f16403de5be25d4dd8cdc7fccfd4251"},
+    {file = "polars-1.21.0.tar.gz", hash = "sha256:7692d0fe0fb4faac18ef9423de55789e289f4d3f26d42519bd23ef8afb672d62"},
 ]
 
 [package.extras]
@@ -3758,7 +3783,7 @@ async = ["gevent"]
 calamine = ["fastexcel (>=0.9)"]
 cloudpickle = ["cloudpickle"]
 connectorx = ["connectorx (>=0.3.2)"]
-database = ["nest-asyncio", "polars[adbc,connectorx,sqlalchemy]"]
+database = ["polars[adbc,connectorx,sqlalchemy]"]
 deltalake = ["deltalake (>=0.19.0)"]
 excel = ["polars[calamine,openpyxl,xlsx2csv,xlsxwriter]"]
 fsspec = ["fsspec"]
@@ -3813,13 +3838,13 @@ virtualenv = ">=20.10.0"
 
 [[package]]
 name = "prefect"
-version = "3.1.10"
+version = "3.1.14"
 description = "Workflow orchestration and management."
 optional = true
 python-versions = ">=3.9"
 files = [
-    {file = "prefect-3.1.10-py3-none-any.whl", hash = "sha256:277241902a0dd5f30bd3b9f4506a8685e9bf0cac48fcc7fbea05f8a6991ef78d"},
-    {file = "prefect-3.1.10.tar.gz", hash = "sha256:aefabf2b6894b6336a4b4ed516da950a511eb13a51733132d674fc3820562f28"},
+    {file = "prefect-3.1.14-py3-none-any.whl", hash = "sha256:8de9b4d32ae045e46568822f6d8d234735f07f2ad8ffa899d502ee73be7396f6"},
+    {file = "prefect-3.1.14.tar.gz", hash = "sha256:2c9e2b29fc0bccb1a6addb883292d055fec9e14a51ed74b223bfb34958e96fe5"},
 ]
 
 [package.dependencies]
@@ -3833,7 +3858,7 @@ cachetools = ">=5.3,<6.0"
 click = ">=8.0,<8.2"
 cloudpickle = ">=2.0,<4.0"
 coolname = ">=1.0.4,<3.0.0"
-croniter = ">=1.0.12,<6.0.0"
+croniter = ">=1.0.12,<7.0.0"
 cryptography = ">=36.0.1"
 dateparser = ">=1.1.1,<2.0.0"
 docker = ">=4.0,<8.0"
@@ -3855,7 +3880,7 @@ packaging = ">=21.3,<24.3"
 pathspec = ">=0.8.0"
 pendulum = ">=3.0.0,<4"
 prometheus-client = ">=0.20.0"
-pydantic = ">=2.7,<2.10.0 || >2.10.0,<3.0.0"
+pydantic = ">=2.9,<2.10.0 || >2.10.0,<3.0.0"
 pydantic_core = ">=2.12.0,<3.0.0"
 pydantic_extra_types = ">=2.8.2,<3.0.0"
 pydantic_settings = ">2.2.1"
@@ -6421,7 +6446,7 @@ cffi = ["cffi (>=1.11)"]
 
 [extras]
 all = ["bytewax", "confluent-kafka", "connectorx", "dask", "databento", "litellm", "minio", "polygon-api-client", "prefect", "psutil", "pyarrow", "pyspark", "ray"]
-core = ["bytewax", "confluent-kafka", "connectorx", "minio", "prefect", "psutil", "ray"]
+core = ["bytewax", "confluent-kafka", "connectorx", "deltalake", "minio", "prefect", "psutil", "ray"]
 dask = ["dask"]
 databento = ["databento"]
 llm = ["litellm"]
@@ -6431,4 +6456,4 @@ pyspark = ["pyspark"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "c3ad0d5f1dcb364dda319cd120b26e5d8eb49df93181fd4946288d29284629a6"
+content-hash = "92fc30a8a41c882506c56ca4f46b01f01e1a0afeb10c11776778beeaad023465"

@@ -1,66 +1,138 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    import datetime
+    import pyarrow.fs as pa_fs
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.typing.literals import tSTORAGE, tDATA_TOOL, tDATA_LAYER
+    from pfeed.typing.core import tData
 
+from abc import ABC, abstractmethod
 from pathlib import Path
-from dataclasses import dataclass, field
 
-from pfeed.const.enums import DataStorage
-from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+from pfeed.const.enums import DataStorage, DataLayer
+from pfeed.data_models.market_data_model import MarketDataModel
 
 
-@dataclass
-class BaseStorage:
-    name: DataStorage
-    data_model: BaseDataModel
-    data_path: Path | None = None
-    file_path: Path | None = None
-    # kwargs for the storage class, e.g. for MinIO, kwargs will be passed to Minio()
-    kwargs: dict = field(default_factory=dict)
+class BaseStorage(ABC):
+    def __init__(
+        self,
+        name: tSTORAGE,
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='general_data',
+        use_deltalake: bool=False,
+        **kwargs
+    ):
+        self.name = DataStorage[name.upper()]
+        self.data_layer = DataLayer[data_layer.upper()]
+        self.data_domain = data_domain
+        self.use_deltalake = use_deltalake
+        self._data_model: BaseDataModel | None = None
+        self._data_handler: BaseDataHandler | None = None
+        self._kwargs = kwargs
+
+    @classmethod
+    def from_data_model(
+        cls,
+        data_model: BaseDataModel, 
+        data_layer: tDATA_LAYER,
+        data_domain: str,
+        use_deltalake: bool=False, 
+        **kwargs
+    ) -> BaseStorage:
+        instance = cls(
+            data_layer=data_layer,
+            data_domain=data_domain,
+            use_deltalake=use_deltalake, 
+            **kwargs
+        )
+        instance.attach_data_model(data_model)
+        instance.initialize_data_handler()
+        return instance
     
-    def __post_init__(self):
-        if isinstance(self.data_model, TimeBasedDataModel):
-            assert not self.data_model.is_date_range(), 'data storage is per date, date range is not supported'
-        self.data_path = self._create_data_path()
-        self.file_path: Path | str = self._create_file_path()
+    @abstractmethod
+    def get_file_system(self) -> pa_fs.FileSystem:
+        pass
     
-    @property
-    def date(self) -> datetime.date:
-        if hasattr(self.data_model, 'date'):
-            return self.data_model.date
-        else:
-            raise ValueError(f'{type(self.data_model)} does not have a date attribute')
-    
-    @property
-    def file_extension(self) -> str:
-        return self.data_model.file_extension
-    
-    @property
-    def filename(self) -> str:
-        return self.data_model.filename
-    
-    @property
-    def storage_path(self) -> Path:
-        return self.data_model.storage_path
+    def get_storage_options(self) -> dict:
+        return {}
         
-    @staticmethod
-    def _create_data_path() -> Path:
-        from pfeed.config import get_config
-        config = get_config()
-        return Path(config.data_path)
+    def attach_data_model(self, data_model: BaseDataModel) -> None:
+        '''
+        Attach a data model to the storage and update related attributes.
+
+        Args:
+            data_model: data model is a detailed description of the data stored.
+                if not provided, storage is just an empty vessel with basic properties, e.g. data_path,
+                since it is not pointing to any data.
+        '''
+        self._data_model = data_model
     
-    def _create_file_path(self) -> Path | str:
-        if isinstance(self.data_path, str):  # e.g. for MinIO, data_path is a string because s3:// doesn't work with pathlib
-            return self.data_path + '/' + str(self.storage_path)
-        elif isinstance(self.data_path, Path):
-            return self.data_path / self.storage_path
+    def initialize_data_handler(self):
+        from pfeed.data_handlers import MarketDataHandler
+        data_handler_configs = {
+            'data_path': str(self.data_path),
+            'file_system': self.get_file_system(),
+            'storage_options': self.get_storage_options(),
+        }
+        if isinstance(self.data_model, MarketDataModel):
+            data_handler_configs['use_deltalake'] = self.use_deltalake
+            self._data_handler = MarketDataHandler(self.data_model, **data_handler_configs)
+    
+    @property
+    def data_model(self) -> BaseDataModel:
+        if not self._data_model:
+            raise ValueError("No data model has been attached to this storage instance")
+        return self._data_model
+    
+    @property
+    def data_handler(self) -> BaseDataHandler:
+        if not self._data_handler:
+            raise ValueError("No data handler has been initialized for this storage instance")
+        return self._data_handler
+
+    @property
+    def filename(self) -> str | None:
+        return None if self.use_deltalake else self.data_model.full_filename
+    
+    @property
+    def file_path(self) -> Path | str | None:
+        if isinstance(self.data_path, Path):
+            return self.data_path / self.storage_path / self.filename
+        elif isinstance(self.data_path, str):
+            return self.data_path + '/' + str(self.storage_path) + '/' + self.filename
         else:
             raise ValueError(f'{type(self.data_path)} is not supported')
 
-    def exists(self) -> bool:
-        return self.file_path.exists()
-
+    @property
+    def storage_path(self) -> Path:
+        return self.data_model.storage_path
+    
+    @property
+    def data_path(self) -> Path:
+        from pfeed.config import get_config
+        config = get_config()
+        return Path(config.data_path) / self.data_layer / self.data_domain
+    
     def __str__(self):
-        return f'{self.name}:{self.data_model}'
+        if self._data_model:
+            return f'{self.name}:{self._data_model}'
+        else:
+            return f'{self.name}'
+    
+    def write_data(self, data: tData):
+        try:
+            from pfeed.utils.monitor import print_disk_usage
+        except ImportError:
+            print_disk_usage = None
+        self.data_handler.write(data)
+        if print_disk_usage:
+            print_disk_usage()
+
+    def read_data(self, data_tool: tDATA_TOOL='pandas', delta_version: int | None=None) -> tuple[tData | None, dict]:
+        '''
+        Args:
+            delta_version: version of the deltalake table to read, if None, read the latest version.
+        '''
+        data, metadata = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
+        return data, metadata

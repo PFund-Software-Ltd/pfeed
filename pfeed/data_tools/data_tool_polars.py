@@ -1,37 +1,35 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from pfeed.typing.literals import tSTORAGE
+    import pyarrow.fs as pa_fs
+    from deltalake import DeltaTable
     
-import os
-
 import polars as pl
 
-from pfeed.const.enums import DataStorage, DataTool
+from pfeed.const.enums import DataTool
 
 
 name = DataTool.polars
 
 
-def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE, **kwargs) -> pl.DataFrame | pl.LazyFrame:
+def read_parquet(
+    paths_or_obj: list[str] | str | bytes, 
+    *args, 
+    file_system: pa_fs.FileSystem | None=None,  # for consistency with other data tools
+    storage_options: dict[str, Any] | None=None,
+    **kwargs
+) -> pl.DataFrame | pl.LazyFrame:
     if isinstance(paths_or_obj, bytes):
         obj = paths_or_obj
         return pl.read_parquet(obj, *args, **kwargs)
     else:
         paths = paths_or_obj if isinstance(paths_or_obj, list) else [paths_or_obj]
-        storage = DataStorage[storage.upper()]
-        if storage not in [DataStorage.LOCAL, DataStorage.CACHE] and 'storage_options' not in kwargs:
-            if storage == DataStorage.MINIO:
-                from pfeed.storages.minio_storage import MinioStorage
-                kwargs['storage_options'] = {
-                    "endpoint_url": MinioStorage.create_endpoint(),
-                    "access_key_id": os.getenv('MINIO_ROOT_USER', 'pfunder'),
-                    "secret_access_key": os.getenv('MINIO_ROOT_PASSWORD', 'password'),
-                }
-            else:
-                raise NotImplementedError(f"read_parquet() for storage {storage} is not implemented")
-        return pl.scan_parquet(paths, *args, **kwargs)
+        return pl.scan_parquet(paths, *args, storage_options=storage_options, **kwargs)
 
+
+def read_delta(delta_table: DeltaTable, **kwargs) -> pl.LazyFrame:
+    return pl.scan_delta(delta_table, **kwargs)
+    
 
 # def concat(dfs: list[pl.DataFrame | pl.LazyFrame]) -> pl.DataFrame | pl.LazyFrame:
 #     return pl.concat(dfs)

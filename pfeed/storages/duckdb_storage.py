@@ -1,9 +1,9 @@
 '''
 default non-duckdb storage structure:
-- env/data_source/unique_identifier/product_type/product_name/resolution/year/month/{filename}.parquet
+- env/data_source/data_origin/product_type/product_name/resolution/year/month/{filename}.parquet
 VS
 duckdb storage structure:
-- .duckdb file per env/data_source/unique_identifier/
+- .duckdb file per env/data_source/data_origin/
 - schema: product_type/
 - one table per product_name/resolution, where year/month is removed
 '''
@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
+    from pfeed.typing.literals import tDATA_TOOL, tDATA_LAYER
+    from pfeed.typing.core import tDataFrame
 
 import json
 from pathlib import Path
@@ -23,6 +25,7 @@ from pfund import print_warning
 from pfeed.typing.core import is_dataframe
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
+from pfeed.const.enums import DataTool
 from pfeed import get_config
 
 
@@ -30,21 +33,32 @@ config = get_config()
 
 
 class DuckDBStorage(BaseStorage):
-    conn: DuckDBPyConnection
-    
-    _schema_name: str
-    _table_name: str
-    _in_memory: bool = False
-
-    def __post_init__(self):
-        super().__post_init__()
+    def __init__(
+        self,
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='general_data',
+        use_deltalake: bool=False,
+        in_memory: bool=True, 
+        **kwargs
+    ):
+        '''
+        Args:
+            in_memory: whether to use in-memory storage
+        '''
+        self._in_memory = in_memory
+        super().__init__(
+            name='duckdb', 
+            data_layer=data_layer,
+            data_domain=data_domain,
+            use_deltalake=use_deltalake,
+            **kwargs
+        )
         self._schema_name = self._create_schema_name()
         self._table_name = self._create_table_name()
-        self._in_memory = self.kwargs.get('in_memory', False)
         if self._in_memory:
-            self.conn = duckdb.connect(':memory:')
+            self.conn: DuckDBPyConnection = duckdb.connect(':memory:', **self._kwargs)
         elif self.file_path.exists():
-            self.conn = duckdb.connect(str(self.file_path))
+            self.conn: DuckDBPyConnection = duckdb.connect(str(self.file_path), **self._kwargs)
         else:
             self.conn = None
     
@@ -76,33 +90,36 @@ class DuckDBStorage(BaseStorage):
         return f'{self._schema_name}.metadata'
     
     @property
-    def file_extension(self) -> str:
-        return '.duckdb'
+    def filename(self) -> str | None:
+        if not self._data_model:
+            return None
+        name = self._data_model.source.name.lower()
+        if self._data_model.is_data_origin_effective():
+            name = self._data_model.data_origin.lower()
+        return name + self._data_model.file_extension
     
     @property
-    def filename(self) -> str:
-        name = self.data_model.source.name.lower()
-        if self.data_model.is_unique_identifier_effective():
-            name = self.data_model.unique_identifier.lower()
-        return name + self.file_extension
-    
+    def file_path(self) -> Path | str | None:
+        return None if self._in_memory else super().file_path
+
     @property
-    def storage_path(self) -> Path:
+    def storage_path(self) -> Path | None:
+        if not self._data_model:
+            return None
         return (
-            Path(self.data_model.env.value) 
+            Path(self.data_layer)
+            / self.data_domain
+            / self.data_model.env.value
             / self.data_model.source.name 
-            / self.data_model.unique_identifier
-            / self.filename
+            / self.data_model.data_origin
         )
     
-    def _create_data_path(self) -> Path | str | None:
-        return None if self._in_memory else super()._create_data_path()
+    @property
+    def data_path(self) -> Path | str | None:
+        return None if self._in_memory else super().data_path
     
-    def _create_file_path(self) -> Path | str | None:
-        return None if self._in_memory else super()._create_file_path()
-        
-    def exists(self) -> bool:
-        return super().exists() and self._table_exists() and self._data_exists()
+    def _exists(self) -> bool:
+        return self.file_path.exists() and self._table_exists() and self._data_exists()
 
     def _data_exists(self) -> bool:
         '''Checks if data exists in the table for specified date(s).
@@ -112,7 +129,7 @@ class DuckDBStorage(BaseStorage):
         '''
         if not self._table_exists():
             return False
-        df: pd.DataFrame = self.get_table(full_table=True)
+        df: pd.DataFrame = self.get_table()
         metadata = self.get_metadata(include_placeholder_dates=True)
         placeholder_dates: list[str] = metadata['placeholder_dates']
         dates_in_table: list[str] = df['ts'].dt.strftime('%Y-%m-%d').unique().tolist() if not df.empty else []
@@ -152,8 +169,9 @@ class DuckDBStorage(BaseStorage):
         except Exception:
             return False
     
-    def _adjust_metadata(self, metadata: dict) -> dict:
+    def _adjust_metadata(self, metadata: dict | None) -> dict:
         '''Converts is_placeholder to placeholder_dates since duckdb storage is not per date'''
+        metadata = metadata or {}
         if 'is_placeholder' in metadata:
             metadata['placeholder_dates'] = []
             if metadata['is_placeholder'] == 'true':
@@ -162,7 +180,7 @@ class DuckDBStorage(BaseStorage):
             metadata.pop('is_placeholder', None)
         return metadata
         
-    def write_table(self, df: pd.DataFrame, metadata: dict):
+    def write_table(self, df: pd.DataFrame, metadata: dict | None=None):
         if not is_dataframe(df):
             raise ValueError(f'{type(df)=} is not a dataframe, cannot write to duckdb')
         if not self._conn_exists():
@@ -208,18 +226,11 @@ class DuckDBStorage(BaseStorage):
             VALUES (?, ?)
         """, [self._table_name, metadata])
     
-    def get_table(self, full_table: bool=False) -> pd.DataFrame:
-        """
-        Args:
-            full_table: whether to get the full table or just the date range of the data model
-        """
+    def get_table(self) -> pd.DataFrame:
         if not self._table_exists(table_name=self._table_name):
             return None
-        if not full_table:
-            start_date, end_date = self.data_model.start_date, self.data_model.end_date
-            conn = self.conn.execute(f"SELECT * FROM {self._schema_table_name} WHERE CAST(ts AS DATE) BETWEEN CAST'{start_date}' AS DATE) AND CAST('{end_date}' AS DATE) ORDER BY ts")
-        else:
-            conn = self.conn.execute(f"SELECT * FROM {self._schema_table_name} ORDER BY ts")
+        start_date, end_date = self.data_model.start_date, self.data_model.end_date
+        conn = self.conn.execute(f"SELECT * FROM {self._schema_table_name} WHERE CAST(ts AS DATE) BETWEEN CAST'{start_date}' AS DATE) AND CAST('{end_date}' AS DATE) ORDER BY ts")
         # REVIEW: this should return pl.LazyFrame ideally if duckdb supports it    
         df: pd.DataFrame = conn.df()
         return df
@@ -263,6 +274,27 @@ class DuckDBStorage(BaseStorage):
     def close(self):
         if self._conn_exists():
             self.conn.close()
+
+    def write_data(self, data: bytes | pd.DataFrame, metadata: dict | None=None):
+        try:
+            from pfeed.utils.monitor import print_disk_usage
+        except ImportError:
+            print_disk_usage = None
+        with self:
+            self.write_table(data, metadata=metadata)
+            if print_disk_usage:
+                print_disk_usage()
+    
+    def read_data(self, data_tool: DataTool | tDATA_TOOL='pandas') -> tuple[tDataFrame | None, dict]:
+        from pfeed.etl import convert_to_user_df
+        if not self._exists():
+            return None, {}
+        with self:
+            df: pd.DataFrame = self.get_table()
+            data_tool = DataTool[data_tool.upper()] if isinstance(data_tool, str) else data_tool
+            df: tDataFrame = convert_to_user_df(df, data_tool)
+            metadata = self.get_metadata(include_placeholder_dates=True)
+            return df, metadata
     
     def __enter__(self):
         return self  # Setup - returns the object to be used in 'with'

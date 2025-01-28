@@ -1,11 +1,13 @@
 import os
 import datetime
 
+import pyarrow.fs as pa_fs
 from minio import Minio
 
 from pfeed.storages.minio_storage import MinioStorage
 
 
+# TODO: pseudo code only
 class S3Storage(MinioStorage):
     @staticmethod
     def create_endpoint() -> str:
@@ -13,6 +15,13 @@ class S3Storage(MinioStorage):
             return endpoint
         else:
             raise Exception("S3_ENDPOINT is not set in environment variables")
+    
+    def get_file_system(self) -> pa_fs.S3FileSystem:
+        return pa_fs.S3FileSystem(
+            endpoint_override=os.getenv('S3_ENDPOINT'),
+            access_key=os.getenv("S3_ACCESS_KEY"),
+            secret_key=os.getenv("S3_SECRET_KEY"),
+        )
 
     # TODO
     def _create_minio(self) -> Minio:

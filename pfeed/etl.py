@@ -1,20 +1,16 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ModuleType
 if TYPE_CHECKING:
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-    from narwhals.typing import IntoFrameT, Frame
-    from pfeed.typing.literals import tSTORAGE, tPRODUCT_TYPE
+    from narwhals.typing import IntoFrame, Frame
+    from pfeed.typing.literals import tPRODUCT_TYPE, tDATA_TOOL
     from pfeed.typing.core import tDataFrame, tData
-    from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.storages.base_storage import BaseStorage
 
 import os
+import importlib
 
 import pandas as pd
 import polars as pl
 import narwhals as nw
-
 try:
     import dask.dataframe as dd
 except ImportError:
@@ -30,127 +26,13 @@ except ImportError:
     SparkSession = None
 
 from pfund.datas.resolution import Resolution
-from pfeed.const.enums import DataStorage, DataTool, DataRawLevel
+from pfeed.const.enums import DataTool
+from pfeed.typing.core import is_dataframe
 
 
-def write_data(data: bytes | pd.DataFrame, storage: BaseStorage, metadata: dict | None = None, compression: str = 'zstd'):
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-    from pfeed.utils.file_formats import compression_methods
-    
-    metadata = metadata or {}
-    if storage.name in [DataStorage.LOCAL, DataStorage.CACHE]:
-        storage.file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path = str(storage.file_path)
-    elif storage.name == DataStorage.MINIO:
-        file_path = str(storage.file_path).replace('s3://', '')
-    elif storage.name == DataStorage.DUCKDB:
-        with storage:
-            storage.write_table(data, metadata)
-            return
-    else:
-        raise NotImplementedError(f'{storage.name=}')
-    fs = get_filesystem(storage.name)
-
-    # Write data based on its type
-    if isinstance(data, pd.DataFrame):
-        table = pa.Table.from_pandas(data, preserve_index=False)
-        schema = table.schema.with_metadata(metadata)
-        table = table.replace_schema_metadata(schema.metadata)
-        with fs.open_output_stream(file_path) as f:
-            pq.write_table(table, f, compression=compression)
-    elif isinstance(data, (bytes, str)):
-        if isinstance(data, str):
-            data: bytes = data.encode('utf-8')
-        data: bytes = compression_methods[compression](data)
-        with fs.open_output_stream(file_path) as f:
-            f.write(data)
-    else:
-        raise NotImplementedError(f'{type(data)=}')
-    
-
-def get_filesystem(storage: DataStorage) -> pa.fs.FileSystem:
-    from pyarrow import fs as pa_fs
-    if storage == DataStorage.MINIO:
-        from pfeed.storages.minio_storage import MinioStorage
-        fs = pa_fs.S3FileSystem(
-            endpoint_override=MinioStorage.create_endpoint(),
-            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
-            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
-        )
-    elif storage == DataStorage.S3:
-        fs = pa_fs.S3FileSystem(
-            endpoint_override=os.getenv('S3_ENDPOINT'),
-            access_key=os.getenv("S3_ACCESS_KEY"),
-            secret_key=os.getenv("S3_SECRET_KEY"),
-        )
-    elif storage == DataStorage.AZURE:
-        fs = pa_fs.AzureFileSystem(
-            account_name=os.getenv("AZURE_ACCOUNT_NAME"),
-            account_key=os.getenv("AZURE_ACCOUNT_KEY"),
-        )
-    elif storage == DataStorage.GCP:
-        fs = pa_fs.GcsFileSystem(
-            access_token=os.getenv("GCP_ACCESS_TOKEN")  # For GCP OAuth tokens
-        )
-    else:
-        fs = pa_fs.LocalFileSystem()
-    return fs
-
-
-def read_data(
-    storage: BaseStorage,
-    compression: str = 'zstd',
-) -> tuple[pq.ParquetFile | pd.DataFrame | bytes | str, dict]:
-    import pyarrow.parquet as pq
-    from pfeed.utils.file_formats import decompression_methods
-    
-    metadata = {}
-    if storage.name in [DataStorage.LOCAL, DataStorage.CACHE]:
-        file_path = str(storage.file_path)
-    elif storage.name == DataStorage.MINIO:
-        file_path = str(storage.file_path).replace('s3://', '')
-    elif storage.name == DataStorage.DUCKDB:
-        metadata = storage.get_metadata()
-        return None, metadata
-    else:
-        raise NotImplementedError(f'{storage.name=}')
-    fs = get_filesystem(storage.name)
-    with fs.open_input_file(file_path) as f:
-        if file_path.endswith('.parquet'):
-            parquet_file = pq.ParquetFile(f)
-            metadata = parquet_file.schema.to_arrow_schema().metadata
-            metadata = {k.decode(): v.decode() for k, v in metadata.items()}
-            return parquet_file, metadata
-        else:
-            raw_data = f.read()
-            raw_data = decompression_methods[compression](raw_data)
-
-            # Attempt to decode as UTF-8 to return text
-            try:
-                text_data = raw_data.decode('utf-8')
-                return text_data, metadata
-            except UnicodeDecodeError:
-                # Return as raw bytes if not UTF-8 decodable
-                return raw_data, metadata
-
-
-def extract_data(data_model: BaseDataModel, storage: tSTORAGE) -> BaseStorage | None:
-    from pfeed.data_models.market_data_model import MarketDataModel
-    storage: BaseStorage | None = get_storage(data_model, storage)
-    if not (storage and storage.exists()):
-        return None
-    _, metadata_from_storage = read_data(storage, compression=data_model.compression)
-    if isinstance(storage.data_model, MarketDataModel):
-        raw_level_from_storage = DataRawLevel[metadata_from_storage['raw_level'].upper()]
-        raw_level_from_metadata = DataRawLevel[data_model.metadata['raw_level'].upper()]
-        no_original_raw_level = DataRawLevel.ORIGINAL not in (raw_level_from_storage, raw_level_from_metadata)
-        # since raw_level 'cleaned' is compatible with 'normalized' ('cleaned' filtered out unnecessary columns),
-        # allow using data in storage with raw_level='cleaned' even the specified raw_level in metadata is 'normalized'
-        if no_original_raw_level and raw_level_from_metadata >= raw_level_from_storage:
-            return storage
-    if metadata_from_storage == data_model.metadata:
-        return storage
+def get_data_tool(data_tool: DataTool | tDATA_TOOL) -> ModuleType:
+    dtl = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
+    return importlib.import_module(f'pfeed.data_tools.data_tool_{dtl}')
 
 
 def standardize_columns(df: pd.DataFrame, resolution: Resolution, product_name: str, symbol: str='') -> pd.DataFrame:
@@ -202,7 +84,7 @@ def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
     
 
-def resample_data(df: IntoFrameT, resolution: str | Resolution) -> IntoFrameT:
+def resample_data(df: IntoFrame, resolution: str | Resolution) -> pd.DataFrame:
     '''Resamples the input dataframe based on the target resolution.
     Args:
         df: The input dataframe to be resampled.
@@ -210,19 +92,16 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution) -> IntoFrameT:
     Returns:
         The resampled dataframe.
     '''
-    if isinstance(df, pd.DataFrame):
-        data_tool = DataTool.pandas
-    elif isinstance(df, (pl.LazyFrame, pl.DataFrame)):
-        data_tool = DataTool.polars
-    elif isinstance(df, dd.DataFrame):
-        data_tool = DataTool.dask
-    else:
-        raise ValueError(f'{type(df)=}')
-    
     df = convert_to_pandas_df(df)
     
     if isinstance(resolution, str):
         resolution = Resolution(resolution)
+        
+    if 'resolution' in df.columns:
+        df_resolution = Resolution(df['resolution'][0])
+        is_resample_required = resolution < df_resolution
+        if not is_resample_required:
+            return df
         
     # converts to pandas's resolution format
     eresolution = (
@@ -274,90 +153,23 @@ def resample_data(df: IntoFrameT, resolution: str | Resolution) -> IntoFrameT:
     resampled_df['resolution'] = repr(resolution)
     # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
     # otherwise, polars will not be able to collect correctly
-    resampled_df = organize_columns(resampled_df)
-    return convert_to_user_df(resampled_df, data_tool)
-
-
-def get_storage(data_model: BaseDataModel, storage: tSTORAGE, **kwargs) -> BaseStorage | None:
-    '''
-    Args:
-        kwargs: kwargs specific to the storage
-            e.g. kwargs for Minio client, DuckDB connection, etc.
-    '''
-    from pfeed.storages import LocalStorage, MinioStorage, CacheStorage, S3Storage, DuckDBStorage
-    from minio import ServerError
-    storage = DataStorage[storage.upper()]
-    if storage == DataStorage.LOCAL:
-        return LocalStorage(name=storage, data_model=data_model, **kwargs)
-    elif storage == DataStorage.MINIO:
-        try:
-            return MinioStorage(name=storage, data_model=data_model, **kwargs)
-        except ServerError:
-            return None
-    elif storage == DataStorage.CACHE:
-        cache_storage = CacheStorage(name=storage, data_model=data_model, **kwargs)
-        cache_storage.clear_caches()
-        return cache_storage
-    elif storage == DataStorage.DUCKDB:
-        return DuckDBStorage(name=storage, data_model=data_model, **kwargs)
-    # elif storage == DataStorage.S3:
-    #     pass
-    # elif storage == DataStorage.AZURE:
-    #     pass
-    # elif storage == DataStorage.GCP:
-    #     pass
-    else:
-        raise NotImplementedError(f'{storage=}')
-
-
-def load_data(
-    data_model: BaseDataModel,
-    data: bytes | pd.DataFrame,
-    storage: tSTORAGE,
-    **kwargs
-) -> list[BaseStorage]:
-    """
-    Loads data into the specified data destination.
-    Args:
-        storage: The destination where the data will be loaded. 
-    Returns:
-        None
-    """    
-    try:
-        from pfeed.utils.monitor import print_disk_usage
-    except ImportError:
-        print_disk_usage = None
-    storage_literal = storage
-    storages: list[BaseStorage] = []
-    if isinstance(data, pd.DataFrame):
-        data_chunks_per_date = {} if data.empty else {date: group for date, group in data.groupby(data['ts'].dt.date)}
-        for date in pd.date_range(data_model.start_date, data_model.end_date).date:
-            data_model_copy = data_model.model_copy(deep=False)
-            # NOTE: create placeholder data if date is not in data_chunks_per_date, 
-            # used as an indicator for successful download, there is just no data on that date (e.g. weekends, holidays, etc.)
-            data_chunk = data_chunks_per_date.get(date, pd.DataFrame(columns=data.columns))
-            # make date range (start_date, end_date) to (date, date), since storage is per date
-            data_model_copy.update_start_date(date)
-            data_model_copy.update_end_date(date)
-            data_model_copy.update_metadata('is_placeholder', 'true' if data_chunk.empty else 'false')
-            if storage := get_storage(data_model_copy, storage_literal, **kwargs):
-                write_data(data_chunk, storage, metadata=data_model_copy.metadata, compression=data_model_copy.compression)
-                storages.append(storage)
-    else:
-        raise NotImplementedError(f'{type(data)=}')
-    if print_disk_usage:
-        if hasattr(storage, 'local_data_path'):
-            print_disk_usage(storage.local_data_path)
-        else:
-            print_disk_usage(storage.data_path)
-    return storages
+    # resampled_df = organize_columns(resampled_df)
+    return resampled_df
 
 
 def convert_to_pandas_df(data: tData) -> pd.DataFrame:
-    from pfeed.utils.file_formats import convert_raw_data_to_pandas_df
-    from pfeed.typing.core import is_dataframe
+    import io
+    from pfeed.utils.file_formats import decompress_data, is_parquet, is_likely_csv
     if isinstance(data, bytes):
-        return convert_raw_data_to_pandas_df(data)
+        data = decompress_data(data)
+        if is_parquet(data):
+            return pd.read_parquet(io.BytesIO(data))
+        elif is_likely_csv(data):
+            return pd.read_csv(io.BytesIO(data))
+        else:
+            raise ValueError("Unknown or unsupported format")
+    elif isinstance(data, pd.DataFrame):
+        return data
     elif is_dataframe(data):
         df: Frame = nw.from_native(data)
         if isinstance(df, nw.LazyFrame):

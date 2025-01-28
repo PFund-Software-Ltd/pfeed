@@ -16,10 +16,10 @@ class TestDownload:
         assert '_execute_download' in dicts
     
     def test_dataflows_cleared_before_download(self, feed, mocker):
-        spy = mocker.spy(feed, '_clear_current_dataflows')
+        spy = mocker.spy(feed, '_clear_subflows')
         mocker.patch.object(feed, 'run')
         feed.download('BTC_USDT_PERP')
-        # _clear_current_dataflows is called twice:
+        # _clear_subflows is called twice:
         # once before the download operation is added
         # and once after the load operation is added
         assert spy.call_count == 2

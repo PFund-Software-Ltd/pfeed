@@ -26,17 +26,16 @@ class BybitSource(BaseSource):
         from pfund.exchanges.bybit.exchange import Exchange
         return Exchange(env='LIVE')
     
-    def get_products_by_types(self, ptypes: list[str]) -> list[str]:
-        '''Get products by product types
+    def get_products_by_type(self, product_type: str) -> list[str]:
+        '''Get products by product type
         e.g. if ptype='PERP', return all perpetual products
         '''
         pdts = []
-        for ptype in ptypes:
-            category: str = self._exchange._derive_product_category(ptype)
-            for epdt in self.api.get_epdts_by_ptype(ptype):
-                pdt = self.adapter(epdt, group=category)
-                is_mapping_exists = (pdt != epdt)
-                # NOTE: mapping may not exist if the product has been delisted
-                if is_mapping_exists:
-                    pdts.append(pdt)
+        category: str = self._exchange._derive_product_category(product_type)
+        for epdt in self.api.get_epdts_by_ptype(product_type):
+            pdt = self.adapter(epdt, group=category)
+            is_mapping_exists = (pdt != epdt)
+            # NOTE: mapping may not exist if the product has been delisted
+            if is_mapping_exists:
+                pdts.append(pdt)
         return pdts

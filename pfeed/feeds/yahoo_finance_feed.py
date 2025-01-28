@@ -2,11 +2,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfeed.typing.literals import tSTORAGE
+    from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
     from pfeed.typing.core import tDataFrame
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.flows.dataflow import DataFlow
-    from pfeed.const.enums import DataRawLevel
 
 import time
 import datetime
@@ -15,8 +14,6 @@ import yfinance
 import pandas as pd
 
 from pfund.datas.resolution import Resolution
-from pfeed import etl
-from pfeed.feeds.base_feed import clear_current_dataflows
 from pfeed.feeds.market_data_feed import MarketDataFeed
 from pfeed.const.enums import MarketDataType
 
@@ -92,7 +89,6 @@ class YahooFinanceFeed(MarketDataFeed):
         return yfinance_kwargs
     
     # TODO
-    @clear_current_dataflows
     def stream(self) -> YahooFinanceFeed:
         raise NotImplementedError(f'{self.name} stream() is not implemented')
         return self
@@ -103,16 +99,17 @@ class YahooFinanceFeed(MarketDataFeed):
     
     def download(
         self,
-        products: str | list[str] | None=None,
-        symbols: str | list[str] | None=None,
-        data_type: Literal['minute', 'hour', 'day']='day',
+        product: str,
+        symbol: str='',
+        resolution: Resolution | str | Literal['minute', 'hour', 'day']='day',
         rollback_period: str | Literal["ytd", "max"]='max',
         start_date: str='',
         end_date: str='',
-        raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
         to_storage: tSTORAGE='local',
-        product_specs: dict[str, dict] | None=None,  # {'product_basis': {'attr': 'value', ...}}
         yfinance_kwargs: dict | None=None,
+        **product_specs
     ) -> YahooFinanceFeed:
         '''
         Download historical data from Yahoo Finance.
@@ -121,9 +118,7 @@ class YahooFinanceFeed(MarketDataFeed):
         start_date and end_date (not including today) should be specified to avoid this issue.
         
         Args:
-            product_specs: The specifications for the products.
-                'TSLA_USD_OPT' is in `products`, you need to provide the specifications of the option in `product_specs`:
-                e.g. {'TSLA_USD_OPT': {'strike_price': 500, 'expiration': '2024-01-01', 'option_type': 'CALL'}}
+            product_specs: The specifications for the product.
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
             rollback_period: Data resolution or 'ytd' or 'max'
                 Period to rollback from today, only used when `start_date` is not specified.
@@ -140,42 +135,43 @@ class YahooFinanceFeed(MarketDataFeed):
         self._yfinance_kwargs = self._prepare_yfinance_kwargs(yfinance_kwargs)
         # makes rollback_period == 'max' more specific for different data types
         if rollback_period == 'max':
-            dtype = MarketDataType[data_type.upper()]
+            dtype = MarketDataType[resolution.timeframe.upper()]
             if dtype == MarketDataType.HOUR:
                 rollback_period = '2y'  # max is 2 years for hourly data
             elif dtype == MarketDataType.MINUTE:
                 rollback_period = '8d'  # max is 8 days for minute data
         return super().download(
-            products=products,
-            symbols=symbols,
-            product_types=None,
-            data_type=data_type,
+            product=product,
+            symbol=symbol,
+            resolution=resolution,
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            raw_level=raw_level,
+            data_layer=data_layer,
+            data_domain=data_domain,
             to_storage=to_storage,
-            product_specs=product_specs,
+            **product_specs
         )
     
     def _create_download_dataflows(
         self,
         product: BaseProduct,
-        resolution: Resolution,
-        raw_level: DataRawLevel,
+        unit_resolution: Resolution,
         start_date: datetime.date,
         end_date: datetime.date,
+        data_origin: str='',
     ) -> list[DataFlow]:
+        assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
         # NOTE: one data model for the entire date range
         data_model = self.create_data_model(
             product,
-            resolution,
-            raw_level,
+            unit_resolution,
             start_date=start_date,
             end_date=end_date,
+            data_origin=data_origin,
         )
         # create a dataflow that schedules _execute_download()
-        dataflow: DataFlow = super().extract('download', data_model)
+        dataflow = self._extract_download(data_model)
         return [dataflow]
 
     def _execute_download(self, data_model: MarketDataModel) -> pd.DataFrame | None:
@@ -218,29 +214,28 @@ class YahooFinanceFeed(MarketDataFeed):
             self.logger.warning(f'failed to download {data_model.product} {data_model.resolution} data, '
                                 f'please check if start_date={original_start_date} and end_date={data_model.end_date} is within the valid range')
         self._yfinance_kwargs.clear()
-        # TODO: better handling of rate limit control
+        # TODO: better handling of rate limit control?
         time.sleep(1)
         return df
 
     def get_historical_data(
         self,
         product: str,
-        symbol: str = '',
-        resolution: str = "1d",
+        resolution: Resolution | str = "1d",
+        symbol: str='',
         rollback_period: str | Literal["ytd", "max"] = "max",
         start_date: str = "",
         end_date: str = "",
-        raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        data_origin: str='',
         from_storage: tSTORAGE | None=None,
-        unique_identifier: str='',
         yfinance_kwargs: dict | None=None,
         **product_specs,
     ) -> tDataFrame | None:
         """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
         Args:
             product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP
-            symbol: yfinance's symbol, e.g. AAPL, TSLA
-                if not provided, the first part of `product` split by '_' will be used.
             rollback_period: Data resolution or 'ytd' or 'max'
                 Period to rollback from today, only used when `start_date` is not specified.
                 Default is '1M' = 1 month.
@@ -248,7 +243,7 @@ class YahooFinanceFeed(MarketDataFeed):
             resolution: Data resolution
                 e.g. '1m' = 1 minute as the unit of each data bar/candle.
                 Default is '1d' = 1 day.
-            raw_level:
+            data_layer:
                 'cleaned' (least raw): normalize data (refer to 'normalized' below), also remove all non-standard columns
                     e.g. standard columns in stock data are ts, product, open, high, low, close, volume, dividends, splits
                 'normalized' (default): perform normalization following pfund's convention, preserve all columns
@@ -263,14 +258,15 @@ class YahooFinanceFeed(MarketDataFeed):
         self._yfinance_kwargs = self._prepare_yfinance_kwargs(yfinance_kwargs)
         df = super().get_historical_data(
             product,
+            resolution,
             symbol=symbol,
-            resolution=resolution,
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            raw_level=raw_level,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            data_origin=data_origin,
             from_storage=from_storage,
-            unique_identifier=unique_identifier,
             **product_specs,
         )
         self._yfinance_kwargs.clear()
@@ -293,6 +289,8 @@ class YahooFinanceFeed(MarketDataFeed):
             expiration: e.g. '2024-12-13', it must be one of the values returned by `get_option_expirations`.
             option_type: 'CALL' or 'PUT'
         '''
+        from pfeed.etl import convert_to_user_df
+        
         ticker: yfinance.Ticker = self.api.Ticker(symbol)
         option_chain = ticker.option_chain(expiration)
         if option_type.upper() == 'CALL':
@@ -301,4 +299,4 @@ class YahooFinanceFeed(MarketDataFeed):
             df = option_chain.puts
         else:
             raise ValueError(f"Invalid option type: {option_type}")
-        return etl.convert_to_user_df(df, self.data_tool.name)
+        return convert_to_user_df(df, self.data_tool.name)

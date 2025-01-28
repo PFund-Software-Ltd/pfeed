@@ -3,19 +3,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import datetime
-    from pfund.typing.literals import tCEFI_PRODUCT_TYPE
+    from bytewax.dataflow import Stream as BytewaxStream
+    from bytewax.inputs import Source as BytewaxSource
     from pfeed.typing.core import tDataFrame
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
 
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfeed.typing.literals import tSTORAGE
+    from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
     from pfeed.flows.dataflow import DataFlow
-    from pfeed.const.enums import DataRawLevel
 
 import pandas as pd
 
-from pfeed.feeds.base_feed import clear_current_dataflows
 from pfeed.feeds.crypto_market_data_feed import CryptoMarketDataFeed
 
 
@@ -51,63 +50,59 @@ class BybitFeed(CryptoMarketDataFeed):
         if is_in_reverse_order:
             df = df.iloc[::-1].reset_index(drop=True)
         return df
-    
-    # TODO
-    @clear_current_dataflows
-    def stream(self) -> BybitFeed:
-        raise NotImplementedError(f'{self.name} stream() is not implemented')
-        return self
-    
-    # TODO
-    def _execute_stream(self, data_model: MarketDataModel):
-        raise NotImplementedError(f'{self.name} _execute_stream() is not implemented')
 
     def download(
         self,
-        products: str | list[str] | None=None, 
-        product_types: tCEFI_PRODUCT_TYPE | list[tCEFI_PRODUCT_TYPE] | None=None, 
-        data_type: Literal['tick', 'second', 'minute', 'hour', 'day']='tick',
+        product: str, 
+        resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day']='tick',
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
         to_storage: tSTORAGE='local',
-        product_specs: dict[str, dict] | None=None,  # {'product_basis': {'attr': 'value', ...}}
+        **product_specs
     ) -> BybitFeed:
         '''
         Args:
-            product_specs: The specifications for the products.
-                'BTC_USDT_OPT' is in `products`, you need to provide the specifications of the option in `product_specs`:
-                e.g. {'BTC_USDT_OPT': {'strike_price': 10000, 'expiration': '2024-01-01', 'option_type': 'CALL'}}
+            product_specs: The specifications for the product.
+                if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
+                get_historical_data(
+                    product='BTC_USDT_OPT',
+                    strike_price=10000,
+                    expiration='2024-01-01',
+                    option_type='CALL',
+                )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
         '''
         return super().download(
-            products=products,
+            product=product,
+            resolution=resolution,
             symbols=None,
-            product_types=product_types,
-            data_type=data_type,
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            raw_level=raw_level,
+            data_layer=data_layer,
+            data_domain=data_domain,
             to_storage=to_storage,
-            product_specs=product_specs,
+            **product_specs
         )
     
     def _create_download_dataflows(
         self,
         product: BaseProduct,
-        resolution: Resolution,
-        raw_level: DataRawLevel,
+        unit_resolution: Resolution,
         start_date: datetime.date,
         end_date: datetime.date,
+        data_origin: str='',
     ) -> list[DataFlow]:
+        assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
         dataflows: list[DataFlow] = []
         # NOTE: one data model per date
         for date in pd.date_range(start_date, end_date).date:
-            data_model = self.create_data_model(product, resolution, raw_level, date)
+            data_model = self.create_data_model(product, unit_resolution, date, data_origin=data_origin)
             # create a dataflow that schedules _execute_download()
-            dataflow: DataFlow = super().extract('download', data_model)
+            dataflow = self._extract_download(data_model)
             dataflows.append(dataflow)
         return dataflows
 
@@ -124,17 +119,41 @@ class BybitFeed(CryptoMarketDataFeed):
         rollback_period: str="1d",
         start_date: str="",
         end_date: str="",
-        raw_level: Literal['cleaned', 'normalized', 'original']='normalized',
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        data_origin: str='',
         from_storage: tSTORAGE | None=None,
         **product_specs
-    ) -> tDataFrame | None:
+    ) -> tDataFrame | None | BybitFeed:
         return super().get_historical_data(
-            product=product,
-            resolution=resolution,
+            product,
+            resolution,
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            raw_level=raw_level,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            data_origin=data_origin,
             from_storage=from_storage,
             **product_specs
         )
+        
+    # TODO
+    def stream(self) -> BybitFeed:
+        raise NotImplementedError(f'{self.name} stream() is not implemented')
+        return self
+    
+    # TODO
+    def _execute_stream(
+        self, 
+        data_model: MarketDataModel, 
+        bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
+    ):
+        if self._use_bytewax:
+            if bytewax_source is None:
+                # TODO: derive bytewax source based on the feed
+                pass
+            return bytewax_source
+        else:
+            # TODO: start streaming
+            pass

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 import datetime
 from abc import abstractmethod
+from functools import wraps
 
 import pandas as pd
 import narwhals as nw
@@ -26,6 +27,24 @@ from pfeed.utils.utils import lambda_with_name
 
 
 tDATA_TYPE = Literal['quote_l3', 'quote_l2', 'quote_l1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
+
+
+def validate_product(func: Callable):
+    @wraps(func)
+    def wrapper(self, product: str, *args, **kwargs):
+        # use regex to validate product string format, it must be like "XXX_YYY_ZZZ"
+        # where the maximum length of each part is 10
+        import re
+        max_len = 10
+        pattern = r'^[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}$'
+        if not re.match(pattern, product):
+            raise ValueError(
+                f'Invalid product format: {product}. '
+                'Product must be in format "XXX_YYY_ZZZ" where each part contains only letters '
+                f'and maximum {max_len} characters long.'
+            )
+        return func(self, product, *args, **kwargs)
+    return wrapper
 
 
 class MarketDataFeed(BaseFeed):
@@ -57,12 +76,13 @@ class MarketDataFeed(BaseFeed):
             end_date=end_date or start_date,
         )
     
+    @validate_product
     @clear_subflows
     def download(
         self,
         product: str,
-        resolution: Resolution | str | tDATA_TYPE,
         symbol: str='',
+        resolution: Resolution | str | tDATA_TYPE='1m',
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
@@ -116,13 +136,13 @@ class MarketDataFeed(BaseFeed):
             self._print_download_msg(resolution, start_date, end_date, data_layer)
         self._create_download_dataflows(
             product,
-            adjusted_resolution,
+            resolution,
             start_date,
             end_date,
             data_origin=data_origin,
         )
         if auto_transform:
-            self._add_default_transformations_to_download(resolution, product)
+            self._add_default_transformations_to_download(adjusted_resolution, resolution, product)
         if not self._pipeline_mode:
             self.load(to_storage=to_storage, data_layer=data_layer, data_domain=data_domain or self.DATA_DOMAIN)
             completed_dataflows, failed_dataflows = self.run()
@@ -146,13 +166,23 @@ class MarketDataFeed(BaseFeed):
     ) -> list[DataFlow]:
         raise NotImplementedError
     
-    def _add_default_transformations_to_download(self, target_resolution: Resolution, product: BaseProduct):
+    def _add_default_transformations_to_download(
+        self, 
+        data_resolution: Resolution,
+        target_resolution: Resolution, 
+        product: BaseProduct
+    ):
+        '''
+        Args:
+            data_resolution: The resolution of the downloaded data.
+            target_resolution: The resolution of the data to be stored.
+        '''
         self.transform(
             etl.convert_to_pandas_df,
             self._normalize_raw_data,
             lambda_with_name(
                 'standardize_columns',
-                lambda df: etl.standardize_columns(df, target_resolution, product.name, symbol=product.symbol),
+                lambda df: etl.standardize_columns(df, data_resolution, product.name, symbol=product.symbol),
             ),
             lambda_with_name(
                 'resample_data_if_necessary', 
@@ -165,6 +195,7 @@ class MarketDataFeed(BaseFeed):
             )
         )
 
+    @validate_product
     @clear_subflows
     def retrieve(
         self,
@@ -329,6 +360,7 @@ class MarketDataFeed(BaseFeed):
             )
         )
     
+    @validate_product
     def get_historical_data(
         self,
         product: str,
@@ -368,17 +400,11 @@ class MarketDataFeed(BaseFeed):
         if missing_dates:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
             if self.source.access_type != DataAccessType.PAID_BY_USAGE:
-                if self.config.print_msg:
-                    print_warning('''
-                    Hint:
-                        get_historical_data() will first try to load data from storages (e.g. cache, local, minio). 
-                        If no data is found, it will download the missing data from the data source and save it to cache.
-                        Consider calling download() to download data to your desired storage before calling get_historical_data().
-                    ''')
                 dfs_from_source_per_date = self.download(
                     product,
-                    adjusted_resolution,
                     symbol=symbol,
+                    resolution=adjusted_resolution,
+                    rollback_period='',
                     start_date=str(missing_dates[0]),
                     end_date=str(missing_dates[-1]),
                     data_origin=data_origin,

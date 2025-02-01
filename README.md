@@ -63,7 +63,7 @@ PFeed (/piː fiːd/) is the data engine for algorithmic trading, serving as a br
 > For more installation options, please refer to the [documentation](https://pfeed-docs.pfund.ai/installation).
 ```bash
 # [RECOMMENDED]: Core Features, including Minio, Deltalake, Ray, etc.
-pip install -U "pfeed[core]"
+pip install -U "pfeed[core,prefect,bytewax]"
 
 # add your desired data sources, e.g. databento, polygon, etc.
 pip install -U "pfeed[core,databento,polygon]"

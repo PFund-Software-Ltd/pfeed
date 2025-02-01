@@ -17,5 +17,5 @@ class LocalStorage(BaseStorage):
     ):
         super().__init__(name=name, data_layer=data_layer, data_domain=data_domain, use_deltalake=use_deltalake, **kwargs)
 
-    def get_file_system(self) -> pa_fs.LocalFileSystem:
+    def get_filesystem(self) -> pa_fs.LocalFileSystem:
         return pa_fs.LocalFileSystem()

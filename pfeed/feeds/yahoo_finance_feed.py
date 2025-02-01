@@ -80,12 +80,12 @@ class YahooFinanceFeed(MarketDataFeed):
         df = df.rename(columns=RENAMING_COLS)
         return df
     
-    def _prepare_yfinance_kwargs(self, yfinance_kwargs: dict | None) -> dict:
+    def _check_yfinance_kwargs(self, yfinance_kwargs: dict | None) -> dict:
         if self._yfinance_kwargs is not None:
             return self._yfinance_kwargs
         yfinance_kwargs = yfinance_kwargs or {}
-        assert "interval" not in yfinance_kwargs, "`interval` duplicates with `resolution`, please remove it"
-        assert "period" not in yfinance_kwargs, "`period` duplicates with `rollback_period`, please remove it"
+        assert "interval" not in yfinance_kwargs, "`interval` duplicates with pfeed's `resolution`, please remove it"
+        assert "period" not in yfinance_kwargs, "`period` duplicates with pfeed's `rollback_period`, please remove it"
         return yfinance_kwargs
     
     # TODO
@@ -108,6 +108,7 @@ class YahooFinanceFeed(MarketDataFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         to_storage: tSTORAGE='local',
+        auto_transform: bool=True,
         yfinance_kwargs: dict | None=None,
         **product_specs
     ) -> YahooFinanceFeed:
@@ -132,10 +133,10 @@ class YahooFinanceFeed(MarketDataFeed):
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         '''
-        self._yfinance_kwargs = self._prepare_yfinance_kwargs(yfinance_kwargs)
+        self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
         # makes rollback_period == 'max' more specific for different data types
         if rollback_period == 'max':
-            dtype = MarketDataType[resolution.timeframe.upper()]
+            dtype = MarketDataType[str(resolution.timeframe)]
             if dtype == MarketDataType.HOUR:
                 rollback_period = '2y'  # max is 2 years for hourly data
             elif dtype == MarketDataType.MINUTE:
@@ -150,6 +151,7 @@ class YahooFinanceFeed(MarketDataFeed):
             data_layer=data_layer,
             data_domain=data_domain,
             to_storage=to_storage,
+            auto_transform=auto_transform,
             **product_specs
         )
     
@@ -187,6 +189,8 @@ class YahooFinanceFeed(MarketDataFeed):
         df = None
         num_retries = 5
         original_start_date = data_model.start_date
+        # NOTE: yfinance's end_date is not inclusive, so we need to add 1 day to the end_date
+        yfinance_end_date = data_model.end_date + datetime.timedelta(days=1)
         while df is None or df.empty and num_retries:
             num_retries -= 1
             self.logger.debug(f'downloading {data_model}')
@@ -194,10 +198,10 @@ class YahooFinanceFeed(MarketDataFeed):
             df: pd.DataFrame | None = ticker.history(
                 interval=eresolution,
                 start=str(data_model.start_date),
-                end=str(data_model.end_date),
+                end=str(yfinance_end_date),
                 **self._yfinance_kwargs
             )
-            # for some unknown reason, yfinance sometimes returns None even start_date and end_date are within the valid range
+            # REVIEW: for some unknown reason, yfinance sometimes returns None even start_date and end_date are within a valid range
             # so we need to increment start_date by 1 day to shorten the date range and try again
             if df is None or df.empty:
                 closer_start_date = data_model.start_date + datetime.timedelta(days=1)
@@ -221,8 +225,8 @@ class YahooFinanceFeed(MarketDataFeed):
     def get_historical_data(
         self,
         product: str,
-        resolution: Resolution | str = "1d",
         symbol: str='',
+        resolution: Resolution | str = "1day",
         rollback_period: str | Literal["ytd", "max"] = "max",
         start_date: str = "",
         end_date: str = "",
@@ -236,6 +240,8 @@ class YahooFinanceFeed(MarketDataFeed):
         """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
         Args:
             product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP
+            symbol: symbol that will be used by yfinance's Ticker.history().
+                If not specified, it will be derived from `product`, which might be inaccurate.
             rollback_period: Data resolution or 'ytd' or 'max'
                 Period to rollback from today, only used when `start_date` is not specified.
                 Default is '1M' = 1 month.
@@ -255,7 +261,7 @@ class YahooFinanceFeed(MarketDataFeed):
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         """
-        self._yfinance_kwargs = self._prepare_yfinance_kwargs(yfinance_kwargs)
+        self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
         df = super().get_historical_data(
             product,
             resolution,

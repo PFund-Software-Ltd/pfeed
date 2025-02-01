@@ -54,7 +54,7 @@ class BaseStorage(ABC):
         return instance
     
     @abstractmethod
-    def get_file_system(self) -> pa_fs.FileSystem:
+    def get_filesystem(self) -> pa_fs.FileSystem:
         pass
     
     def get_storage_options(self) -> dict:
@@ -75,7 +75,7 @@ class BaseStorage(ABC):
         from pfeed.data_handlers import MarketDataHandler
         data_handler_configs = {
             'data_path': str(self.data_path),
-            'file_system': self.get_file_system(),
+            'filesystem': self.get_filesystem(),
             'storage_options': self.get_storage_options(),
         }
         if isinstance(self.data_model, MarketDataModel):
@@ -102,14 +102,20 @@ class BaseStorage(ABC):
 
     @property
     def filename(self) -> str | None:
-        return None if self.use_deltalake else self.data_model.full_filename
+        return None if self.use_deltalake else self.data_model.filename
     
     @property
     def file_path(self) -> Path | str | None:
         if isinstance(self.data_path, Path):
-            return self.data_path / self.storage_path / self.filename
+            file_path = self.data_path / self.storage_path
+            if not self.use_deltalake:
+                file_path /= self.filename
+            return file_path
         elif isinstance(self.data_path, str):
-            return self.data_path + '/' + str(self.storage_path) + '/' + self.filename
+            file_path = self.data_path + '/' + str(self.storage_path)
+            if not self.use_deltalake:
+                file_path += '/' + self.filename
+            return file_path
         else:
             raise ValueError(f'{type(self.data_path)} is not supported')
 

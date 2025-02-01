@@ -15,7 +15,7 @@ name = DataTool.polars
 def read_parquet(
     paths_or_obj: list[str] | str | bytes, 
     *args, 
-    file_system: pa_fs.FileSystem | None=None,  # for consistency with other data tools
+    filesystem: pa_fs.FileSystem | None=None,  # for consistency with other data tools
     storage_options: dict[str, Any] | None=None,
     **kwargs
 ) -> pl.DataFrame | pl.LazyFrame:

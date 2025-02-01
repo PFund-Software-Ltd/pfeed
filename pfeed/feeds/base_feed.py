@@ -80,12 +80,6 @@ class BaseFeed(ABC):
         if not is_loggers_set_up:
             set_up_loggers(self.config.log_path, self.config.logging_config_file_path, user_logging_config=self.config.logging_config)
         self.logger = logging.getLogger(self.name.lower() + '_data')
-
-        if self.config.print_msg:
-            print(f'''Hint:
-                You can run command "pfeed config set --data-path {{your_path}}" to set your data path that stores downloaded data.
-                The current data path is: {self.config.data_path}
-            ''')
             
     @staticmethod
     @abstractmethod
@@ -387,11 +381,6 @@ class BaseFeed(ABC):
         
         
         if self._use_ray:
-            if self.config.print_msg:
-                print('''Note:
-                If Ray appears to be running sequentially rather than in parallel, it may be due to insufficient network bandwidth for parallel downloads.
-                ''')
-            
             import atexit
             import ray
             from ray.util.queue import Queue
@@ -480,7 +469,7 @@ class BaseFeed(ABC):
         if failed_dataflows:
             retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type == 'retrieve']
             if retrieve_dataflows:
-                self.logger.debug(f'{self.name} failed dataflows (op_type=retrieve): {[str(dataflow) for dataflow in retrieve_dataflows]}')
+                self.logger.debug(f'{self.name} failed dataflows: {[str(dataflow) for dataflow in retrieve_dataflows]}')
             non_retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type != 'retrieve']
             if non_retrieve_dataflows:
                 self.logger.warning(

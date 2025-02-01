@@ -21,3 +21,8 @@ data: dict = feed.get_realtime_data(...)
 ```{code-block} python
 pe.stream(...)
 ```
+
+
+```{hint}
+You can run the command "**pfeed config set --data-path {your_path}**" to specify the path where downloaded data will be stored.
+```

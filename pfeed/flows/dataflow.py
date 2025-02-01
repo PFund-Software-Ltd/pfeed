@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 import logging
 from enum import StrEnum
 
-import pandas as pd
 from prefect import flow, task
 from prefect.logging import get_run_logger
 try:
@@ -24,6 +23,8 @@ except ImportError:
     class BytewaxStream:
         pass
     bytewax_op = None
+
+from pfeed.typing.core import is_dataframe
 
 
 class FlowType(StrEnum):
@@ -70,13 +71,14 @@ class DataFlow:
         return self._faucet.data_model
     
     def __str__(self):
-        return f'{self.name}'
+        return f'{self.name}.{self.op_type}'
     
     def is_streaming(self) -> bool:
         return self._faucet._streaming
     
-    def run(self, flow_type: FlowType=FlowType.native) -> tData | None:
-        if (data := self._extract(flow_type=flow_type)) is not None:
+    def run(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxDataFlow:
+        data: tData | None | BytewaxStream = self._extract(flow_type=flow_type)
+        if (data is not None) and (not is_dataframe(data) or not data.empty):
             data: tData | BytewaxStream = self._transform(data, flow_type=flow_type)
             self._load(data, flow_type=flow_type)
             # if use bytewax, return bytewax dataflow instead
@@ -84,7 +86,9 @@ class DataFlow:
                 self.output = self._bytewax_dataflow
             else:
                 self.output = data
-            return data
+            return self.output
+        else:
+            return None
     
     def _extract(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxStream:
         data = None
@@ -93,7 +97,7 @@ class DataFlow:
             extract = task(self._faucet.open) if flow_type == FlowType.prefect else self._faucet.open
             data: tData | None = extract()
             if data is not None:
-                self.logger.info(f"extracted {self.data_model} data by '{self._faucet.name}'")
+                self.logger.debug(f"extracted {self.data_model} data by '{self._faucet.name}'")
             else:
                 self.logger.debug(f'failed to extract {self.data_model} data by {self._faucet.name}')
         else:
@@ -122,10 +126,7 @@ class DataFlow:
             if not self.is_streaming():
                 transform = task(func) if flow_type == FlowType.prefect else func
                 data: tData = transform(data)
-                self.logger.info(f"transformed {self.data_model} data by '{func.__name__}'")
-                if isinstance(data, pd.DataFrame) and data.empty:
-                    self.logger.warning(f'dataframe is empty, skipping transformations for {self.data_model}')
-                    break
+                self.logger.debug(f"transformed {self.data_model} data by '{func.__name__}'")
             else:
                 if flow_type == FlowType.bytewax:
                     # REVIEW: only supports passing in stream to the user's function
@@ -144,9 +145,9 @@ class DataFlow:
             load = task(self._storage.write_data) if flow_type == FlowType.prefect else self._storage.write_data
             success = load(data)
             if not success:
-                self.logger.warning(f'failed to load {self._faucet.name} data to storage')
+                self.logger.warning(f'failed to load {self.data_model} data to storage')
             else:
-                self.logger.info(f'loaded {self._faucet.name} data to {self._storage.name}')
+                self.logger.info(f'loaded {self.data_model} data to {self._storage.name}')
         else:
             stream = data
             if flow_type == FlowType.bytewax:

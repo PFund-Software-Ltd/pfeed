@@ -9,7 +9,7 @@ else
 fi
 
 # install python dependencies so that jupyter notebooks can be executed
-pip install jupyter-book "pfeed[all]"
+pip install jupyter-book "pfeed[core,prefect,bytewax]"
 
 # Clear Cache, Build HTML Assets and Execute Notebooks
 cd docs/

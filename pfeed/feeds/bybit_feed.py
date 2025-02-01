@@ -61,6 +61,7 @@ class BybitFeed(CryptoMarketDataFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         to_storage: tSTORAGE='local',
+        auto_transform: bool=True,
         **product_specs
     ) -> BybitFeed:
         '''
@@ -85,6 +86,7 @@ class BybitFeed(CryptoMarketDataFeed):
             data_layer=data_layer,
             data_domain=data_domain,
             to_storage=to_storage,
+            auto_transform=auto_transform,
             **product_specs
         )
     

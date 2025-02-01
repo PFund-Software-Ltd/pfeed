@@ -94,7 +94,6 @@ def resample_data(df: IntoFrame, resolution: str | Resolution) -> pd.DataFrame:
         The resampled dataframe.
     '''
     df = convert_to_pandas_df(df)
-    
     if isinstance(resolution, str):
         resolution = Resolution(resolution)
         
@@ -141,7 +140,7 @@ def resample_data(df: IntoFrame, resolution: str | Resolution) -> pd.DataFrame:
         df
         .set_index('ts')
         .resample(
-            eresolution, 
+            eresolution,
             label='left',
             closed='left',  # closed is only default to be 'right' when resolution is week
         )

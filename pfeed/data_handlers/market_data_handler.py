@@ -18,7 +18,7 @@ class MarketDataHandler(BaseDataHandler):
         self, 
         data_model: MarketDataModel,
         data_path: str,
-        file_system: pa_fs.FileSystem,
+        filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
         use_deltalake: bool = False,
     ):
@@ -29,7 +29,7 @@ class MarketDataHandler(BaseDataHandler):
         '''
         super().__init__(data_model, data_path)
         self._io = TabularIO(
-            file_system,
+            filesystem,
             compression=data_model.compression,
             storage_options=storage_options,
             use_deltalake=use_deltalake,

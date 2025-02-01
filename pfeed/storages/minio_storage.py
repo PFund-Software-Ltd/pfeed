@@ -43,7 +43,7 @@ class MinioStorage(BaseStorage):
         if not self.minio.bucket_exists(self.BUCKET_NAME):
             self.minio.make_bucket(self.BUCKET_NAME)
     
-    def get_file_system(self) -> pa_fs.S3FileSystem:
+    def get_filesystem(self) -> pa_fs.S3FileSystem:
         return pa_fs.S3FileSystem(
             endpoint_override=self.endpoint,
             access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),

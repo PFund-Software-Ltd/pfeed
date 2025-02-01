@@ -14,7 +14,7 @@
 :sync: tab1
 ```bash
 # [RECOMMENDED]: Core Features, including Minio, Deltalake, Ray, etc.
-pip install -U "pfeed[core]"
+pip install -U "pfeed[core,prefect,bytewax]"
 ```
 ```bash
 # Minimal Features

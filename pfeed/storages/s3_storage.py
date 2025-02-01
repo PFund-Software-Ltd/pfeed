@@ -16,7 +16,7 @@ class S3Storage(MinioStorage):
         else:
             raise Exception("S3_ENDPOINT is not set in environment variables")
     
-    def get_file_system(self) -> pa_fs.S3FileSystem:
+    def get_filesystem(self) -> pa_fs.S3FileSystem:
         return pa_fs.S3FileSystem(
             endpoint_override=os.getenv('S3_ENDPOINT'),
             access_key=os.getenv("S3_ACCESS_KEY"),

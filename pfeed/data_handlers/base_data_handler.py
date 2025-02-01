@@ -27,4 +27,4 @@ class BaseDataHandler(ABC):
 
     def _create_file_path(self, data_model: BaseDataModel | None=None) -> str:
         data_model = data_model or self._data_model
-        return self._data_path + '/' + str(data_model.storage_path) + '/' + data_model.full_filename
+        return self._data_path + '/' + str(data_model.storage_path) + '/' + data_model.filename

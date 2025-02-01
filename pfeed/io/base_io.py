@@ -11,21 +11,21 @@ import pyarrow.fs as pa_fs
 
 
 class BaseIO(ABC):
-    def __init__(self, file_system: pa_fs.FileSystem, compression: str='gzip', storage_options: dict | None=None):
-        self._file_system = file_system
+    def __init__(self, filesystem: pa_fs.FileSystem, compression: str='gzip', storage_options: dict | None=None):
+        self._filesystem = filesystem
         self._compression = compression
         self._storage_options = storage_options
     
     @property
     def is_local_fs(self) -> bool:
-        return isinstance(self._file_system, pa_fs.LocalFileSystem)
+        return isinstance(self._filesystem, pa_fs.LocalFileSystem)
     
     def _mkdir(self, file_path: str):
         if self.is_local_fs:
             Path(file_path).parent.mkdir(parents=True, exist_ok=True)
         
     def _exists(self, file_path: str) -> bool:
-        file_info = self._file_system.get_file_info(file_path)
+        file_info = self._filesystem.get_file_info(file_path)
         return file_info.type == pa_fs.FileType.File
         
     @abstractmethod

@@ -52,10 +52,6 @@ class BaseDataModel(BaseModel, ABC):
     def update_metadata(self, key: str, value: Any) -> None:
         self.metadata[key] = value
 
-    @property
-    def full_filename(self) -> str:
-        return self.filename + self.file_extension
-    
     def __str__(self):
         if self.is_data_origin_effective():
             return f'{self.source.name.value}:{self.data_origin}'

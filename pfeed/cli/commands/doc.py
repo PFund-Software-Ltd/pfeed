@@ -6,6 +6,9 @@ import click
 from pfeed.const.paths import MAIN_PATH
 
 
+PFEED_DOCS_URL = 'https://pfeed-docs.pfund.ai'
+
+
 def _execute_notebooks(docs_path: str):
     """Clear outputs and execute notebooks"""
     find_ipynb_cmd = ["find", docs_path, "-path", f"{docs_path}/_build", "-prune", "-o", "-name", "*.ipynb", "-print"]
@@ -32,7 +35,7 @@ def doc(build, start, execute):
         if execute:
             raise click.UsageError("You must specify either --build or --start.")
         else:
-            webbrowser.open('https://pfeed-docs.pfund.ai')
+            webbrowser.open(PFEED_DOCS_URL)
             return
             
     docs_path = str(MAIN_PATH / 'docs')

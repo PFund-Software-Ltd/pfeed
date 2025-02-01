@@ -17,7 +17,7 @@ name = DataTool.pandas
 def read_parquet(
     paths_or_obj: list[str] | str | bytes, 
     *args, 
-    file_system: pa_fs.FileSystem | None=None, 
+    filesystem: pa_fs.FileSystem | None=None, 
     storage_options: dict[str, Any] | None=None,
     **kwargs
 ) -> pd.DataFrame:
@@ -30,7 +30,7 @@ def read_parquet(
         return pd.read_parquet(
             paths, 
             *args, 
-            file_system=file_system, 
+            filesystem=filesystem, 
             storage_options=storage_options, 
             **kwargs
         )

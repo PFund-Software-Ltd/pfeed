@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from bytewax.dataflow import Stream as BytewaxStream
     from pfund.products.product_base import BaseProduct
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing.core import tData, tDataFrame
+    from pfeed.typing.core import tData
     from pfeed.typing.literals import tSTORAGE, tDATA_TOOL, tDATA_LAYER
     from pfeed.const.enums import DataSource
     from pfeed.sources.base_source import BaseSource
@@ -29,7 +29,7 @@ from pfeed.flows.faucet import Faucet
 from pfeed.config import get_config
 from pfeed.const.enums import DataTool, DataStorage
 from pfeed.flows.dataflow import DataFlow
-from pfeed.utils.utils import lambda_with_name, rollback_date_range
+from pfeed.utils.utils import rollback_date_range
 
 
 __all__ = ["BaseFeed"]
@@ -403,7 +403,9 @@ class BaseFeed(ABC):
                     if not self.logger.handlers:
                         self.logger.addHandler(QueueHandler(log_queue))
                         self.logger.setLevel(logging.DEBUG)
-                    
+                        # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
+                        self.logger.propagate = False
+                        
                     if self._use_prefect:
                         res: tData | None = dataflow()
                     elif self._use_bytewax:

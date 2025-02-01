@@ -180,7 +180,7 @@ def convert_to_pandas_df(data: tData) -> pd.DataFrame:
         raise ValueError(f'{type(data)=}')
 
 
-def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
+def convert_to_user_df(df: tDataFrame, data_tool: DataTool | tDATA_TOOL) -> tDataFrame:
     '''Converts the input dataframe to the user's desired data tool.
     Args:
         df: The input dataframe to be converted.
@@ -190,12 +190,21 @@ def convert_to_user_df(df: pd.DataFrame, data_tool: DataTool) -> tDataFrame:
         The converted dataframe.
     '''
     data_tool = data_tool.lower()
-    if data_tool == DataTool.pandas:
+    # if the input dataframe is already in the desired data tool, return it directly
+    if isinstance(df, pd.DataFrame) and data_tool == DataTool.pandas:
         return df
+    elif isinstance(df, (pl.DataFrame, pl.LazyFrame)) and data_tool == DataTool.polars:
+        return df.lazy() if isinstance(df, pl.DataFrame) else df
+    elif isinstance(df, dd.DataFrame) and data_tool == DataTool.dask:
+        return df
+
+    nw_df = nw.from_native(df)
+    if data_tool == DataTool.pandas:
+        return nw_df.to_pandas()
     elif data_tool == DataTool.polars:
-        return pl.from_pandas(df).lazy()
+        return nw_df.to_polars().lazy()
     elif data_tool == DataTool.dask:
-        return dd.from_pandas(df, npartitions=1)
+        return dd.from_pandas(nw_df.to_pandas(), npartitions=1)
     # elif data_tool == DataTool.spark:
     #     spark = SparkSession.builder.getOrCreate()
     #     return spark.createDataFrame(df)

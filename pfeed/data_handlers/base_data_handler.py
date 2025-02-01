@@ -21,6 +21,10 @@ class BaseDataHandler(ABC):
     def read(self, data_tool: tDATA_TOOL='pandas', **kwargs) -> tuple[tData | None, dict]:
         pass
 
+    @abstractmethod
+    def _validate_schema(self, data: tData) -> tData:
+        pass
+
     def _create_file_path(self, data_model: BaseDataModel | None=None) -> str:
         data_model = data_model or self._data_model
         return self._data_path + '/' + str(data_model.storage_path) + '/' + data_model.full_filename

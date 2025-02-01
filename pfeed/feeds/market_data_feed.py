@@ -57,19 +57,6 @@ class MarketDataFeed(BaseFeed):
             end_date=end_date or start_date,
         )
     
-    def _validate_schema(self, df: pd.DataFrame, data_model: MarketDataModel) -> pd.DataFrame:
-        from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema
-        resolution = data_model.resolution
-        if resolution.is_quote():
-            raise NotImplementedError('quote data is not supported yet')
-        elif resolution.is_tick():
-            schema = TickDataSchema
-        elif resolution.is_bar():
-            schema = BarDataSchema
-        else:
-            schema = MarketDataSchema
-        return schema.validate(df)
-    
     @clear_subflows
     def download(
         self,
@@ -376,7 +363,8 @@ class MarketDataFeed(BaseFeed):
         missing_dates = [date for date in dfs_from_storage_per_date if dfs_from_storage_per_date[date] is None]
         dfs_from_storage = [df for df in dfs_from_storage_per_date.values() if df is not None]
 
-        dfs_from_source = []
+
+        dfs_from_source: list[tDataFrame] = []
         if missing_dates:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
             if self.source.access_type != DataAccessType.PAID_BY_USAGE:
@@ -405,7 +393,8 @@ class MarketDataFeed(BaseFeed):
 
         if missing_dates:
             self.logger.warning(f'output data is INCOMPLETE, there are missing data when getting historical {resolution} data for {product}, missing dates: {missing_dates}')
-        
+            
+
         dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
         df: Frame | None = nw.concat(dfs) if dfs else None
         if df is not None:
@@ -413,10 +402,10 @@ class MarketDataFeed(BaseFeed):
             is_resample_required = resolution < adjusted_resolution
             if is_resample_required:
                 df: pd.DataFrame = etl.resample_data(df, resolution)
-                df: tDataFrame = etl.convert_to_user_df(df, self.data_tool.name)
                 self.logger.debug(f'resampled {product.name} {adjusted_resolution} data to {resolution}')
             else:
                 df: tDataFrame = df.to_native()
+            df: tDataFrame = etl.convert_to_user_df(df, self.data_tool.name)
         return df
     
     # TODO

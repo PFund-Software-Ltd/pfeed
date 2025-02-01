@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
+    from pfund.datas.resolution import Resolution
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tDATA_TOOL
     from pfeed.data_models.market_data_model import MarketDataModel
@@ -33,11 +34,25 @@ class MarketDataHandler(BaseDataHandler):
             storage_options=storage_options,
             use_deltalake=use_deltalake,
         )
+    
+    def _validate_schema(self, data: pd.DataFrame) -> pd.DataFrame:
+        from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema
+        resolution: Resolution = self._data_model.resolution
+        if resolution.is_quote():
+            raise NotImplementedError('quote data is not supported yet')
+        elif resolution.is_tick():
+            schema = TickDataSchema
+        elif resolution.is_bar():
+            schema = BarDataSchema
+        else:
+            schema = MarketDataSchema
+        return schema.validate(data)
         
     def write(self, data: tDataFrame):
         from pfeed.etl import convert_to_pandas_df
         # split data with a date range into chunks per date
         data: pd.DataFrame = convert_to_pandas_df(data)
+        data = self._validate_schema(data)
         data_chunks_per_date = {} if data.empty else {date: group for date, group in data.groupby(data['ts'].dt.date)}
         for date in self._data_model.dates:
             data_model_copy: MarketDataModel = self._data_model.model_copy(deep=False)

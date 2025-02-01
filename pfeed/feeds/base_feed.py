@@ -98,10 +98,6 @@ class BaseFeed(ABC):
         pass
     
     @abstractmethod
-    def _validate_schema(self, df: pd.DataFrame, data_model: BaseDataModel) -> pd.DataFrame:
-        pass
-
-    @abstractmethod
     def create_data_model(self, *args, **kwargs) -> BaseDataModel:
         pass
 
@@ -123,12 +119,6 @@ class BaseFeed(ABC):
                 It is recommended to use MinIO as your data storage solution.
                 You can do that by setting `to_storage='minio'`.
             ''')
-    
-    def _assert_data_quality(self, df: pd.DataFrame, data_model: BaseDataModel) -> pd.DataFrame:
-        '''Asserts that the data conforms to pfeed's internal standards before loading it into storage.'''
-        from pfeed.etl import convert_to_pandas_df
-        df = convert_to_pandas_df(df)
-        return self._validate_schema(df, data_model)
 
     def _init_ray(self, **kwargs):
         import ray
@@ -353,11 +343,6 @@ class BaseFeed(ABC):
                 useful for grouping data
             metadata: custom metadata to be added to the data
         '''
-        def _create_assert_data_quality_function(_data_model: BaseDataModel):
-            return lambda_with_name(
-                '_assert_data_quality',
-                lambda df: self._assert_data_quality(df, _data_model)
-            )
         if self._use_ray:
             assert to_storage.lower() != 'duckdb', 'DuckDB is not thread-safe, cannot be used with Ray'
         Storage = DataStorage[to_storage.upper()].storage_class
@@ -366,10 +351,6 @@ class BaseFeed(ABC):
             data_model: BaseDataModel = dataflow.data_model
             if metadata:
                 data_model.add_metadata(metadata)
-            # assert data standards before loading into storage
-            # NOTE: remember when looping, if you pass in e.g. dataflow to lambda dataflow: ..., due to python lambda's late binding, you are passing in the last dataflow object to all lambdas
-            # so this is wrong: dataflow.add_transformations(lambda df: self._assert_data_quality(df, dataflow.data_model)) <- dataflow object is always the last one in the loop
-            dataflow.add_transformations(_create_assert_data_quality_function(data_model))
             storage: BaseStorage = Storage.from_data_model(
                 data_model,
                 data_layer,

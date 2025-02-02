@@ -25,6 +25,8 @@
 [Prefect]: https://www.prefect.io/
 [Bytewax]: https://www.bytewax.io
 
+> **This library is NOT ready for use, please wait for 0.1.0 release.**
+
 ## Problem
 Starting algo-trading requires reliable and clean data. However, the time-consuming and mundane tasks of data cleaning and storage often discourage traders from embarking on their algo-trading journey.
 

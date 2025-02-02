@@ -91,8 +91,9 @@ class MarketDataFeed(BaseFeed):
         data_domain: str='',
         to_storage: tSTORAGE='local',
         auto_transform: bool=True,
+        concat_output: bool=True,
         **product_specs
-    ) -> dict[datetime.date, tDataFrame | None] | MarketDataFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketDataFeed:
         '''
         Download historical data from data source.
         
@@ -121,8 +122,10 @@ class MarketDataFeed(BaseFeed):
                 - resampling data to the target resolution
                 - filtering non-standard columns if resampling is required
                 since during resampling, non-standard columns cannot be resampled/interpreted
+            concat_output: Whether to concatenate the data from different dates.
+                If True, the data from different dates will be concatenated into a single DataFrame.
+                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
         '''
-        self._print_minio_warning(to_storage)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
@@ -151,7 +154,16 @@ class MarketDataFeed(BaseFeed):
             for dataflow in completed_dataflows + failed_dataflows:
                 date = dataflow.data_model.date
                 dfs[date] = dataflow.output if date not in missing_dates else None
-            return dfs
+            if concat_output:
+                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
+                if dfs:
+                    df: Frame = nw.concat(dfs)
+                    df: tDataFrame = nw.to_native(df)
+                else:
+                    df = None
+                return df
+            else:
+                return dfs
         else:
             return self
     
@@ -210,8 +222,9 @@ class MarketDataFeed(BaseFeed):
         from_storage: tSTORAGE | None=None,
         auto_transform: bool=True,
         storage_configs: dict | None=None,
+        concat_output: bool=True,
         **product_specs
-    ) -> dict[datetime.date, tDataFrame | None] | MarketDataFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketDataFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -242,6 +255,9 @@ class MarketDataFeed(BaseFeed):
             auto_transform: Whether to apply default transformations to the data.
                 Default transformations include:
                 - resampling data to the target resolution
+            concat_output: Whether to concatenate the data from different dates.
+                If True, the data from different dates will be concatenated into a single DataFrame.
+                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
                 get_historical_data(
@@ -281,7 +297,16 @@ class MarketDataFeed(BaseFeed):
             for dataflow in completed_dataflows + failed_dataflows:
                 date = dataflow.data_model.date
                 dfs[date] = dataflow.output if date not in missing_dates else None
-            return dfs
+            if concat_output:
+                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
+                if dfs:
+                    df: Frame = nw.concat(dfs)
+                    df: tDataFrame = nw.to_native(df)
+                else:
+                    df = None
+                return df
+            else:
+                return dfs
         else:
             return self
     
@@ -390,6 +415,7 @@ class MarketDataFeed(BaseFeed):
             data_layer=data_layer,
             data_domain=data_domain,
             from_storage=from_storage,
+            concat_output=False,
             **product_specs
         )
         missing_dates = [date for date in dfs_from_storage_per_date if dfs_from_storage_per_date[date] is None]
@@ -411,6 +437,7 @@ class MarketDataFeed(BaseFeed):
                     data_layer=data_layer,
                     data_domain=data_domain,
                     to_storage='cache',
+                    concat_output=False,
                     **product_specs
                 )
 

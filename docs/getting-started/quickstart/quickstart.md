@@ -1,17 +1,24 @@
 [MinIO]: https://min.io/
+[Delta Lake]: https://delta-io.github.io/delta-rs/
 
 # Quickstart
 
-There are mainly 4 ways to interact with data in pfeed:
-1. `get_historical_data()` gets historical data from local storage (if exists) or remote data sources and returns a cleaned DataFrame/LazyFrame.
+There are mainly 6 ways to interact with data in pfeed:
+1. `get_historical_data()` gets historical data from local storage (if exists) or downloads from remote data sources and stores in cache, then returns a cleaned DataFrame/LazyFrame.
 ```{code-block} python
 import pfeed as pe
-feed = pe.BybitFeed(data_tool='pandas')
+feed = pe.BybitFeed(data_tool='polars', use_ray=True)
 df = feed.get_historical_data('BTC_USDT_PERP', rollback_period='1w', resolution='1d')
 ```
-2. `download_historical_data()` or `download()` loads the downloaded data into your local machine, local data lake [MinIO], or the cloud.
+2. `download()` downloads data into your local machine or the cloud, supports [Delta Lake] format.
 ```{code-block} python
-pe.download('bybit', products=['BTC_USDT_PERP'], dtypes=['minute'], start_date='2024-01-01', end_date='2024-01-03', use_ray=True, use_minio=False)
+feed.download(
+    product='BTC_USDT_PERP', 
+    resolution='minute', 
+    start_date='2025-01-01', 
+    end_date='2025-01-03', 
+    to_storage='local',  # or 'minio', if MinIO is running
+)
 ```
 3. 🚧 `get_realtime_data()` gets real-time data by calling the broker/exchange's API.
 ```{code-block} python

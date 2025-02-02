@@ -106,14 +106,6 @@ class BaseFeed(ABC):
     def is_pipeline(self) -> bool:
         return self._pipeline_mode
 
-    def _print_minio_warning(self, to_storage: tSTORAGE):
-        if self.config.print_msg and to_storage.lower() not in ['minio', 'cache']:
-            print_warning('''
-                pfeed is designed to work natively with MinIO as a data lake.
-                It is recommended to use MinIO as your data storage solution.
-                You can do that by setting `to_storage='minio'`.
-            ''')
-
     def _init_ray(self, **kwargs):
         import ray
         if not ray.is_initialized():

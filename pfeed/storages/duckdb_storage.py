@@ -22,7 +22,7 @@ from pandas.api.types import is_datetime64_ns_dtype
 import duckdb
 
 from pfund import print_warning
-from pfeed.typing.core import is_dataframe
+from pfeed.utils.dataframe import is_dataframe
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
 from pfeed.const.enums import DataTool

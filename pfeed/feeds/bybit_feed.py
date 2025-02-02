@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from pfeed.typing.core import tDataFrame
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
-
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
     from pfeed.flows.dataflow import DataFlow
@@ -63,7 +62,7 @@ class BybitFeed(CryptoMarketDataFeed):
         to_storage: tSTORAGE='local',
         auto_transform: bool=True,
         **product_specs
-    ) -> BybitFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitFeed:
         '''
         Args:
             product_specs: The specifications for the product.
@@ -117,7 +116,7 @@ class BybitFeed(CryptoMarketDataFeed):
     def get_historical_data(
         self,
         product: str,
-        resolution: str="1tick",
+        resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day']="1tick",
         rollback_period: str="1day",
         start_date: str="",
         end_date: str="",
@@ -140,6 +139,79 @@ class BybitFeed(CryptoMarketDataFeed):
             **product_specs
         )
         
+    def retrieve(
+        self,
+        product: str,
+        resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day'],
+        rollback_period: str="1w",
+        start_date: str='',
+        end_date: str='',
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        from_storage: tSTORAGE | None=None,
+        auto_transform: bool=True,
+        storage_configs: dict | None=None,
+        concat_output: bool=True,
+        **product_specs
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitFeed:
+        '''Retrieve data from storage.
+        Args:
+            product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
+            resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
+                For convenience, data types such as 'tick', 'second', 'minute' etc. are also supported.
+            rollback_period:
+                Period to rollback from today, only used when `start_date` is not specified.
+                Default is '1w' = 1 week.
+            start_date: Start date.
+                If not specified:
+                    If the data source has a 'start_date' attribute, use it as the start date.
+                    Otherwise, use yesterday's date as the default start date.
+            end_date: End date.
+                If not specified, use today's date as the end date.
+            data_layer:
+                'curated' (least raw): normalize data (refer to 'cleaned' below), also remove all non-standard columns
+                    e.g. standard columns in second data are ts, product, open, high, low, close, volume
+                'cleaned' (default): perform normalization following pfund's convention, preserve all columns
+                    Normalization example:
+                    - renaming: 'timestamp' -> 'ts'
+                    - mapping: 'buy' -> 1, 'sell' -> -1
+                'raw' (most raw): keep the original data, no transformation will be performed.
+                It will be ignored if the data is loaded from storage but not downloaded.
+            data_domain: The domain of the data. e.g. 'market_data'. Can be a custom domain.
+            from_storage: try to load data from this storage.
+                If not specified, will search through all storages, e.g. local, minio, cache.
+                If no data is found, will try to download the missing data from the data source.
+            auto_transform: Whether to apply default transformations to the data.
+                Default transformations include:
+                - resampling data to the target resolution
+            concat_output: Whether to concatenate the data from different dates.
+                If True, the data from different dates will be concatenated into a single DataFrame.
+                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
+            product_specs: The specifications for the product.
+                if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
+                get_historical_data(
+                    product='BTC_USDT_OPT',
+                    strike_price=10000,
+                    expiration='2024-01-01',
+                    option_type='CALL',
+                )
+                The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
+        '''
+        return super().retrieve(
+            product=product,
+            resolution=resolution,
+            rollback_period=rollback_period,
+            start_date=start_date,
+            end_date=end_date,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            from_storage=from_storage,
+            auto_transform=auto_transform,
+            storage_configs=storage_configs,
+            concat_output=concat_output,
+            **product_specs
+        )
+
     # TODO
     def stream(self) -> BybitFeed:
         raise NotImplementedError(f'{self.name} stream() is not implemented')

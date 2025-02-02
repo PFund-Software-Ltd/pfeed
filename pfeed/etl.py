@@ -6,29 +6,16 @@ if TYPE_CHECKING:
     from pfeed.typing.literals import tPRODUCT_TYPE, tDATA_TOOL
     from pfeed.typing.core import tDataFrame, tData
 
-import os
 import importlib
 
 import pandas as pd
 import polars as pl
 import narwhals as nw
-try:
-    import dask.dataframe as dd
-except ImportError:
-    dd = None
-
-try:
-    os.environ['PYARROW_IGNORE_TIMEZONE'] = '1'  # used to suppress warning
-    import pyspark.pandas as ps
-    from pyspark.sql import DataFrame as SparkDataFrame, SparkSession
-except ImportError:
-    ps = None
-    SparkDataFrame = None
-    SparkSession = None
 
 from pfund.datas.resolution import Resolution
+from pfeed.typing.core import dd
 from pfeed.const.enums import DataTool
-from pfeed.typing.core import is_dataframe
+from pfeed.utils.dataframe import is_dataframe
 
 
 def get_data_tool(data_tool: DataTool | tDATA_TOOL) -> ModuleType:

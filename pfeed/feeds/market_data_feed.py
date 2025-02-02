@@ -26,7 +26,7 @@ from pfeed.const.enums import DataAccessType
 from pfeed.utils.utils import lambda_with_name
 
 
-tDATA_TYPE = Literal['quote_l3', 'quote_l2', 'quote_l1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
+tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
 
 
 def validate_product(func: Callable):

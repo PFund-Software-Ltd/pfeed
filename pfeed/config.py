@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
-import multiprocessing
 import logging
 import shutil
 import importlib.resources
@@ -59,7 +60,7 @@ class Configuration:
         cls._verbose = verbose
     
     @classmethod
-    def load(cls):
+    def load(cls) -> Configuration:
         '''Loads user's config file and returns a Configuration object'''
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         # Create default config from dataclass fields
@@ -95,14 +96,6 @@ class Configuration:
         if needs_update:
             configuration.dump()
         return configuration
-    
-    @classmethod
-    def reset(cls):
-        '''Resets the config by deleting the user config directory and reloading the config'''
-        shutil.rmtree(CONFIG_PATH)
-        if cls._verbose:
-            print(f"{PROJ_NAME} config successfully reset.")
-        return cls.load()
     
     def dump(self):
         with open(CONFIG_FILE_PATH, 'w') as f:

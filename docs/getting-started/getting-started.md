@@ -41,3 +41,7 @@ Fetch data without storage using **data source's API**.
 :::
 
 ::::
+
+```{hint}
+You can run the command "**pfeed config set --data-path {your_path}**" to specify the path where downloaded data will be stored.
+```

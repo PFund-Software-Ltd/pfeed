@@ -33,29 +33,32 @@ project:
     - file: concepts/concepts.md
       children:
         - file: concepts/data_lake.md
+        - file: concepts/delta_lake.md
         - file: concepts/etl_elt.md
-        - file: concepts/data_types.md
-        - file: concepts/data_feed.md
     - title: Tutorials
       children:
         - file: tutorials/download.md
         - file: tutorials/data_storage.md
+        - file: tutorials/pipeline_mode.ipynb
+        - file: tutorials/configuration.md
         - file: tutorials/stream.md
         - file: tutorials/data_recording.md
-        - file: tutorials/dataops.md
-        - file: tutorials/configuration.md
     - title: How To Guides
       children:
         - file: how-to-guides/eda.ipynb
         - file: how-to-guides/scale_up.ipynb
     - title: Integrations
       children:
-        - file: integrations/quadratic.md
         - file: integrations/delta_lake.ipynb
-        - file: integrations/fugue.ipynb
-        - file: integrations/ibis.ipynb
+        - file: integrations/prefect.ipynb
+        - file: integrations/bytewax.ipynb
+        # - file: integrations/quadratic.md
+        # - file: integrations/fugue.ipynb
+        # - file: integrations/ibis.ipynb
+    - file: supported-data-resolutions.md
     - file: supported-data-sources.md
     - file: supported-data-tools.md
+    - file: docker_usage.md
     - file: cli_commands.md
     - title: Reference
       children:

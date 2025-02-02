@@ -1,35 +1,37 @@
-[MinIO]: https://min.io/
-[Delta Lake]: https://delta-io.github.io/delta-rs/
-
 # Quickstart
 
-There are mainly 6 ways to interact with data in pfeed:
-1. `get_historical_data()` gets historical data from local storage (if exists) or downloads from remote data sources and stores in cache, then returns a cleaned DataFrame/LazyFrame.
+There are mainly **6 ways** to interact with data in pfeed:
+
+1. *`get_historical_data()`* retrieves stored data from storage (if any) or downloads it from data sources. The data is then cached and returned as a cleaned DataFrame or LazyFrame.
 ```{code-block} python
 import pfeed as pe
 feed = pe.BybitFeed(data_tool='polars', use_ray=True)
 df = feed.get_historical_data('BTC_USDT_PERP', rollback_period='1w', resolution='1d')
 ```
-2. `download()` downloads data into your local machine or the cloud, supports [Delta Lake] format.
+---
+2. *`download()`* saves data locally or to the cloud.
 ```{code-block} python
-feed.download(
+df = feed.download(
     product='BTC_USDT_PERP', 
-    resolution='minute', 
+    resolution='1m',
     start_date='2025-01-01', 
     end_date='2025-01-03', 
     to_storage='local',  # or 'minio', if MinIO is running
 )
 ```
-3. 🚧 `get_realtime_data()` gets real-time data by calling the broker/exchange's API.
+---
+3. *`retrieve()`* loads previously stored data from local or cloud storage.
 ```{code-block} python
-data: dict = feed.get_realtime_data(...)
+df = feed.retrieve(
+    product='BTC_USDT_PERP', 
+    resolution='1m',
+    start_date='2025-01-01', 
+    end_date='2025-01-03', 
+)
 ```
-4. 🚧 `stream_realtime_data()` or `stream()` listens to real-time data via websocket and optionally stores it .
-```{code-block} python
-pe.stream(...)
-```
-
-
-```{hint}
-You can run the command "**pfeed config set --data-path {your_path}**" to specify the path where downloaded data will be stored.
-```
+---
+4. 🚧 *`get_realtime_data()`* fetches real-time data directly from the broker/exchange's API.
+---
+5. 🚧 *`stream()`* listens to real-time data via websocket and can optionally store it .
+---
+6. 🚧 *`fetch()`* pulls data from a data source's API without storing it.

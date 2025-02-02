@@ -4,21 +4,20 @@ data_origin: >
   we source from upstream enterprise data vendors.
 data_categories:
   market_data:
-    resolutions:
-      1_quote_L1:
-        - STK
-        - ETF
-      1_tick:
-        - STK
-        - ETF
-      1_minute:
-        - STK
-        - ETF
-        - FUT
-        - OPT
-        - CRYPTO
-        - FX
-        - INDEX
+    quote_L1:
+      - STK
+      - ETF
+    tick:
+      - STK
+      - ETF
+    minute:
+      - STK
+      - ETF
+      - FUT
+      - OPT
+      - CRYPTO
+      - FX
+      - INDEX
 provider_type: vendor  # data is not as raw as data provided from data distributors
 access_type: paid  # refer to enum DataAccessType
 api_key_required: true

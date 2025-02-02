@@ -2,7 +2,7 @@ name: pfeed
 services:
   minio:
     container_name: pe-minio
-    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     ports:
       - "${MINIO_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -12,14 +12,18 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pfunder}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-password}
     command: server /data --console-address ":9001"
-  # timescaledb:
-  #   container_name: pe-timescaledb
-  #   image: timescaledev/timescaledb-ha:pg16.2-ts2.14.1-all
-  #   ports:
-  #     - "${TIMESCALEDB_PORT:-5432}:5432"
-  #   volumes:
-  #     - ${PFEED_DATA_PATH}/timescaledb:/var/lib/postgresql/data
-  #   environment:
-  #     POSTGRES_DB: ${TIMESCALEDB_DB:-pfeed}
-  #     POSTGRES_USER: ${TIMESCALEDB_USER:-pfunder}
-  #     POSTGRES_PASSWORD: ${TIMESCALEDB_PASSWORD:-password}
+    profiles:
+      - minio
+  timescaledb:
+    container_name: pe-timescaledb
+    image: timescaledev/timescaledb-ha:pg17.2-ts2.17.2-all-oss
+    ports:
+      - "${TIMESCALEDB_PORT:-5432}:5432"
+    volumes:
+      - ${PFEED_DATA_PATH}/timescaledb:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${TIMESCALEDB_DB:-pfeed}
+      POSTGRES_USER: ${TIMESCALEDB_USER:-pfunder}
+      POSTGRES_PASSWORD: ${TIMESCALEDB_PASSWORD:-password}
+    profiles:
+      - timescaledb

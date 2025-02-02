@@ -9,7 +9,6 @@ data_origin: >
   and level 2 order books. These currently include Coinbase, Kraken, BitFinex, and BitStamp.
 data_categories:
   market_data:
-    resolutions:
 provider_type: distributor  # refer to enum DataProviderType
 access_type: free_tier  # refer to enum DataAccessType
 api_key_required: true

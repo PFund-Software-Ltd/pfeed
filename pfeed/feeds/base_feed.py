@@ -168,7 +168,7 @@ class BaseFeed(ABC):
         data_domain: str, 
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
-    ) -> tuple[tData | None, dict] | tData | None:
+    ) -> tData | None:
         search_storages = ['cache', 'local', 'minio', 'duckdb'] if from_storage is None else [from_storage]
         data = None
         storage_configs = storage_configs or {}

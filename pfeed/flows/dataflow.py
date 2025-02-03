@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.outputs import Sink as BytewaxSink
     from pfeed.typing.core import tData
-    from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.faucet import Faucet
 
@@ -25,7 +24,6 @@ except ImportError:
         pass
     bytewax_op = None
 
-from pfeed.const.enums import DataStorage
 from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
 
 

@@ -34,5 +34,5 @@ class BaseIO(ABC):
         pass
 
     @abstractmethod
-    def read(self, file_path: str, data_tool: tDATA_TOOL='polars', **kwargs) -> tuple[tData, dict] | tData:
+    def read(self, file_path: str, data_tool: tDATA_TOOL='polars', **kwargs) -> tData | None:
         pass

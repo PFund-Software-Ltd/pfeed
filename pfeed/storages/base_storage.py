@@ -143,7 +143,7 @@ class BaseStorage(ABC):
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
             return False
 
-    def read_data(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[tData | None, dict]:
+    def read_data(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tData | None:
         '''
         Args:
             delta_version: version of the deltalake table to read, if None, read the latest version.

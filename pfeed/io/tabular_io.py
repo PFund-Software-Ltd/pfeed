@@ -57,14 +57,13 @@ class TabularIO(BaseIO):
         delta_version: int | None=None,
     ) -> tDataFrame | None:
         from pfeed.etl import get_data_tool
-        metadata = {}
         file_path_without_filename, filename = file_path.rsplit('/', 1)
         if self._use_deltalake:
             is_exists = DeltaTable.is_deltatable(file_path_without_filename, storage_options=self._storage_options)
         else:
             is_exists = self._exists(file_path)
         if not is_exists:
-            return None, metadata
+            return None
         data_tool: ModuleType = get_data_tool(data_tool)
         if self._use_deltalake:
             if data_tool == 'polars':

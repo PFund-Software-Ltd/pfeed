@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.dataflow import Stream as BytewaxStream
+    from pfeed.storages.base_storage import BaseStorage
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.flows.dataflow import DataFlow
@@ -22,7 +23,7 @@ from pfund.datas.resolution import Resolution
 from pfeed import etl
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.data_models.market_data_model import MarketDataModel
-from pfeed.const.enums import DataAccessType
+from pfeed.const.enums import DataAccessType, DataStorage
 from pfeed.utils.utils import lambda_with_name
 
 
@@ -59,13 +60,20 @@ class MarketDataFeed(BaseFeed):
     
     def create_data_model(
         self,
-        product: BaseProduct,
+        product: str | BaseProduct,
         resolution: str | Resolution,
-        start_date: datetime.date,
-        end_date: datetime.date | None = None,
+        start_date: str | datetime.date,
+        end_date: str | datetime.date | None = None,
         data_origin: str = '',
         env: tENVIRONMENT = 'BACKTEST',
+        **product_specs
     ) -> MarketDataModel:
+        if isinstance(product, str):
+            product = self.create_product(product, **product_specs)
+        if isinstance(start_date, str):
+            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+        if isinstance(end_date, str):
+            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return MarketDataModel(
             env=env,
             source=self.source,
@@ -74,6 +82,39 @@ class MarketDataFeed(BaseFeed):
             resolution=resolution,
             start_date=start_date,
             end_date=end_date or start_date,
+        )
+    
+    def create_storage(
+        self,
+        storage: tSTORAGE,
+        product: str | BaseProduct,
+        resolution: str | Resolution,
+        start_date: str | datetime.date,
+        end_date: str | datetime.date | None = None,
+        data_origin: str = '',
+        env: tENVIRONMENT = 'BACKTEST',
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        storage_configs: dict | None=None,
+        **product_specs
+    ) -> BaseStorage:
+        data_model = self.create_data_model(
+            product,
+            resolution,
+            start_date,
+            end_date=end_date,
+            data_origin=data_origin,
+            env=env,
+            **product_specs
+        )
+        storage_configs = storage_configs or {}
+        Storage = DataStorage[storage.upper()].storage_class
+        return Storage.from_data_model(
+            data_model,
+            data_layer,
+            data_domain=data_domain or self.DATA_DOMAIN,
+            use_deltalake=self._use_deltalake,
+            **storage_configs,
         )
     
     @validate_product
@@ -137,7 +178,7 @@ class MarketDataFeed(BaseFeed):
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         if self.config.print_msg and start_date and end_date:
             self._print_download_msg(resolution, start_date, end_date, data_layer)
-        self._create_download_dataflows(
+        dataflows: list[DataFlow] = self._create_download_dataflows(
             product,
             resolution,
             start_date,
@@ -147,7 +188,11 @@ class MarketDataFeed(BaseFeed):
         if auto_transform:
             self._add_default_transformations_to_download(adjusted_resolution, resolution, product)
         if not self._pipeline_mode:
-            self.load(to_storage=to_storage, data_layer=data_layer, data_domain=data_domain or self.DATA_DOMAIN)
+            self.load(
+                to_storage=to_storage,
+                data_layer=data_layer,
+                data_domain=data_domain or self.DATA_DOMAIN,
+            )
             completed_dataflows, failed_dataflows = self.run()
             missing_dates = [dataflow.data_model.date for dataflow in failed_dataflows]
             dfs: dict[datetime.date, tDataFrame | None] = {}

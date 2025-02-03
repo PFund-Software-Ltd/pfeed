@@ -26,7 +26,7 @@ class BaseStorage(ABC):
     ):
         self.name = DataStorage[name.upper()]
         self.data_layer = DataLayer[data_layer.upper()]
-        self.data_domain = data_domain
+        self.data_domain = data_domain.lower()
         self.use_deltalake = use_deltalake
         self._logger: logging.Logger | None = None
         self._data_model: BaseDataModel | None = None
@@ -143,14 +143,14 @@ class BaseStorage(ABC):
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
             return False
 
-    def read_data(self, data_tool: tDATA_TOOL='pandas', delta_version: int | None=None) -> tuple[tData | None, dict]:
+    def read_data(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[tData | None, dict]:
         '''
         Args:
             delta_version: version of the deltalake table to read, if None, read the latest version.
         '''
         try:
-            data, metadata = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
-            return data, metadata
+            data = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
+            return data
         except Exception:
-            self._logger.exception(f'Failed to read data ({data_tool=}, {delta_version=}) from {self.name}')
-            return None, {}
+            self._logger.exception(f'Failed to read data (data_tool={data_tool.name}, {delta_version=}) from {self.name}')
+            return None

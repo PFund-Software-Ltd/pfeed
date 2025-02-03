@@ -86,6 +86,8 @@ class YahooFinanceFeed(MarketDataFeed):
         yfinance_kwargs = yfinance_kwargs or {}
         assert "interval" not in yfinance_kwargs, "`interval` duplicates with pfeed's `resolution`, please remove it"
         assert "period" not in yfinance_kwargs, "`period` duplicates with pfeed's `rollback_period`, please remove it"
+        assert "start" not in yfinance_kwargs, "`start` duplicates with pfeed's `start_date`, please remove it"
+        assert "end" not in yfinance_kwargs, "`end` duplicates with pfeed's `end_date`, please remove it"
         return yfinance_kwargs
     
     # TODO
@@ -191,6 +193,7 @@ class YahooFinanceFeed(MarketDataFeed):
         original_start_date = data_model.start_date
         # NOTE: yfinance's end_date is not inclusive, so we need to add 1 day to the end_date
         yfinance_end_date = data_model.end_date + datetime.timedelta(days=1)
+        
         while df is None or df.empty and num_retries:
             num_retries -= 1
             self.logger.debug(f'downloading {data_model}')
@@ -272,7 +275,7 @@ class YahooFinanceFeed(MarketDataFeed):
                 If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
-                get_historical_data(
+                retrieve(
                     product='BTC_USDT_OPT',
                     strike_price=10000,
                     expiration='2024-01-01',

@@ -14,16 +14,16 @@ services:
     command: server /data --console-address ":9001"
     profiles:
       - minio
-  timescaledb:
-    container_name: pe-timescaledb
-    image: timescaledev/timescaledb-ha:pg17.2-ts2.17.2-all-oss
-    ports:
-      - "${TIMESCALEDB_PORT:-5432}:5432"
-    volumes:
-      - ${PFEED_DATA_PATH}/timescaledb:/var/lib/postgresql/data
-    environment:
-      POSTGRES_DB: ${TIMESCALEDB_DB:-pfeed}
-      POSTGRES_USER: ${TIMESCALEDB_USER:-pfunder}
-      POSTGRES_PASSWORD: ${TIMESCALEDB_PASSWORD:-password}
-    profiles:
-      - timescaledb
+  # timescaledb:
+  #   container_name: pe-timescaledb
+  #   image: timescaledev/timescaledb-ha:pg17.2-ts2.17.2-all-oss
+  #   ports:
+  #     - "${TIMESCALEDB_PORT:-5432}:5432"
+  #   volumes:
+  #     - ${PFEED_DATA_PATH}/timescaledb:/var/lib/postgresql/data
+  #   environment:
+  #     POSTGRES_DB: ${TIMESCALEDB_DB:-pfeed}
+  #     POSTGRES_USER: ${TIMESCALEDB_USER:-pfunder}
+  #     POSTGRES_PASSWORD: ${TIMESCALEDB_PASSWORD:-password}
+  #   profiles:
+  #     - timescaledb

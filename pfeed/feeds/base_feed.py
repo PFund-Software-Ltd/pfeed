@@ -24,7 +24,6 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
-from pfund import print_warning
 from pfeed.flows.faucet import Faucet
 from pfeed.config import get_config
 from pfeed.const.enums import DataTool, DataStorage
@@ -63,6 +62,10 @@ class BaseFeed(ABC):
         self._use_ray = use_ray
         self._use_prefect = use_prefect
         self._use_bytewax = use_bytewax
+        
+        # FIXME:
+        assert not self._use_bytewax, 'Bytewax is not supported yet'
+        
         if self._use_prefect and self._use_bytewax:
             raise ValueError('Cannot use both prefect and bytewax at the same time')
         self._use_deltalake = use_deltalake
@@ -94,6 +97,13 @@ class BaseFeed(ABC):
     @abstractmethod
     def create_data_model(self, *args, **kwargs) -> BaseDataModel:
         pass
+
+    @abstractmethod
+    def create_storage(self, *args, **kwargs) -> BaseStorage:
+        pass
+    
+    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
+        return self.source.create_product(product_basis, symbol=symbol, **product_specs)
 
     def configure_storage(self, storage: tSTORAGE, storage_configs: dict) -> BaseFeed:
         '''Configure storage kwargs for the given storage
@@ -157,11 +167,10 @@ class BaseFeed(ABC):
         data_layer: tDATA_LAYER, 
         data_domain: str, 
         from_storage: tSTORAGE | None=None,
-        include_metadata: bool=False,
         storage_configs: dict | None=None,
     ) -> tuple[tData | None, dict] | tData | None:
         search_storages = ['cache', 'local', 'minio', 'duckdb'] if from_storage is None else [from_storage]
-        data, metadata = None, {}
+        data = None
         storage_configs = storage_configs or {}
         if storage_configs:
             assert from_storage is not None, 'from_storage is required when storage_configs is provided'
@@ -177,39 +186,17 @@ class BaseFeed(ABC):
                     use_deltalake=self._use_deltalake,
                     **search_storage_configs,
                 )
-                data, metadata = storage.read_data(data_tool=self.data_tool.name)
+                data = storage.read_data(data_tool=self.data_tool.name)
                 if data is not None:
                     self.logger.debug(f'found data {data_model} in {search_storage.upper()}')
                     break
             except Exception as e:  # e.g. minio's ServerError if server is not running
                 continue
-        if include_metadata:
-            return data, metadata
-        else:
-            return data
+        return data
 
-    def get_metadata(
-        self,
-        data_model: BaseDataModel,
-        data_layer: tDATA_LAYER,
-        data_domain: str,
-        from_storage: tSTORAGE,
-    ) -> dict:
-        _, metadata = self._execute_retrieve(
-            data_model,
-            data_layer,
-            data_domain,
-            from_storage=from_storage,
-            include_metadata=True,
-        )
-        return metadata
-    
     # TODO
     def _execute_fetch(self, data_model: BaseDataModel, *args, **kwargs) -> tData | None:
         raise NotImplementedError(f'{self.name} _execute_fetch() is not implemented')
-
-    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
-        return self.source.create_product(product_basis, symbol=symbol, **product_specs)
     
     def _standardize_dates(self, start_date: str, end_date: str, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.
@@ -319,7 +306,6 @@ class BaseFeed(ABC):
         to_storage: tSTORAGE='local',   
         data_layer: tDATA_LAYER='curated',
         data_domain: str='',
-        metadata: dict | None=None,
         storage_configs: dict | None=None,
         bytewax_sink: BytewaxSink | str | None=None,
     ) -> BaseFeed:
@@ -327,24 +313,23 @@ class BaseFeed(ABC):
         Args:
             data_domain: custom domain of the data, used in data_path/data_layer/data_domain
                 useful for grouping data
-            metadata: custom metadata to be added to the data
         '''
         if self._use_ray:
             assert to_storage.lower() != 'duckdb', 'DuckDB is not thread-safe, cannot be used with Ray'
-        Storage = DataStorage[to_storage.upper()].storage_class
         storage_configs = storage_configs or self._storage_configs.get(to_storage, {})
+        Storage = DataStorage[to_storage.upper()].storage_class
         for dataflow in self._subflows:
-            data_model: BaseDataModel = dataflow.data_model
-            if metadata:
-                data_model.add_metadata(metadata)
-            storage: BaseStorage = Storage.from_data_model(
-                data_model,
-                data_layer,
-                data_domain or self.DATA_DOMAIN,
-                use_deltalake=self._use_deltalake,
-                **storage_configs,
-            )
-            dataflow.set_storage(storage)
+            # NOTE: lazy creation of storage to avoid pickle errors when using ray
+            # e.g. minio client is using socket, which is not picklable
+            def create_storage():
+                return Storage.from_data_model(
+                    dataflow.data_model,
+                    data_layer,
+                    data_domain or self.DATA_DOMAIN,
+                    use_deltalake=self._use_deltalake,
+                    **storage_configs,
+                )
+            dataflow.lazy_create_storage(create_storage)
             if self._use_bytewax:
                 from bytewax.connectors.stdio import StdOutSink
                 dataflow.set_bytewax_sink(bytewax_sink or StdOutSink())
@@ -370,7 +355,6 @@ class BaseFeed(ABC):
                 # FIXME:
                 success = True
             return success
-        
         
         if self._use_ray:
             import atexit

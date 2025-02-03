@@ -1,6 +1,6 @@
 [DuckDB]: https://duckdb.org/
 [Polars]: https://pola.rs/
-[Spark]: https://spark.apache.org/
+[Dask]: https://dask.org/
 
 # ETL vs ELT
 ::::{aside}
@@ -20,9 +20,9 @@ Traditionally, **ETL (Extract, Transform, Load)** processes data before loading 
 - **Limited Data Exploration**: Since ETL transformed data first, raw data is discarded, making it harder to explore historical data for new insights.
 
 
-Empowered by growing computational power, **ELT (Extract, Load, Transform)** is becoming the standard for data processing. `pfeed` leverages this by storing raw data in **columnar formats**, allowing you to perform complex transformations with high performance and low costs using tools like [DuckDB], [Polars] and [Spark].
+Empowered by growing computational power, **ELT (Extract, Load, Transform)** is becoming the standard for data processing. `pfeed` leverages this by storing raw data in **columnar formats**, allowing you to perform complex transformations with high performance and low costs using tools like [DuckDB], [Polars] and [Dask].
 
 
 ```{important} Takeaway
-`pfeed` follows the ELT pattern to extract raw data from sources, store them in a local data lake, leaving the transformation part to you for your research.
+Except for necessary data cleaning transformations, `pfeed` follows the ELT pattern: it extracts raw data from sources, stores it in a local data lake, and leaves the transformation step to you for research.
 ```

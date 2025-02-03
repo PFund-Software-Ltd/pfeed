@@ -31,7 +31,7 @@ class BaseDataModel(BaseModel, ABC):
     file_extension: str = ''
     compression: str = ''
     data_origin: str = ''
-    metadata: dict = Field(default_factory=dict)
+    # metadata: dict = Field(default_factory=dict)
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
@@ -45,12 +45,12 @@ class BaseDataModel(BaseModel, ABC):
         '''
         return self.data_origin != self.source.name.value
     
-    def add_metadata(self, metadata: dict) -> None:
-        assert not self.metadata, 'metadata is already set, use update_metadata() instead'
-        self.metadata = metadata
+    # def add_metadata(self, metadata: dict) -> None:
+    #     assert not self.metadata, 'metadata is already set, use update_metadata() instead'
+    #     self.metadata = metadata
 
-    def update_metadata(self, key: str, value: Any) -> None:
-        self.metadata[key] = value
+    # def update_metadata(self, key: str, value: Any) -> None:
+    #     self.metadata[key] = value
 
     def __str__(self):
         if self.is_data_origin_effective():

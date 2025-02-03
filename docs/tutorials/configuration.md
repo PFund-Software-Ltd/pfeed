@@ -80,3 +80,6 @@ pfeed open --config-file
 ```{seealso}
 For more details, see the [CLI commands](../getting-started/cli_commands.md) documentation.
 ```
+
+## Setting Environment Variables
+TODO

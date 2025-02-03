@@ -34,24 +34,29 @@ project:
       children:
         - file: concepts/data_lake.md
         - file: concepts/delta_lake.md
+        - file: concepts/medallion.md
         - file: concepts/etl_elt.md
     - title: Tutorials
       children:
-        - file: tutorials/download.md
-        - file: tutorials/data_storage.md
+        - file: tutorials/storage.ipynb
+        - file: tutorials/partition_filtering.ipynb
         - file: tutorials/pipeline_mode.ipynb
         - file: tutorials/configuration.md
-        - file: tutorials/stream.md
-        - file: tutorials/data_recording.md
-    - title: How To Guides
-      children:
-        - file: how-to-guides/eda.ipynb
-        - file: how-to-guides/scale_up.ipynb
+        - file: tutorials/environment_variables.md
+        # TODO
+        # - file: tutorials/data_recording.md
+    # TODO
+    # - title: How To Guides
+    #   children:
+    #     - file: how-to-guides/eda.ipynb
+    #     - file: how-to-guides/scale_up.ipynb
     - title: Integrations
       children:
-        - file: integrations/delta_lake.ipynb
+        - file: integrations/deltalake.ipynb
         - file: integrations/prefect.ipynb
         - file: integrations/bytewax.ipynb
+        - file: integrations/duckdb.ipynb
+        # TODO
         # - file: integrations/quadratic.md
         # - file: integrations/fugue.ipynb
         # - file: integrations/ibis.ipynb

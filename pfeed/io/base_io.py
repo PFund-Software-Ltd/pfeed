@@ -25,13 +25,14 @@ class BaseIO(ABC):
             Path(file_path).parent.mkdir(parents=True, exist_ok=True)
         
     def _exists(self, file_path: str) -> bool:
+        file_path = file_path.replace('s3://', '')
         file_info = self._filesystem.get_file_info(file_path)
         return file_info.type == pa_fs.FileType.File
         
     @abstractmethod
-    def write(self, data: tData, file_path: str, metadata: dict | None=None, **kwargs):
+    def write(self, data: tData, file_path: str, **kwargs):
         pass
 
     @abstractmethod
-    def read(self, file_path: str, data_tool: tDATA_TOOL='pandas', **kwargs) -> tuple[tData, dict] | tData:
+    def read(self, file_path: str, data_tool: tDATA_TOOL='polars', **kwargs) -> tuple[tData, dict] | tData:
         pass

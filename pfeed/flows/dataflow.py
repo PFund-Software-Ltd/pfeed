@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.outputs import Sink as BytewaxSink
     from pfeed.typing.core import tData
+    from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.faucet import Faucet
 
@@ -24,6 +25,7 @@ except ImportError:
         pass
     bytewax_op = None
 
+from pfeed.const.enums import DataStorage
 from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
 
 
@@ -40,18 +42,17 @@ class DataFlow:
         self.name = f'{data_source.name}_DataFlow'
         self._faucet: Faucet = faucet
         self._transformations: list[Callable] = []
-        self._storage: BaseStorage | None = None
+        self._storage_creator: Callable[[], BaseStorage] | None = None
         self._bytewax_sink: BytewaxSink | str | None = None
         self._bytewax_dataflow: BytewaxDataFlow | None = None
         self.output: tData | None = None
     
     def add_transformations(self, *funcs: tuple[Callable, ...]):
         self._transformations.extend(funcs)
-        
-    def set_storage(self, storage: BaseStorage):
-        assert self._storage is None, f'{self.name} already has a storage'
-        self._storage = storage
-
+    
+    def lazy_create_storage(self, create_storage_func: Callable[[], BaseStorage]):
+        self._storage_creator = create_storage_func
+    
     def set_bytewax_sink(self, bytewax_sink: BytewaxSink | str):
         self._bytewax_sink = bytewax_sink
 
@@ -137,17 +138,19 @@ class DataFlow:
         return data
     
     def _load(self, data: tData | BytewaxStream, flow_type: FlowType=FlowType.native):
-        if self._storage is None:
+        if self._storage_creator is None:
             if self.op_type != "retrieve":
-                self.logger.warning(f'{self.name} has no destination storage, skipping load operation')
-            return
+                raise Exception(f'{self.name} has no destination storage')
+            else:
+                return
+        storage = self._storage_creator()
         if not self.is_streaming():
-            load = task(self._storage.write_data) if flow_type == FlowType.prefect else self._storage.write_data
+            load = task(storage.write_data) if flow_type == FlowType.prefect else storage.write_data
             success = load(data)
             if not success:
                 self.logger.warning(f'failed to load {self.data_model} data to storage')
             else:
-                self.logger.info(f'loaded {self.data_model} data to {self._storage.name}')
+                self.logger.info(f'loaded {self.data_model} data to {storage.name}')
         else:
             stream = data
             if flow_type == FlowType.bytewax:
@@ -155,7 +158,7 @@ class DataFlow:
                 bytewax_op.output(self._bytewax_sink.__name__, stream, self._bytewax_sink)
             else:
                 # TODO: streaming without bytewax
-                self._storage.write_data(...)
+                storage.write_data(...)
 
     def to_prefect_dataflow(self, **kwargs) -> PrefectDataFlow:
         '''

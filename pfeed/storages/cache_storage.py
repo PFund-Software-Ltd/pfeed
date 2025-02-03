@@ -18,7 +18,7 @@ class CacheStorage(LocalStorage):
         **kwargs
     ):
         super().__init__(name='cache', data_layer=data_layer, data_domain=data_domain, use_deltalake=use_deltalake, **kwargs)
-        self.clear_caches()
+        self._clear_caches()
     
     @staticmethod
     def _get_today() -> datetime.date:
@@ -30,7 +30,7 @@ class CacheStorage(LocalStorage):
         config = get_config()
         return Path(config.cache_path) / self.data_layer.name.lower() / self.data_domain
 
-    def clear_caches(self):
+    def _clear_caches(self):
         '''Clear old caches except the current date'''
         from pfund import print_error
         from pfund.utils.utils import get_last_modified_time

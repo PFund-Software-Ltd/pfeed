@@ -189,7 +189,7 @@ class BybitFeed(CryptoMarketDataFeed):
                 If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
-                get_historical_data(
+                retrieve(
                     product='BTC_USDT_OPT',
                     strike_price=10000,
                     expiration='2024-01-01',

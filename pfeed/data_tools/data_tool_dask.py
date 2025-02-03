@@ -36,6 +36,7 @@ def read_parquet(
         )
 
 
+# TODO: may use dask-deltalake, currently it doesn't look well-maintained
 def read_delta(delta_table: DeltaTable, **kwargs) -> dd.DataFrame:
     return dd.from_pandas(delta_table.to_pandas(**kwargs))
 

@@ -27,8 +27,13 @@ def read_parquet(
         return pl.scan_parquet(paths, *args, storage_options=storage_options, **kwargs)
 
 
-def read_delta(delta_table: DeltaTable, **kwargs) -> pl.LazyFrame:
-    return pl.scan_delta(delta_table, **kwargs)
+def read_delta(
+    path: str, 
+    storage_options: dict[str, Any] | None=None,
+    version: int | None=None,
+    **kwargs
+) -> pl.LazyFrame:
+    return pl.scan_delta(path, storage_options=storage_options, version=version, **kwargs)
     
 
 # def concat(dfs: list[pl.DataFrame | pl.LazyFrame]) -> pl.DataFrame | pl.LazyFrame:

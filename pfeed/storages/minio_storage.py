@@ -51,12 +51,17 @@ class MinioStorage(BaseStorage):
         )
     
     def get_storage_options(self) -> dict:
-        return {
+        storage_options = {
             "endpoint_url": self.endpoint,
             "access_key_id": os.getenv('MINIO_ROOT_USER', 'pfunder'),
             "secret_access_key": os.getenv('MINIO_ROOT_PASSWORD', 'password'),
+            "region": "us-east-1",
         }
-        
+        if self.use_deltalake:
+            storage_options['allow_http'] = 'true' if self.endpoint.startswith('http://') else 'false'
+            storage_options['conditional_put'] = 'etag'
+        return storage_options
+    
     @staticmethod
     def create_endpoint() -> str:
         '''Creates endpoint, e.g. http://localhost:9000'''
@@ -98,9 +103,7 @@ class MinioStorage(BaseStorage):
     @property
     def data_path(self) -> str:
         data_path = "s3://" + self.BUCKET_NAME
-        if not self.use_deltalake:
-            data_path = data_path.replace('s3://', '')
-        return '/'.join([data_path, self.data_layer, self.data_domain])
+        return '/'.join([data_path, self.data_layer.name.lower(), self.data_domain])
     
     def get_object(self, object_name: str) -> bytes | None:
         try:

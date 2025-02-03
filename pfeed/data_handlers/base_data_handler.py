@@ -18,7 +18,7 @@ class BaseDataHandler(ABC):
         pass
 
     @abstractmethod
-    def read(self, data_tool: tDATA_TOOL='pandas', **kwargs) -> tuple[tData | None, dict]:
+    def read(self, data_tool: tDATA_TOOL='polars', **kwargs) -> tuple[tData | None, dict]:
         pass
 
     @abstractmethod

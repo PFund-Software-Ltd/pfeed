@@ -12,6 +12,7 @@ class DataStorage(StrEnum):
     MINIO = 'MINIO'
     DUCKDB = 'DUCKDB'
     # TODO:
+    # HUGGINGFACE = HF = 'HUGGINGFACE'
     # S3 = 'S3'
     # AZURE = 'AZURE'
     # GCP = 'GCP'

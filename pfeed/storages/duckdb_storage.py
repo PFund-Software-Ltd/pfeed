@@ -130,7 +130,7 @@ class DuckDBStorage(BaseStorage):
         if not self._table_exists():
             return False
         df: pd.DataFrame = self.get_table()
-        metadata = self.get_metadata(include_placeholder_dates=True)
+        metadata = self._get_metadata(include_placeholder_dates=True)
         placeholder_dates: list[str] = metadata['placeholder_dates']
         dates_in_table: list[str] = df['ts'].dt.strftime('%Y-%m-%d').unique().tolist() if not df.empty else []
         duplicated_dates = set(dates_in_table) & set(placeholder_dates)
@@ -205,7 +205,7 @@ class DuckDBStorage(BaseStorage):
             """)
             self.conn.execute(f"INSERT INTO {self._schema_table_name} SELECT * FROM df")
         metadata = self._adjust_metadata(metadata)
-        if existing_metadata := self.get_metadata(include_placeholder_dates=True):
+        if existing_metadata := self._get_metadata(include_placeholder_dates=True):
             metadata['placeholder_dates'] += existing_metadata['placeholder_dates']
             metadata['placeholder_dates'] = list(set(metadata['placeholder_dates']))
         self._write_metadata(metadata)
@@ -235,7 +235,7 @@ class DuckDBStorage(BaseStorage):
         df: pd.DataFrame = conn.df()
         return df
     
-    def get_metadata(self, include_placeholder_dates: bool=False) -> dict:
+    def _get_metadata(self, include_placeholder_dates: bool=False) -> dict:
         '''
         Args:
             include_placeholder_dates: whether to include key 'placeholder_dates' in the metadata
@@ -275,20 +275,28 @@ class DuckDBStorage(BaseStorage):
         if self._conn_exists():
             self.conn.close()
 
-    def write_data(self, data: bytes | pd.DataFrame, metadata: dict | None=None):
+    def write_data(self, data: tDataFrame):
+        from pfeed.etl import convert_to_pandas_df
+        data: pd.DataFrame = convert_to_pandas_df(data)
         with self:
+            metadata = {}
+            data_chunks_per_date = {} if data.empty else {date: group for date, group in data.groupby(data['ts'].dt.date)}
+            for date in self._data_model.dates:
+                if date not in data_chunks_per_date:
+                    metadata['is_placeholder'] = 'true'
+                else:
+                    metadata['is_placeholder'] = 'false'
             self.write_table(data, metadata=metadata)
     
-    def read_data(self, data_tool: DataTool | tDATA_TOOL='pandas') -> tuple[tDataFrame | None, dict]:
+    def read_data(self, data_tool: DataTool | tDATA_TOOL='pandas') -> tDataFrame | None:
         from pfeed.etl import convert_to_user_df
         if not self._exists():
-            return None, {}
+            return None
         with self:
             df: pd.DataFrame = self.get_table()
             data_tool = DataTool[data_tool.upper()] if isinstance(data_tool, str) else data_tool
             df: tDataFrame = convert_to_user_df(df, data_tool)
-            metadata = self.get_metadata(include_placeholder_dates=True)
-            return df, metadata
+            return df
     
     def __enter__(self):
         return self  # Setup - returns the object to be used in 'with'

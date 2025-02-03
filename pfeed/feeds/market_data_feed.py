@@ -176,9 +176,12 @@ class MarketDataFeed(BaseFeed):
             max(unit_resolution, self.source.lowest_resolution)
         )
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+        # if no default and no custom transformations, set data_layer to 'raw'
+        if not auto_transform and not self._pipeline_mode:
+            data_layer = 'raw'
         if self.config.print_msg and start_date and end_date:
             self._print_download_msg(resolution, start_date, end_date, data_layer)
-        dataflows: list[DataFlow] = self._create_download_dataflows(
+        self._create_download_dataflows(
             product,
             resolution,
             start_date,
@@ -187,7 +190,7 @@ class MarketDataFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_download(adjusted_resolution, resolution, product)
-        if not self._pipeline_mode:
+        if not self._pipeline_mode:    
             self.load(
                 to_storage=to_storage,
                 data_layer=data_layer,

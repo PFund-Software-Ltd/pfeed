@@ -318,18 +318,20 @@ class BaseFeed(ABC):
             assert to_storage.lower() != 'duckdb', 'DuckDB is not thread-safe, cannot be used with Ray'
         storage_configs = storage_configs or self._storage_configs.get(to_storage, {})
         Storage = DataStorage[to_storage.upper()].storage_class
+
+        # NOTE: lazy creation of storage to avoid pickle errors when using ray
+        # e.g. minio client is using socket, which is not picklable
+        def _create_storage(data_model: BaseDataModel):
+            return Storage.from_data_model(
+                data_model,
+                data_layer,
+                data_domain or self.DATA_DOMAIN,
+                use_deltalake=self._use_deltalake,
+                **storage_configs,
+            )
+
         for dataflow in self._subflows:
-            # NOTE: lazy creation of storage to avoid pickle errors when using ray
-            # e.g. minio client is using socket, which is not picklable
-            def create_storage():
-                return Storage.from_data_model(
-                    dataflow.data_model,
-                    data_layer,
-                    data_domain or self.DATA_DOMAIN,
-                    use_deltalake=self._use_deltalake,
-                    **storage_configs,
-                )
-            dataflow.lazy_create_storage(create_storage)
+            dataflow.lazy_create_storage(_create_storage)
             if self._use_bytewax:
                 from bytewax.connectors.stdio import StdOutSink
                 dataflow.set_bytewax_sink(bytewax_sink or StdOutSink())

@@ -136,6 +136,7 @@ class YahooFinanceFeed(MarketDataFeed):
                 refer to kwargs in history() in yfinance/scrapers/history.py
         '''
         self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
+        resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         # makes rollback_period == 'max' more specific for different data types
         if rollback_period == 'max':
             dtype = MarketDataType[str(resolution.timeframe)]

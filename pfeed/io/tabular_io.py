@@ -33,9 +33,8 @@ class TabularIO(BaseIO):
         file_path_without_filename, filename = file_path.rsplit('/', 1)
         self._mkdir(file_path)
         table = pa.Table.from_pandas(data, preserve_index=False)
-        if self._use_deltalake:
+        if self._use_deltalake and not data.empty:
             import deltalake as dl
-            # NOTE: writing metadata to commit_properties is NOT persistent, so don't use it
             dl.write_deltalake(file_path_without_filename, table, mode='overwrite', storage_options=self._storage_options)
             # REVIEW: ignore metadata for now
             # HACK: delta-rs doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
@@ -43,6 +42,7 @@ class TabularIO(BaseIO):
             # table = pa.Table.from_pandas(empty_df_with_metadata, preserve_index=False)
             # file_path = file_path_without_filename + '/.metadata/' + filename
         else:
+            # NOTE: delta lake doesn't support writing empty df, so we need to write a parquet file for empty df
             file_path = file_path.replace('s3://', '')
             # REVIEW: ignore metadata for now
             # schema = table.schema.with_metadata(metadata)
@@ -58,14 +58,19 @@ class TabularIO(BaseIO):
     ) -> tDataFrame | None:
         from pfeed.etl import get_data_tool
         file_path_without_filename, filename = file_path.rsplit('/', 1)
-        if self._use_deltalake:
+        read_from_deltalake = self._use_deltalake
+        if read_from_deltalake:
             is_exists = DeltaTable.is_deltatable(file_path_without_filename, storage_options=self._storage_options)
+            if not is_exists:
+                # if not a delta table, check if the file exists (parquet file of empty df)
+                is_exists = self._exists(file_path)
+                read_from_deltalake = False
         else:
             is_exists = self._exists(file_path)
         if not is_exists:
             return None
         data_tool: ModuleType = get_data_tool(data_tool)
-        if self._use_deltalake:
+        if read_from_deltalake:
             if data_tool == 'polars':
                 data: tDataFrame = data_tool.read_delta(
                     file_path_without_filename, 
@@ -79,8 +84,6 @@ class TabularIO(BaseIO):
                     version=delta_version
                 )
                 data: tDataFrame = data_tool.read_delta(dt)
-            # REVIEW: ignore metadata for now
-            # file_path = file_path_without_filename + '/.metadata/' + filename
         else:
             fs = self._filesystem if not self.is_local_fs else None
             data: tDataFrame = data_tool.read_parquet(

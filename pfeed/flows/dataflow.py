@@ -80,14 +80,12 @@ class DataFlow:
         if (data is not None) and not (is_dataframe(data) and is_empty_dataframe(data)):
             data: tData | BytewaxStream = self._transform(data, flow_type=flow_type)
             self._load(data, flow_type=flow_type)
-            # if use bytewax, return bytewax dataflow instead
-            if isinstance(data, BytewaxStream):
-                self.output = self._bytewax_dataflow
-            else:
-                self.output = data
-            return self.output
+        # if use bytewax, return bytewax dataflow instead
+        if isinstance(data, BytewaxStream):
+            self.output = self._bytewax_dataflow
         else:
-            return None
+            self.output = data
+        return self.output
     
     def _extract(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxStream:
         data = None
@@ -141,7 +139,7 @@ class DataFlow:
                 raise Exception(f'{self.name} has no destination storage')
             else:
                 return
-        storage = self._storage_creator()
+        storage = self._storage_creator(self.data_model)
         if not self.is_streaming():
             load = task(storage.write_data) if flow_type == FlowType.prefect else storage.write_data
             success = load(data)

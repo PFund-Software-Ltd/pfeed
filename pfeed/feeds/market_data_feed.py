@@ -18,7 +18,6 @@ import pandas as pd
 import narwhals as nw
 from rich.console import Console
 
-from pfund import print_warning
 from pfund.datas.resolution import Resolution
 from pfeed import etl
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
@@ -50,9 +49,6 @@ def validate_product(func: Callable):
 
 class MarketDataFeed(BaseFeed):
     DATA_DOMAIN = 'market_data'
-    
-    def _print_download_msg(self, resolution: Resolution, start_date: datetime.date, end_date: datetime.date, data_layer: tDATA_LAYER):
-        Console().print(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
     
     @property
     def global_min_resolution(self) -> Resolution:
@@ -179,8 +175,8 @@ class MarketDataFeed(BaseFeed):
         # if no default and no custom transformations, set data_layer to 'raw'
         if not auto_transform and not self._pipeline_mode:
             data_layer = 'raw'
-        if self.config.print_msg and start_date and end_date:
-            self._print_download_msg(resolution, start_date, end_date, data_layer)
+        if start_date and end_date:
+            Console().print(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
         self._create_download_dataflows(
             product,
             resolution,
@@ -334,8 +330,6 @@ class MarketDataFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_retrieve(resolution)
-        else:
-            print_warning('Output data might not be in the desired resolution when auto_transform=False')
         if not self._pipeline_mode:
             completed_dataflows, failed_dataflows = self.run()
             if missing_dates := [dataflow.data_model.date for dataflow in failed_dataflows]:
@@ -493,7 +487,11 @@ class MarketDataFeed(BaseFeed):
                 dfs_from_source = [df for df in dfs_from_source_per_date.values() if df is not None]
 
         if missing_dates:
-            self.logger.warning(f'output data is INCOMPLETE, there are missing data when getting historical {resolution} data for {product}, missing dates: {missing_dates}')
+            self.logger.warning(
+                f'output data is INCOMPLETE, '
+                f'there are missing data when getting historical {resolution} data for {product},\n'
+                f'missing dates: {missing_dates}'
+            )
             
 
         dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]

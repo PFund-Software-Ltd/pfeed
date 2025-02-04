@@ -39,7 +39,7 @@ project:
     - title: Tutorials
       children:
         - file: tutorials/storage.ipynb
-        - file: tutorials/partition_filtering.ipynb
+        - file: tutorials/partition_pruning.ipynb
         - file: tutorials/pipeline_mode.ipynb
         - file: tutorials/configuration.md
         - file: tutorials/environment_variables.md

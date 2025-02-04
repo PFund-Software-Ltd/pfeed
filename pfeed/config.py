@@ -43,7 +43,6 @@ class Configuration:
     custom_excepthook: bool = False
     env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
-    print_msg: bool = True
     
     _logging_config = {}
     _instance = None
@@ -183,15 +182,12 @@ def configure(
     env_file_path: str | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
-    print_msg: bool | None = None,
     verbose: bool = False,
     write: bool = False,
 ):
     '''Configures the global config object.
     It will override the existing config values from the existing config file or the default values.
     Args:
-        print_msg: If False, all the hints, notes or warnings will not be printed.
-            Only turn it off when you are already familiar with how pfeed works
         write: If True, the config will be saved to the config file.
     '''
     NON_CONFIG_KEYS = ['verbose', 'write']

@@ -142,6 +142,7 @@ class DuckDBStorage(BaseStorage):
         # check if all dates in the data model are present in the table
         return all(str(date) in total_dates for date in self.data_model.dates)
 
+    # REVIEW
     def _remove_placeholder_dates(self, metadata: dict, dates_to_remove: list[str]):
         print_warning(f"""
             Removing placeholder dates: {dates_to_remove} - This should not occur. 
@@ -193,8 +194,7 @@ class DuckDBStorage(BaseStorage):
             # duckdb doesn't support datetime64[ns]
             if is_datetime64_ns_dtype(df['ts'].dtype):
                 df['ts'] = df['ts'].astype('datetime64[us]')
-                if config.print_msg:
-                    print_warning(f"Converting 'ts' column from datetime64[ns] to datetime64[us] for {self.name} {self.data_model} compatibility")
+                print_warning(f"Converting 'ts' column from datetime64[ns] to datetime64[us] for {self.name} {self.data_model} compatibility")
             
             self.conn.execute(f"CREATE TABLE IF NOT EXISTS {self._schema_table_name} AS SELECT * FROM df")
             # Delete any overlapping data within the date range before inserting

@@ -34,7 +34,7 @@ Starting algo-trading requires reliable and clean data. However, the time-consum
 By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, allowing traders to focus on strategy development.
 
 ---
-PFeed (/piː fiːd/) is the data engine for algorithmic trading, serving as a bridge between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, supporting both **batch processing** and **streaming** workflows through streamlined data collection, cleaning, transformation, and storage.
+PFeed (/piː fiːd/) is the data engine for trading, serving as a bridge between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, supporting both **batch processing** and **streaming** workflows through streamlined data collection, cleaning, transformation, and storage.
 
 ## Core Features
 - [x] Download or stream reliable, validated and **clean data** for research, backtesting, or live trading

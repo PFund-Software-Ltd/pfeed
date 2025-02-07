@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.plugins.base_plugin import BasePlugin
+    from pfund_plugins.base_plugin import BasePlugin
     # need these imports to support IDE hints:
     aliases = ...
     from pfeed.feeds import (
@@ -13,10 +13,12 @@ from importlib.metadata import version
 from pfeed.config import configure, get_config
 
 
+
 plugins = {}
 def add_plugin(plugin: BasePlugin):
     plugins[plugin.name] = plugin
     
+
 
 def __getattr__(name: str):
     if name == 'aliases':
@@ -29,7 +31,7 @@ def __getattr__(name: str):
     elif name in ('BybitFeed', 'Bybit'):
         from pfeed.feeds.bybit_feed import BybitFeed
         return BybitFeed
-    if name in plugins:
+    elif name in plugins:
         return plugins[name]
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     

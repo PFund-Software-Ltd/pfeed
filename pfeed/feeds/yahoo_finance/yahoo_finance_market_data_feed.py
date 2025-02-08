@@ -18,12 +18,12 @@ from pfeed.feeds.market_data_feed import MarketDataFeed
 from pfeed.const.enums import MarketDataType
 
 
-__all__ = ["YahooFinanceFeed"]
+__all__ = ["YahooFinanceMarketDataFeed"]
 
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
-class YahooFinanceFeed(MarketDataFeed):
+class YahooFinanceMarketDataFeed(MarketDataFeed):
     _URLS = {
         "rest": "https://query1.finance.yahoo.com",
         "ws": "wss://streamer.finance.yahoo.com",
@@ -111,6 +111,7 @@ class YahooFinanceFeed(MarketDataFeed):
         data_domain: str='',
         to_storage: tSTORAGE='local',
         auto_transform: bool=True,
+        concat_output: bool=True,
         yfinance_kwargs: dict | None=None,
         **product_specs
     ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | YahooFinanceFeed:
@@ -132,6 +133,9 @@ class YahooFinanceFeed(MarketDataFeed):
                     Otherwise, use yesterday's date as the default start date.
             end_date: End date.
                 If not specified, use today's date as the end date.
+            concat_output: Whether to concatenate the data from different dates.
+                If True, the data from different dates will be concatenated into a single DataFrame.
+                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         '''
@@ -155,6 +159,7 @@ class YahooFinanceFeed(MarketDataFeed):
             data_domain=data_domain,
             to_storage=to_storage,
             auto_transform=auto_transform,
+            concat_output=concat_output,
             **product_specs
         )
     

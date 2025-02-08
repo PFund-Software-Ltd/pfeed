@@ -26,10 +26,10 @@ def __getattr__(name: str):
         from pfund.const.aliases import ALIASES as PFUND_ALIASES
         return {**ALIASES, **PFUND_ALIASES}
     elif name in ('YahooFinanceFeed', 'YahooFinance', 'YF'):
-        from pfeed.feeds.yahoo_finance_feed import YahooFinanceFeed
+        from pfeed.feeds.yahoo_finance.yahoo_finance_market_data_feed import YahooFinanceFeed
         return YahooFinanceFeed
     elif name in ('BybitFeed', 'Bybit'):
-        from pfeed.feeds.bybit_feed import BybitFeed
+        from pfeed.feeds.bybit.bybit_market_data_feed import BybitFeed
         return BybitFeed
     elif name in plugins:
         return plugins[name]

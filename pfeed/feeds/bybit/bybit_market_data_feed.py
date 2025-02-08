@@ -17,10 +17,10 @@ import pandas as pd
 from pfeed.feeds.crypto_market_data_feed import CryptoMarketDataFeed
 
 
-__all__ = ['BybitFeed']
+__all__ = ['BybitMarketDataFeed']
 
 
-class BybitFeed(CryptoMarketDataFeed):
+class BybitMarketDataFeed(CryptoMarketDataFeed):
     @staticmethod
     def get_data_source():
         from pfeed.sources.bybit.source import BybitSource
@@ -61,10 +61,14 @@ class BybitFeed(CryptoMarketDataFeed):
         data_domain: str='',
         to_storage: tSTORAGE='local',
         auto_transform: bool=True,
+        concat_output: bool=True,
         **product_specs
     ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitFeed:
         '''
         Args:
+            concat_output: Whether to concatenate the data from different dates.
+                If True, the data from different dates will be concatenated into a single DataFrame.
+                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
                 get_historical_data(
@@ -86,6 +90,7 @@ class BybitFeed(CryptoMarketDataFeed):
             data_domain=data_domain,
             to_storage=to_storage,
             auto_transform=auto_transform,
+            concat_output=concat_output,
             **product_specs
         )
     

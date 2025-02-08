@@ -11,16 +11,20 @@ class DataSource(StrEnum):
     DATABENTO = 'DATABENTO'
     BYBIT = 'BYBIT'
     BINANCE = 'BINANCE'
+    FINANCIAL_MODELING_PREP = 'FINANCIAL_MODELING_PREP'
     
-    # TODO
     @property
     def feed_class(self) -> type[BaseFeed]:
         """Returns the corresponding Feed class for this data source."""
-        from pfeed.feeds.bybit_feed import BybitFeed
-        from pfeed.feeds.yahoo_finance_feed import YahooFinanceFeed
+        from pfeed.feeds import (
+            Bybit,
+            YahooFinanceFeed,
+            FinancialModelingPrep
+        )
         return {
-            DataSource.BYBIT: BybitFeed,
+            DataSource.BYBIT: Bybit,
             DataSource.YAHOO_FINANCE: YahooFinanceFeed,
             # DataSource.DATABENTO: DatabentoFeed,
             # DataSource.BINANCE: BinanceFeed,
+            DataSource.FINANCIAL_MODELING_PREP: FinancialModelingPrep,
         }[self]

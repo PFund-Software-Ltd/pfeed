@@ -126,7 +126,7 @@ class BaseFeed(ABC):
         if ray.is_initialized():
             ray.shutdown()
 
-    def download(self, *args, **kwargs) -> BaseFeed:
+    def download(self, *args, **kwargs) -> tData | None | BaseFeed:
         raise NotImplementedError(f"{self.name} download() is not implemented")
     
     def stream(
@@ -142,7 +142,7 @@ class BaseFeed(ABC):
     def retrieve(self, *args, **kwargs) -> tData | None:
         raise NotImplementedError(f'{self.name} retrieve() is not implemented')
     
-    def fetch(self, *args, **kwargs) -> tData | None:
+    def fetch(self, *args, **kwargs) -> tData | None | BaseFeed:
         raise NotImplementedError(f'{self.name} fetch() is not implemented')
     
     def get_historical_data(self, *args, **kwargs) -> tData | None:

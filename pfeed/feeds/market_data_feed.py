@@ -536,7 +536,7 @@ class MarketDataFeed(BaseFeed):
     
     # TODO: General-purpose data fetching without storage overhead
     @clear_subflows
-    def fetch(self) -> tDataFrame | None:
+    def fetch(self) -> tDataFrame | None | MarketDataFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
     
     # TODO

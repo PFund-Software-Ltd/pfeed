@@ -1,5 +1,5 @@
 from pfeed.typing.literals import tDATA_TOOL
-from pfeed.feeds.bybit.bybit_market_data_feed import BybitMarketDataFeed
+from pfeed.feeds.bybit.market_feed import BybitMarketFeed
 
 
 class Bybit:
@@ -13,4 +13,4 @@ class Bybit:
         use_deltalake: bool=False,
     ):
         params = {k: v for k, v in locals().items() if k != 'self'}
-        self.market = BybitMarketDataFeed(**params)
+        self.market = BybitMarketFeed(**params)

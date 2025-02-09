@@ -14,18 +14,13 @@ if TYPE_CHECKING:
 
 import pandas as pd
 
-from pfeed.feeds.crypto_market_data_feed import CryptoMarketDataFeed
+from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
 
 
-__all__ = ['BybitMarketDataFeed']
+__all__ = ['BybitMarketFeed']
 
 
-class BybitMarketDataFeed(CryptoMarketDataFeed):
-    @staticmethod
-    def get_data_source():
-        from pfeed.sources.bybit.source import BybitSource
-        return BybitSource()
-    
+class BybitMarketFeed(CryptoMarketFeed):
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.
@@ -63,7 +58,7 @@ class BybitMarketDataFeed(CryptoMarketDataFeed):
         auto_transform: bool=True,
         concat_output: bool=True,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitMarketFeed:
         '''
         Args:
             concat_output: Whether to concatenate the data from different dates.
@@ -130,7 +125,7 @@ class BybitMarketDataFeed(CryptoMarketDataFeed):
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
         **product_specs
-    ) -> tDataFrame | None | BybitFeed:
+    ) -> tDataFrame | None | BybitMarketFeed:
         return super().get_historical_data(
             product,
             resolution,
@@ -158,7 +153,7 @@ class BybitMarketDataFeed(CryptoMarketDataFeed):
         storage_configs: dict | None=None,
         concat_output: bool=True,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitMarketFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -218,7 +213,7 @@ class BybitMarketDataFeed(CryptoMarketDataFeed):
         )
 
     # TODO
-    def stream(self) -> BybitFeed:
+    def stream(self) -> BybitMarketFeed:
         raise NotImplementedError(f'{self.name} stream() is not implemented')
         return self
     

@@ -5,7 +5,7 @@ from pfeed.sources.binance.stream import stream_realtime_data, stream_realtime_d
 
 def __getattr__(name):
     if name in ('Feed', 'BinanceFeed'):
-        from pfeed.feeds.binance_feed import BinanceFeed as Feed
+        from pfeed.feeds.binance.market_feed import BinanceFeed as Feed
         return Feed
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

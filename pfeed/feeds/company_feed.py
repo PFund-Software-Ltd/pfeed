@@ -1,6 +1,6 @@
 from pfeed.feeds.base_feed import BaseFeed
 
 
-class CalendarDataFeed(BaseFeed):
+class CompanyFeed(BaseFeed):
     def __init__(self):
         pass

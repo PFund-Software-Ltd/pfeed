@@ -4,17 +4,24 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed.typing.literals import tDATA_SOURCE
 
+import os
 from abc import ABC, abstractmethod
 
+from pfund.utils.utils import Singleton
 from pfeed.const.enums import DataSource, DataProviderType, DataAccessType
+from pfeed.const.aliases import ALIASES 
 
 
-class BaseSource(ABC):
-    def __init__(self, name: tDATA_SOURCE):
+class BaseSource(Singleton, ABC):
+    def __init__(self, name: tDATA_SOURCE, api_key: str | None=None):
         self.name = DataSource[name.upper()]
+        api_key_name, api_key_alias = f'{self.name}_API_KEY', f'{ALIASES[self.name]}_API_KEY'
+        self._api_key = api_key or os.getenv(api_key_name) or os.getenv(api_key_alias)
         self.generic_metadata, self.specific_metadata = self._load_metadata()
         self.start_date = self.specific_metadata.get('start_date', None)
         self.api_key_required = self.generic_metadata['api_key_required']
+        if self.api_key_required and not self._api_key:
+            raise ValueError(f'{api_key_name} or {api_key_alias} is not set')
         self.access_type = DataAccessType[self.generic_metadata['access_type'].upper()]
         self.provider_type = DataProviderType[self.generic_metadata['provider_type'].upper()]
         self.data_origin = self.generic_metadata['data_origin']

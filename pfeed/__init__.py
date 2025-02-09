@@ -5,8 +5,9 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     aliases = ...
     from pfeed.feeds import (
-        BybitFeed, Bybit,
-        YahooFinanceFeed, YahooFinance, YF,
+        Bybit,
+        YahooFinance, YF,
+        FinancialModelingPrep, FMP,
     )
 
 from importlib.metadata import version
@@ -25,12 +26,15 @@ def __getattr__(name: str):
         from pfeed.const.aliases import ALIASES
         from pfund.const.aliases import ALIASES as PFUND_ALIASES
         return {**ALIASES, **PFUND_ALIASES}
-    elif name in ('YahooFinanceFeed', 'YahooFinance', 'YF'):
-        from pfeed.feeds.yahoo_finance.yahoo_finance_market_data_feed import YahooFinanceFeed
-        return YahooFinanceFeed
-    elif name in ('BybitFeed', 'Bybit'):
-        from pfeed.feeds.bybit.bybit_market_data_feed import BybitFeed
-        return BybitFeed
+    elif name in ('YahooFinance', 'YF'):
+        from pfeed.feeds import YahooFinance
+        return YahooFinance
+    elif name in ('Bybit',):
+        from pfeed.feeds import Bybit
+        return Bybit
+    elif name in ('FinancialModelingPrep', 'FMP'):
+        from pfeed.feeds import FinancialModelingPrep
+        return FinancialModelingPrep
     elif name in plugins:
         return plugins[name]
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")

@@ -4,8 +4,8 @@ if TYPE_CHECKING:
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tSTORAGE
 
-from pfeed.feeds.market_data_feed import MarketDataFeed
+from pfeed.feeds.market_feed import MarketFeed
 
 
-class CryptoMarketDataFeed(MarketDataFeed):
+class CryptoMarketFeed(MarketFeed):
     pass

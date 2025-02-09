@@ -46,6 +46,7 @@ class BaseFeed(ABC):
     
     def __init__(
         self, 
+        api_key: str | None=None,
         data_tool: tDATA_TOOL='polars', 
         pipeline_mode: bool=False,
         use_ray: bool=True,
@@ -58,7 +59,17 @@ class BaseFeed(ABC):
             storage_configs: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
         from pfund.plogging import set_up_loggers
+        self.config = get_config()
+        is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
+        if not is_loggers_set_up:
+            set_up_loggers(self.config.log_path, self.config.logging_config_file_path, user_logging_config=self.config.logging_config)
+        self.logger = logging.getLogger(self.name.lower() + '_data')
+        self.data_tool: ModuleType = importlib.import_module(f'pfeed.data_tools.data_tool_{DataTool[data_tool.lower()]}')
+        self.source: BaseSource = getattr(importlib.import_module(f'pfeed.sources.{self.name.lower()}.source'), f'{self.name}Source')(api_key=api_key)
+        self.api = self.source.api if hasattr(self.source, 'api') else None
+        self.name: DataSource = self.source.name
         self._pipeline_mode = pipeline_mode
+        
         self._use_ray = use_ray
         self._use_prefect = use_prefect
         self._use_bytewax = use_bytewax
@@ -69,26 +80,12 @@ class BaseFeed(ABC):
         if self._use_prefect and self._use_bytewax:
             raise ValueError('Cannot use both prefect and bytewax at the same time')
         self._use_deltalake = use_deltalake
-        self._storage_configs: dict[tSTORAGE, dict] = {}
         self._dataflows: list[DataFlow] = []
         self._subflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
-        self.source: BaseSource = self.get_data_source()
-        self.api = self.source.api if hasattr(self.source, 'api') else None
-        self.name: DataSource = self.source.name
-        self.data_tool: ModuleType = importlib.import_module(f'pfeed.data_tools.data_tool_{DataTool[data_tool.lower()]}')
-        self.config = get_config()
-        is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
-        if not is_loggers_set_up:
-            set_up_loggers(self.config.log_path, self.config.logging_config_file_path, user_logging_config=self.config.logging_config)
-        self.logger = logging.getLogger(self.name.lower() + '_data')
+        self._storage_configs: dict[tSTORAGE, dict] = {}
             
-    @staticmethod
-    @abstractmethod
-    def get_data_source() -> BaseSource:
-        pass
-    
     @staticmethod
     @abstractmethod
     def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:

@@ -47,7 +47,7 @@ def validate_product(func: Callable):
     return wrapper
 
 
-class MarketDataFeed(BaseFeed):
+class MarketFeed(BaseFeed):
     DATA_DOMAIN = 'market_data'
     
     @property
@@ -130,7 +130,7 @@ class MarketDataFeed(BaseFeed):
         auto_transform: bool=True,
         concat_output: bool=True,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketDataFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketFeed:
         '''
         Download historical data from data source.
         
@@ -268,7 +268,7 @@ class MarketDataFeed(BaseFeed):
         storage_configs: dict | None=None,
         concat_output: bool=True,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketDataFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -515,7 +515,7 @@ class MarketDataFeed(BaseFeed):
         channel: str,
         bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
         auto_transform: bool=True,
-    ) -> MarketDataFeed:
+    ) -> MarketFeed:
         # dataflow: DataFlow = self._create_stream_dataflow(bytewax_source=bytewax_source)
         # if auto_transform:
         #     self._add_default_transformations_to_stream()
@@ -536,7 +536,7 @@ class MarketDataFeed(BaseFeed):
     
     # TODO: General-purpose data fetching without storage overhead
     @clear_subflows
-    def fetch(self) -> tDataFrame | None | MarketDataFeed:
+    def fetch(self) -> tDataFrame | None | MarketFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
     
     # TODO

@@ -9,10 +9,10 @@ if TYPE_CHECKING:
 from pfeed.feeds.base_feed import BaseFeed
 
 
-__all__ = ['BinanceFeed']
+__all__ = ['BinanceMarketFeed']
 
 
-class BinanceFeed(BaseFeed):
+class BinanceMarketFeed(BaseFeed):
     def __init__(self, data_tool: tSUPPORTED_DATA_TOOLS='pandas', config: Configuration | None=None):
         super().__init__('binance', data_tool=data_tool, config=config)
         

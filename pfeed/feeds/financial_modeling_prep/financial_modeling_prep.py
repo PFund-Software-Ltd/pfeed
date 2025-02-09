@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 from typing import Literal
 
@@ -7,11 +6,11 @@ from enum import StrEnum
 
 from pfeed.typing.literals import tDATA_TOOL
 from pfeed.feeds.financial_modeling_prep import (
-    FMPEconomicDataFeed,
-    FMPFundamentalDataFeed,
-    FMPNewsDataFeed,
-    FMPMarketDataFeed,
-    FMPAnalystDataFeed,
+    FMPEconomicFeed,
+    FMPFundamentalFeed,
+    FMPNewsFeed,
+    FMPMarketFeed,
+    FMPAnalystFeed,
 )
 
 
@@ -21,7 +20,8 @@ class FMPCategory(StrEnum):
     news = 'news'
     market = 'market'
 tCATEGORY = Literal['economic', 'fundamental', 'news', 'market']
-FMPDataFeed = FMPEconomicDataFeed | FMPFundamentalDataFeed | FMPNewsDataFeed | FMPMarketDataFeed
+FMPDataFeed = FMPEconomicFeed | FMPFundamentalFeed | FMPNewsFeed | FMPMarketFeed
+
 
 class FinancialModelingPrep:
     def __init__(
@@ -34,14 +34,12 @@ class FinancialModelingPrep:
         use_bytewax: bool=False,
         use_deltalake: bool=False,
     ):
-        self._api_key = api_key or os.getenv('FMP_API_KEY')
-        assert self._api_key, 'FMP_API_KEY is not set'
         params = {k: v for k, v in locals().items() if k != 'self'}
-        self.economic = FMPEconomicDataFeed(**params)
-        self.fundamental = FMPFundamentalDataFeed(**params)
-        self.news = FMPNewsDataFeed(**params)
-        self.market = FMPMarketDataFeed(**params)
-        self.analyst = FMPAnalystDataFeed(**params)
+        self.economic = FMPEconomicFeed(**params)
+        self.fundamental = FMPFundamentalFeed(**params)
+        self.news = FMPNewsFeed(**params)
+        self.market = FMPMarketFeed(**params)
+        self.analyst = FMPAnalystFeed(**params)
     
     @property
     def categories(self) -> list[FMPCategory]:

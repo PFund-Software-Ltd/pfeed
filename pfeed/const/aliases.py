@@ -1,5 +1,7 @@
-ALIASES = {
+_BASE_ALIASES = {
     'YF': 'YAHOO_FINANCE',
     'FRD': 'FIRSTRATE_DATA',
     'DBT': 'DATABENTO',
+    'FMP': 'FINANCIAL_MODELING_PREP',
 }
+ALIASES = {**_BASE_ALIASES, **{v: k for k, v in _BASE_ALIASES.items()}}

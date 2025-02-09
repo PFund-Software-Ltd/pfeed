@@ -14,16 +14,16 @@ import yfinance
 import pandas as pd
 
 from pfund.datas.resolution import Resolution
-from pfeed.feeds.market_data_feed import MarketDataFeed
+from pfeed.feeds.market_feed import MarketFeed
 from pfeed.const.enums import MarketDataType
 
 
-__all__ = ["YahooFinanceMarketDataFeed"]
+__all__ = ["YahooFinanceMarketFeed"]
 
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
-class YahooFinanceMarketDataFeed(MarketDataFeed):
+class YahooFinanceMarketFeed(MarketFeed):
     _URLS = {
         "rest": "https://query1.finance.yahoo.com",
         "ws": "wss://streamer.finance.yahoo.com",
@@ -57,11 +57,6 @@ class YahooFinanceMarketDataFeed(MarketDataFeed):
     _yfinance_kwargs: dict | None = None
 
     @staticmethod
-    def get_data_source():
-        from pfeed.sources.yahoo_finance.source import YahooFinanceSource
-        return YahooFinanceSource()
-    
-    @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         # convert to UTC and reset index
         df.index = df.index.tz_convert("UTC").tz_localize(None)
@@ -91,7 +86,7 @@ class YahooFinanceMarketDataFeed(MarketDataFeed):
         return yfinance_kwargs
     
     # TODO
-    def stream(self) -> YahooFinanceFeed:
+    def stream(self) -> YahooFinanceMarketFeed:
         raise NotImplementedError(f'{self.name} stream() is not implemented')
         return self
 
@@ -114,7 +109,7 @@ class YahooFinanceMarketDataFeed(MarketDataFeed):
         concat_output: bool=True,
         yfinance_kwargs: dict | None=None,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | YahooFinanceFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | YahooFinanceMarketFeed:
         '''
         Download historical data from Yahoo Finance.
         Be reminded that if you include today's data, it can be incomplete, this especially applies to the usage of rollback_period.
@@ -245,7 +240,7 @@ class YahooFinanceMarketDataFeed(MarketDataFeed):
         storage_configs: dict | None=None,
         concat_output: bool=True,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | YahooFinanceFeed:
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | YahooFinanceMarketFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".

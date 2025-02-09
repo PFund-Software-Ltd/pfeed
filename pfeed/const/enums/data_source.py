@@ -18,12 +18,12 @@ class DataSource(StrEnum):
         """Returns the corresponding Feed class for this data source."""
         from pfeed.feeds import (
             Bybit,
-            YahooFinanceFeed,
+            YahooFinance,
             FinancialModelingPrep
         )
         return {
             DataSource.BYBIT: Bybit,
-            DataSource.YAHOO_FINANCE: YahooFinanceFeed,
+            DataSource.YAHOO_FINANCE: YahooFinance,
             # DataSource.DATABENTO: DatabentoFeed,
             # DataSource.BINANCE: BinanceFeed,
             DataSource.FINANCIAL_MODELING_PREP: FinancialModelingPrep,

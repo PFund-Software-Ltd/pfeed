@@ -10,9 +10,9 @@ __all__ = ["BybitSource"]
 
 
 class BybitSource(BaseSource):
-    def __init__(self):
+    def __init__(self, api_key: str | None=None):
         from pfeed.sources.bybit.api import BybitAPI
-        super().__init__('BYBIT')
+        super().__init__('BYBIT', api_key=api_key)
         self._exchange: BaseExchange = self._create_exchange()
         self._exchange.load_all_product_mappings()
         self.adapter = self._exchange.adapter

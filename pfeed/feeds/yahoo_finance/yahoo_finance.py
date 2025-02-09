@@ -1,7 +1,11 @@
-from pfeed.feeds.yahoo_finance.yahoo_finance_market_data_feed import YahooFinanceMarketDataFeed
+from pfeed.feeds.yahoo_finance.market_feed import YahooFinanceMarketFeed
+
+
+__all__ = ['YahooFinance']
 
 
 class YahooFinance:
     def __init__(self):
-        self.market = YahooFinanceMarketDataFeed()
-        
+        self.market = YahooFinanceMarketFeed()
+
+

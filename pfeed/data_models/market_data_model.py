@@ -62,7 +62,14 @@ class MarketDataModel(TimeBasedDataModel):
         self.storage_path = self._create_storage_path()
 
     def __hash__(self):
-        return hash((self.source.name, self.data_origin, self.start_date, self.end_date, self.product, self.resolution))
+        return hash((
+            self.source.name, 
+            self.data_origin, 
+            self.start_date, 
+            self.end_date, 
+            self.product, 
+            self.resolution
+        ))
     
     def update_start_date(self, start_date: datetime.date) -> None:
         super().update_start_date(start_date)

@@ -1,6 +1,6 @@
-from pfeed.feeds.financial_modeling_prep.economic_feed import (
-    FinancialModelingPrepEconomicFeed,
-    FinancialModelingPrepEconomicFeed as FMPEconomicFeed,
+from pfeed.feeds.financial_modeling_prep.economics_feed import (
+    FinancialModelingPrepEconomicsFeed,
+    FinancialModelingPrepEconomicsFeed as FMPEconomicsFeed,
 )
 from pfeed.feeds.financial_modeling_prep.fundamental_feed import (
     FinancialModelingPrepFundamentalFeed,

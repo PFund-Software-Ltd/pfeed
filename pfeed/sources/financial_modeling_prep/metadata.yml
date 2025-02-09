@@ -1,0 +1,42 @@
+data_origin: https://financialmodelingprep.com
+data_categories:
+  market_data:
+    tick:
+      - STK
+      - ETF
+      - MTF
+      - CMDTY
+      - FX
+      - CRYPTO
+      - INDEX
+    minute:
+      - STK
+      - CMDTY
+      - FX
+      - CRYPTO
+      - INDEX
+  news_data:
+    - article
+    - press_release
+  # economics_data:
+  #   indicators:
+  #     - GDP
+  # company_data:
+  #   profile
+  #   fundamental
+  #   earnings_transcript
+  # analyst_data:
+  #   estimates:
+  #   ratings:
+  # calendar_data:
+  # statements_data:
+  #   - income_statement
+  #   - balance_sheet_statement
+  #   - cash_flow_statement
+provider_type: vendor
+api_key_required: true
+access_type: free_tier
+rate_limits: null
+github_repo: https://github.com/Pfund-Software-Ltd/fmp-api-client
+is_repo_official: false
+docs_url: https://site.financialmodelingprep.com/developer/docs/stable

@@ -6,6 +6,7 @@ if TYPE_CHECKING:
 
 from pfeed.sources.base_source import BaseSource
 
+
 __all__ = ["BybitSource"]
 
 

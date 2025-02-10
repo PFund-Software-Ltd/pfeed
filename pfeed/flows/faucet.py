@@ -31,7 +31,7 @@ class Faucet:
         name: str='',
     ):
         self.data_model = data_model
-        self.data_source: BaseSource = data_model.source
+        self.data_source: BaseSource = data_model.data_source
         self.op_type = ExtractType[op_type.lower()] if isinstance(op_type, str) else op_type
         self.name = self._create_name(name)
         self.execute_func = lambda_with_name(self.name, execute_func)

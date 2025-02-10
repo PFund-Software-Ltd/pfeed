@@ -8,7 +8,7 @@ import os
 from abc import ABC, abstractmethod
 
 from pfund.utils.utils import Singleton
-from pfeed.const.enums import DataSource, DataProviderType, DataAccessType
+from pfeed.const.enums import DataSource, DataProviderType, DataAccessType, ProductType
 from pfeed.const.aliases import ALIASES 
 
 
@@ -28,19 +28,20 @@ class BaseSource(Singleton, ABC):
         self.rate_limits = self.generic_metadata['rate_limits']
         self.docs_url = self.generic_metadata['docs_url']
         self.data_categories = list(self.generic_metadata['data_categories'].keys())
-        self.dtypes = self.data_types = self._extract_data_types()
-        self.highest_resolution, self.lowest_resolution = self._get_highest_and_lowest_resolutions(self.data_types)
-        self.ptypes = self.product_types = self._extract_product_types()
+        has_market_data = 'market_data' in self.data_categories
+        if has_market_data:
+            self.highest_resolution, self.lowest_resolution = self._get_highest_and_lowest_resolutions()
+            self.ptypes = self.product_types = self._extract_product_types()
     
     @abstractmethod
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
         pass
     
-    @staticmethod
-    def _get_highest_and_lowest_resolutions(data_types: list[str]):
+    def _get_highest_and_lowest_resolutions(self):
         from pfund.datas.resolution import Resolution
         from pfeed.const.enums import MarketDataType
-        resolutions = sorted([Resolution(data_type) for data_type in data_types if data_type.upper() in MarketDataType.__members__], reverse=True)
+        data_types = [MarketDataType[data_type.upper()] for data_type in self.generic_metadata['data_categories']['market_data']]
+        resolutions = sorted([Resolution(data_type) for data_type in data_types], reverse=True)
         return resolutions[0], resolutions[-1]
     
     def _load_metadata(self):
@@ -53,20 +54,9 @@ class BaseSource(Singleton, ABC):
             specific_metadata = next(metadata_docs, {})
         return generic_metadata, specific_metadata
 
-    def _extract_data_types(self):
-        data_types = []
-        for data_category in self.generic_metadata['data_categories']:
-            for data_type in self.generic_metadata['data_categories'][data_category]:
-                if data_category == 'market_data':
-                    # capitalize orderbook_level from 'l' to 'L'
-                    data_type = data_type.lower().replace('_l', '_L')
-                data_types.append(data_type)
-        return data_types
-        
-    def _extract_product_types(self):
+    def _extract_product_types(self) -> list[ProductType]:
         return list(set(
-            product_type.upper()
-            for data_category in self.generic_metadata['data_categories'].values()
-            for data_type in data_category.values()
-            for product_type in data_type
+            ProductType[product_type.upper()]
+            for data_type in self.generic_metadata['data_categories']['market_data']
+            for product_type in self.generic_metadata['data_categories']['market_data'][data_type]
         ))

@@ -25,7 +25,7 @@ class BaseDataModel(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     env: Environment
-    source: BaseSource
+    data_source: BaseSource
     filename: str = ''
     storage_path: Path | None = None
     file_extension: str = ''
@@ -35,7 +35,7 @@ class BaseDataModel(BaseModel, ABC):
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
-            self.data_origin = self.source.name.value
+            self.data_origin = self.data_source.name.value
         self.filename = self._create_filename()
         self.storage_path = self._create_storage_path()
     
@@ -43,7 +43,7 @@ class BaseDataModel(BaseModel, ABC):
         '''
         A data_origin is not effective if it is the same as the source name.
         '''
-        return self.data_origin != self.source.name.value
+        return self.data_origin != self.data_source.name.value
     
     # def add_metadata(self, metadata: dict) -> None:
     #     assert not self.metadata, 'metadata is already set, use update_metadata() instead'
@@ -54,12 +54,9 @@ class BaseDataModel(BaseModel, ABC):
 
     def __str__(self):
         if self.is_data_origin_effective():
-            return f'{self.source.name.value}:{self.data_origin}'
+            return f'{self.data_source.name.value}:{self.data_origin}'
         else:
-            return f'{self.source.name.value}'
-
-    def __hash__(self):
-        return hash((self.source.name, self.data_origin))
+            return f'{self.data_source.name.value}'
 
     @abstractmethod
     def _create_filename(self) -> str:

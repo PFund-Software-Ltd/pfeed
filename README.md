@@ -1,4 +1,4 @@
-# PFeed: Data Pipeline for Algo-Trading, Getting and Storing Real-Time and Historical Data Made Easy.
+# PFeed: The Single Source of Truth for Algo-Trading Data. Uniting Traders to Clean Once & Share with All.
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)
 ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfeed?style=social)
@@ -25,16 +25,16 @@
 [Prefect]: https://www.prefect.io/
 [Bytewax]: https://www.bytewax.io
 
-> **This library is NOT ready for use, please wait for 0.1.0 release.**
+> **This library is NOT ready for use, please wait for 0.1.0 release.** 
 
 ## Problem
-Starting algo-trading requires reliable and clean data. However, the time-consuming and mundane tasks of data cleaning and storage often discourage traders from embarking on their algo-trading journey.
+Starting algo-trading requires reliable and clean data, but traders often **work in silos**, each writing **duplicated code** to clean the same datasets—wasting time and effort. Accessing clean, ready-to-use data is a challenge, forcing traders to handle tedious data tasks before they can even start trading.
 
 ## Solution
-By leveraging modern data engineering tools, `pfeed` handles the tedious data work and **outputs backtesting-ready data**, allowing traders to focus on strategy development.
+`pfeed` leverages modern data engineering tools to centralize data cleaning efforts, automate ETL/ELT, store data in a **data lake with Delta Lake** support, and output **backtesting-ready data**, allowing traders to focus on strategy development.
 
 ---
-PFeed (/piː fiːd/) is the data engine for trading, serving as a bridge between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, supporting both **batch processing** and **streaming** workflows through streamlined data collection, cleaning, transformation, and storage.
+PFeed (/piː fiːd/) is the data engine for trading, serving as a pipeline between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, supporting both **batch processing** and **streaming** workflows through streamlined data collection, cleaning, transformation, and storage.
 
 ## Core Features
 - [x] Download or stream reliable, validated and **clean data** for research, backtesting, or live trading

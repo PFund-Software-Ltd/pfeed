@@ -1,5 +1,5 @@
 import pytest
-from pfeed.feeds.bybit.market_feed import BybitFeed
+from pfeed.feeds.bybit.bybit import BybitFeed
 
 
 @pytest.fixture

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING, Callable
+from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
@@ -11,8 +11,6 @@ if TYPE_CHECKING:
     from pfeed.flows.dataflow import DataFlow
 
 import datetime
-from abc import abstractmethod
-from functools import wraps
 
 import pandas as pd
 import narwhals as nw
@@ -23,28 +21,10 @@ from pfeed import etl
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.const.enums import DataAccessType, DataStorage
-from pfeed.utils.utils import lambda_with_name
+from pfeed.utils.utils import lambda_with_name, validate_product
 
 
 tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
-
-
-def validate_product(func: Callable):
-    @wraps(func)
-    def wrapper(self, product: str, *args, **kwargs):
-        # use regex to validate product string format, it must be like "XXX_YYY_ZZZ"
-        # where the maximum length of each part is 10
-        import re
-        max_len = 10
-        pattern = r'^[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}$'
-        if not re.match(pattern, product):
-            raise ValueError(
-                f'Invalid product format: {product}. '
-                'Product must be in format "XXX_YYY_ZZZ" where each part contains only letters '
-                f'and maximum {max_len} characters long.'
-            )
-        return func(self, product, *args, **kwargs)
-    return wrapper
 
 
 class MarketFeed(BaseFeed):
@@ -72,7 +52,7 @@ class MarketFeed(BaseFeed):
             end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return MarketDataModel(
             env=env,
-            source=self.source,
+            source=self.data_source,
             data_origin=data_origin,
             product=product,
             resolution=resolution,
@@ -168,8 +148,8 @@ class MarketFeed(BaseFeed):
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
         unit_resolution = Resolution('1' + repr(resolution.timeframe))
         adjusted_resolution = min(
-            self.source.highest_resolution,
-            max(unit_resolution, self.source.lowest_resolution)
+            self.data_source.highest_resolution,
+            max(unit_resolution, self.data_source.lowest_resolution)
         )
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         # if no default and no custom transformations, set data_layer to 'raw'
@@ -210,17 +190,6 @@ class MarketFeed(BaseFeed):
                 return dfs
         else:
             return self
-    
-    @abstractmethod
-    def _create_download_dataflows(
-        self,
-        product: BaseProduct,
-        resolution: Resolution,
-        start_date: datetime.date,
-        end_date: datetime.date,
-        data_origin: str='',
-    ) -> list[DataFlow]:
-        raise NotImplementedError
     
     def _add_default_transformations_to_download(
         self, 
@@ -371,7 +340,7 @@ class MarketFeed(BaseFeed):
         search_resolutions = [unit_resolution] + [
             resolution for resolution in unit_resolution.get_higher_resolutions(exclude_quote=True) 
             # remove resolutions that are not supported by the data source
-            if resolution <= self.source.highest_resolution
+            if resolution <= self.data_source.highest_resolution
         ]
         data = None
         for search_resolution in search_resolutions:
@@ -467,7 +436,7 @@ class MarketFeed(BaseFeed):
         dfs_from_source: list[tDataFrame] = []
         if missing_dates:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
-            if self.source.access_type != DataAccessType.PAID_BY_USAGE:
+            if self.data_source.access_type != DataAccessType.PAID_BY_USAGE:
                 dfs_from_source_per_date = self.download(
                     product,
                     symbol=symbol,

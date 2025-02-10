@@ -40,6 +40,3 @@ class TimeBasedDataModel(BaseDataModel):
             return ':'.join([super().__str__(), str(self.start_date)])
         else:
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
-
-    def __hash__(self):
-        return hash((self.source.name, self.data_origin, self.start_date, self.end_date))

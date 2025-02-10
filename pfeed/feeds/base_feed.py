@@ -46,7 +46,7 @@ class BaseFeed(ABC):
     
     def __init__(
         self, 
-        api_key: str | None=None,
+        data_source: BaseSource | None=None,
         data_tool: tDATA_TOOL='polars', 
         pipeline_mode: bool=False,
         use_ray: bool=True,
@@ -63,13 +63,16 @@ class BaseFeed(ABC):
         is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
         if not is_loggers_set_up:
             set_up_loggers(self.config.log_path, self.config.logging_config_file_path, user_logging_config=self.config.logging_config)
-        self.logger = logging.getLogger(self.name.lower() + '_data')
         self.data_tool: ModuleType = importlib.import_module(f'pfeed.data_tools.data_tool_{DataTool[data_tool.lower()]}')
-        self.source: BaseSource = getattr(importlib.import_module(f'pfeed.sources.{self.name.lower()}.source'), f'{self.name}Source')(api_key=api_key)
-        self.api = self.source.api if hasattr(self.source, 'api') else None
-        self.name: DataSource = self.source.name
+        if data_source is None:
+            assert hasattr(self, '_create_data_source'), '_create_data_source() is not implemented'
+            self.data_source: BaseSource = self._create_data_source()
+        else:
+            self.data_source: BaseSource = data_source
+        self.name: DataSource = self.data_source.name
+        self.logger = logging.getLogger(self.name.lower() + '_data')
+
         self._pipeline_mode = pipeline_mode
-        
         self._use_ray = use_ray
         self._use_prefect = use_prefect
         self._use_bytewax = use_bytewax
@@ -85,10 +88,14 @@ class BaseFeed(ABC):
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
         self._storage_configs: dict[tSTORAGE, dict] = {}
-            
+    
+    @property
+    def api(self):
+        return self.data_source.api if hasattr(self.data_source, 'api') else None
+    
     @staticmethod
     @abstractmethod
-    def _normalize_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         pass
     
     @abstractmethod
@@ -100,7 +107,7 @@ class BaseFeed(ABC):
         pass
     
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
-        return self.source.create_product(product_basis, symbol=symbol, **product_specs)
+        return self.data_source.create_product(product_basis, symbol=symbol, **product_specs)
 
     def configure_storage(self, storage: tSTORAGE, storage_configs: dict) -> BaseFeed:
         '''Configure storage kwargs for the given storage
@@ -123,8 +130,9 @@ class BaseFeed(ABC):
         if ray.is_initialized():
             ray.shutdown()
 
+    @abstractmethod
     def download(self, *args, **kwargs) -> tData | None | BaseFeed:
-        raise NotImplementedError(f"{self.name} download() is not implemented")
+        pass
     
     def stream(
         self, 
@@ -136,9 +144,11 @@ class BaseFeed(ABC):
     ) -> BaseFeed:
         raise NotImplementedError(f"{self.name} stream() is not implemented")
 
+    @abstractmethod
     def retrieve(self, *args, **kwargs) -> tData | None:
-        raise NotImplementedError(f'{self.name} retrieve() is not implemented')
+        pass
     
+    # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
     def fetch(self, *args, **kwargs) -> tData | None | BaseFeed:
         raise NotImplementedError(f'{self.name} fetch() is not implemented')
     
@@ -148,8 +158,13 @@ class BaseFeed(ABC):
     def get_realtime_data(self, *args, **kwargs) -> tData | None:
         raise NotImplementedError(f'{self.name} get_realtime_data() is not implemented')
     
+    @abstractmethod
+    def _create_download_dataflows(self, *args, **kwargs) -> list[DataFlow]:
+        pass
+    
+    @abstractmethod
     def _execute_download(self, data_model: BaseDataModel) -> tData:
-        raise NotImplementedError(f"{self.name} _execute_download() is not implemented")
+        pass
     
     def _execute_stream(
         self, 
@@ -157,7 +172,7 @@ class BaseFeed(ABC):
         bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
     ) -> tData | BytewaxSource | BytewaxStream:
         raise NotImplementedError(f"{self.name} _execute_stream() is not implemented")
-    
+
     def _execute_retrieve(
         self,
         data_model: BaseDataModel, 
@@ -224,8 +239,8 @@ class BaseFeed(ABC):
                 end_date = yesterday
         else:
             if rollback_period == 'max':
-                if self.source.start_date:
-                    start_date = self.source.start_date
+                if self.data_source.start_date:
+                    start_date = self.data_source.start_date
                 else:
                     raise ValueError(f'{self.name} {rollback_period=} is not supported')
             else:

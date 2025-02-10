@@ -19,6 +19,9 @@ class TradFiSource(BaseSource):
             Product = OptionProduct
         elif ptype == TradFiProductType.FUT:
             Product = FutureProduct
+        # TODO: add crypto product
+        # elif ptype == TradFiProductType.CRYPTO:
+            # Product = CryptoProduct
         # EXTEND: add other product types, e.g. ETF, FX, etc.
         else:
             Product = BaseProduct

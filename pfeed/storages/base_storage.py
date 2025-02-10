@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from pfeed.const.enums import DataStorage, DataLayer
-from pfeed.data_models.market_data_model import MarketDataModel
+from pfeed.data_models import MarketDataModel, NewsDataModel
 
 
 class BaseStorage(ABC):
@@ -85,7 +85,7 @@ class BaseStorage(ABC):
             raise NotImplementedError(f'No data handler is available for {type(self.data_model)}')
     
     def initialize_logger(self):
-        name = self._data_model.source.name.lower()
+        name = self._data_model.data_source.name.lower()
         self._logger = logging.getLogger(f"{name}_data")
     
     @property

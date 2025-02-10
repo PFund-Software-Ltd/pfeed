@@ -93,7 +93,7 @@ class DuckDBStorage(BaseStorage):
     def filename(self) -> str | None:
         if not self._data_model:
             return None
-        name = self._data_model.source.name.lower()
+        name = self._data_model.data_source.name.lower()
         if self._data_model.is_data_origin_effective():
             name = self._data_model.data_origin.lower()
         return name + self._data_model.file_extension
@@ -110,7 +110,7 @@ class DuckDBStorage(BaseStorage):
             Path(self.data_layer)
             / self.data_domain
             / self.data_model.env.value
-            / self.data_model.source.name 
+            / self.data_model.data_source.name 
             / self.data_model.data_origin
         )
     

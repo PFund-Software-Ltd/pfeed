@@ -1,8 +1,13 @@
-from pfeed.feeds.databento.market_feed import DatabentoMarketFeed
+from pfeed.feeds.market_feed import MarketFeed
 
 
-class Databento:
+# download data date by date to avoid memory issue (pandas) 
+# and it is the least risky in case of download failure of bulk data
+def download(...):
+    pass
+
+
+class DatabentoMarketFeed(MarketFeed):
     def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.market = DatabentoMarketFeed(api_key)
-
+        super().__init__()
+        self._api_key = api_key

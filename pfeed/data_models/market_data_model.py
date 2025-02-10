@@ -53,7 +53,7 @@ class MarketDataModel(TimeBasedDataModel):
         '''
         # lowest_supported_resolution = Resolution('1' + [dt.name for dt in MarketDataType][-1])
         lowest_supported_resolution = self.global_min_resolution
-        assert lowest_supported_resolution <= self.resolution <= self.source.highest_resolution, f'{self.resolution=} is not supported for {self.source.name}'
+        assert lowest_supported_resolution <= self.resolution <= self.data_source.highest_resolution, f'{self.resolution=} is not supported for {self.data_source.name}'
         return self.resolution
 
     def update_resolution(self, resolution: Resolution) -> None:
@@ -61,16 +61,6 @@ class MarketDataModel(TimeBasedDataModel):
         self._validate_resolution()
         self.storage_path = self._create_storage_path()
 
-    def __hash__(self):
-        return hash((
-            self.source.name, 
-            self.data_origin, 
-            self.start_date, 
-            self.end_date, 
-            self.product, 
-            self.resolution
-        ))
-    
     def update_start_date(self, start_date: datetime.date) -> None:
         super().update_start_date(start_date)
         # update filename and storage path to reflect the new start date
@@ -79,7 +69,7 @@ class MarketDataModel(TimeBasedDataModel):
 
     def _create_filename(self) -> str:
         # NOTE: since storage is per date, only uses self.date (start_date) to create filename
-        filename = '_'.join([self.product.basis, str(self.date)])
+        filename = '_'.join([self.product.name, str(self.date)])
         return filename + self.file_extension
 
     def _create_storage_path(self) -> Path:
@@ -87,7 +77,7 @@ class MarketDataModel(TimeBasedDataModel):
         year, month, day = str(self.date).split('-')
         return (
             Path(self.env.value)
-            / self.source.name
+            / self.data_source.name
             / self.data_origin
             / self.product.type.value
             / self.product.name

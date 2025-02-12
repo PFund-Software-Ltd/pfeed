@@ -1,44 +1,29 @@
+'''
+ETL for market data.
+'''
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from types import ModuleType
 if TYPE_CHECKING:
-    from narwhals.typing import IntoFrame, Frame
-    from pfeed.typing.literals import tPRODUCT_TYPE, tDATA_TOOL
-    from pfeed.typing.core import tDataFrame, tData
-
-import importlib
+    from narwhals.typing import IntoFrame
+    from pfeed.typing.literals import tPRODUCT_TYPE
 
 import pandas as pd
-import polars as pl
-import narwhals as nw
 
 from pfund.datas.resolution import Resolution
-from pfeed.typing.core import dd
-from pfeed.const.enums import DataTool
-from pfeed.utils.dataframe import is_dataframe
-
-
-def get_data_tool(data_tool: DataTool | tDATA_TOOL) -> ModuleType:
-    dtl = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
-    return importlib.import_module(f'pfeed.data_tools.data_tool_{dtl}')
 
 
 def standardize_columns(df: pd.DataFrame, resolution: Resolution, product_name: str, symbol: str='') -> pd.DataFrame:
     """Standardizes the columns of a DataFrame.
-    Adds columns 'resolution', 'product', 'symbol', and convert 'ts' to datetime
+    Adds columns 'resolution', 'product', 'symbol', and convert 'date' to datetime
     Args:
         product_name: Full name of the product, using the 'name' attribute of the product
     """
-    from pandas.api.types import is_datetime64_any_dtype as is_datetime
-    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
+    from pfeed._etl.base import standardize_date_column
     df['resolution'] = repr(resolution)
     df['product'] = product_name.upper()
     if symbol:
         df['symbol'] = symbol.upper()
-    if not is_datetime(df['ts']):
-        first_ts = df.loc[0, 'ts']
-        ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
-        df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
+    df = standardize_date_column(df)
     return df
 
 
@@ -48,9 +33,9 @@ def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
     pdt = df['product'][0]
     ptype: tPRODUCT_TYPE = pdt.split('_')[2]
     if is_tick_data:
-        standard_cols = ['ts', 'product', 'resolution', 'side', 'volume', 'price']
+        standard_cols = ['date', 'product', 'resolution', 'side', 'volume', 'price']
     else:
-        standard_cols = ['ts', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']
+        standard_cols = ['date', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']
     df_cols = df.columns
     extra_cols = ['symbol']
     # EXTEND
@@ -64,8 +49,8 @@ def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    '''Moves 'ts', 'product', 'resolution', 'symbol' to the leftmost side.'''
-    left_cols = ['ts', 'resolution', 'product']
+    '''Moves 'date', 'product', 'resolution', 'symbol' to the leftmost side.'''
+    left_cols = ['date', 'resolution', 'product']
     if 'symbol' in df.columns:
         left_cols.append('symbol')
     df = df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
@@ -80,6 +65,7 @@ def resample_data(df: IntoFrame, resolution: str | Resolution) -> pd.DataFrame:
     Returns:
         The resampled dataframe.
     '''
+    from pfeed._etl.base import convert_to_pandas_df
     df = convert_to_pandas_df(df)
     if isinstance(resolution, str):
         resolution = Resolution(resolution)
@@ -125,7 +111,7 @@ def resample_data(df: IntoFrame, resolution: str | Resolution) -> pd.DataFrame:
           
     resampled_df = (
         df
-        .set_index('ts')
+        .set_index('date')
         .resample(
             eresolution,
             label='left',
@@ -143,56 +129,3 @@ def resample_data(df: IntoFrame, resolution: str | Resolution) -> pd.DataFrame:
     # resampled_df = organize_columns(resampled_df)
     return resampled_df
 
-
-def convert_to_pandas_df(data: tData) -> pd.DataFrame:
-    import io
-    from pfeed.utils.file_formats import decompress_data, is_parquet, is_likely_csv
-    if isinstance(data, bytes):
-        data = decompress_data(data)
-        if is_parquet(data):
-            return pd.read_parquet(io.BytesIO(data))
-        elif is_likely_csv(data):
-            return pd.read_csv(io.BytesIO(data))
-        else:
-            raise ValueError("Unknown or unsupported format")
-    elif isinstance(data, pd.DataFrame):
-        return data
-    elif is_dataframe(data):
-        df: Frame = nw.from_native(data)
-        if isinstance(df, nw.LazyFrame):
-            df = df.collect()
-        return df.to_pandas()
-    else:
-        raise ValueError(f'{type(data)=}')
-
-
-def convert_to_user_df(df: tDataFrame, data_tool: DataTool | tDATA_TOOL) -> tDataFrame:
-    '''Converts the input dataframe to the user's desired data tool.
-    Args:
-        df: The input dataframe to be converted.
-        data_tool: The data tool to convert the dataframe to.
-            e.g. if data_tool is 'pandas', the returned the dataframe is a pandas dataframe.
-    Returns:
-        The converted dataframe.
-    '''
-    data_tool = data_tool.lower()
-    # if the input dataframe is already in the desired data tool, return it directly
-    if isinstance(df, pd.DataFrame) and data_tool == DataTool.pandas:
-        return df
-    elif isinstance(df, (pl.DataFrame, pl.LazyFrame)) and data_tool == DataTool.polars:
-        return df.lazy() if isinstance(df, pl.DataFrame) else df
-    elif isinstance(df, dd.DataFrame) and data_tool == DataTool.dask:
-        return df
-
-    nw_df = nw.from_native(df)
-    if data_tool == DataTool.pandas:
-        return nw_df.to_pandas()
-    elif data_tool == DataTool.polars:
-        return nw_df.to_polars().lazy()
-    elif data_tool == DataTool.dask:
-        return dd.from_pandas(nw_df.to_pandas(), npartitions=1)
-    # elif data_tool == DataTool.spark:
-    #     spark = SparkSession.builder.getOrCreate()
-    #     return spark.createDataFrame(df)
-    else:
-        raise ValueError(f'{data_tool=}')

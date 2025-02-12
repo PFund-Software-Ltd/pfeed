@@ -8,7 +8,7 @@ from logging.handlers import QueueHandler, QueueListener
 from tqdm import tqdm
 from rich.console import Console
 
-from pfeed import etl
+from pfeed._etl import etl
 from pfeed.config import Configuration
 from pfeed.utils.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes

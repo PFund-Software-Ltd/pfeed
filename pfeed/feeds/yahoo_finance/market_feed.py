@@ -71,7 +71,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         df['volume'] = df['volume'].astype(float)
         
         # somehow different column names "Date" and "Datetime" are used in yfinance depending on the resolution
-        RENAMING_COLS = {'date': 'ts', 'datetime': 'ts', 'stock_splits': 'splits'}
+        RENAMING_COLS = {'datetime': 'date', 'stock_splits': 'splits'}
         df = df.rename(columns=RENAMING_COLS)
         return df
     
@@ -260,7 +260,7 @@ class YahooFinanceMarketFeed(MarketFeed):
                     e.g. standard columns in second data are ts, product, open, high, low, close, volume
                 'cleaned' (default): perform normalization following pfund's convention, preserve all columns
                     Normalization example:
-                    - renaming: 'timestamp' -> 'ts'
+                    - renaming: 'timestamp' -> 'date'
                     - mapping: 'buy' -> 1, 'sell' -> -1
                 'raw' (most raw): keep the original data, no transformation will be performed.
                 It will be ignored if the data is loaded from storage but not downloaded.
@@ -331,7 +331,7 @@ class YahooFinanceMarketFeed(MarketFeed):
                     e.g. standard columns in stock data are ts, product, open, high, low, close, volume, dividends, splits
                 'normalized' (default): perform normalization following pfund's convention, preserve all columns
                     Normalization example:
-                    - renaming: 'timestamp' -> 'ts'
+                    - renaming: 'timestamp' -> 'date'
                     - mapping: 'buy' -> 1, 'sell' -> -1
                 'original' (most raw): keep the original data from yfinance, no transformation will be performed.
                 It will be ignored if the data is loaded from storage but not downloaded.
@@ -372,7 +372,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             expiration: e.g. '2024-12-13', it must be one of the values returned by `get_option_expirations`.
             option_type: 'CALL' or 'PUT'
         '''
-        from pfeed.etl import convert_to_user_df
+        from pfeed._etl.base import convert_to_user_df
         
         ticker: yfinance.Ticker = self.api.Ticker(symbol)
         option_chain = ticker.option_chain(expiration)

@@ -33,7 +33,7 @@ def sample_dfs():
 @pytest.fixture
 def ts_df():
     pdf = pd.DataFrame({
-        'ts': pd.to_datetime(['2024-01-01', '2024-01-03', '2024-01-02']),
+        'date': pd.to_datetime(['2024-01-01', '2024-01-03', '2024-01-02']),
         'value': [1, 3, 2]
     })
     return dd.from_pandas(pdf, npartitions=1)
@@ -77,7 +77,7 @@ def test_concat_with_index_reset(sample_dfs):
 def test_sort_by_ts(ts_df):
     result = sort_by_ts(ts_df)
     expected = dd.from_pandas(pd.DataFrame({
-        'ts': pd.to_datetime(['2024-01-01', '2024-01-02', '2024-01-03']),
+        'date': pd.to_datetime(['2024-01-01', '2024-01-02', '2024-01-03']),
         'value': [1, 2, 3]
     }), npartitions=1)
     assert_eq(result, expected, check_divisions=False)

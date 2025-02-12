@@ -34,7 +34,7 @@ class FinancialModelingPrep:
     def __init__(
         self, 
         api_key: str | None=None,
-        fmp_plan: Literal['basic', 'starter', 'premium', 'ultimate']='basic',
+        fmp_plan: Literal['basic', 'starter', 'premium', 'ultimate']='',
         data_tool: tDATA_TOOL='polars', 
         pipeline_mode: bool=False,
         use_ray: bool=False,

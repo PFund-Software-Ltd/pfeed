@@ -26,7 +26,7 @@ def sample_dfs():
 @pytest.fixture
 def ts_df():
     return pd.DataFrame({
-        'ts': pd.to_datetime(['2024-01-01', '2024-01-03', '2024-01-02']),
+        'date': pd.to_datetime(['2024-01-01', '2024-01-03', '2024-01-02']),
         'value': [1, 3, 2]
     })
 
@@ -71,7 +71,7 @@ def test_concat_with_index_reset(sample_dfs):
 def test_sort_by_ts(ts_df):
     result = sort_by_ts(ts_df)
     expected = pd.DataFrame({
-        'ts': pd.to_datetime(['2024-01-01', '2024-01-02', '2024-01-03']),
+        'date': pd.to_datetime(['2024-01-01', '2024-01-02', '2024-01-03']),
         'value': [1, 2, 3]
     })
     pd.testing.assert_frame_equal(result, expected)

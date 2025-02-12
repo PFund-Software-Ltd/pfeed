@@ -72,15 +72,18 @@ class BaseStorage(ABC):
         self._data_model = data_model
     
     def initialize_data_handler(self):
-        from pfeed.data_handlers import MarketDataHandler
+        from pfeed.data_handlers import MarketDataHandler, NewsDataHandler
         data_handler_configs = {
             'data_path': str(self.data_path),
             'filesystem': self.get_filesystem(),
             'storage_options': self.get_storage_options(),
         }
-        if isinstance(self.data_model, MarketDataModel):
+        if self.data_model.file_extension == '.parquet':
             data_handler_configs['use_deltalake'] = self.use_deltalake
+        if isinstance(self.data_model, MarketDataModel):
             self._data_handler = MarketDataHandler(self.data_model, **data_handler_configs)
+        elif isinstance(self.data_model, NewsDataModel):
+            self._data_handler = NewsDataHandler(self.data_model, **data_handler_configs)
         else:
             raise NotImplementedError(f'No data handler is available for {type(self.data_model)}')
     

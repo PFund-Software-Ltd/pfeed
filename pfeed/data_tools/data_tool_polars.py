@@ -41,7 +41,7 @@ def read_delta(
 
 
 # def sort_by_ts(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
-#     return df.sort(by='ts', descending=False)
+#     return df.sort(by='date', descending=False)
 
 
 # def is_empty(df: pl.DataFrame | pl.LazyFrame) -> bool:
@@ -52,14 +52,14 @@ def read_delta(
 
 # def to_datetime(df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:
 #     from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
-#     if df['ts'].dtype == pl.Datetime:
+#     if df['date'].dtype == pl.Datetime:
 #         return df
 #     else:
 #         if isinstance(df, pl.LazyFrame):
-#             first_ts = df.select(pl.col("ts").first()).collect().item()
+#             first_ts = df.select(pl.col('date').first()).collect().item()
 #         else:
-#             first_ts = df[0, "ts"]
+#             first_ts = df[0, 'date']
 #         ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
 #         return df.with_columns(
-#             (pl.col("ts") * scaling_factor).cast(pl.Datetime(time_unit=ts_unit))
+#             (pl.col('date') * scaling_factor).cast(pl.Datetime(time_unit=ts_unit))
 #         )

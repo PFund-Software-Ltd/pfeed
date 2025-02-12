@@ -8,7 +8,7 @@ from pfeed.sources.base_source import BaseSource
 
 class TradFiSource(BaseSource):
     def create_product(self, product_basis: str, symbol='', **product_specs) -> BaseProduct:
-        from pfund.products import BaseProduct, StockProduct, OptionProduct, FutureProduct
+        from pfund.products import BaseProduct, StockProduct, OptionProduct, FutureProduct, CryptoProduct, FXProduct
         from pfund.const.enums import TradFiProductType
         product_basis = product_basis.upper()
         base_asset, quote_asset, product_type = product_basis.split('_')
@@ -19,9 +19,10 @@ class TradFiSource(BaseSource):
             Product = OptionProduct
         elif ptype == TradFiProductType.FUT:
             Product = FutureProduct
-        # TODO: add crypto product
-        # elif ptype == TradFiProductType.CRYPTO:
-            # Product = CryptoProduct
+        elif ptype == TradFiProductType.FX:
+            Product = FXProduct
+        elif ptype == TradFiProductType.CRYPTO:
+            Product = CryptoProduct
         # EXTEND: add other product types, e.g. ETF, FX, etc.
         else:
             Product = BaseProduct

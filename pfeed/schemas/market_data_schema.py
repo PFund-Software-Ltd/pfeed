@@ -6,7 +6,7 @@ from pandera.typing import Series
 
 
 class MarketDataSchema(pa.DataFrameModel):
-    ts: Series[datetime.datetime]
+    date: Series[datetime.datetime]
     resolution: Series[str] = pa.Field(isin=[
         '1q_L1', '1q_L2', '1q_L3', '1t',
         '1s', '1m', '1h', '1d',
@@ -15,9 +15,9 @@ class MarketDataSchema(pa.DataFrameModel):
     product: Series[str]
     symbol: Series[str] | None
     
-    @pa.check('ts', error='ts is not monotonic increasing')
-    def validate_ts(cls, ts: Series[datetime.datetime]) -> bool:
-        return ts.is_monotonic_increasing
+    @pa.check('date', error='date is not monotonic increasing')
+    def validate_date(cls, date: Series[datetime.datetime]) -> bool:
+        return date.is_monotonic_increasing
 
     @pa.dataframe_check
     def validate_index_reset(cls, df: pd.DataFrame) -> bool:

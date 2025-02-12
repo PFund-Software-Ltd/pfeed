@@ -14,7 +14,7 @@ try:
 except ImportError:
     DeltaTable = None
 
-from pfeed.io.base_io import BaseIO
+from pfeed._io.base_io import BaseIO
 
 
 class TabularIO(BaseIO):
@@ -56,7 +56,7 @@ class TabularIO(BaseIO):
         data_tool: tDATA_TOOL='polars',
         delta_version: int | None=None,
     ) -> tDataFrame | None:
-        from pfeed.etl import get_data_tool
+        from pfeed._etl.etl import get_data_tool
         file_path_without_filename, filename = file_path.rsplit('/', 1)
         read_from_deltalake = self._use_deltalake
         if read_from_deltalake:

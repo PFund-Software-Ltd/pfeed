@@ -32,7 +32,7 @@ DATA_NAMING_REGEX_PATTERNS = {
 # TODO:
 MAPPING_COLS = {'Buy': 1, 'Sell': -1}
 # TODO:
-RENAMING_COLS = {'timestamp': 'ts', 'size': 'volume'}
+RENAMING_COLS = {'timestamp': 'date', 'size': 'volume'}
 
 # TODO: support other ptypes
 SUPPORTED_PRODUCT_TYPES = ['PERP']

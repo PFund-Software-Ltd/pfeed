@@ -132,7 +132,7 @@ class DuckDBStorage(BaseStorage):
         df: pd.DataFrame = self.get_table()
         metadata = self._get_metadata(include_placeholder_dates=True)
         placeholder_dates: list[str] = metadata['placeholder_dates']
-        dates_in_table: list[str] = df['ts'].dt.strftime('%Y-%m-%d').unique().tolist() if not df.empty else []
+        dates_in_table: list[str] = df['date'].dt.strftime('%Y-%m-%d').unique().tolist() if not df.empty else []
         duplicated_dates = set(dates_in_table) & set(placeholder_dates)
         # This is a rare edge case, occurs when data for a date was missing
         # during the initial download but becomes available in a subsequent download
@@ -189,12 +189,12 @@ class DuckDBStorage(BaseStorage):
             self.conn = duckdb.connect(str(self.file_path))
         self.conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self._schema_name}")
         if not df.empty:
-            if 'ts' not in df.columns:
-                raise ValueError("DataFrame must have a 'ts' column.")
+            if 'date' not in df.columns:
+                raise ValueError("DataFrame must have a 'date' column.")
             # duckdb doesn't support datetime64[ns]
-            if is_datetime64_ns_dtype(df['ts'].dtype):
-                df['ts'] = df['ts'].astype('datetime64[us]')
-                print_warning(f"Converting 'ts' column from datetime64[ns] to datetime64[us] for {self.name} {self.data_model} compatibility")
+            if is_datetime64_ns_dtype(df['date'].dtype):
+                df['date'] = df['date'].astype('datetime64[us]')
+                print_warning(f"Converting 'date' column from datetime64[ns] to datetime64[us] for {self.name} {self.data_model} compatibility")
             
             self.conn.execute(f"CREATE TABLE IF NOT EXISTS {self._schema_table_name} AS SELECT * FROM df")
             # Delete any overlapping data within the date range before inserting
@@ -276,11 +276,11 @@ class DuckDBStorage(BaseStorage):
             self.conn.close()
 
     def write_data(self, data: tDataFrame):
-        from pfeed.etl import convert_to_pandas_df
+        from pfeed._etl.base import convert_to_pandas_df
         data: pd.DataFrame = convert_to_pandas_df(data)
         with self:
             metadata = {}
-            data_chunks_per_date = {} if data.empty else {date: group for date, group in data.groupby(data['ts'].dt.date)}
+            data_chunks_per_date = {} if data.empty else {date: group for date, group in data.groupby(data['date'].dt.date)}
             for date in self._data_model.dates:
                 if date not in data_chunks_per_date:
                     metadata['is_placeholder'] = 'true'
@@ -289,7 +289,7 @@ class DuckDBStorage(BaseStorage):
             self.write_table(data, metadata=metadata)
     
     def read_data(self, data_tool: DataTool | tDATA_TOOL='pandas') -> tDataFrame | None:
-        from pfeed.etl import convert_to_user_df
+        from pfeed._etl.base import convert_to_user_df
         if not self._exists():
             return None
         with self:

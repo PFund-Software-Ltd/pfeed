@@ -35,7 +35,7 @@ class TestDownload:
         }
     
     def extract_downloaded_data(self, feed, pdt: str, data_type, date, to_storage, raw_level, filename_prefix: str='', filename_suffix: str='') -> BaseStorage | None:
-        from pfeed.etl import extract_data
+        from pfeed._etl.etl import extract_data
         from pfund.datas.resolution import Resolution
         product = feed.create_product(pdt)
         data_model = feed.create_data_model(
@@ -75,7 +75,7 @@ class TestDownload:
             assert storage.exists()
         df = feed.data_tool.read_parquet(storage.file_path, storage=storage.name.value)
         assert not feed.data_tool.is_empty(df)
-        cols_after_cleaned = ['ts', 'product', 'resolution', 'side', 'price', 'volume']
+        cols_after_cleaned = ['date', 'product', 'resolution', 'side', 'price', 'volume']
         if raw_level == 'normalized':
             assert set(df.columns) == set(cols_after_cleaned + ['symbol', 'tickDirection', 'trdMatchID', 'grossValue', 'homeNotional', 'foreignNotional'])
         elif raw_level == 'cleaned':

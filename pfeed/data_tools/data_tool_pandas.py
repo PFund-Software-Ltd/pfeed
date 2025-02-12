@@ -45,7 +45,7 @@ def read_delta(delta_table: DeltaTable, **kwargs) -> pd.DataFrame:
 
 
 # def sort_by_ts(df: pd.DataFrame) -> pd.DataFrame:
-#     return df.sort_values(by='ts', ignore_index=True, ascending=True)
+#     return df.sort_values(by='date', ignore_index=True, ascending=True)
 
 
 # def is_empty(df: pd.DataFrame) -> bool:
@@ -56,10 +56,10 @@ def read_delta(delta_table: DeltaTable, **kwargs) -> pd.DataFrame:
 #     # determine_timestamp_integer_unit_and_scaling_factor() is used to preserve the precision of the timestamp
 #     from pandas.api.types import is_datetime64_any_dtype as is_datetime
 #     from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
-#     if is_datetime(df['ts']):
+#     if is_datetime(df['date']):
 #         return df
 #     else:
-#         first_ts = df.loc[0, 'ts']
+#         first_ts = df.loc[0, 'date']
 #         ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
-#         df['ts'] = pd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
+#         df['date'] = pd.to_datetime(df['date'] * scaling_factor, unit=ts_unit)
 #         return df

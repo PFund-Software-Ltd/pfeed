@@ -17,7 +17,8 @@ import narwhals as nw
 from rich.console import Console
 
 from pfund.datas.resolution import Resolution
-from pfeed import etl
+from pfeed._etl import market as etl
+from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.const.enums import DataAccessType, DataStorage
@@ -203,12 +204,13 @@ class MarketFeed(BaseFeed):
             target_resolution: The resolution of the data to be stored.
         '''
         self.transform(
-            etl.convert_to_pandas_df,
+            convert_to_pandas_df,
             self._normalize_raw_data,
             lambda_with_name(
                 'standardize_columns',
                 lambda df: etl.standardize_columns(df, data_resolution, product.name, symbol=product.symbol),
             ),
+            etl.filter_columns,
             lambda_with_name(
                 'resample_data_if_necessary', 
                 lambda df: etl.resample_data(df, target_resolution)
@@ -216,7 +218,7 @@ class MarketFeed(BaseFeed):
             etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: etl.convert_to_user_df(df, self.data_tool.name)
+                lambda df: convert_to_user_df(df, self.data_tool.name)
             )
         )
 
@@ -257,7 +259,7 @@ class MarketFeed(BaseFeed):
                     e.g. standard columns in second data are ts, product, open, high, low, close, volume
                 'cleaned' (default): perform normalization following pfund's convention, preserve all columns
                     Normalization example:
-                    - renaming: 'timestamp' -> 'ts'
+                    - renaming: 'timestamp' -> 'date'
                     - mapping: 'buy' -> 1, 'sell' -> -1
                 'raw' (most raw): keep the original data, no transformation will be performed.
                 It will be ignored if the data is loaded from storage but not downloaded.
@@ -392,7 +394,7 @@ class MarketFeed(BaseFeed):
             etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: etl.convert_to_user_df(df, self.data_tool.name)
+                lambda df: convert_to_user_df(df, self.data_tool.name)
             )
         )
     
@@ -466,14 +468,14 @@ class MarketFeed(BaseFeed):
         dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
         df: Frame | None = nw.concat(dfs) if dfs else None
         if df is not None:
-            df: Frame = df.sort(by='ts', descending=False)
+            df: Frame = df.sort(by='date', descending=False)
             is_resample_required = resolution < adjusted_resolution
             if is_resample_required:
                 df: pd.DataFrame = etl.resample_data(df, resolution)
                 self.logger.debug(f'resampled {product.name} {adjusted_resolution} data to {resolution}')
             else:
                 df: tDataFrame = df.to_native()
-            df: tDataFrame = etl.convert_to_user_df(df, self.data_tool.name)
+            df: tDataFrame = convert_to_user_df(df, self.data_tool.name)
         return df
     
     # TODO

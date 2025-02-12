@@ -50,7 +50,7 @@ def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE
 
 
 # def sort_by_ts(df: SparkDataFrame) -> SparkDataFrame:
-#     return df.orderBy('ts', ascending=True)
+#     return df.orderBy('date', ascending=True)
 
 
 # def is_empty(df: SparkDataFrame) -> bool:
@@ -58,4 +58,4 @@ def read_parquet(paths_or_obj: list[str] | str | bytes, *args, storage: tSTORAGE
 
 
 # def to_datetime(df: SparkDataFrame) -> SparkDataFrame:
-#     return df.withColumn("ts", F.to_timestamp(F.col("ts")))
+#     return df.withColumn('date', F.to_timestamp(F.col('date')))

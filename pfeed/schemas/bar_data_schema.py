@@ -30,6 +30,6 @@ class BarDataSchema(MarketDataSchema):
     def validate_close_within_high_low(cls, df: pd.DataFrame) -> Series[bool]:
         return (df['close'] >= df['low']) & (df['close'] <= df['high'])
 
-    @pa.check('ts')
+    @pa.check('date')
     def validate_no_duplicate_timestamps(cls, ts: Series[datetime.datetime]) -> bool:
         return ts.duplicated().sum() == 0

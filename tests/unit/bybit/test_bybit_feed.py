@@ -46,9 +46,9 @@ class TestNormalizeRawData:
             'side': ['Buy', 'Sell']
         })
         result = feed._normalize_raw_data(df)
-        assert 'ts' in result.columns  # timestamp -> ts
+        assert 'date' in result.columns  # timestamp -> ts
         assert 'volume' in result.columns  # size -> volume
-        assert set(result.columns) == {'ts', 'volume', 'side'}
+        assert set(result.columns) == {'date', 'volume', 'side'}
 
     def test_reverse_order_detection(self, feed):
         """Test detection and correction of reverse-ordered data"""
@@ -59,7 +59,7 @@ class TestNormalizeRawData:
         })
         result = feed._normalize_raw_data(df)
         # Check if timestamps are now in ascending order
-        assert result['ts'].is_monotonic_increasing
+        assert result['date'].is_monotonic_increasing
         # Check if associated data was also reversed correctly
         assert result['volume'].tolist() == [100, 200, 300]
         assert result['side'].tolist() == [1, -1, 1]

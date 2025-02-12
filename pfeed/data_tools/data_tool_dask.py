@@ -49,7 +49,7 @@ def read_delta(delta_table: DeltaTable, **kwargs) -> dd.DataFrame:
 
 
 # def sort_by_ts(df: dd.DataFrame) -> dd.DataFrame:
-#     return df.sort_values(by='ts', ascending=True).reset_index(drop=True)
+#     return df.sort_values(by='date', ascending=True).reset_index(drop=True)
 
 
 # def is_empty(df: dd.DataFrame) -> bool:
@@ -58,7 +58,7 @@ def read_delta(delta_table: DeltaTable, **kwargs) -> dd.DataFrame:
 
 # def to_datetime(df: dd.DataFrame) -> dd.DataFrame:
 #     from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
-#     first_ts = df['ts'].head(1)[0]
+#     first_ts = df['date'].head(1)[0]
 #     ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_ts)
-#     df['ts'] = dd.to_datetime(df['ts'] * scaling_factor, unit=ts_unit)
+#     df['date'] = dd.to_datetime(df['date'] * scaling_factor, unit=ts_unit)
 #     return df

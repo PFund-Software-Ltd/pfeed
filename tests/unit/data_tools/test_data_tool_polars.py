@@ -26,9 +26,9 @@ def sample_dfs():
 @pytest.fixture
 def ts_df():
     return pl.DataFrame({
-        'ts': ['2024-01-01', '2024-01-03', '2024-01-02'],
+        'date': ['2024-01-01', '2024-01-03', '2024-01-02'],
         'value': [1, 3, 2]
-    }).with_columns(pl.col('ts').str.strptime(pl.Datetime))
+    }).with_columns(pl.col('date').str.strptime(pl.Datetime))
 
 @pytest.fixture
 def parquet_bytes(sample_df):
@@ -71,9 +71,9 @@ def test_concat(sample_dfs):
 def test_sort_by_ts(ts_df):
     result = sort_by_ts(ts_df)
     expected = pl.DataFrame({
-        'ts': ['2024-01-01', '2024-01-02', '2024-01-03'],
+        'date': ['2024-01-01', '2024-01-02', '2024-01-03'],
         'value': [1, 2, 3]
-    }).with_columns(pl.col('ts').str.strptime(pl.Datetime))
+    }).with_columns(pl.col('date').str.strptime(pl.Datetime))
     assert result.equals(expected)
 
 def test_sort_by_ts_missing_column():

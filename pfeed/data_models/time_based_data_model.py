@@ -31,6 +31,9 @@ class TimeBasedDataModel(BaseDataModel):
 
     def update_start_date(self, start_date: datetime.date) -> None:
         self.start_date = start_date
+        # update filename and storage path to reflect the new start date
+        self.filename = self._create_filename()
+        self.storage_path = self._create_storage_path()
         
     def update_end_date(self, end_date: datetime.date) -> None:
         self.end_date = end_date

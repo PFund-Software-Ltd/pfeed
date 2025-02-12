@@ -61,12 +61,6 @@ class MarketDataModel(TimeBasedDataModel):
         self._validate_resolution()
         self.storage_path = self._create_storage_path()
 
-    def update_start_date(self, start_date: datetime.date) -> None:
-        super().update_start_date(start_date)
-        # update filename and storage path to reflect the new start date
-        self.filename = self._create_filename()
-        self.storage_path = self._create_storage_path()
-
     def _create_filename(self) -> str:
         # NOTE: since storage is per date, only uses self.date (start_date) to create filename
         filename = '_'.join([self.product.name, str(self.date)])

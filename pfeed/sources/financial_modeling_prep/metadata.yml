@@ -15,6 +15,7 @@ data_categories:
       - FX
       - CRYPTO
       - INDEX
+  # REVIEW: currently the elements in news_data are not used
   news_data:
     - article
     - press_release

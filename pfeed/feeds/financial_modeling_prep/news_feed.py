@@ -1,15 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
     from fmp_api_client.news import News
     from pfeed.data_models.news_data_model import NewsDataModel
-    from pfeed.flows.dataflow import DataFlow
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tDATA_LAYER, tSTORAGE
     
 import asyncio
-import datetime
 
 import pandas as pd
 from fmp_api_client import FMPPlan
@@ -64,7 +61,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
         to_storage: tSTORAGE='local',
         auto_transform: bool=True,
         **product_specs
-    ) -> tDataFrame | None | NewsFeed:
+    ) -> tDataFrame | None | FinancialModelingPrepNewsFeed:
         return super().download(
             product=product,
             symbol=symbol,
@@ -78,24 +75,6 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
             auto_transform=auto_transform,
             **product_specs
         )
-    
-    def _create_download_dataflows(
-        self,
-        start_date: datetime.date,
-        end_date: datetime.date,
-        product: BaseProduct | None=None,
-        data_origin: str='',
-    ) -> list[DataFlow]:
-        # NOTE: one data model for the entire date range
-        data_model = self.create_data_model(
-            start_date=start_date,
-            end_date=end_date,
-            product=product,
-            data_origin=data_origin,
-        )
-        # create a dataflow that schedules _execute_download()
-        dataflow = self._extract_download(data_model)
-        return [dataflow]
 
     def _execute_download(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
         self.logger.debug(f'downloading {data_model}')

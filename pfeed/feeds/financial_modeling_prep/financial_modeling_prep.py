@@ -10,23 +10,26 @@ from fmp_api_client.plan import FMPPlan
 
 from pfeed.sources.financial_modeling_prep.source import FinancialModelingPrepSource
 from pfeed.feeds.financial_modeling_prep import (
-    FMPEconomicsFeed,
     FMPNewsFeed,
-    FMPMarketFeed,
+    FMPEconomicsFeed,
     FMPAnalystFeed,
+    FMPMarketFeed,
 )
 
+
+__all__ = ['FinancialModelingPrep']
 
 class FMPCategory(StrEnum):
     economic = 'economic'
     news = 'news'
     market = 'market'
-tCATEGORY = Literal['economic', 'news', 'market']
+    analyst = 'analyst'
+
 FMPDataFeed = (
-    FMPEconomicsFeed | 
     FMPNewsFeed | 
-    FMPMarketFeed |
-    FMPAnalystFeed
+    FMPEconomicsFeed | 
+    FMPAnalystFeed |
+    FMPMarketFeed
 )
 
 
@@ -45,9 +48,10 @@ class FinancialModelingPrep:
         params = {k: v for k, v in locals().items() if k not in ['self', 'api_key', 'fmp_plan']}
         params['data_source'] = FinancialModelingPrepSource(api_key=api_key, fmp_plan=fmp_plan)
         self.news = FMPNewsFeed(**params)
+        # TODO:
         # self.economic = FMPEconomicsFeed(**params)
-        # self.market = FMPMarketFeed(**params)
         # self.analyst = FMPAnalystFeed(**params)
+        # self.market = FMPMarketFeed(**params)
 
     @property
     def data_source(self) -> FinancialModelingPrepSource:

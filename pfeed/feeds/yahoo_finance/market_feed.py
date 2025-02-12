@@ -187,6 +187,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         eresolution = str(resolution.period) + etimeframe
         
         symbol = data_model.product.symbol
+        assert symbol, f'symbol is required for {data_model}'
         ticker = self.api.Ticker(symbol)
         
         df = None

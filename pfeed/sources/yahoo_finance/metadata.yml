@@ -28,24 +28,6 @@ data_categories:
       - FX
       - CRYPTO
       - INDEX
-    week:
-      - STK
-      - ETF
-      - MTF
-      - OPT
-      - FUT
-      - FX
-      - CRYPTO
-      - INDEX
-    month:
-      - STK
-      - ETF
-      - MTF
-      - OPT
-      - FUT
-      - FX
-      - CRYPTO
-      - INDEX
 provider_type: aggregator  # refer to enum DataProviderType
 api_key_required: false
 access_type: free  # refer to enum DataAccessType

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
+    from pfeed.flows.dataflow import DataFlow
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tDATA_LAYER, tSTORAGE, tENVIRONMENT
 
@@ -134,6 +135,24 @@ class NewsFeed(BaseFeed):
         else:
             return self
     
+    def _create_download_dataflows(
+        self,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        product: BaseProduct | None=None,
+        data_origin: str='',
+    ) -> list[DataFlow]:
+        # NOTE: one data model for the entire date range
+        data_model = self.create_data_model(
+            start_date=start_date,
+            end_date=end_date,
+            product=product,
+            data_origin=data_origin,
+        )
+        # create a dataflow that schedules _execute_download()
+        dataflow = self._extract_download(data_model)
+        return [dataflow]
+
     def _add_default_transformations_to_download(self, product: BaseProduct | None=None):
         self.transform(
             self._normalize_raw_data,

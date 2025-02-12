@@ -28,7 +28,7 @@ def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
     if not is_datetime64_any_dtype(df['date']):
         first_date = df.loc[0, 'date']
         if isinstance(first_date, str):
-            df['date'] = pd.to_datetime(df['date'])
+            df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
         elif isinstance(first_date, (float, int)):
             ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_date)
             df['date'] = pd.to_datetime(df['date'] * scaling_factor, unit=ts_unit)

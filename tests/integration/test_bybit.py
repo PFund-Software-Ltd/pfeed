@@ -35,7 +35,7 @@ class TestDownload:
         }
     
     def extract_downloaded_data(self, feed, pdt: str, data_type, date, to_storage, raw_level, filename_prefix: str='', filename_suffix: str='') -> BaseStorage | None:
-        from pfeed._etl.etl import extract_data
+        from pfeed._etl.base import extract_data
         from pfund.datas.resolution import Resolution
         product = feed.create_product(pdt)
         data_model = feed.create_data_model(

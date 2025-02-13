@@ -23,6 +23,7 @@ from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.const.enums import DataAccessType, DataStorage
 from pfeed.utils.utils import lambda_with_name, validate_product
+from pfeed.utils.dataframe import is_empty_dataframe
 
 
 tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
@@ -45,11 +46,11 @@ class MarketFeed(BaseFeed):
         env: tENVIRONMENT = 'BACKTEST',
         **product_specs
     ) -> MarketDataModel:
-        if isinstance(product, str):
+        if isinstance(product, str) and product:
             product = self.create_product(product, **product_specs)
-        if isinstance(start_date, str):
+        if isinstance(start_date, str) and start_date:
             start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-        if isinstance(end_date, str):
+        if isinstance(end_date, str) and end_date:
             end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return MarketDataModel(
             env=env,
@@ -94,7 +95,6 @@ class MarketFeed(BaseFeed):
             **storage_configs,
         )
     
-    @validate_product
     @clear_subflows
     def download(
         self,
@@ -108,6 +108,7 @@ class MarketFeed(BaseFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         to_storage: tSTORAGE='local',
+        storage_configs: dict | None=None,
         auto_transform: bool=True,
         concat_output: bool=True,
         **product_specs
@@ -144,6 +145,7 @@ class MarketFeed(BaseFeed):
                 If True, the data from different dates will be concatenated into a single DataFrame.
                 If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
         '''
+        validate_product(product)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
@@ -172,6 +174,7 @@ class MarketFeed(BaseFeed):
                 to_storage=to_storage,
                 data_layer=data_layer,
                 data_domain=data_domain or self.DATA_DOMAIN,
+                storage_configs=storage_configs,
             )
             completed_dataflows, failed_dataflows = self.run()
             missing_dates = [dataflow.data_model.date for dataflow in failed_dataflows]
@@ -182,7 +185,7 @@ class MarketFeed(BaseFeed):
             if concat_output:
                 dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
                 if dfs:
-                    df: Frame = nw.concat(dfs)
+                    df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
                     df: tDataFrame = nw.to_native(df)
                 else:
                     df = None
@@ -222,7 +225,6 @@ class MarketFeed(BaseFeed):
             )
         )
 
-    @validate_product
     @clear_subflows
     def retrieve(
         self,
@@ -235,8 +237,8 @@ class MarketFeed(BaseFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
-        auto_transform: bool=True,
         storage_configs: dict | None=None,
+        auto_transform: bool=True,
         concat_output: bool=True,
         **product_specs
     ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketFeed:
@@ -283,6 +285,7 @@ class MarketFeed(BaseFeed):
                 )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
         '''
+        validate_product(product)
         product: BaseProduct = self.create_product(product, **product_specs)
         resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
@@ -313,7 +316,7 @@ class MarketFeed(BaseFeed):
             if concat_output:
                 dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
                 if dfs:
-                    df: Frame = nw.concat(dfs)
+                    df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
                     df: tDataFrame = nw.to_native(df)
                 else:
                     df = None
@@ -398,7 +401,6 @@ class MarketFeed(BaseFeed):
             )
         )
     
-    @validate_product
     def get_historical_data(
         self,
         product: str,
@@ -413,6 +415,7 @@ class MarketFeed(BaseFeed):
         from_storage: tSTORAGE | None=None,
         **product_specs
     ) -> tDataFrame | None:
+        validate_product(product)
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
         resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
@@ -466,7 +469,7 @@ class MarketFeed(BaseFeed):
             
 
         dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
-        df: Frame | None = nw.concat(dfs) if dfs else None
+        df: Frame | None = nw.concat(df for df in dfs if not is_empty_dataframe(df)) if dfs else None
         if df is not None:
             df: Frame = df.sort(by='date', descending=False)
             is_resample_required = resolution < adjusted_resolution

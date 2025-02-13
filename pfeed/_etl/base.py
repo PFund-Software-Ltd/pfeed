@@ -34,9 +34,7 @@ def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
             df['date'] = pd.to_datetime(df['date'] * scaling_factor, unit=ts_unit)
         else:
             raise ValueError(f'{type(first_date)=}')
-    is_in_reverse_order = df['date'][0] > df['date'][1]
-    if is_in_reverse_order:
-        df = df.iloc[::-1].reset_index(drop=True)
+    df.sort_values(by='date', inplace=True)
     return df
 
 

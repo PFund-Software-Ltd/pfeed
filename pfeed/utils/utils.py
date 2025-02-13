@@ -1,5 +1,4 @@
 from typing import Callable, Literal
-from functools import wraps
 import re
 import inspect
 import datetime
@@ -7,22 +6,18 @@ import calendar
 import pytz
 
 
-def validate_product(func: Callable):
-    @wraps(func)
-    def wrapper(self, product: str, *args, **kwargs):
-        # use regex to validate product string format, it must be like "XXX_YYY_ZZZ"
-        # where the maximum length of each part is 10
-        import re
-        max_len = 10
-        pattern = r'^[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}$'
-        if not re.match(pattern, product):
-            raise ValueError(
-                f'Invalid product format: {product}. '
-                'Product must be in format "XXX_YYY_ZZZ" where each part contains only letters '
-                f'and maximum {max_len} characters long.'
-            )
-        return func(self, product, *args, **kwargs)
-    return wrapper
+def validate_product(product: str, allow_empty: bool=False):
+    # use regex to validate product string format, it must be like "XXX_YYY_ZZZ"
+    # where the maximum length of each part is 10
+    import re
+    max_len = 10
+    pattern = r'^[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}$'
+    if not allow_empty and not re.match(pattern, product):
+        raise ValueError(
+            f'Invalid product format: {product}. '
+            'Product must be in format "XXX_YYY_ZZZ" where each part contains only letters '
+            f'and maximum {max_len} characters long.'
+        )
 
 
 def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):

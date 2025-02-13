@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 import datetime
 
+import pandas as pd
 import narwhals as nw
 from rich.console import Console
 
@@ -19,8 +20,16 @@ from pfeed.const.enums import DataStorage
 from pfeed._etl.base import convert_to_user_df
 from pfeed.storages.base_storage import BaseStorage
 from pfeed.utils.utils import lambda_with_name, validate_product
+from pfeed.utils.dataframe import is_empty_dataframe
 
 
+'''
+# FIXME: the core issue with NewsFeed is the return of each API call could be different
+i.e. it makes the data stored per date NOT deterministic
+e.g. if getting today's data, the next API call could have more data, 
+e.g. if changing the params for the same API call, the data could be different.
+how to handle this? handled by metadata?
+'''
 class NewsFeed(BaseFeed):
     DATA_DOMAIN = 'news_data'
 
@@ -33,11 +42,11 @@ class NewsFeed(BaseFeed):
         env: tENVIRONMENT = 'BACKTEST',
         **product_specs
     ) -> NewsDataModel:
-        if isinstance(product, str):
+        if isinstance(product, str) and product:
             product = self.create_product(product, **product_specs)
-        if isinstance(start_date, str):
+        if isinstance(start_date, str) and start_date:
             start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-        if isinstance(end_date, str):
+        if isinstance(end_date, str) and end_date:
             end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return NewsDataModel(
             env=env,
@@ -45,8 +54,7 @@ class NewsFeed(BaseFeed):
             data_origin=data_origin,
             product=product,
             start_date=start_date,
-            end_date=end_date,
-            **product_specs
+            end_date=end_date or start_date,
         )
     
     def create_storage(
@@ -80,7 +88,6 @@ class NewsFeed(BaseFeed):
             **storage_configs,
         )
 
-    @validate_product
     @clear_subflows
     def download(
         self, 
@@ -93,6 +100,7 @@ class NewsFeed(BaseFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         to_storage: tSTORAGE='local',
+        storage_configs: dict | None=None,
         auto_transform: bool=True,
         **product_specs
     ) -> tDataFrame | None | NewsFeed:
@@ -100,6 +108,7 @@ class NewsFeed(BaseFeed):
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
         '''
+        validate_product(product, allow_empty=True)
         if not product:
             assert not symbol, 'symbol should not be provided if product is not provided'
         else:
@@ -123,11 +132,12 @@ class NewsFeed(BaseFeed):
                 to_storage=to_storage,
                 data_layer=data_layer,
                 data_domain=data_domain,
+                storage_configs=storage_configs,
             )
             completed_dataflows, failed_dataflows = self.run()
             if completed_dataflows:
                 dfs: list[Frame] = [nw.from_native(dataflow.output) for dataflow in completed_dataflows]
-                df: Frame = nw.concat(dfs)
+                df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
                 df: tDataFrame = nw.to_native(df)
             else:
                 df = None
@@ -167,12 +177,93 @@ class NewsFeed(BaseFeed):
                 lambda df: convert_to_user_df(df, self.data_tool.name)
             )
         )
+        
+    @clear_subflows
+    def retrieve(
+        self,
+        product: str='',
+        rollback_period: str='1w',
+        start_date: str='',
+        end_date: str='',
+        data_origin: str='',
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        from_storage: tSTORAGE | None=None,
+        storage_configs: dict | None=None,
+        auto_transform: bool=True,
+        **product_specs
+    ) -> tDataFrame | None | NewsFeed:
+        validate_product(product, allow_empty=True)
+        if product:
+            product: BaseProduct = self.create_product(product, **product_specs)
+        else:
+            product = None
+        start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+        self._create_retrieve_dataflows(
+            start_date,
+            end_date,
+            data_origin,
+            data_layer,
+            data_domain or self.DATA_DOMAIN,
+            product=product,
+            from_storage=from_storage,
+            storage_configs=storage_configs,
+        )
+        if auto_transform:
+            self._add_default_transformations_to_retrieve()
+        if not self._pipeline_mode:
+            completed_dataflows, failed_dataflows = self.run()
+            if completed_dataflows:
+                dfs: list[Frame] = [nw.from_native(dataflow.output) for dataflow in completed_dataflows]
+                df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
+                df: tDataFrame = nw.to_native(df)
+            else:
+                df = None
+            return df
+        else:
+            return self
+    
+    def _create_retrieve_dataflows(
+        self,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        data_origin: str,
+        data_layer: tDATA_LAYER,
+        data_domain: str,
+        product: BaseProduct | None=None,
+        from_storage: tSTORAGE | None=None,
+        storage_configs: dict | None=None,
+    ) -> list[DataFlow]:
+        dataflows: list[DataFlow] = []
+        # NOTE: one data model per date
+        for date in pd.date_range(start_date, end_date).date:
+            data_model = self.create_data_model(
+                start_date=date,
+                product=product,
+                data_origin=data_origin,
+            )
+            dataflow: DataFlow = self._extract_retrieve(
+                data_model,
+                data_layer,
+                data_domain,
+                from_storage=from_storage,
+                storage_configs=storage_configs,
+            )
+            dataflows.append(dataflow)
+        return dataflows
+    
+    def _add_default_transformations_to_retrieve(self):
+        self.transform(
+            lambda_with_name(
+                'convert_to_user_df',
+                lambda df: convert_to_user_df(df, self.data_tool.name)
+            )
+        )
 
     # TODO
-    @validate_product
     def get_historical_data(
         self, 
-        product: str, 
+        product: str='',
         symbol: str='', 
         rollback_period: str="1w",
         start_date: str='',
@@ -188,4 +279,8 @@ class NewsFeed(BaseFeed):
         Data will be stored in cache by default.
         If from_storage is not specified, data will be fetched again from data source.
         '''
+        validate_product(product, allow_empty=True)
+    
+    # TODO
+    def fetch(self):
         pass

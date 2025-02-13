@@ -11,6 +11,13 @@ def is_dataframe(value, include_narwhals=True) -> bool:
     )
 
 
+def is_lazyframe(value, include_narwhals=True) -> bool:
+    return (
+        isinstance(value, (pl.LazyFrame, dd.DataFrame, SparkDataFrame))
+        or (include_narwhals and isinstance(value, (nw.LazyFrame)))
+    )
+
+
 def is_empty_dataframe(df) -> bool:
     if isinstance(df, (pd.DataFrame, ps.DataFrame)):
         return df.empty
@@ -22,6 +29,10 @@ def is_empty_dataframe(df) -> bool:
         return len(df.index) == 0
     elif isinstance(df, SparkDataFrame):
         return df.rdd.isEmpty()
+    elif isinstance(df, nw.LazyFrame):
+        return df.head(1).collect().is_empty()
+    elif isinstance(df, nw.DataFrame):
+        return df.is_empty()
     else:
         raise ValueError(f'Unsupported dataframe type: {type(df)}')
 

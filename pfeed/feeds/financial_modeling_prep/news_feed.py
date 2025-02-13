@@ -3,8 +3,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from fmp_api_client.news import News
     from pfeed.data_models.news_data_model import NewsDataModel
-    from pfeed.typing.core import tDataFrame
-    from pfeed.typing.literals import tDATA_LAYER, tSTORAGE
     
 import asyncio
 
@@ -21,6 +19,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
         return self.data_source.api.news
     
     def _normalize_raw_data(self, datas: dict[str, list[list[dict] | []]]) -> pd.DataFrame:
+        dfs = []
         for func, data in datas.items():
             if func == 'FMP_articles':
                 df = self._normalize_raw_data_from_FMP_articles(data)
@@ -31,7 +30,22 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
             #     df = self._normalize_raw_data_from_search_press_releases(data)
             else:
                 raise ValueError(f'unknown function {func}')
-        return df
+
+            if df.empty:
+                # create an empty dataframe with required columns
+                df = pd.DataFrame(columns=[
+                    "date", "title", "content", "publisher", "url", "product", "symbol"
+                ]).astype({
+                    "date": "datetime64[ns]",
+                    "title": "string",
+                    "content": "string",
+                    "publisher": "string",
+                    "url": "string",
+                    "product": "string",
+                    "symbol": "string"
+                })
+            dfs.append(df)
+        return pd.concat(dfs)
     
     def _normalize_raw_data_from_FMP_articles(self, data: list[list[dict] | []]) -> pd.DataFrame:
         if not data:
@@ -48,34 +62,6 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
         df.rename(columns={'publishedDate': 'date', 'text': 'content'}, inplace=True)
         return df
     
-    def download(
-        self, 
-        product: str='',
-        symbol: str='',
-        rollback_period: str ='1w',
-        start_date: str='',
-        end_date: str='',
-        data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
-        to_storage: tSTORAGE='local',
-        auto_transform: bool=True,
-        **product_specs
-    ) -> tDataFrame | None | FinancialModelingPrepNewsFeed:
-        return super().download(
-            product=product,
-            symbol=symbol,
-            rollback_period=rollback_period,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            to_storage=to_storage,
-            auto_transform=auto_transform,
-            **product_specs
-        )
-
     def _execute_download(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
         self.logger.debug(f'downloading {data_model}')
         datas: dict[str, list[list[dict] | []]] = asyncio.run(self._aexecute_download(data_model))
@@ -113,11 +99,3 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
             tasks['search_press_releases'] = self.api.asearch_press_releases(symbols=symbols, from_=start_date, to=end_date)
         results = await asyncio.gather(*tasks.values())
         return dict(zip(tasks.keys(), results))
-
-    # TODO:
-    def retrieve(self):
-        pass
-    
-    # TODO:
-    def fetch(self):
-        pass

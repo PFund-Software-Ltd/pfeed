@@ -57,4 +57,7 @@ __all__ = (
     "add_plugin",
     "aliases",
     "what_is",
+    "YahooFinance", "YF",
+    "Bybit",
+    "FinancialModelingPrep", "FMP",
 )

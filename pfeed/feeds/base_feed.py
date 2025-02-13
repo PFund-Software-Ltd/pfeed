@@ -296,7 +296,7 @@ class BaseFeed(ABC):
             lambda: self._execute_retrieve(
                 data_model,
                 data_layer,
-                data_domain,
+                data_domain or self.DATA_DOMAIN,
                 from_storage=from_storage,
                 storage_configs=storage_configs,
             ),

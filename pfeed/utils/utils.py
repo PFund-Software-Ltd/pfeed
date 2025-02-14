@@ -6,13 +6,13 @@ import calendar
 import pytz
 
 
-def validate_product(product: str, allow_empty: bool=False):
+def validate_product(product: str):
     # use regex to validate product string format, it must be like "XXX_YYY_ZZZ"
     # where the maximum length of each part is 10
     import re
     max_len = 10
     pattern = r'^[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}$'
-    if not allow_empty and not re.match(pattern, product):
+    if not re.match(pattern, product):
         raise ValueError(
             f'Invalid product format: {product}. '
             'Product must be in format "XXX_YYY_ZZZ" where each part contains only letters '

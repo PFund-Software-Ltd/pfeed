@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
 
 from pfeed.sources.base_source import BaseSource
+from pfeed.utils.utils import validate_product
 
 
 __all__ = ["BybitSource"]
@@ -20,6 +21,7 @@ class BybitSource(BaseSource):
         self.api = BybitAPI(self._exchange)
     
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
+        validate_product(product_basis)
         return self._exchange.create_product(product_basis, **product_specs)
         
     @staticmethod

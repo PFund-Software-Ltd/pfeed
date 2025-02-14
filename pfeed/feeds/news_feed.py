@@ -16,10 +16,9 @@ from rich.console import Console
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.data_models.news_data_model import NewsDataModel
 from pfeed._etl import news as etl
-from pfeed.const.enums import DataStorage
 from pfeed._etl.base import convert_to_user_df
-from pfeed.storages.base_storage import BaseStorage
-from pfeed.utils.utils import lambda_with_name, validate_product
+from pfeed.const.enums import DataAccessType
+from pfeed.utils.utils import lambda_with_name
 from pfeed.utils.dataframe import is_empty_dataframe
 
 
@@ -57,37 +56,6 @@ class NewsFeed(BaseFeed):
             end_date=end_date or start_date,
         )
     
-    def create_storage(
-        self,
-        storage: tSTORAGE,
-        start_date: str | datetime.date,
-        end_date: str | datetime.date | None = None,
-        product: str | BaseProduct | None = None,
-        data_origin: str = '',
-        env: tENVIRONMENT = 'BACKTEST',
-        data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
-        storage_configs: dict | None=None,
-        **product_specs
-    ) -> BaseStorage:
-        data_model = self.create_data_model(
-            start_date,
-            end_date=end_date,
-            product=product,
-            data_origin=data_origin,
-            env=env,
-            **product_specs
-        )
-        storage_configs = storage_configs or {}
-        Storage = DataStorage[storage.upper()].storage_class
-        return Storage.from_data_model(
-            data_model,
-            data_layer,
-            data_domain=data_domain or self.DATA_DOMAIN,
-            use_deltalake=self._use_deltalake,
-            **storage_configs,
-        )
-
     @clear_subflows
     def download(
         self, 
@@ -102,15 +70,16 @@ class NewsFeed(BaseFeed):
         to_storage: tSTORAGE='local',
         storage_configs: dict | None=None,
         auto_transform: bool=True,
+        concat_output: bool=True,
         **product_specs
     ) -> tDataFrame | None | NewsFeed:
         '''
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
         '''
-        validate_product(product, allow_empty=True)
         if not product:
             assert not symbol, 'symbol should not be provided if product is not provided'
+            product = None
         else:
             product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
@@ -127,23 +96,13 @@ class NewsFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_download(product=product)
-        if not self._pipeline_mode:
-            self.load(
-                to_storage=to_storage,
-                data_layer=data_layer,
-                data_domain=data_domain,
-                storage_configs=storage_configs,
-            )
-            completed_dataflows, failed_dataflows = self.run()
-            if completed_dataflows:
-                dfs: list[Frame] = [nw.from_native(dataflow.output) for dataflow in completed_dataflows]
-                df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
-                df: tDataFrame = nw.to_native(df)
-            else:
-                df = None
-            return df
-        else:
-            return self
+        return self._run_download(
+            data_layer=data_layer,
+            data_domain=data_domain or self.DATA_DOMAIN,
+            to_storage=to_storage,
+            storage_configs=storage_configs,
+            concat_output=concat_output,
+        )
     
     def _create_download_dataflows(
         self,
@@ -191,9 +150,9 @@ class NewsFeed(BaseFeed):
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
         auto_transform: bool=True,
+        concat_output: bool=True,
         **product_specs
     ) -> tDataFrame | None | NewsFeed:
-        validate_product(product, allow_empty=True)
         if product:
             product: BaseProduct = self.create_product(product, **product_specs)
         else:
@@ -211,18 +170,8 @@ class NewsFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_retrieve()
-        if not self._pipeline_mode:
-            completed_dataflows, failed_dataflows = self.run()
-            if completed_dataflows:
-                dfs: list[Frame] = [nw.from_native(dataflow.output) for dataflow in completed_dataflows]
-                df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
-                df: tDataFrame = nw.to_native(df)
-            else:
-                df = None
-            return df
-        else:
-            return self
-    
+        return self._run_retrieve(concat_output=concat_output)
+
     def _create_retrieve_dataflows(
         self,
         start_date: datetime.date,
@@ -260,7 +209,6 @@ class NewsFeed(BaseFeed):
             )
         )
 
-    # TODO
     def get_historical_data(
         self, 
         product: str='',
@@ -272,15 +220,75 @@ class NewsFeed(BaseFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
+        storage_configs: dict | None=None,
         **product_specs
     ):
         '''
         Get news data from data source.
         Data will be stored in cache by default.
-        If from_storage is not specified, data will be fetched again from data source.
+        Args:
+            NOTE: this behavior is different from MarketFeed
+            from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
-        validate_product(product, allow_empty=True)
-    
+        assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
+        if from_storage is not None:
+            dfs_from_storage_per_date: dict[datetime.date, tDataFrame | None] = self.retrieve(
+                product=product,
+                rollback_period=rollback_period,
+                start_date=start_date,
+                end_date=end_date,
+                data_origin=data_origin,
+                data_layer=data_layer,
+                data_domain=data_domain,
+                from_storage=from_storage,
+                storage_configs=storage_configs,
+                concat_output=False,
+                **product_specs
+            )
+            missing_dates = [date for date in dfs_from_storage_per_date if dfs_from_storage_per_date[date] is None]
+            dfs_from_storage = [df for df in dfs_from_storage_per_date.values() if df is not None]
+        else:
+            dfs_from_storage_per_date = {}
+            missing_dates = [date for date in pd.date_range(start_date, end_date).date]
+            dfs_from_storage = []
+        
+        dfs_from_source: list[tDataFrame] = []
+        if missing_dates:
+            # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
+            if self.data_source.access_type != DataAccessType.PAID_BY_USAGE:
+                dfs_from_source_per_date = self.download(
+                    product=product,
+                    symbol=symbol,
+                    rollback_period='',
+                    start_date=str(missing_dates[0]),
+                    end_date=str(missing_dates[-1]),
+                    data_origin=data_origin,
+                    data_layer=data_layer,
+                    data_domain=data_domain,
+                    to_storage='cache',
+                    storage_configs=storage_configs,
+                    concat_output=False,
+                    **product_specs
+                )
+
+                missing_dates = [date for date in dfs_from_source_per_date if dfs_from_source_per_date[date] is None]
+                dfs_from_source = [df for df in dfs_from_source_per_date.values() if df is not None]
+        
+        if missing_dates:
+            self.logger.warning(
+                f'output data is INCOMPLETE, '
+                f'there are missing data when getting historical news data for {product=},\n'
+                f'missing dates: {missing_dates}'
+            )
+        
+        dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
+        df: Frame | None = nw.concat(df for df in dfs if not is_empty_dataframe(df)) if dfs else None
+        if df is not None:
+            
+            df: Frame = df.sort(by='date', descending=False)
+            df: tDataFrame = df.to_native()
+        return df
+
     # TODO
     def fetch(self):
         pass

@@ -127,6 +127,7 @@ class BybitMarketFeed(CryptoMarketFeed):
         data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
+        storage_configs: dict | None=None,
         **product_specs
     ) -> tDataFrame | None | BybitMarketFeed:
         return super().get_historical_data(
@@ -139,6 +140,7 @@ class BybitMarketFeed(CryptoMarketFeed):
             data_domain=data_domain,
             data_origin=data_origin,
             from_storage=from_storage,
+            storage_configs=storage_configs,
             **product_specs
         )
         

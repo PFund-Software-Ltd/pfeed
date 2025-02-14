@@ -33,7 +33,7 @@ def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
             ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_date)
             df['date'] = pd.to_datetime(df['date'] * scaling_factor, unit=ts_unit)
         else:
-            raise ValueError(f'{type(first_date)=}')
+            raise ValueError(f'{type(first_date)=}, {first_date=}')
     df.sort_values(by='date', inplace=True)
     return df
 

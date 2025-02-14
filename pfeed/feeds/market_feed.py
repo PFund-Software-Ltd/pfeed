@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.dataflow import Stream as BytewaxStream
-    from pfeed.storages.base_storage import BaseStorage
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.flows.dataflow import DataFlow
@@ -21,8 +20,8 @@ from pfeed._etl import market as etl
 from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.data_models.market_data_model import MarketDataModel
-from pfeed.const.enums import DataAccessType, DataStorage
-from pfeed.utils.utils import lambda_with_name, validate_product
+from pfeed.const.enums import DataAccessType
+from pfeed.utils.utils import lambda_with_name
 from pfeed.utils.dataframe import is_empty_dataframe
 
 
@@ -61,40 +60,7 @@ class MarketFeed(BaseFeed):
             start_date=start_date,
             end_date=end_date or start_date,
         )
-    
-    def create_storage(
-        self,
-        storage: tSTORAGE,
-        product: str | BaseProduct,
-        resolution: str | Resolution,
-        start_date: str | datetime.date,
-        end_date: str | datetime.date | None = None,
-        data_origin: str = '',
-        env: tENVIRONMENT = 'BACKTEST',
-        data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
-        storage_configs: dict | None=None,
-        **product_specs
-    ) -> BaseStorage:
-        data_model = self.create_data_model(
-            product,
-            resolution,
-            start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            env=env,
-            **product_specs
-        )
-        storage_configs = storage_configs or {}
-        Storage = DataStorage[storage.upper()].storage_class
-        return Storage.from_data_model(
-            data_model,
-            data_layer,
-            data_domain=data_domain or self.DATA_DOMAIN,
-            use_deltalake=self._use_deltalake,
-            **storage_configs,
-        )
-    
+        
     @clear_subflows
     def download(
         self,
@@ -145,7 +111,6 @@ class MarketFeed(BaseFeed):
                 If True, the data from different dates will be concatenated into a single DataFrame.
                 If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
         '''
-        validate_product(product)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
@@ -169,31 +134,13 @@ class MarketFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_download(adjusted_resolution, resolution, product)
-        if not self._pipeline_mode:    
-            self.load(
-                to_storage=to_storage,
-                data_layer=data_layer,
-                data_domain=data_domain or self.DATA_DOMAIN,
-                storage_configs=storage_configs,
-            )
-            completed_dataflows, failed_dataflows = self.run()
-            missing_dates = [dataflow.data_model.date for dataflow in failed_dataflows]
-            dfs: dict[datetime.date, tDataFrame | None] = {}
-            for dataflow in completed_dataflows + failed_dataflows:
-                date = dataflow.data_model.date
-                dfs[date] = dataflow.output if date not in missing_dates else None
-            if concat_output:
-                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
-                if dfs:
-                    df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
-                    df: tDataFrame = nw.to_native(df)
-                else:
-                    df = None
-                return df
-            else:
-                return dfs
-        else:
-            return self
+        return self._run_download(
+            data_layer=data_layer,
+            data_domain=data_domain or self.DATA_DOMAIN,
+            to_storage=to_storage,
+            storage_configs=storage_configs,
+            concat_output=concat_output,
+        )
     
     def _add_default_transformations_to_download(
         self, 
@@ -285,7 +232,6 @@ class MarketFeed(BaseFeed):
                 )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
         '''
-        validate_product(product)
         product: BaseProduct = self.create_product(product, **product_specs)
         resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
@@ -304,27 +250,7 @@ class MarketFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_retrieve(resolution)
-        if not self._pipeline_mode:
-            completed_dataflows, failed_dataflows = self.run()
-            if missing_dates := [dataflow.data_model.date for dataflow in failed_dataflows]:
-                # fill gaps between missing dates since downloads will include all dates in range
-                missing_dates = pd.date_range(min(missing_dates), max(missing_dates)).date.tolist()
-            dfs: dict[datetime.date, tDataFrame | None] = {}
-            for dataflow in completed_dataflows + failed_dataflows:
-                date = dataflow.data_model.date
-                dfs[date] = dataflow.output if date not in missing_dates else None
-            if concat_output:
-                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
-                if dfs:
-                    df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
-                    df: tDataFrame = nw.to_native(df)
-                else:
-                    df = None
-                return df
-            else:
-                return dfs
-        else:
-            return self
+        return self._run_retrieve(concat_output=concat_output)
     
     def _execute_retrieve(
         self,
@@ -413,9 +339,9 @@ class MarketFeed(BaseFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
+        storage_configs: dict | None=None,
         **product_specs
     ) -> tDataFrame | None:
-        validate_product(product)
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
         resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
@@ -431,6 +357,7 @@ class MarketFeed(BaseFeed):
             data_layer=data_layer,
             data_domain=data_domain,
             from_storage=from_storage,
+            storage_configs=storage_configs,
             concat_output=False,
             **product_specs
         )
@@ -453,6 +380,7 @@ class MarketFeed(BaseFeed):
                     data_layer=data_layer,
                     data_domain=data_domain,
                     to_storage='cache',
+                    storage_configs=storage_configs,
                     concat_output=False,
                     **product_specs
                 )

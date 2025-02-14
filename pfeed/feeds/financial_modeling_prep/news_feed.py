@@ -45,7 +45,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
                     "symbol": "string"
                 })
             dfs.append(df)
-        return pd.concat(dfs)
+        return pd.concat(dfs, ignore_index=True)
     
     def _normalize_raw_data_from_FMP_articles(self, data: list[list[dict] | []]) -> pd.DataFrame:
         if not data:

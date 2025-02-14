@@ -241,6 +241,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
+        storage_configs: dict | None=None,
         yfinance_kwargs: dict | None=None,
         **product_specs,
     ) -> tDataFrame | None:
@@ -280,6 +281,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             data_domain=data_domain,
             data_origin=data_origin,
             from_storage=from_storage,
+            storage_configs=storage_configs,
             **product_specs,
         )
         self._yfinance_kwargs.clear()

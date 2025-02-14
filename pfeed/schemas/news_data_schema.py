@@ -11,4 +11,6 @@ class NewsDataSchema(pa.DataFrameModel):
     publisher: Series[str]
     url: Series[str]
     product: Series[str] = pa.Field(nullable=True)
+    author: Series[str] | None = pa.Field(nullable=True)
+    exchange: Series[str] | None = pa.Field(nullable=True)
     symbol: Series[str] | None

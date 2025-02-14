@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Literal, Callable
 from types import ModuleType
 if TYPE_CHECKING:
     import pandas as pd
+    from narwhals.typing import Frame
     from prefect import Flow as PrefectFlow
     from bytewax.dataflow import Dataflow as BytewaxDataFlow
     from bytewax.inputs import Source as BytewaxSource
@@ -10,7 +11,7 @@ if TYPE_CHECKING:
     from bytewax.dataflow import Stream as BytewaxStream
     from pfund.products.product_base import BaseProduct
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing.core import tData
+    from pfeed.typing.core import tData, tDataFrame
     from pfeed.typing.literals import tSTORAGE, tDATA_TOOL, tDATA_LAYER
     from pfeed.const.enums import DataSource
     from pfeed.sources.base_source import BaseSource
@@ -24,11 +25,14 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
+import narwhals as nw
+
 from pfeed.flows.faucet import Faucet
 from pfeed.config import get_config
 from pfeed.const.enums import DataTool, DataStorage
 from pfeed.flows.dataflow import DataFlow
 from pfeed.utils.utils import rollback_date_range
+from pfeed.utils.dataframe import is_empty_dataframe
 
 
 __all__ = ["BaseFeed"]
@@ -102,9 +106,23 @@ class BaseFeed(ABC):
     def create_data_model(self, *args, **kwargs) -> BaseDataModel:
         pass
 
-    @abstractmethod
-    def create_storage(self, *args, **kwargs) -> BaseStorage:
-        pass
+    def create_storage(
+        self,
+        storage: tSTORAGE,
+        data_model: BaseDataModel,
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        storage_configs: dict | None=None,
+    ) -> BaseStorage:
+        storage_configs = storage_configs or {}
+        Storage = DataStorage[storage.upper()].storage_class
+        return Storage.from_data_model(
+            data_model,
+            data_layer,
+            data_domain=data_domain or self.DATA_DOMAIN,
+            use_deltalake=self._use_deltalake,
+            **storage_configs,
+        )
     
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
         return self.data_source.create_product(product_basis, symbol=symbol, **product_specs)
@@ -133,6 +151,40 @@ class BaseFeed(ABC):
     @abstractmethod
     def download(self, *args, **kwargs) -> tData | None | BaseFeed:
         pass
+
+    def _run_download(
+        self, 
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        to_storage: tSTORAGE='local',
+        storage_configs: dict | None=None,
+        concat_output: bool=True,
+    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
+        if not self._pipeline_mode:    
+            self.load(
+                to_storage=to_storage,
+                data_layer=data_layer,
+                data_domain=data_domain or self.DATA_DOMAIN,
+                storage_configs=storage_configs,
+            )
+            completed_dataflows, failed_dataflows = self.run()
+            missing_dates = [dataflow.data_model.date for dataflow in failed_dataflows]
+            dfs: dict[datetime.date, tDataFrame | None] = {}
+            for dataflow in completed_dataflows + failed_dataflows:
+                date = dataflow.data_model.date
+                dfs[date] = dataflow.output if date not in missing_dates else None
+            if concat_output:
+                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
+                if dfs:
+                    df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
+                    df: tDataFrame = nw.to_native(df)
+                else:
+                    df = None
+                return df
+            else:
+                return dfs
+        else:
+            return self
     
     def stream(
         self, 
@@ -147,6 +199,29 @@ class BaseFeed(ABC):
     @abstractmethod
     def retrieve(self, *args, **kwargs) -> tData | None:
         pass
+
+    def _run_retrieve(self, concat_output: bool=True) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
+        if not self._pipeline_mode:
+            completed_dataflows, failed_dataflows = self.run()
+            if missing_dates := [dataflow.data_model.date for dataflow in failed_dataflows]:
+                # fill gaps between missing dates since downloads will include all dates in range
+                missing_dates = pd.date_range(min(missing_dates), max(missing_dates)).date.tolist()
+            dfs: dict[datetime.date, tDataFrame | None] = {}
+            for dataflow in completed_dataflows + failed_dataflows:
+                date = dataflow.data_model.date
+                dfs[date] = dataflow.output if date not in missing_dates else None
+            if concat_output:
+                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
+                if dfs:
+                    df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
+                    df: tDataFrame = nw.to_native(df)
+                else:
+                    df = None
+                return df
+            else:
+                return dfs
+        else:
+            return self
     
     # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
     def fetch(self, *args, **kwargs) -> tData | None | BaseFeed:

@@ -46,7 +46,7 @@ class DeltaLakeStorageMixin:
         print('Vacuuming Delta Lake...')
         delta_tables = self.get_delta_tables()
         for dt in delta_tables:
-            files_deleted = dt.vacuum(retention_hours=0, enforce_retention_duration=False, dry_run=dry_run)
+            files_deleted = dt.vacuum(dry_run=dry_run)
             verb = 'Going to delete' if dry_run else 'Deleted'
             style = 'bold red' if dry_run else 'bold green'
             if files_deleted:

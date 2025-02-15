@@ -103,7 +103,11 @@ class MinioStorage(BaseStorage):
     @property
     def data_path(self) -> str:
         data_path = "s3://" + self.BUCKET_NAME
-        return '/'.join([data_path, self.data_layer.name.lower(), self.data_domain])
+        return '/'.join([
+            data_path,
+            f'data_layer={self.data_layer.name.lower()}',
+            f'data_domain={self.data_domain}'
+        ])
     
     def get_object(self, object_name: str) -> bytes | None:
         try:

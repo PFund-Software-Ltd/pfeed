@@ -142,7 +142,11 @@ class BaseStorage(ABC):
     def data_path(self) -> Path:
         from pfeed.config import get_config
         config = get_config()
-        return Path(config.data_path) / self.data_layer.name.lower() / self.data_domain
+        return (
+            Path(config.data_path)
+            / f'data_layer={self.data_layer.name.lower()}'
+            / f'data_domain={self.data_domain}'
+        )
     
     def __str__(self):
         if self._data_model:

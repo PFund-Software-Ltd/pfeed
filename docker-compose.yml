@@ -7,7 +7,7 @@ services:
       - "${MINIO_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - ${PFEED_DATA_PATH}/minio:/data
+      - ${MINIO_DATA_PATH}:/data
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pfunder}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-password}
@@ -20,7 +20,7 @@ services:
   #   ports:
   #     - "${TIMESCALEDB_PORT:-5432}:5432"
   #   volumes:
-  #     - ${PFEED_DATA_PATH}/timescaledb:/var/lib/postgresql/data
+  #     - ${TIMESCALEDB_DATA_PATH}/timescaledb:/var/lib/postgresql/data
   #   environment:
   #     POSTGRES_DB: ${TIMESCALEDB_DB:-pfeed}
   #     POSTGRES_USER: ${TIMESCALEDB_USER:-pfunder}

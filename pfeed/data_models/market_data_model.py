@@ -69,13 +69,13 @@ class MarketDataModel(TimeBasedDataModel):
         # NOTE: since storage is per date, only uses self.date (start_date) to create storage path
         year, month, day = str(self.date).split('-')
         return (
-            Path(self.env.value)
-            / self.data_source.name
-            / self.data_origin
-            / self.product.type.value
-            / self.product.name
-            / str(self.resolution)
-            / year
-            / month 
-            / day
+            Path(f'env={self.env.value}')
+            / f'data_source={self.data_source.name}'
+            / f'data_origin={self.data_origin}'
+            / f'product_type={self.product.type.value}'
+            / f'product={self.product.name}'
+            / f'resolution={repr(self.resolution)}'
+            / f'year={year}'
+            / f'month={month}'
+            / f'day={day}'
         )

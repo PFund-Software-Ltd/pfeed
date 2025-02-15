@@ -28,7 +28,11 @@ class CacheStorage(LocalStorage):
     def data_path(self) -> Path:
         from pfeed.config import get_config
         config = get_config()
-        return Path(config.cache_path) / self.data_layer.name.lower() / self.data_domain
+        return (
+            Path(config.cache_path)
+            / f'data_layer={self.data_layer.name.lower()}'
+            / f'data_domain={self.data_domain}'
+        )
 
     def _clear_caches(self):
         '''Clear old caches except the current date'''

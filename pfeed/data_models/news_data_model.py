@@ -24,7 +24,7 @@ class NewsDataModel(TimeBasedDataModel):
     
     def _create_filename(self) -> str:
         if self.product is None:
-            filename = '_'.join(["general_news", str(self.date)])
+            filename = '_'.join(["GENERAL_MARKET_NEWS", str(self.date)])
         else:
             filename = '_'.join([self.product.name, str(self.date)])
         return filename + self.file_extension
@@ -33,23 +33,23 @@ class NewsDataModel(TimeBasedDataModel):
         year, month, day = str(self.date).split('-')
         if self.product is None:
             return (
-                Path(self.env.value)
-                / self.data_source.name
-                / self.data_origin
-                / 'GENERAL'
-                / 'NEWS'
-                / year
-                / month 
-                / day
+                Path(f'env={self.env.value}')
+                / f'data_source={self.data_source.name}'
+                / f'data_origin={self.data_origin}'
+                / 'product_type=NONE'
+                / 'product=NONE'
+                / f'year={year}'
+                / f'month={month}'
+                / f'day={day}'
             )
         else:
             return (
-                Path(self.env.value)
-                / self.data_source.name
-                / self.data_origin
-                / self.product.type.value
-                / self.product.name
-                / year
-                / month 
-                / day
+                Path(f'env={self.env.value}')
+                / f'data_source={self.data_source.name}'
+                / f'data_origin={self.data_origin}'
+                / f'product_type={self.product.type.value}'
+                / f'product={self.product.name}'
+                / f'year={year}'
+                / f'month={month}'
+                / f'day={day}'
             )

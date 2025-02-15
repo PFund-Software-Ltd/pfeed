@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import click
 
 
@@ -20,5 +22,6 @@ def docker_compose(ctx, env_file_path, docker_compose_file_path):
     click.echo(f'Using docker-compose.yml file from "{docker_compose_file_path}"')
     command = ['docker-compose', '--file', str(docker_compose_file_path), '--env-file', str(env_file_path)] + ctx.args
     
-    os.environ['PFEED_DATA_PATH'] = config.data_path  # used in docker-compose.yml
+    if 'MINIO_DATA_PATH' not in os.environ:
+        os.environ['MINIO_DATA_PATH'] = str(Path(config.data_path).parent / 'minio')  # used in docker-compose.yml
     subprocess.run(command, env=os.environ)

@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable
 from types import ModuleType
 if TYPE_CHECKING:
-    import pandas as pd
     from narwhals.typing import Frame
     from prefect import Flow as PrefectFlow
     from bytewax.dataflow import Dataflow as BytewaxDataFlow
@@ -25,6 +24,7 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
+import pandas as pd
 import narwhals as nw
 
 from pfeed.flows.faucet import Faucet

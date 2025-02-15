@@ -39,12 +39,13 @@ class CacheStorage(LocalStorage):
         cache_path = config.cache_path
         today = self._get_today()
         
-        for file_dir in os.listdir(cache_path):
-            full_path = os.path.join(cache_path, file_dir)
-            last_modified_date = get_last_modified_time(full_path).date()
+        for file_dir in Path(cache_path).rglob("*"):
+            if not file_dir.is_dir():
+                continue
+            last_modified_date = get_last_modified_time(file_dir).date()
             try:
-                if os.path.isdir(full_path) and last_modified_date < today - datetime.timedelta(days=self.NUM_RETAINED_DAYS):
-                    shutil.rmtree(full_path)
+                if last_modified_date < today - datetime.timedelta(days=self.NUM_RETAINED_DAYS):
+                    shutil.rmtree(file_dir)
                     print(f"Removed '{file_dir}' directory in caches")
             except Exception as e:
                 print_error(f"Error removing '{file_dir}' directory in caches: {str(e)}")

@@ -16,6 +16,18 @@ from pfeed.data_models import MarketDataModel, NewsDataModel
 
 
 class BaseStorage(ABC):
+    def __new__(cls, *args, use_deltalake=False, **kwargs):
+        if use_deltalake:
+            # Create a new class that inherits from both BaseStorage and DeltaLakeStorageMixin
+            from pfeed.storages.delta_lake_storage_mixin import DeltaLakeStorageMixin
+            new_cls = type(
+                f'DeltaLake{cls.__name__}',
+                (cls, DeltaLakeStorageMixin),
+                {}
+            )
+            return super(BaseStorage, new_cls).__new__(new_cls)
+        return super().__new__(cls)
+
     def __init__(
         self,
         name: tSTORAGE,

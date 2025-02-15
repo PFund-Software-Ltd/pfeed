@@ -71,7 +71,7 @@ class TabularIO(BaseIO):
             return None
         data_tool: ModuleType = get_data_tool(data_tool)
         if read_from_deltalake:
-            if data_tool == 'polars':
+            if data_tool.name == 'polars':
                 data: tDataFrame = data_tool.read_delta(
                     file_path_without_filename, 
                     storage_options=self._storage_options,

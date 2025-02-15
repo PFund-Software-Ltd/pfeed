@@ -53,7 +53,7 @@ class MarketFeed(BaseFeed):
             end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return MarketDataModel(
             env=env,
-            source=self.data_source,
+            data_source=self.data_source,
             data_origin=data_origin,
             product=product,
             resolution=resolution,

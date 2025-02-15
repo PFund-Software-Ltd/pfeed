@@ -15,7 +15,7 @@ from pfeed.const.aliases import ALIASES
 class BaseSource(Singleton, ABC):
     def __init__(self, name: tDATA_SOURCE, api_key: str | None=None):
         self.name = DataSource[name.upper()]
-        api_key_name, api_key_alias = f'{self.name}_API_KEY', f'{ALIASES[self.name]}_API_KEY'
+        api_key_name, api_key_alias = f'{self.name}_API_KEY', f'{ALIASES.get(self.name, self.name)}_API_KEY'
         self._api_key = api_key or os.getenv(api_key_name) or os.getenv(api_key_alias)
         self.generic_metadata, self.specific_metadata = self._load_metadata()
         self.start_date = self.specific_metadata.get('start_date', None)

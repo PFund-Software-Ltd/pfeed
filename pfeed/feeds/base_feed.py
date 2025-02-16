@@ -278,6 +278,7 @@ class BaseFeed(ABC):
                     self.logger.debug(f'found data {data_model} in {search_storage.upper()}')
                     break
             except Exception as e:  # e.g. minio's ServerError if server is not running
+                self.logger.exception(f'Error in retrieving data {data_model} from {search_storage.upper()}:')
                 continue
         return data
 

@@ -144,7 +144,7 @@ class DataFlow:
             load = task(storage.write_data) if flow_type == FlowType.prefect else storage.write_data
             success = load(data)
             if not success:
-                self.logger.warning(f'failed to load {self.data_model} data to storage')
+                self.logger.warning(f'failed to load {self.data_model} data to {storage.name}')
             else:
                 self.logger.info(f'loaded {self.data_model} data to {storage.name}')
         else:

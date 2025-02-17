@@ -425,27 +425,37 @@ class BaseFeed(ABC):
                 dataflow.set_bytewax_sink(bytewax_sink or StdOutSink())
         return self
     
-    def run(self, ray_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
+    def run(
+        self, 
+        ray_kwargs: dict | None=None,
+        prefect_kwargs: dict | None=None,
+        bytewax_kwargs: dict | None=None,
+    ) -> tuple[list[DataFlow], list[DataFlow]]:
         '''Run dataflows'''
         from tqdm import tqdm
         from pfeed.utils.utils import generate_color
-        dataflows = self.to_prefect_dataflows() if self._use_prefect else self._dataflows
-        if self._use_bytewax:
-            dataflows.append(self.to_bytewax_dataflow())
+
+        ray_kwargs = ray_kwargs or {}
+        prefect_kwargs = prefect_kwargs or {}
+        bytewax_kwargs = bytewax_kwargs or {}
+        
         completed_dataflows: list[DataFlow] = []
         failed_dataflows: list[DataFlow] = []
         color = generate_color(self.name.value)
-        prefect_error_msg = 'Error in running {name} prefect dataflows: {err}, did you forget to run "prefect server start" to start prefect\'s server?'
+    
 
-        def _handle_result(res: tData | None) -> bool:
-            if not self._use_prefect:
-                success = False if res is None else True
+        def _run_dataflow(dataflow: DataFlow) -> bool:
+            if self._use_prefect:
+                flow_type = 'prefect'
+            elif self._use_bytewax:
+                flow_type = 'bytewax'
             else:
-                # for prefect, use dashboard to check failed dataflows
-                # FIXME:
-                success = True
+                flow_type = 'native'
+            res: tData | None = dataflow.run(flow_type=flow_type)
+            success = res is not None
             return success
-        
+
+
         if self._use_ray:
             import atexit
             import ray
@@ -453,37 +463,26 @@ class BaseFeed(ABC):
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             @ray.remote
-            def ray_task(dataflow) -> bool:
+            def ray_task(dataflow: DataFlow) -> bool:
+                success = False
                 try:
                     if not self.logger.handlers:
                         self.logger.addHandler(QueueHandler(log_queue))
                         self.logger.setLevel(logging.DEBUG)
                         # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
                         self.logger.propagate = False
-                        
-                    if self._use_prefect:
-                        res: tData | None = dataflow()
-                    elif self._use_bytewax:
-                        # REVIEW, using run_main() to execute the dataflow in the current thread, NOT for production
-                        from bytewax.testing import run_main
-                        run_main(dataflow)
-                    else:
-                        res: tData | None = dataflow.run()
-                    
-                    success = _handle_result(res)
-                    return success, dataflow
+                    success = _run_dataflow(dataflow)
                 except RuntimeError as err:
                     if self._use_prefect:
-                        self.logger.error(prefect_error_msg.format(name=self.name, err=err))
+                        self.logger.exception(f'Error in running prefect {dataflow}:')
                     else:
                         raise err
-                    return False, dataflow
                 except Exception:
                     self.logger.exception(f'Error in running {dataflow}:')
-                    return False, dataflow
+
+                return success, dataflow
             
             try:
-                ray_kwargs = ray_kwargs or {}
                 if 'num_cpus' not in ray_kwargs:
                     ray_kwargs['num_cpus'] = os.cpu_count()
                 self._init_ray(**ray_kwargs)
@@ -491,7 +490,7 @@ class BaseFeed(ABC):
                 log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
                 log_listener.start()
                 batch_size = ray_kwargs['num_cpus']
-                dataflow_batches = [dataflows[i: i + batch_size] for i in range(0, len(dataflows), batch_size)]
+                dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
                 for dataflow_batch in tqdm(dataflow_batches, desc=f'Running {self.name} dataflows', colour=color):
                     futures = [ray_task.remote(dataflow) for dataflow in dataflow_batch]
                     returns = ray.get(futures)
@@ -510,23 +509,15 @@ class BaseFeed(ABC):
                 self._shutdown_ray()
         else:
             try:
-                for dataflow in tqdm(dataflows, desc=f'Running {self.name} dataflows', colour=color):
-                    if self._use_prefect:
-                        res: tData | None = dataflow()
-                    elif self._use_bytewax:
-                        # REVIEW, using run_main() to execute the dataflow in the current thread, NOT for production
-                        from bytewax.testing import run_main
-                        run_main(dataflow)
-                    else:
-                        res: tData | None = dataflow.run()
-                    success = _handle_result(res)
+                for dataflow in tqdm(self._dataflows, desc=f'Running {self.name} dataflows', colour=color):
+                    success = _run_dataflow(dataflow)
                     if not success:
                         failed_dataflows.append(dataflow)
                     else:
                         completed_dataflows.append(dataflow)
             except RuntimeError as err:
                 if self._use_prefect:
-                    self.logger.error(prefect_error_msg.format(name=self.name, err=err))
+                    self.logger.exception(f'Error in running prefect {dataflow}:')
                 else:
                     raise err
             except Exception:

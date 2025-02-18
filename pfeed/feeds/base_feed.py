@@ -63,10 +63,10 @@ class BaseFeed(ABC):
             storage_configs: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
         from pfund.plogging import set_up_loggers
-        self.config = get_config()
         is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
         if not is_loggers_set_up:
-            set_up_loggers(self.config.log_path, self.config.logging_config_file_path, user_logging_config=self.config.logging_config)
+            config = get_config()
+            set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
         self.data_tool: ModuleType = importlib.import_module(f'pfeed.data_tools.data_tool_{DataTool[data_tool.lower()]}')
         if data_source is None:
             assert hasattr(self, '_create_data_source'), '_create_data_source() is not implemented'

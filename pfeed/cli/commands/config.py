@@ -117,17 +117,21 @@ def open(config_file, env_file, log_file, docker_file, default_editor):
     if default_editor:
         click.edit(filename=file_path)
     else:
-        open_with_vscode(file_path)
+        open_with_code_editor(file_path)
         
         
-def open_with_vscode(file_path):
+def open_with_code_editor(file_path):
+    """Try to open file with VS Code or Cursor, falling back to default editor if neither is available."""
     import subprocess
     try:
         subprocess.run(["code", str(file_path)], check=True)
         click.echo(f"Opened {file_path} with VS Code")
-    except subprocess.CalledProcessError:
-        click.echo("Failed to open with VS Code. Falling back to default editor.")
-        click.edit(filename=file_path)
-    except FileNotFoundError:
-        click.echo("VS Code command 'code' not found. Falling back to default editor.")
-        click.edit(filename=file_path)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Try Cursor next
+        try:
+            subprocess.run(["cursor", str(file_path)], check=True)
+            click.echo(f"Opened {file_path} with Cursor")
+            return
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            click.echo("Neither VS Code nor Cursor available. Falling back to default editor.")
+            click.edit(filename=file_path)

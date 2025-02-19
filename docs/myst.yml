@@ -30,7 +30,7 @@ project:
             - file: getting_started/quickstart/get_realtime_data.ipynb
             - file: getting_started/quickstart/stream_realtime_data.ipynb
             - file: getting_started/quickstart/fetch_general_data.ipynb
-    - file: concepts/concepts.md
+    - title: Concepts
       children:
         - file: concepts/data_lake.md
         - file: concepts/delta_lake.md
@@ -52,7 +52,7 @@ project:
     #     - file: how_to_guides/scale_up.ipynb
     - title: Integrations
       children:
-        - file: integrations/deltalake.ipynb
+        - file: integrations/delta-rs.ipynb
         - file: integrations/duckdb.ipynb
         - file: integrations/prefect.ipynb
         - file: integrations/bytewax.ipynb
@@ -66,9 +66,13 @@ project:
         - file: coverage/supported_product_types.md
         - file: coverage/supported_data_sources.md
         - file: coverage/supported_data_tools.md
+    - file: cli_commands/cli_commands.md
+      children:
+        - file: cli_commands/download.md
+        - file: cli_commands/config.md
+        - file: cli_commands/clear.md
+        - file: cli_commands/deltalake.md
     - file: docker_usage.md
-    # TODO: separate commands into different files
-    # - file: cli_commands.md
     # TODO:
     # - title: Reference
     #   children:

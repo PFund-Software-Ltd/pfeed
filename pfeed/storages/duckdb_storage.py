@@ -24,7 +24,7 @@ import duckdb
 from pfund import print_warning
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
-from pfeed.const.enums import DataTool
+from pfeed.enums import DataTool
 from pfeed import get_config
 
 

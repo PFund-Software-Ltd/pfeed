@@ -8,7 +8,7 @@ import io
 import pandas as pd
 from deltalake import DeltaTable
 
-from pfeed.const.enums import DataTool
+from pfeed.enums import DataTool
 
 
 name = DataTool.pandas

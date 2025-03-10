@@ -1,7 +1,7 @@
 import click
 
 import pfeed as pe
-from pfeed.const.enums import DataSource, DataStorage, DataLayer
+from pfeed.enums import DataSource, DataStorage, DataLayer
 from pfeed.const.aliases import ALIASES
 from pfeed.cli.utils import parse_extra_args
 

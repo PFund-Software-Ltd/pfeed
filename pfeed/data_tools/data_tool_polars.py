@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     
 import polars as pl
 
-from pfeed.const.enums import DataTool
+from pfeed.enums import DataTool
 
 
 name = DataTool.polars

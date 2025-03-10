@@ -9,7 +9,7 @@ import pandas as pd
 import dask.dataframe as dd
 from deltalake import DeltaTable
 
-from pfeed.const.enums import DataTool
+from pfeed.enums import DataTool
 
 
 name = DataTool.dask

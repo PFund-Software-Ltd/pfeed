@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing.core import tData, tDataFrame
     from pfeed.typing.literals import tSTORAGE, tDATA_TOOL, tDATA_LAYER
-    from pfeed.const.enums import DataSource
+    from pfeed.enums import DataSource
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
@@ -29,7 +29,7 @@ from pprint import pformat
 
 import narwhals as nw
 
-from pfeed.const.enums import DataTool, DataStorage
+from pfeed.enums import DataTool, DataStorage
 
 
 __all__ = ["BaseFeed"]

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pfeed.const.enums.env import Environment
+from pfeed.enums.env import Environment
 from pfeed.sources.base_source import BaseSource
 
 

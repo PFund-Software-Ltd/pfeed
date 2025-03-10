@@ -133,7 +133,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         '''
-        from pfeed.const.enums import MarketDataType
+        from pfeed.enums import MarketDataType
 
         self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
         resolution: Resolution = self.create_resolution(resolution)

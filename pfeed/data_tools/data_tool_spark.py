@@ -7,7 +7,7 @@ import os
 
 from pyspark.sql import DataFrame as SparkDataFrame, functions as F, SparkSession
 
-from pfeed.const.enums import DataStorage, DataTool
+from pfeed.enums import DataStorage, DataTool
 
 
 name = DataTool.spark

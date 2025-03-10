@@ -11,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pfeed.const.enums import DataStorage, DataLayer
+from pfeed.enums import DataStorage, DataLayer
 from pfeed.data_models import MarketDataModel, NewsDataModel
 
 

@@ -13,7 +13,7 @@ import polars as pl
 import narwhals as nw
 
 from pfeed.typing.core import dd
-from pfeed.const.enums import DataTool
+from pfeed.enums import DataTool
 from pfeed.utils.dataframe import is_dataframe
 
 

@@ -4,7 +4,7 @@ import pytest
 
 from pfeed.feeds import BybitFeed
 from pfeed.storages.base_storage import BaseStorage
-from pfeed.const.enums import DataLayer
+from pfeed.enums import DataLayer
 
 
 @pytest.fixture

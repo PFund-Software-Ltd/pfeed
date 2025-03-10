@@ -8,7 +8,7 @@ import os
 from abc import ABC, abstractmethod
 
 from pfund.utils.utils import Singleton
-from pfeed.const.enums import DataSource, DataProviderType, DataAccessType, ProductType
+from pfeed.enums import DataSource, DataProviderType, DataAccessType, ProductType
 from pfeed.const.aliases import BIDIRECTIONAL_ALIASES 
 
 
@@ -39,7 +39,7 @@ class BaseSource(Singleton, ABC):
     
     def _get_highest_and_lowest_resolutions(self):
         from pfund.datas.resolution import Resolution
-        from pfeed.const.enums import MarketDataType
+        from pfeed.enums import MarketDataType
         data_types = [MarketDataType[data_type.upper()] for data_type in self.generic_metadata['data_categories']['market_data']]
         resolutions = sorted([Resolution(data_type) for data_type in data_types], reverse=True)
         return resolutions[0], resolutions[-1]

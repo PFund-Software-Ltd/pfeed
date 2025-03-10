@@ -2,7 +2,7 @@ import click
 
 from rich.console import Console
 
-from pfeed.const.enums import DataStorage
+from pfeed.enums import DataStorage
 from pfeed.storages.base_storage import BaseStorage
 
 

@@ -18,7 +18,7 @@ import narwhals as nw
 from rich.console import Console
 
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
-from pfeed.const.enums import DataAccessType
+from pfeed.enums import DataAccessType
 
 
 tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']

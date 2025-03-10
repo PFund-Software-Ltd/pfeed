@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.flows.dataflow import DataFlow
+    from pfeed.data_models.market_data_model import MarketDataModel
 
 import datetime
 
@@ -15,14 +16,10 @@ import pandas as pd
 import narwhals as nw
 from rich.console import Console
 
-from pfund.datas.resolution import Resolution
-from pfeed._etl import market as etl
-from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
-from pfeed.data_models.market_data_model import MarketDataModel
+from pfund.datas.resolution import Resolution
 from pfeed.const.enums import DataAccessType
 from pfeed.utils.utils import lambda_with_name
-from pfeed.utils.dataframe import is_empty_dataframe
 
 
 tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
@@ -45,6 +42,7 @@ class MarketFeed(BaseFeed):
         env: tENVIRONMENT = 'BACKTEST',
         **product_specs
     ) -> MarketDataModel:
+        from pfeed.data_models.market_data_model import MarketDataModel
         if isinstance(product, str) and product:
             product = self.create_product(product, **product_specs)
         if isinstance(start_date, str) and start_date:
@@ -153,6 +151,9 @@ class MarketFeed(BaseFeed):
             data_resolution: The resolution of the downloaded data.
             target_resolution: The resolution of the data to be stored.
         '''
+        from pfeed._etl import market as etl
+        from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
+
         self.transform(
             convert_to_pandas_df,
             self._normalize_raw_data,
@@ -315,6 +316,8 @@ class MarketFeed(BaseFeed):
         return dataflows
     
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
+        from pfeed._etl import market as etl
+        from pfeed._etl.base import convert_to_user_df
         self.transform(
             lambda_with_name(
                 'resample_data_if_necessary', 
@@ -342,6 +345,10 @@ class MarketFeed(BaseFeed):
         storage_configs: dict | None=None,
         **product_specs
     ) -> tDataFrame | None:
+        from pfeed._etl import market as etl
+        from pfeed._etl.base import convert_to_user_df
+        from pfeed.utils.dataframe import is_empty_dataframe
+
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
         resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'

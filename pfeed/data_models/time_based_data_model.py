@@ -16,7 +16,7 @@ class TimeBasedDataModel(BaseDataModel):
     
     @field_validator('end_date')
     @classmethod
-    def validate_end_date(cls, end_date: datetime.date | None, info: ValidationInfo) -> datetime.date | None:
+    def validate_end_date(cls, end_date: datetime.date, info: ValidationInfo) -> datetime.date:
         '''Validates the start and end dates of the data model.'''
         if info.data['start_date'] > end_date:
             raise ValueError(f'start date {info.data["start_date"]} must be before or equal to end date {end_date}.')

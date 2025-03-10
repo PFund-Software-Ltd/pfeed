@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from pfeed.const.enums import DataSource
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
+    from pfeed.flows.dataflow import DataFlow
+    from pfeed.flows.faucet import Faucet
     
 import os
 from abc import ABC, abstractmethod
@@ -26,14 +28,9 @@ from pprint import pformat
 
 import pandas as pd
 import narwhals as nw
-from minio import ServerError as MinioServerError
 
-from pfeed.flows.faucet import Faucet
 from pfeed.config import get_config
 from pfeed.const.enums import DataTool, DataStorage
-from pfeed.flows.dataflow import DataFlow
-from pfeed.utils.utils import rollback_date_range
-from pfeed.utils.dataframe import is_empty_dataframe
 
 
 __all__ = ["BaseFeed"]
@@ -161,6 +158,7 @@ class BaseFeed(ABC):
         storage_configs: dict | None=None,
         concat_output: bool=True,
     ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
+        from pfeed.utils.dataframe import is_empty_dataframe
         if not self._pipeline_mode:    
             self.load(
                 to_storage=to_storage,
@@ -202,6 +200,7 @@ class BaseFeed(ABC):
         pass
 
     def _run_retrieve(self, concat_output: bool=True) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
+        from pfeed.utils.dataframe import is_empty_dataframe
         if not self._pipeline_mode:
             completed_dataflows, failed_dataflows = self.run()
             if missing_dates := [dataflow.data_model.date for dataflow in failed_dataflows]:
@@ -257,6 +256,7 @@ class BaseFeed(ABC):
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
     ) -> tData | None:
+        from minio import ServerError as MinioServerError
         search_storages = ['cache', 'local', 'minio', 'duckdb'] if from_storage is None else [from_storage]
         data = None
         storage_configs = storage_configs or {}
@@ -308,6 +308,7 @@ class BaseFeed(ABC):
         Raises:
             ValueError: If rollback_period='max' but data source has no start_date attribute
         '''
+        from pfeed.utils.utils import rollback_date_range
         if start_date:
             start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
             if end_date:
@@ -326,6 +327,7 @@ class BaseFeed(ABC):
         return start_date, end_date
     
     def create_dataflow(self, faucet: Faucet) -> DataFlow:
+        from pfeed.flows.dataflow import DataFlow
         dataflow = DataFlow(faucet)
         self._subflows.append(dataflow)
         self._dataflows.append(dataflow)
@@ -333,6 +335,7 @@ class BaseFeed(ABC):
     
     @staticmethod
     def create_faucet(data_model: BaseDataModel, execute_func: Callable, op_type: Literal['download', 'stream', 'retrieve', 'fetch']) -> Faucet:
+        from pfeed.flows.faucet import Faucet
         return Faucet(data_model, execute_func, op_type)
     
     def _clear_subflows(self):

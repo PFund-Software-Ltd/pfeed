@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from pfeed.flows.dataflow import DataFlow
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tDATA_LAYER, tSTORAGE, tENVIRONMENT
+    from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
 
@@ -14,12 +15,8 @@ import narwhals as nw
 from rich.console import Console
 
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
-from pfeed.data_models.news_data_model import NewsDataModel
-from pfeed._etl import news as etl
-from pfeed._etl.base import convert_to_user_df
 from pfeed.const.enums import DataAccessType
 from pfeed.utils.utils import lambda_with_name
-from pfeed.utils.dataframe import is_empty_dataframe
 
 
 '''
@@ -41,6 +38,7 @@ class NewsFeed(BaseFeed):
         env: tENVIRONMENT = 'BACKTEST',
         **product_specs
     ) -> NewsDataModel:
+        from pfeed.data_models.news_data_model import NewsDataModel
         if isinstance(product, str) and product:
             product = self.create_product(product, **product_specs)
         if isinstance(start_date, str) and start_date:
@@ -123,6 +121,8 @@ class NewsFeed(BaseFeed):
         return [dataflow]
 
     def _add_default_transformations_to_download(self, product: BaseProduct | None=None):
+        from pfeed._etl import news as etl
+        from pfeed._etl.base import convert_to_user_df
         self.transform(
             self._normalize_raw_data,
             lambda_with_name(
@@ -202,6 +202,7 @@ class NewsFeed(BaseFeed):
         return dataflows
     
     def _add_default_transformations_to_retrieve(self):
+        from pfeed._etl.base import convert_to_user_df
         self.transform(
             lambda_with_name(
                 'convert_to_user_df',
@@ -230,6 +231,7 @@ class NewsFeed(BaseFeed):
             NOTE: this behavior is different from MarketFeed
             from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
+        from pfeed.utils.dataframe import is_empty_dataframe
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
         if from_storage is not None:
             dfs_from_storage_per_date: dict[datetime.date, tDataFrame | None] = self.retrieve(

@@ -3,6 +3,7 @@ from typing import Literal
 import os
 
 from fmp_api_client import FMPClient, FMPPlan
+
 from pfeed.sources.tradfi_source import TradFiSource
 
 

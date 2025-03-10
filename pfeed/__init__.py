@@ -40,6 +40,7 @@ def __getattr__(name: str):
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     
     
+# TODO: add llm plugin to explain "what is xxx?"
 def what_is(alias: str) -> str | None:
     from pfeed.const.aliases import ALIASES
     from pfund.const.aliases import ALIASES as PFUND_ALIASES

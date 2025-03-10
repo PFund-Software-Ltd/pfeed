@@ -1,9 +1,6 @@
 from typing import Callable, Literal
 import re
-import inspect
 import datetime
-import calendar
-import pytz
 
 
 def validate_product(product: str):
@@ -107,6 +104,7 @@ def lambda_with_name(name: str, lambda_func: Callable):
     
 
 def get_args_and_kwargs(func):
+    import inspect
     signature = inspect.signature(func)
     args = [param.name for param in signature.parameters.values() if param.default == inspect.Parameter.empty]
     kwargs = {param.name: param.default for param in signature.parameters.values() if param.default != inspect.Parameter.empty}
@@ -141,6 +139,7 @@ def get_TZ_abbrev_and_UTC_offset(date: str, tz_identifier='US/Eastern'):
         date: e.g. 2023-11-11
         timezone: TZ identifier from IANA timezone database
     '''
+    import pytz
     date = datetime.datetime.strptime(date, '%Y-%m-%d')
     timezone = pytz.timezone(tz_identifier)
     local_date = timezone.localize(date)  # attach timezone to the datetime object 
@@ -149,6 +148,7 @@ def get_TZ_abbrev_and_UTC_offset(date: str, tz_identifier='US/Eastern'):
 
 def rollback_date_range(rollback_period: str | Literal['ytd']) -> tuple[datetime.date, datetime.date]:
     '''Returns start_date and end_date based on the rollback_period (e.g. '1w', '1M', 'ytd' (Year To Date)).'''
+    import calendar
     from pfund.datas.resolution import Resolution
     def _nextmonth(year, month):
         if month == 12:

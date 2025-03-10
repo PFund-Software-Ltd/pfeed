@@ -4,13 +4,13 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
 
 from pfeed.sources.base_source import BaseSource
-from pfeed.utils.utils import validate_product
 
 
 class TradFiSource(BaseSource):
     def create_product(self, product_basis: str, symbol='', **product_specs) -> BaseProduct:
         from pfund.products import BaseProduct, StockProduct, OptionProduct, FutureProduct, CryptoProduct, FXProduct
         from pfund.const.enums import TradFiProductType
+        from pfeed.utils.utils import validate_product
         product_basis = product_basis.upper()
         validate_product(product_basis)
         base_asset, quote_asset, product_type = product_basis.split('_')

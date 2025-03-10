@@ -1,8 +1,10 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
+    import pandas as pd
     from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
+    from pfund.datas.resolution import Resolution
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.dataflow import Stream as BytewaxStream
     from pfeed.typing.core import tDataFrame
@@ -12,14 +14,11 @@ if TYPE_CHECKING:
 
 import datetime
 
-import pandas as pd
 import narwhals as nw
 from rich.console import Console
 
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
-from pfund.datas.resolution import Resolution
 from pfeed.const.enums import DataAccessType
-from pfeed.utils.utils import lambda_with_name
 
 
 tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
@@ -30,7 +29,11 @@ class MarketFeed(BaseFeed):
     
     @property
     def global_min_resolution(self) -> Resolution:
-        return Resolution('1d')
+        return self.create_resolution('1d')
+    
+    def create_resolution(self, resolution: str | Resolution) -> Resolution:
+        from pfund.datas.resolution import Resolution
+        return Resolution(resolution) if isinstance(resolution, str) else resolution
     
     def create_data_model(
         self,
@@ -110,10 +113,10 @@ class MarketFeed(BaseFeed):
                 If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
         '''
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
-        resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
+        resolution: Resolution = self.create_resolution(resolution)
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
-        unit_resolution = Resolution('1' + repr(resolution.timeframe))
-        adjusted_resolution = min(
+        unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
+        adjusted_resolution: Resolution = min(
             self.data_source.highest_resolution,
             max(unit_resolution, self.data_source.lowest_resolution)
         )
@@ -153,6 +156,7 @@ class MarketFeed(BaseFeed):
         '''
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
+        from pfeed.utils.utils import lambda_with_name
 
         self.transform(
             convert_to_pandas_df,
@@ -234,9 +238,9 @@ class MarketFeed(BaseFeed):
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
         '''
         product: BaseProduct = self.create_product(product, **product_specs)
-        resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
+        resolution: Resolution = self.create_resolution(resolution)
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
-        unit_resolution = Resolution('1' + repr(resolution.timeframe))
+        unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         self._create_retrieve_dataflows(
             product,
@@ -300,10 +304,12 @@ class MarketFeed(BaseFeed):
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
     ) -> list[DataFlow]:
+        from pandas import date_range
+
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
         dataflows: list[DataFlow] = []
         # NOTE: one data model per date
-        for date in pd.date_range(start_date, end_date).date:
+        for date in date_range(start_date, end_date).date:
             data_model = self.create_data_model(product, unit_resolution, date, data_origin=data_origin)
             dataflow: DataFlow = self._extract_retrieve(
                 data_model,
@@ -318,6 +324,8 @@ class MarketFeed(BaseFeed):
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_user_df
+        from pfeed.utils.utils import lambda_with_name
+
         self.transform(
             lambda_with_name(
                 'resample_data_if_necessary', 
@@ -350,9 +358,9 @@ class MarketFeed(BaseFeed):
         from pfeed.utils.dataframe import is_empty_dataframe
 
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
-        resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
+        resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
-        adjusted_resolution = max(resolution, self.global_min_resolution)
+        adjusted_resolution: Resolution = max(resolution, self.global_min_resolution)
         # NOTE: returned dfs from retrieve-dataflows should be of adjusted_resolution
         dfs_from_storage_per_date: dict[datetime.date, tDataFrame | None] = self.retrieve(
             product,

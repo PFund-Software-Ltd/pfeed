@@ -4,11 +4,21 @@ if TYPE_CHECKING:
     from pfund_plugins.base_plugin import BasePlugin
     # need these imports to support IDE hints:
     aliases = ...
-    from pfeed.feeds import (
-        Bybit,
-        YahooFinance, YF,
-        FinancialModelingPrep, FMP,
+    from pfeed.feeds.yahoo_finance.yahoo_finance import (
+        YahooFinance,
+        YahooFinance as YF,
     )
+    from pfeed.feeds.bybit.bybit import (
+        BybitMarketFeed as Bybit,
+    )
+    try:
+        from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import (
+            FinancialModelingPrep,
+            FinancialModelingPrep as FMP,
+        )
+    except ImportError:
+        FinancialModelingPrep = FMP = None
+
 
 from importlib.metadata import version
 from pfeed.config import configure, get_config
@@ -27,13 +37,13 @@ def __getattr__(name: str):
         from pfund.const.aliases import ALIASES as PFUND_ALIASES
         return {**ALIASES, **PFUND_ALIASES}
     elif name in ('YahooFinance', 'YF'):
-        from pfeed.feeds import YahooFinance
+        from pfeed.feeds.yahoo_finance.yahoo_finance import YahooFinance
         return YahooFinance
     elif name in ('Bybit',):
-        from pfeed.feeds import Bybit
+        from pfeed.feeds.bybit.bybit import BybitMarketFeed as Bybit
         return Bybit
     elif name in ('FinancialModelingPrep', 'FMP'):
-        from pfeed.feeds import FinancialModelingPrep
+        from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import FinancialModelingPrep
         return FinancialModelingPrep
     elif name in plugins:
         return plugins[name]

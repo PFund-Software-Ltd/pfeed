@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 import datetime
 
-import pandas as pd
 import narwhals as nw
 from rich.console import Console
 
@@ -183,9 +182,11 @@ class NewsFeed(BaseFeed):
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
     ) -> list[DataFlow]:
+        from pandas import date_range
+
         dataflows: list[DataFlow] = []
         # NOTE: one data model per date
-        for date in pd.date_range(start_date, end_date).date:
+        for date in date_range(start_date, end_date).date:
             data_model = self.create_data_model(
                 start_date=date,
                 product=product,
@@ -231,7 +232,9 @@ class NewsFeed(BaseFeed):
             NOTE: this behavior is different from MarketFeed
             from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
+        from pandas import date_range
         from pfeed.utils.dataframe import is_empty_dataframe
+
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
         if from_storage is not None:
             dfs_from_storage_per_date: dict[datetime.date, tDataFrame | None] = self.retrieve(
@@ -251,7 +254,7 @@ class NewsFeed(BaseFeed):
             dfs_from_storage = [df for df in dfs_from_storage_per_date.values() if df is not None]
         else:
             dfs_from_storage_per_date = {}
-            missing_dates = [date for date in pd.date_range(start_date, end_date).date]
+            missing_dates = [date for date in date_range(start_date, end_date).date]
             dfs_from_storage = []
         
         dfs_from_source: list[tDataFrame] = []

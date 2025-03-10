@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import datetime
+    import pandas as pd
     from bytewax.dataflow import Stream as BytewaxStream
     from bytewax.inputs import Source as BytewaxSource
     from pfeed.typing.core import tDataFrame
@@ -11,8 +12,6 @@ if TYPE_CHECKING:
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
     from pfeed.flows.dataflow import DataFlow
-
-import pandas as pd
 
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
 from pfeed.sources.bybit.source import BybitSource
@@ -100,10 +99,12 @@ class BybitMarketFeed(CryptoMarketFeed):
         end_date: datetime.date,
         data_origin: str='',
     ) -> list[DataFlow]:
+        from pandas import date_range
+
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
         dataflows: list[DataFlow] = []
         # NOTE: one data model per date
-        for date in pd.date_range(start_date, end_date).date:
+        for date in date_range(start_date, end_date).date:
             data_model = self.create_data_model(product, unit_resolution, date, data_origin=data_origin)
             # create a dataflow that schedules _execute_download()
             dataflow = self._extract_download(data_model)

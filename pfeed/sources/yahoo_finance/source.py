@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
 
-import yfinance
 
 from pfeed.sources.tradfi_source import TradFiSource
 
@@ -13,6 +12,7 @@ __all__ = ["YahooFinanceSource"]
 
 class YahooFinanceSource(TradFiSource):
     def __init__(self):
+        import yfinance
         super().__init__('YAHOO_FINANCE')
         self.api = yfinance
 

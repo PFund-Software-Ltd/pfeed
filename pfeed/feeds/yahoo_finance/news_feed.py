@@ -1,12 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import pandas as pd
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
-
-import yfinance as yf
-import pandas as pd
 
 from pfeed.feeds.news_feed import NewsFeed
 
@@ -14,6 +12,7 @@ from pfeed.feeds.news_feed import NewsFeed
 class YahooFinanceNewsFeed(NewsFeed):
     # REVIEW: better handle some potentially useful attributes: "storyline" and "editorsPick"
     def _normalize_raw_data(self, data: list[dict]) -> pd.DataFrame:
+        import pandas as pd
         # extract contents only
         data = [item['content'] for item in data]
         for item in data:
@@ -41,7 +40,7 @@ class YahooFinanceNewsFeed(NewsFeed):
         self.logger.debug(f'downloading {data_model}')
         symbol = data_model.product.symbol
         assert symbol, f'symbol is required for {data_model}'
-        ticker = yf.Ticker(symbol)
+        ticker = self.api.Ticker(symbol)
         # FIXME: hard-code count to 100
         data = ticker.get_news(count=100, tab='news')
 

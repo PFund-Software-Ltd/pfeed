@@ -1,6 +1,5 @@
 import datetime
 
-from pandas import date_range
 from pydantic import field_validator, Field, ValidationInfo
 
 from pfeed.data_models.base_data_model import BaseDataModel
@@ -24,6 +23,7 @@ class TimeBasedDataModel(BaseDataModel):
     
     @property
     def dates(self) -> list[datetime.date]:
+        from pandas import date_range
         return date_range(self.start_date, self.end_date).date.tolist()
 
     def is_date_range(self) -> bool:

@@ -10,6 +10,7 @@ duckdb storage structure:
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    import pandas as pd
     from duckdb import DuckDBPyConnection
     from pfeed.typing.literals import tDATA_TOOL, tDATA_LAYER
     from pfeed.typing.core import tDataFrame
@@ -18,12 +19,9 @@ if TYPE_CHECKING:
 import json
 from pathlib import Path
 
-import pandas as pd
-from pandas.api.types import is_datetime64_ns_dtype
 import duckdb
 
 from pfund import print_warning
-from pfeed.utils.dataframe import is_dataframe
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
 from pfeed.const.enums import DataTool
@@ -229,6 +227,9 @@ class DuckDBStorage(BaseStorage):
         return metadata
         
     def _write_table(self, df: pd.DataFrame, metadata: dict | None=None):
+        from pandas.api.types import is_datetime64_ns_dtype
+        from pfeed.utils.dataframe import is_dataframe
+
         if not is_dataframe(df):
             raise ValueError(f'{type(df)=} is not a dataframe, cannot write to duckdb')
         

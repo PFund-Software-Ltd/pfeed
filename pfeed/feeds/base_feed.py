@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable
 from types import ModuleType
 if TYPE_CHECKING:
+    import pandas as pd
     from narwhals.typing import Frame
     from prefect import Flow as PrefectFlow
     from bytewax.dataflow import Dataflow as BytewaxDataFlow
@@ -26,10 +27,8 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
-import pandas as pd
 import narwhals as nw
 
-from pfeed.config import get_config
 from pfeed.const.enums import DataTool, DataStorage
 
 
@@ -61,6 +60,8 @@ class BaseFeed(ABC):
             storage_configs: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
         from pfund.plogging import set_up_loggers
+        from pfeed.config import get_config
+
         is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
         if not is_loggers_set_up:
             config = get_config()
@@ -200,12 +201,13 @@ class BaseFeed(ABC):
         pass
 
     def _run_retrieve(self, concat_output: bool=True) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
+        from pandas import date_range
         from pfeed.utils.dataframe import is_empty_dataframe
         if not self._pipeline_mode:
             completed_dataflows, failed_dataflows = self.run()
             if missing_dates := [dataflow.data_model.date for dataflow in failed_dataflows]:
                 # fill gaps between missing dates since downloads will include all dates in range
-                missing_dates = pd.date_range(min(missing_dates), max(missing_dates)).date.tolist()
+                missing_dates = date_range(min(missing_dates), max(missing_dates)).date.tolist()
             dfs: dict[datetime.date, tDataFrame | None] = {}
             for dataflow in completed_dataflows + failed_dataflows:
                 date = dataflow.data_model.date

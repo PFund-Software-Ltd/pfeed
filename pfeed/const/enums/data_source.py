@@ -16,15 +16,11 @@ class DataSource(StrEnum):
     @property
     def feed_class(self) -> type[BaseFeed]:
         """Returns the corresponding Feed class for this data source."""
-        from pfeed.feeds import (
-            Bybit,
-            YahooFinance,
-            FinancialModelingPrep
-        )
+        import pfeed as pe
         return {
-            DataSource.BYBIT: Bybit,
-            DataSource.YAHOO_FINANCE: YahooFinance,
+            DataSource.BYBIT: pe.Bybit,
+            DataSource.YAHOO_FINANCE: pe.YahooFinance,
             # DataSource.DATABENTO: DatabentoFeed,
             # DataSource.BINANCE: BinanceFeed,
-            DataSource.FINANCIAL_MODELING_PREP: FinancialModelingPrep,
+            DataSource.FINANCIAL_MODELING_PREP: pe.FinancialModelingPrep,
         }[self]

@@ -1,7 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    import pandas as pd
+    from yfinance import Ticker
     from pfund.products.product_base import BaseProduct
+    from pfund.datas.resolution import Resolution
     from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
     from pfeed.typing.core import tDataFrame
     from pfeed.data_models.market_data_model import MarketDataModel
@@ -10,12 +13,7 @@ if TYPE_CHECKING:
 import time
 import datetime
 
-import yfinance
-import pandas as pd
-
-from pfund.datas.resolution import Resolution
 from pfeed.feeds.market_feed import MarketFeed
-from pfeed.const.enums import MarketDataType
 
 
 __all__ = ["YahooFinanceMarketFeed"]
@@ -135,8 +133,10 @@ class YahooFinanceMarketFeed(MarketFeed):
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         '''
+        from pfeed.const.enums import MarketDataType
+
         self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
-        resolution = Resolution(resolution) if isinstance(resolution, str) else resolution
+        resolution: Resolution = self.create_resolution(resolution)
         # makes rollback_period == 'max' more specific for different data types
         if rollback_period == 'max':
             dtype = MarketDataType[str(resolution.timeframe)]
@@ -293,7 +293,7 @@ class YahooFinanceMarketFeed(MarketFeed):
     ###
     def get_option_expirations(self, symbol: str) -> tuple[str]:
         '''Get all available option expirations for a given symbol.'''
-        ticker: yfinance.Ticker = self.api.Ticker(symbol)
+        ticker: Ticker = self.api.Ticker(symbol)
         expirations = ticker.options
         return expirations
 
@@ -306,7 +306,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         '''
         from pfeed._etl.base import convert_to_user_df
         
-        ticker: yfinance.Ticker = self.api.Ticker(symbol)
+        ticker: Ticker = self.api.Ticker(symbol)
         option_chain = ticker.option_chain(expiration)
         if option_type.upper() == 'CALL':
             df = option_chain.calls

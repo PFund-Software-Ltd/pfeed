@@ -25,7 +25,7 @@ class YahooFinanceSource(TradFiSource):
     
     def _create_symbol(self, product: BaseProduct) -> str:
         '''Creates symbol based on product type'''
-        from pfund.const.enums import TradFiProductType
+        from pfund.enums import TradFiProductType
         ptype = product.type
         if ptype == TradFiProductType.STK:
             symbol = product.symbol  # using the default symbol created in product creation

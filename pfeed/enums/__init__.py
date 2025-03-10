@@ -1,4 +1,4 @@
-from pfund.const.enums.product_type import ProductType, TradFiProductType, CeFiProductType, DeFiProductType
+from pfund.enums.product_type import ProductType, TradFiProductType, CeFiProductType, DeFiProductType
 from pfeed.enums.env import Environment
 from pfeed.enums.data_source import DataSource
 from pfeed.enums.data_storage import DataStorage

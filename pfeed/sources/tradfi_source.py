@@ -9,7 +9,7 @@ from pfeed.sources.base_source import BaseSource
 class TradFiSource(BaseSource):
     def create_product(self, product_basis: str, symbol='', **product_specs) -> BaseProduct:
         from pfund.products import BaseProduct, StockProduct, OptionProduct, FutureProduct, CryptoProduct, FXProduct
-        from pfund.const.enums import TradFiProductType
+        from pfund.enums import TradFiProductType
         from pfeed.utils.utils import validate_product
         product_basis = product_basis.upper()
         validate_product(product_basis)

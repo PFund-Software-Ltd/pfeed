@@ -150,41 +150,6 @@ class BaseFeed(ABC):
     @abstractmethod
     def download(self, *args, **kwargs) -> tData | None | BaseFeed:
         pass
-
-    def _run_download(
-        self, 
-        data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
-        to_storage: tSTORAGE='local',
-        storage_configs: dict | None=None,
-        concat_output: bool=True,
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
-        from pfeed.utils.dataframe import is_empty_dataframe
-        if not self._pipeline_mode:    
-            self.load(
-                to_storage=to_storage,
-                data_layer=data_layer,
-                data_domain=data_domain or self.DATA_DOMAIN,
-                storage_configs=storage_configs,
-            )
-            completed_dataflows, failed_dataflows = self.run()
-            missing_dates = [dataflow.data_model.date for dataflow in failed_dataflows]
-            dfs: dict[datetime.date, tDataFrame | None] = {}
-            for dataflow in completed_dataflows + failed_dataflows:
-                date = dataflow.data_model.date
-                dfs[date] = dataflow.output if date not in missing_dates else None
-            if concat_output:
-                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
-                if dfs:
-                    df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
-                    df: tDataFrame = nw.to_native(df)
-                else:
-                    df = None
-                return df
-            else:
-                return dfs
-        else:
-            return self
     
     def stream(
         self, 
@@ -199,31 +164,6 @@ class BaseFeed(ABC):
     @abstractmethod
     def retrieve(self, *args, **kwargs) -> tData | None:
         pass
-
-    def _run_retrieve(self, concat_output: bool=True) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
-        from pandas import date_range
-        from pfeed.utils.dataframe import is_empty_dataframe
-        if not self._pipeline_mode:
-            completed_dataflows, failed_dataflows = self.run()
-            if missing_dates := [dataflow.data_model.date for dataflow in failed_dataflows]:
-                # fill gaps between missing dates since downloads will include all dates in range
-                missing_dates = date_range(min(missing_dates), max(missing_dates)).date.tolist()
-            dfs: dict[datetime.date, tDataFrame | None] = {}
-            for dataflow in completed_dataflows + failed_dataflows:
-                date = dataflow.data_model.date
-                dfs[date] = dataflow.output if date not in missing_dates else None
-            if concat_output:
-                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
-                if dfs:
-                    df: Frame = nw.concat(df for df in dfs if not is_empty_dataframe(df))
-                    df: tDataFrame = nw.to_native(df)
-                else:
-                    df = None
-                return df
-            else:
-                return dfs
-        else:
-            return self
     
     # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
     def fetch(self, *args, **kwargs) -> tData | None | BaseFeed:
@@ -431,6 +371,27 @@ class BaseFeed(ABC):
                 from bytewax.connectors.stdio import StdOutSink
                 dataflow.set_bytewax_sink(bytewax_sink or StdOutSink())
         return self
+    
+    def _run(self, concat_output: bool=True) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
+        if not self._pipeline_mode:
+            completed_dataflows, failed_dataflows = self.run()
+            missing_dates = [dataflow.data_model.date for dataflow in failed_dataflows]
+            dfs: dict[datetime.date, tDataFrame | None] = {}
+            for dataflow in completed_dataflows + failed_dataflows:
+                date = dataflow.data_model.date
+                dfs[date] = dataflow.output if date not in missing_dates else None
+            if concat_output:
+                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
+                if dfs:
+                    df: Frame = nw.concat(df for df in dfs)
+                    df: tDataFrame = nw.to_native(df)
+                else:
+                    df = None
+                return df
+            else:
+                return dfs
+        else:
+            return self
     
     def run(
         self, 

@@ -124,7 +124,7 @@ class MarketFeed(BaseFeed):
         # if no default and no custom transformations, set data_layer to 'raw'
         if not auto_transform and not self._pipeline_mode:
             data_layer = 'raw'
-        cprint(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
+        cprint(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold green')
         self._create_download_dataflows(
             product,
             resolution,
@@ -134,13 +134,14 @@ class MarketFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_download(adjusted_resolution, resolution, product)
-        return self._run_download(
-            data_layer=data_layer,
-            data_domain=data_domain or self.DATA_DOMAIN,
-            to_storage=to_storage,
-            storage_configs=storage_configs,
-            concat_output=concat_output,
-        )
+        if not self._pipeline_mode:    
+            self.load(
+                to_storage=to_storage,
+                data_layer=data_layer,
+                data_domain=data_domain or self.DATA_DOMAIN,
+                storage_configs=storage_configs,
+            )
+        return self._run(concat_output=concat_output)
     
     def _add_default_transformations_to_download(
         self, 
@@ -255,7 +256,7 @@ class MarketFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_retrieve(resolution)
-        return self._run_retrieve(concat_output=concat_output)
+        return self._run(concat_output=concat_output)
     
     def _execute_retrieve(
         self,
@@ -351,46 +352,61 @@ class MarketFeed(BaseFeed):
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
+        skip_retrieve: bool=False,
         **product_specs
     ) -> tDataFrame | None:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_user_df
-        from pfeed.utils.dataframe import is_empty_dataframe
-        
+        from pandas import date_range
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         adjusted_resolution: Resolution = max(resolution, self.global_min_resolution)
-        # NOTE: returned dfs from retrieve-dataflows should be of adjusted_resolution
-        dfs_from_storage_per_date: dict[datetime.date, tDataFrame | None] = self.retrieve(
-            product,
-            adjusted_resolution,
-            rollback_period=rollback_period,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            from_storage=from_storage,
-            storage_configs=storage_configs,
-            concat_output=False,
-            **product_specs
-        )
-        missing_dates = [date for date in dfs_from_storage_per_date if dfs_from_storage_per_date[date] is None]
-        dfs_from_storage = [df for df in dfs_from_storage_per_date.values() if df is not None]
+        is_download_required = skip_retrieve
+
+        if not skip_retrieve:
+            # NOTE: returned dfs from retrieve-dataflows should be of adjusted_resolution
+            dfs_from_storage_per_date: dict[datetime.date, tDataFrame | None] = self.retrieve(
+                product,
+                adjusted_resolution,
+                rollback_period=rollback_period,
+                start_date=start_date,
+                end_date=end_date,
+                data_origin=data_origin,
+                data_layer=data_layer,
+                data_domain=data_domain,
+                from_storage=from_storage,
+                storage_configs=storage_configs,
+                concat_output=False,
+                **product_specs
+            )
+
+            if missing_dates := [date for date in dfs_from_storage_per_date if dfs_from_storage_per_date[date] is None]:
+                is_download_required = True
+                # fill gaps between missing dates 
+                start_missing_date = str(min(missing_dates))
+                end_missing_date = str(max(missing_dates))
+                missing_dates = date_range(start_missing_date, end_missing_date).date.tolist()
+
+            # avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
+            dfs_from_storage: list[tDataFrame] = [df for date, df in dfs_from_storage_per_date.items() if df is not None and date not in missing_dates]
+        else:
+            dfs_from_storage: list[tDataFrame] = []
+            start_missing_date = start_date
+            end_missing_date = end_date
 
 
         dfs_from_source: list[tDataFrame] = []
-        if missing_dates:
+        if is_download_required:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
             if self.data_source.access_type != DataAccessType.PAID_BY_USAGE:
                 dfs_from_source_per_date = self.download(
                     product,
                     symbol=symbol,
                     resolution=adjusted_resolution,
-                    rollback_period='',
-                    start_date=str(missing_dates[0]),
-                    end_date=str(missing_dates[-1]),
+                    rollback_period=rollback_period,
+                    start_date=start_missing_date,
+                    end_date=end_missing_date,
                     data_origin=data_origin,
                     data_layer=data_layer,
                     data_domain=data_domain,
@@ -412,8 +428,7 @@ class MarketFeed(BaseFeed):
             
 
         dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
-        non_empty_dfs = [df for df in dfs if not is_empty_dataframe(df)]
-        df: Frame | None = nw.concat(non_empty_dfs) if non_empty_dfs else None
+        df: Frame | None = nw.concat(df for df in dfs) if dfs else None
         if df is not None:
             df: Frame = df.sort(by='date', descending=False)
             is_resample_required = resolution < adjusted_resolution

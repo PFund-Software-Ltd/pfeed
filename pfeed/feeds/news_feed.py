@@ -93,13 +93,14 @@ class NewsFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_download(product=product)
-        return self._run_download(
-            data_layer=data_layer,
-            data_domain=data_domain or self.DATA_DOMAIN,
-            to_storage=to_storage,
-            storage_configs=storage_configs,
-            concat_output=concat_output,
-        )
+        if not self._pipeline_mode:    
+            self.load(
+                to_storage=to_storage,
+                data_layer=data_layer,
+                data_domain=data_domain or self.DATA_DOMAIN,
+                storage_configs=storage_configs,
+            )
+        return self._run(concat_output=concat_output)
     
     def _create_download_dataflows(
         self,
@@ -169,7 +170,7 @@ class NewsFeed(BaseFeed):
         )
         if auto_transform:
             self._add_default_transformations_to_retrieve()
-        return self._run_retrieve(concat_output=concat_output)
+        return self._run(concat_output=concat_output)
 
     def _create_retrieve_dataflows(
         self,
@@ -233,7 +234,6 @@ class NewsFeed(BaseFeed):
             from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
         from pandas import date_range
-        from pfeed.utils.dataframe import is_empty_dataframe
 
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
         if from_storage is not None:
@@ -287,9 +287,8 @@ class NewsFeed(BaseFeed):
             )
         
         dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
-        df: Frame | None = nw.concat(df for df in dfs if not is_empty_dataframe(df)) if dfs else None
+        df: Frame | None = nw.concat(df for df in dfs) if dfs else None
         if df is not None:
-            
             df: Frame = df.sort(by='date', descending=False)
             df: tDataFrame = df.to_native()
         return df

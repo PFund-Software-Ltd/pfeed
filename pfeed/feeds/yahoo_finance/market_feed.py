@@ -196,7 +196,8 @@ class YahooFinanceMarketFeed(MarketFeed):
         etimeframe = self._ADAPTER["timeframe"].get(timeframe, timeframe)
         eresolution = str(resolution.period) + etimeframe
         
-        symbol = data_model.product.symbol
+        product = data_model.product
+        symbol = product.symbol
         assert symbol, f'symbol is required for {data_model}'
         ticker = self.api.Ticker(symbol)
         
@@ -217,17 +218,28 @@ class YahooFinanceMarketFeed(MarketFeed):
             )
             no_df = (df is None or df.empty)
             if no_df:
-                self.logger.info(f'failed to download {data_model.product} {data_model.resolution} data, retrying...')
+                self.logger.info(f'failed to download {product.name} {resolution} data, retrying...')
                 time.sleep(0.1)
             else:
                 self.logger.debug(f'downloaded {data_model}')
+                if str(data_model.start_date) == '1900-01-01':  # rollback_period='max' for daily data
+                    actual_start_date = min(df.index).date()
+                    data_model.update_start_date(actual_start_date)
+                    self.logger.debug(f'set start_date={actual_start_date} for {data_model}')
                 break
         else:
-            self.logger.warning(f'failed to download {data_model.product} {data_model.resolution} data, '
+            self.logger.warning(f'failed to download {product.name} {resolution} data, '
                                 f'please check if start_date={data_model.start_date} and end_date={data_model.end_date} is within the valid range')
+        # REVIEW: for some unknown reason, yfinance sometimes returns None or empty DataFrame even start_date and end_date are within a valid range
+        # i.e. same function call, different results, need to remind users to manually retry again
+        if df is None or df.empty:
+            df_msg = 'df is None' if df is None else 'df is empty'
+            self.logger.warning(
+                f'{df_msg} when downloading {product.name} {resolution} data from {self.name}, please double check if it is reasonable.\n'
+                'If not, it is possibly due to rate limit, network issue, or bugs in package `yfinance`,\n'
+                'you may try to modify/specify (avoid using `rollback_period`) `start_date` and `end_date` and try again.'
+            )
         self._yfinance_kwargs.clear()
-        # TODO: better handling of rate limit control?
-        time.sleep(1)
         return df
 
     def get_historical_data(
@@ -243,6 +255,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
+        skip_retrieve: bool=False,
         yfinance_kwargs: dict | None=None,
         **product_specs,
     ) -> tDataFrame | None:
@@ -267,12 +280,16 @@ class YahooFinanceMarketFeed(MarketFeed):
                     - mapping: 'buy' -> 1, 'sell' -> -1
                 'original' (most raw): keep the original data from yfinance, no transformation will be performed.
                 It will be ignored if the data is loaded from storage but not downloaded.
+            skip_retrieve: Whether to skip retrieving data from storage.
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         """
         self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
-        if rollback_period == 'max':
+        if rollback_period == 'max' and not start_date:
             start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
+            # HACK: for daily data with rollback_period='max', retrieving data from storage takes too long (too many dates), skip it
+            if start_date == '1900-01-01':
+                skip_retrieve = True
         df = super().get_historical_data(
             product,
             resolution,
@@ -285,17 +302,9 @@ class YahooFinanceMarketFeed(MarketFeed):
             data_origin=data_origin,
             from_storage=from_storage,
             storage_configs=storage_configs,
+            skip_retrieve=skip_retrieve,
             **product_specs,
         )
-        # REVIEW: for some unknown reason, yfinance sometimes returns None or empty DataFrame even start_date and end_date are within a valid range
-        # i.e. same function call, different results, need to remind users to manually retry again
-        if df is None or df.empty:
-            df_msg = 'df is None' if df is None else 'df is empty'
-            self.logger.warning(
-                f'{df_msg} when downloading {product} {resolution} data from Yahoo Finance, please double check if it is reasonable.\n'
-                'If not, it is possibly due to rate limit, network issue, or bugs in package `yfinance`,\n'
-                'you may try to modify/specify (avoid using `rollback_period`) `start_date` and `end_date` and try again.'
-            )
         self._yfinance_kwargs.clear()
         return df
 

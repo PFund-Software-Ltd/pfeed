@@ -27,7 +27,8 @@ class TabularIO(BaseIO):
     ):
         super().__init__(filesystem, compression=compression, storage_options=storage_options)
         self._use_deltalake = use_deltalake
-        assert DeltaTable is not None, 'deltalake is not installed'
+        if use_deltalake:
+            assert DeltaTable is not None, 'deltalake is not installed'
     
     def write(self, data: pd.DataFrame, file_path: str):
         file_path_without_filename, filename = file_path.rsplit('/', 1)

@@ -24,8 +24,6 @@ except ImportError:
         pass
     bytewax_op = None
 
-from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
-
 
 class FlowType(StrEnum):
     native = 'native'
@@ -92,6 +90,7 @@ class DataFlow:
         return self.output
     
     def _run(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxDataFlow:
+        from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
         data: tData | None | BytewaxStream = self._extract(flow_type=flow_type)
         if (data is not None) and not (is_dataframe(data) and is_empty_dataframe(data)):
             data: tData | BytewaxStream = self._transform(data, flow_type=flow_type)

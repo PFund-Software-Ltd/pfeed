@@ -11,8 +11,8 @@ if TYPE_CHECKING:
 import datetime
 
 import narwhals as nw
-from rich.console import Console
 
+from pfund import cprint
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.enums import DataAccessType
 from pfeed.utils.utils import lambda_with_name
@@ -84,7 +84,7 @@ class NewsFeed(BaseFeed):
         if not auto_transform and not self._pipeline_mode:
             data_layer = 'raw' 
         if start_date and end_date:
-            Console().print(f'Downloading historical news data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
+            cprint(f'Downloading historical news data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
         self._create_download_dataflows(
             start_date,
             end_date,

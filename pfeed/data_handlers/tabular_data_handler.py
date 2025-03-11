@@ -60,6 +60,7 @@ class TabularDataHandler(BaseDataHandler):
             )
 
     def read(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tDataFrame | None:
+        # since data is stored per date, data model must only contain a single date
         assert not self._data_model.is_date_range(), 'data model must only contain a single date'
         return self._io.read(
             file_path=self._create_file_path(self._data_model),

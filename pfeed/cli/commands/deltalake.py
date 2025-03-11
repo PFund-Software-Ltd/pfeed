@@ -1,7 +1,6 @@
 import click
 
-from rich.console import Console
-
+from pfund import cprint
 from pfeed.enums import DataStorage
 from pfeed.storages.base_storage import BaseStorage
 
@@ -39,7 +38,7 @@ def vacuum(storage: DataStorage, no_dry_run: bool):
     - To actually delete unreferenced files, use the `--no-dry-run` (`-n`) flag.
     '''
     if not no_dry_run:
-        Console().print('This is a dry run. NO files will actually be deleted. To turn it off, use the --no-dry-run/-n flag.', style='bold yellow')
+        cprint('This is a dry run. NO files will actually be deleted. To turn it off, use the --no-dry-run/-n flag.', style='bold yellow')
     Storage = storage.storage_class
     storage: BaseStorage = Storage(use_deltalake=True)
     dry_run = not no_dry_run

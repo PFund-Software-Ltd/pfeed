@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 import datetime
 
 import narwhals as nw
-from rich.console import Console
 
+from pfund import cprint
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.enums import DataAccessType
 
@@ -124,8 +124,7 @@ class MarketFeed(BaseFeed):
         # if no default and no custom transformations, set data_layer to 'raw'
         if not auto_transform and not self._pipeline_mode:
             data_layer = 'raw'
-        if start_date and end_date:
-            Console().print(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
+        cprint(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
         self._create_download_dataflows(
             product,
             resolution,
@@ -242,6 +241,7 @@ class MarketFeed(BaseFeed):
         assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
         unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+        cprint(f'Retrieving {self.name} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold blue')
         self._create_retrieve_dataflows(
             product,
             unit_resolution,
@@ -356,7 +356,7 @@ class MarketFeed(BaseFeed):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_user_df
         from pfeed.utils.dataframe import is_empty_dataframe
-
+        
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
@@ -412,7 +412,8 @@ class MarketFeed(BaseFeed):
             
 
         dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
-        df: Frame | None = nw.concat(df for df in dfs if not is_empty_dataframe(df)) if dfs else None
+        non_empty_dfs = [df for df in dfs if not is_empty_dataframe(df)]
+        df: Frame | None = nw.concat(non_empty_dfs) if non_empty_dfs else None
         if df is not None:
             df: Frame = df.sort(by='date', descending=False)
             is_resample_required = resolution < adjusted_resolution

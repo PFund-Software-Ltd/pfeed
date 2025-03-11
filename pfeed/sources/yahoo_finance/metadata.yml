@@ -35,5 +35,3 @@ rate_limits: null
 github_repo: https://github.com/ranaroussi/yfinance
 is_repo_official: false
 docs_url: https://ranaroussi.github.io/yfinance/
----
-start_date: 1900-01-01  # do not need to be precise, if data on that date doesn't exist, it will be skipped

@@ -311,21 +311,21 @@ class BaseFeed(ABC):
             ValueError: If rollback_period='max' but data source has no start_date attribute
         '''
         from pfeed.utils.utils import rollback_date_range
-        if start_date:
-            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+        if start_date or rollback_period == 'max':
+            if start_date:
+                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+            else:
+                if self.data_source.start_date:
+                    start_date = self.data_source.start_date
+                else:
+                    raise ValueError(f'{self.name} {rollback_period=} is not supported')
             if end_date:
                 end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
             else:
                 yesterday = datetime.datetime.now(tz=datetime.timezone.utc).date() - datetime.timedelta(days=1)
                 end_date = yesterday
         else:
-            if rollback_period == 'max':
-                if self.data_source.start_date:
-                    start_date = self.data_source.start_date
-                else:
-                    raise ValueError(f'{self.name} {rollback_period=} is not supported')
-            else:
-                start_date, end_date = rollback_date_range(rollback_period)
+            start_date, end_date = rollback_date_range(rollback_period)
         return start_date, end_date
     
     def create_dataflow(self, faucet: Faucet) -> DataFlow:
@@ -531,9 +531,7 @@ class BaseFeed(ABC):
                 self.logger.exception(f'Error in running {self.name} dataflows:')
 
         if failed_dataflows:
-            retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type == 'retrieve']
-            if retrieve_dataflows:
-                self.logger.debug(f'{self.name} failed dataflows: {[str(dataflow) for dataflow in retrieve_dataflows]}')
+            # retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type == 'retrieve']
             non_retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type != 'retrieve']
             if non_retrieve_dataflows:
                 self.logger.warning(

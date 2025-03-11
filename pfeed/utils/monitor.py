@@ -1,5 +1,6 @@
 import psutil
-from rich.console import Console
+
+from pfund import cprint
 
 
 def print_disk_usage(path: str | None=None) -> None:
@@ -11,7 +12,7 @@ def print_disk_usage(path: str | None=None) -> None:
         config = get_config()
         path = config.data_path
     disk_usage = psutil.disk_usage(path)
-    Console().print(f"Disk usage at {path}: {disk_usage.percent}%", style="bold red")
+    cprint(f"Disk usage at {path}: {disk_usage.percent}%", style="bold red")
 
 
 def print_ram_usage() -> None:
@@ -19,4 +20,4 @@ def print_ram_usage() -> None:
     Prints the system's RAM usage.
     """
     ram_usage = psutil.virtual_memory()
-    Console().print(f"RAM usage: {ram_usage.percent}%", style="bold red")
+    cprint(f"RAM usage: {ram_usage.percent}%", style="bold red")

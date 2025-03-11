@@ -1,11 +1,9 @@
-from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    import datetime
-    import pandas as pd
-    from pandera.typing import Series
+import warnings
+import datetime
 
+import pandas as pd
 import pandera as pa
+from pandera.typing import Series
     
 from pfeed.schemas import MarketDataSchema
 
@@ -15,7 +13,21 @@ class BarDataSchema(MarketDataSchema):
     high: Series[float] = pa.Field(gt=0)
     low: Series[float] = pa.Field(gt=0)
     close: Series[float] = pa.Field(gt=0)
-    volume: Series[float] = pa.Field(gt=0)
+    volume: Series[float] = pa.Field(ge=0)
+
+    @pa.dataframe_check
+    def warn_zero_volume(cls, df: pd.DataFrame) -> bool:
+        zero_volume_df = df[df['volume'] == 0]
+        if not zero_volume_df.empty:
+            YELLOW = "\033[93m"  # color for warning
+            RESET = "\033[0m"  # Reset to default color
+            warning_message = (
+                f"{YELLOW}⚠️ Warning: The following rows have zero volume:\n"
+                # Format the zero volume rows as a string for better readability.
+                f"{zero_volume_df.to_string()}{RESET}"
+            )
+            warnings.warn(warning_message, UserWarning)
+        return True  # Always return True to ensure the schema validation doesn't fail
 
     @pa.dataframe_check
     def validate_high_is_highest(cls, df: pd.DataFrame) -> Series[bool]:

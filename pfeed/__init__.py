@@ -11,14 +11,10 @@ if TYPE_CHECKING:
     from pfeed.feeds.bybit.bybit import (
         BybitMarketFeed as Bybit,
     )
-    try:
-        from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import (
-            FinancialModelingPrep,
-            FinancialModelingPrep as FMP,
-        )
-    except ImportError:
-        FinancialModelingPrep = FMP = None
-
+    from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import (
+        FinancialModelingPrep,
+        FinancialModelingPrep as FMP,
+    )
 
 from importlib.metadata import version
 from pfeed.config import configure, get_config

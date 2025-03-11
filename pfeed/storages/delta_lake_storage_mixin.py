@@ -2,7 +2,8 @@ from pathlib import Path
 from pprint import pprint
 
 from deltalake import DeltaTable
-from rich.console import Console
+
+from pfund import cprint
 
 
 class DeltaLakeStorageMixin:
@@ -50,9 +51,9 @@ class DeltaLakeStorageMixin:
             verb = 'Going to delete' if dry_run else 'Deleted'
             style = 'bold red' if dry_run else 'bold green'
             if files_deleted:
-                Console().print(f'{verb} {len(files_deleted)} files from {dt.table_uri}', style=style)
+                cprint(f'{verb} {len(files_deleted)} files from {dt.table_uri}', style=style)
             else:
-                Console().print(f'No files to delete from {dt.table_uri}', style='bold blue')
+                cprint(f'No files to delete from {dt.table_uri}', style='bold blue')
     
     def optimize_delta_files(self):
         print('Optimizing Delta Lake...')

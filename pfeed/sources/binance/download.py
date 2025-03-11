@@ -6,8 +6,8 @@ from collections import defaultdict
 from logging.handlers import QueueHandler, QueueListener
 
 from tqdm import tqdm
-from rich.console import Console
 
+from pfund import cprint
 from pfeed._etl import etl
 from pfeed.config import Configuration
 from pfeed.utils.utils import get_dates_in_between
@@ -21,7 +21,6 @@ from pfund.plogging import set_up_loggers
 
 
 logger = logging.getLogger(DATA_SOURCE.lower() + '_data')
-cprint = Console().print
 
 
 __all__ = ['download_historical_data']

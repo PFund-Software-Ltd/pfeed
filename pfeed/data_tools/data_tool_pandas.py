@@ -21,20 +21,34 @@ def read_parquet(
     storage_options: dict[str, Any] | None=None,
     **kwargs
 ) -> pd.DataFrame:
+    from pyarrow.lib import ArrowTypeError
+    
     if isinstance(paths_or_obj, bytes):
         obj = io.BytesIO(paths_or_obj)
         return pd.read_parquet(obj, *args, **kwargs)
     else:
         paths = paths_or_obj if isinstance(paths_or_obj, list) else [paths_or_obj]
         paths = [path.replace('s3://', '') for path in paths]
-        return pd.read_parquet(
-            paths, 
-            *args, 
-            filesystem=filesystem, 
-            storage_options=storage_options, 
-            **kwargs
-        )
-
+        # FIXME: bug in pyarrow (see issue https://github.com/apache/arrow/issues/43574)
+        # workaround: use polars to read parquet file and convert to pandas
+        try:
+            return pd.read_parquet(
+                paths, 
+                *args, 
+                filesystem=filesystem, 
+                storage_options=storage_options, 
+                **kwargs
+            )
+        except ArrowTypeError:
+            from pfeed.data_tools.data_tool_polars import read_parquet
+            df_polars = read_parquet(
+                paths, 
+                *args, 
+                filesystem=filesystem, 
+                storage_options=storage_options, 
+                **kwargs
+            )
+            return df_polars.collect().to_pandas()
 
 def read_delta(delta_table: DeltaTable, **kwargs) -> pd.DataFrame:
     return delta_table.to_pandas(**kwargs)

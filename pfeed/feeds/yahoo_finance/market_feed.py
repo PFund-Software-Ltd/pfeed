@@ -53,6 +53,7 @@ class YahooFinanceMarketFeed(MarketFeed):
     # }
     
     _yfinance_kwargs: dict | None = None
+    
 
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -73,6 +74,21 @@ class YahooFinanceMarketFeed(MarketFeed):
         df = df.rename(columns=RENAMING_COLS)
         return df
     
+    def _handle_rollback_max_period(self, resolution: Resolution | str | Literal['minute', 'hour', 'day'], start_date: str, end_date: str):
+        from pfeed.enums import MarketDataType
+        resolution: Resolution = self.create_resolution(resolution)
+        dtype = MarketDataType[str(resolution.timeframe)]
+        if dtype == MarketDataType.DAY:
+            # HACK: use '1900-01-01' as the start date for daily data since we don't know the exact start date when rollback_period == 'max'
+            start_date = '1900-01-01'
+            end_date = ''
+            rollback_period = ''
+        elif dtype == MarketDataType.HOUR:
+            rollback_period = '2y'  # max is 2 years for hourly data
+        elif dtype == MarketDataType.MINUTE:
+            rollback_period = '8d'  # max is 8 days for minute data
+        return start_date, end_date, rollback_period
+
     def _check_yfinance_kwargs(self, yfinance_kwargs: dict | None) -> dict:
         if self._yfinance_kwargs is not None:
             return self._yfinance_kwargs
@@ -133,17 +149,9 @@ class YahooFinanceMarketFeed(MarketFeed):
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         '''
-        from pfeed.enums import MarketDataType
-
         self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
-        resolution: Resolution = self.create_resolution(resolution)
-        # makes rollback_period == 'max' more specific for different data types
         if rollback_period == 'max':
-            dtype = MarketDataType[str(resolution.timeframe)]
-            if dtype == MarketDataType.HOUR:
-                rollback_period = '2y'  # max is 2 years for hourly data
-            elif dtype == MarketDataType.MINUTE:
-                rollback_period = '8d'  # max is 8 days for minute data
+            start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
         return super().download(
             product=product,
             symbol=symbol,
@@ -192,14 +200,13 @@ class YahooFinanceMarketFeed(MarketFeed):
         assert symbol, f'symbol is required for {data_model}'
         ticker = self.api.Ticker(symbol)
         
-        df = None
-        num_retries = 5
-        original_start_date = data_model.start_date
+        no_df = True
+        NUM_RETRIES = 3
         # NOTE: yfinance's end_date is not inclusive, so we need to add 1 day to the end_date
         yfinance_end_date = data_model.end_date + datetime.timedelta(days=1)
         
-        while df is None or df.empty and num_retries:
-            num_retries -= 1
+        while no_df and NUM_RETRIES:
+            NUM_RETRIES -= 1
             self.logger.debug(f'downloading {data_model}')
             # NOTE: yfinance's period is not used, only use start_date and end_date for data clarity in storage
             df: pd.DataFrame | None = ticker.history(
@@ -208,22 +215,16 @@ class YahooFinanceMarketFeed(MarketFeed):
                 end=str(yfinance_end_date),
                 **self._yfinance_kwargs
             )
-            # REVIEW: for some unknown reason, yfinance sometimes returns None even start_date and end_date are within a valid range
-            # so we need to increment start_date by 1 day to shorten the date range and try again
-            if df is None or df.empty:
-                closer_start_date = data_model.start_date + datetime.timedelta(days=1)
-                if closer_start_date >= data_model.end_date:
-                    break
-                else:
-                    data_model.update_start_date(closer_start_date)
-                    self.logger.info(f'failed to download {data_model.product} {data_model.resolution} data, retrying with start_date={closer_start_date}')
+            no_df = (df is None or df.empty)
+            if no_df:
+                self.logger.info(f'failed to download {data_model.product} {data_model.resolution} data, retrying...')
                 time.sleep(0.1)
             else:
                 self.logger.debug(f'downloaded {data_model}')
                 break
         else:
             self.logger.warning(f'failed to download {data_model.product} {data_model.resolution} data, '
-                                f'please check if start_date={original_start_date} and end_date={data_model.end_date} is within the valid range')
+                                f'please check if start_date={data_model.start_date} and end_date={data_model.end_date} is within the valid range')
         self._yfinance_kwargs.clear()
         # TODO: better handling of rate limit control?
         time.sleep(1)
@@ -270,6 +271,8 @@ class YahooFinanceMarketFeed(MarketFeed):
                 refer to kwargs in history() in yfinance/scrapers/history.py
         """
         self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
+        if rollback_period == 'max':
+            start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
         df = super().get_historical_data(
             product,
             resolution,
@@ -284,6 +287,15 @@ class YahooFinanceMarketFeed(MarketFeed):
             storage_configs=storage_configs,
             **product_specs,
         )
+        # REVIEW: for some unknown reason, yfinance sometimes returns None or empty DataFrame even start_date and end_date are within a valid range
+        # i.e. same function call, different results, need to remind users to manually retry again
+        if df is None or df.empty:
+            df_msg = 'df is None' if df is None else 'df is empty'
+            self.logger.warning(
+                f'{df_msg} when downloading {product} {resolution} data from Yahoo Finance, please double check if it is reasonable.\n'
+                'If not, it is possibly due to rate limit, network issue, or bugs in package `yfinance`,\n'
+                'you may try to modify/specify (avoid using `rollback_period`) `start_date` and `end_date` and try again.'
+            )
         self._yfinance_kwargs.clear()
         return df
 

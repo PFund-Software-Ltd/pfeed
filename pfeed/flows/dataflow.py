@@ -24,6 +24,8 @@ except ImportError:
         pass
     bytewax_op = None
 
+from pfeed.flows.result import FlowResult
+
 
 class FlowType(StrEnum):
     native = 'native'
@@ -40,7 +42,7 @@ class DataFlow:
         self._transformations: list[Callable] = []
         self._storage_creator: Callable[[], BaseStorage] | None = None
         self._bytewax_sink: BytewaxSink | str | None = None
-        self.output: tData | None = None
+        self._result = FlowResult()
     
     def add_transformations(self, *funcs: tuple[Callable, ...]):
         self._transformations.extend(funcs)
@@ -50,6 +52,10 @@ class DataFlow:
     
     def set_bytewax_sink(self, bytewax_sink: BytewaxSink | str):
         self._bytewax_sink = bytewax_sink
+
+    @property
+    def result(self) -> FlowResult:
+        return self._result
 
     @property
     def faucet(self) -> Faucet:
@@ -72,22 +78,22 @@ class DataFlow:
     def run(
         self, 
         flow_type: FlowType | Literal['native', 'prefect', 'bytewax']='native',
-    ) -> tData | None | BytewaxDataFlow:
+    ) -> FlowResult:
         flow_type = FlowType[flow_type.lower()]
         if flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow()
             data: tData | None = prefect_dataflow()
-            self.output = data
+            self._result.set_data(data)
         elif flow_type == FlowType.bytewax:
             bytewax_dataflow = self.to_bytewax_dataflow()
             # REVIEW, using run_main() to execute the dataflow in the current thread, NOT for production
             from bytewax.testing import run_main
             run_main(bytewax_dataflow)
-            self.output = bytewax_dataflow
+            self._result.set_data(bytewax_dataflow)
         else:
             data: tData | None = self._run()
-            self.output = data
-        return self.output
+            self._result.set_data(data)
+        return self._result
     
     def _run(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxDataFlow:
         from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
@@ -98,15 +104,17 @@ class DataFlow:
         return data
     
     def _extract(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxStream:
-        data = None
         # self.logger.debug(f"extracting {self.data_model} data by '{self._faucet.name}'")
         if not self.is_streaming():
             extract = task(self._faucet.open) if flow_type == FlowType.prefect else self._faucet.open
-            data: tData | None = extract()
+            data, metadata = extract()
+            if metadata:
+                self._result.set_metadata(**metadata)
             if data is not None:
                 self.logger.debug(f"extracted {self.data_model} data by '{self._faucet.name}'")
             else:
                 self.logger.debug(f'failed to extract {self.data_model} data by {self._faucet.name}')
+            return data
         else:
             if flow_type == FlowType.bytewax:
                 assert self._bytewax_dataflow is not None, f'{self.name} has no bytewax dataflow'
@@ -114,12 +122,11 @@ class DataFlow:
                 if isinstance(source, BytewaxSource):
                     stream: BytewaxStream = bytewax_op.input(self.name, self._bytewax_dataflow, source)
                 else:
-                    stream = source
+                    stream: BytewaxStream = source
                 return stream
             else:
                 # TODO: streaming without bytewax
                 pass
-        return data
     
     def _transform(
         self, 

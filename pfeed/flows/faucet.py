@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Literal
+from typing import Callable, TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
     from bytewax.dataflow import Stream as BytewaxStream
     from bytewax.inputs import Source as BytewaxSource
@@ -7,16 +7,8 @@ if TYPE_CHECKING:
     from pfeed.sources.base_source import BaseSource
     from pfeed.typing.core import tData
     
-from enum import StrEnum
-
+from pfeed.enums.extract_type import ExtractType
 from pfeed.utils.utils import lambda_with_name
-
-
-class ExtractType(StrEnum):
-    download = 'download'
-    stream = 'stream'
-    retrieve = 'retrieve'
-    fetch = 'fetch'
 
 
 class Faucet:
@@ -48,14 +40,19 @@ class Faucet:
             name_list.append(name)
         return '.'.join(name_list)
     
-    def open(self) -> tData | None | BytewaxSource | BytewaxStream:
+    def open(self) -> BytewaxSource | BytewaxStream | tuple[tData | None, dict[str, Any]]:
         if self._streaming:
             # TODO: streaming without bytewax
             source: BytewaxSource | BytewaxStream = self.execute_func()
             return source
         else:
-            data: tData | None = self.execute_func()
-            return data
+            if self.op_type == ExtractType.retrieve:
+                data, metadata = self.execute_func()
+            else:
+                data: tData | None = self.execute_func()
+                # currently no metadata for other op_types
+                metadata = {}
+            return data, metadata
     
     def __str__(self):
         return self.name

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pandas as pd
     from narwhals.typing import Frame
@@ -17,14 +17,15 @@ import datetime
 import narwhals as nw
 
 from pfund import cprint
-from pfeed.feeds.base_feed import BaseFeed, clear_subflows
+from pfeed.feeds.base_feed import clear_subflows
+from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.enums import DataAccessType
 
 
 tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
 
 
-class MarketFeed(BaseFeed):
+class MarketFeed(TimeBasedFeed):
     DATA_DOMAIN = 'market_data'
     
     @property
@@ -77,9 +78,10 @@ class MarketFeed(BaseFeed):
         to_storage: tSTORAGE='local',
         storage_configs: dict | None=None,
         auto_transform: bool=True,
-        concat_output: bool=True,
+        dataflow_per_date: bool=True,
+        include_metadata: bool=False,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketFeed:
+    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | MarketFeed:
         '''
         Download historical data from data source.
         
@@ -94,7 +96,7 @@ class MarketFeed(BaseFeed):
                 If not specified, use today's date as the end date.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
-                get_historical_data(
+                download(
                     product='BTC_USDT_OPT',
                     strike_price=10000,
                     expiration='2024-01-01',
@@ -108,9 +110,9 @@ class MarketFeed(BaseFeed):
                 - resampling data to the target resolution
                 - filtering non-standard columns if resampling is required
                 since during resampling, non-standard columns cannot be resampled/interpreted
-            concat_output: Whether to concatenate the data from different dates.
-                If True, the data from different dates will be concatenated into a single DataFrame.
-                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
+            dataflow_per_date: Whether to create a dataflow for each date.
+                If True, a dataflow will be created for each date.
+                If False, a single dataflow will be created for the entire date range.
         '''
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution: Resolution = self.create_resolution(resolution)
@@ -131,6 +133,7 @@ class MarketFeed(BaseFeed):
             start_date,
             end_date,
             data_origin=data_origin,
+            dataflow_per_date=dataflow_per_date,
         )
         if auto_transform:
             self._add_default_transformations_to_download(adjusted_resolution, resolution, product)
@@ -141,7 +144,37 @@ class MarketFeed(BaseFeed):
                 data_domain=data_domain or self.DATA_DOMAIN,
                 storage_configs=storage_configs,
             )
-        return self._run(concat_output=concat_output)
+            return self._eager_run(include_metadata=include_metadata)
+        else:
+            return self
+    
+    def _create_download_dataflows(
+        self,
+        product: BaseProduct,
+        unit_resolution: Resolution,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        data_origin: str='',
+        dataflow_per_date: bool=True,
+    ) -> list[DataFlow]:
+        from pandas import date_range
+        assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
+        
+        dataflows: list[DataFlow] = []
+
+        def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
+            data_model = self.create_data_model(product, unit_resolution, start_date=data_model_start_date, end_date=data_model_end_date, data_origin=data_origin)
+            dataflow: DataFlow = self._extract_download(data_model)
+            dataflows.append(dataflow)
+        
+        if dataflow_per_date:
+            # one dataflow per date
+            for date in date_range(start_date, end_date).date:
+                _add_dataflow(date, date)
+        else:
+            # one dataflow for the entire date range
+            _add_dataflow(start_date, end_date)
+        return dataflows
     
     def _add_default_transformations_to_download(
         self, 
@@ -191,9 +224,10 @@ class MarketFeed(BaseFeed):
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
         auto_transform: bool=True,
-        concat_output: bool=True,
+        dataflow_per_date: bool=False,
+        include_metadata: bool=False,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | MarketFeed:
+    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | MarketFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -224,12 +258,12 @@ class MarketFeed(BaseFeed):
             auto_transform: Whether to apply default transformations to the data.
                 Default transformations include:
                 - resampling data to the target resolution
-            concat_output: Whether to concatenate the data from different dates.
-                If True, the data from different dates will be concatenated into a single DataFrame.
-                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
+            dataflow_per_date: Whether to create a dataflow for each date, where data is stored per date.
+                If True, a dataflow will be created for each date.
+                If False, a single dataflow will be created for the entire date range.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
-                get_historical_data(
+                retrieve(
                     product='BTC_USDT_OPT',
                     strike_price=10000,
                     expiration='2024-01-01',
@@ -253,10 +287,14 @@ class MarketFeed(BaseFeed):
             data_domain or self.DATA_DOMAIN,
             from_storage=from_storage,
             storage_configs=storage_configs,
+            dataflow_per_date=dataflow_per_date,
         )
         if auto_transform:
             self._add_default_transformations_to_retrieve(resolution)
-        return self._run(concat_output=concat_output)
+        if not self._pipeline_mode:
+            return self._eager_run(include_metadata=include_metadata)
+        else:
+            return self
     
     def _execute_retrieve(
         self,
@@ -265,7 +303,7 @@ class MarketFeed(BaseFeed):
         data_domain: str,
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
-    ) -> tDataFrame | None:
+    ) -> tuple[tDataFrame | None, dict[str, Any]]:
         '''Retrieve data from storage.
         If data is not found, search for higher resolutions.
         NOTE: This will change the resolution of the data model.
@@ -279,10 +317,11 @@ class MarketFeed(BaseFeed):
             # remove resolutions that are not supported by the data source
             if resolution <= self.data_source.highest_resolution
         ]
-        data = None
+        data: tDataFrame | None = None
+        metadata: dict[str, list[datetime.date]] = {}
         for search_resolution in search_resolutions:
             data_model.update_resolution(search_resolution)
-            data: tDataFrame | None = super()._execute_retrieve(
+            data, metadata = super()._execute_retrieve(
                 data_model,
                 data_layer,
                 data_domain,
@@ -291,7 +330,7 @@ class MarketFeed(BaseFeed):
             )
             if data is not None:
                 break
-        return data
+        return data, metadata
         
     def _create_retrieve_dataflows(
         self,
@@ -304,14 +343,15 @@ class MarketFeed(BaseFeed):
         data_domain: str,
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
+        dataflow_per_date: bool=False,
     ) -> list[DataFlow]:
         from pandas import date_range
-
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
+        
         dataflows: list[DataFlow] = []
-        # NOTE: one data model per date
-        for date in date_range(start_date, end_date).date:
-            data_model = self.create_data_model(product, unit_resolution, date, data_origin=data_origin)
+        
+        def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
+            data_model = self.create_data_model(product, unit_resolution, start_date=data_model_start_date, end_date=data_model_end_date, data_origin=data_origin)
             dataflow: DataFlow = self._extract_retrieve(
                 data_model,
                 data_layer,
@@ -320,6 +360,14 @@ class MarketFeed(BaseFeed):
                 storage_configs=storage_configs,
             )
             dataflows.append(dataflow)
+        
+        if dataflow_per_date:
+            # one dataflow per date
+            for date in date_range(start_date, end_date).date:
+                _add_dataflow(date, date)
+        else:
+            # one dataflow for the entire date range
+            _add_dataflow(start_date, end_date)
         return dataflows
     
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
@@ -351,8 +399,9 @@ class MarketFeed(BaseFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
+        to_storage: tSTORAGE='cache',
         storage_configs: dict | None=None,
-        skip_retrieve: bool=False,
+        force_download: bool=False,
         **product_specs
     ) -> tDataFrame | None:
         from pfeed._etl import market as etl
@@ -362,11 +411,15 @@ class MarketFeed(BaseFeed):
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         adjusted_resolution: Resolution = max(resolution, self.global_min_resolution)
-        is_download_required = skip_retrieve
 
-        if not skip_retrieve:
-            # NOTE: returned dfs from retrieve-dataflows should be of adjusted_resolution
-            dfs_from_storage_per_date: dict[datetime.date, tDataFrame | None] = self.retrieve(
+        is_download_required = force_download
+        df_from_storage: tDataFrame | None = None
+        df_from_source: tDataFrame | None = None
+        missing_dates: list[datetime.date] = []
+
+        if not force_download:
+            # NOTE: returned df from retrieve-dataflows should be of adjusted_resolution
+            df_from_storage, metadata = self.retrieve(
                 product,
                 adjusted_resolution,
                 rollback_period=rollback_period,
@@ -377,30 +430,30 @@ class MarketFeed(BaseFeed):
                 data_domain=data_domain,
                 from_storage=from_storage,
                 storage_configs=storage_configs,
-                concat_output=False,
+                include_metadata=True,
                 **product_specs
             )
-
-            if missing_dates := [date for date in dfs_from_storage_per_date if dfs_from_storage_per_date[date] is None]:
+            
+            if missing_dates := metadata['missing_dates']:
                 is_download_required = True
                 # fill gaps between missing dates 
                 start_missing_date = str(min(missing_dates))
                 end_missing_date = str(max(missing_dates))
                 missing_dates = date_range(start_missing_date, end_missing_date).date.tolist()
-
-            # avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
-            dfs_from_storage: list[tDataFrame] = [df for date, df in dfs_from_storage_per_date.items() if df is not None and date not in missing_dates]
+            
+            if df_from_storage is not None:
+                df_from_storage: Frame = nw.from_native(df_from_storage)
+                if missing_dates:
+                    # remove missing dates in df_from_storage to avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
+                    df_from_storage: Frame = df_from_storage.filter(~nw.col('date').dt.date().is_in(missing_dates))
         else:
-            dfs_from_storage: list[tDataFrame] = []
             start_missing_date = start_date
             end_missing_date = end_date
 
-
-        dfs_from_source: list[tDataFrame] = []
         if is_download_required:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
             if self.data_source.access_type != DataAccessType.PAID_BY_USAGE:
-                dfs_from_source_per_date = self.download(
+                df_from_source, metadata = self.download(
                     product,
                     symbol=symbol,
                     resolution=adjusted_resolution,
@@ -410,14 +463,14 @@ class MarketFeed(BaseFeed):
                     data_origin=data_origin,
                     data_layer=data_layer,
                     data_domain=data_domain,
-                    to_storage='cache',
+                    to_storage=to_storage,
                     storage_configs=storage_configs,
-                    concat_output=False,
+                    include_metadata=True,
                     **product_specs
                 )
-
-                missing_dates = [date for date in dfs_from_source_per_date if dfs_from_source_per_date[date] is None]
-                dfs_from_source = [df for df in dfs_from_source_per_date.values() if df is not None]
+                missing_dates = metadata['missing_dates']
+                if df_from_source is not None:
+                    df_from_source: Frame = nw.from_native(df_from_source)
 
         if missing_dates:
             self.logger.warning(
@@ -426,9 +479,17 @@ class MarketFeed(BaseFeed):
                 f'missing dates: {missing_dates}'
             )
             
+        df_from_storage: Frame | None
+        df_from_source: Frame | None
+        if df_from_storage is not None and df_from_source is not None:
+            df: Frame = nw.concat([df_from_storage, df_from_source])
+        elif df_from_storage is not None:
+            df: Frame = df_from_storage
+        elif df_from_source is not None:
+            df: Frame = df_from_source
+        else:
+            df = None
 
-        dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
-        df: Frame | None = nw.concat(df for df in dfs) if dfs else None
         if df is not None:
             df: Frame = df.sort(by='date', descending=False)
             is_resample_required = resolution < adjusted_resolution

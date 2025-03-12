@@ -8,10 +8,8 @@ if TYPE_CHECKING:
     from bytewax.inputs import Source as BytewaxSource
     from pfeed.typing.core import tDataFrame
     from pfund.datas.resolution import Resolution
-    from pfund.products.product_base import BaseProduct
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
-    from pfeed.flows.dataflow import DataFlow
 
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
 from pfeed.sources.bybit.source import BybitSource
@@ -58,17 +56,14 @@ class BybitMarketFeed(CryptoMarketFeed):
         to_storage: tSTORAGE='local',
         storage_configs: dict | None=None,
         auto_transform: bool=True,
-        concat_output: bool=True,
+        dataflow_per_date: bool=True,
         **product_specs
     ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitMarketFeed:
         '''
         Args:
-            concat_output: Whether to concatenate the data from different dates.
-                If True, the data from different dates will be concatenated into a single DataFrame.
-                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
-                get_historical_data(
+                download(
                     product='BTC_USDT_OPT',
                     strike_price=10000,
                     expiration='2024-01-01',
@@ -87,29 +82,9 @@ class BybitMarketFeed(CryptoMarketFeed):
             to_storage=to_storage,
             storage_configs=storage_configs,
             auto_transform=auto_transform,
-            concat_output=concat_output,
+            dataflow_per_date=dataflow_per_date,
             **product_specs
         )
-    
-    def _create_download_dataflows(
-        self,
-        product: BaseProduct,
-        unit_resolution: Resolution,
-        start_date: datetime.date,
-        end_date: datetime.date,
-        data_origin: str='',
-    ) -> list[DataFlow]:
-        from pandas import date_range
-
-        assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        dataflows: list[DataFlow] = []
-        # NOTE: one data model per date
-        for date in date_range(start_date, end_date).date:
-            data_model = self.create_data_model(product, unit_resolution, date, data_origin=data_origin)
-            # create a dataflow that schedules _execute_download()
-            dataflow = self._extract_download(data_model)
-            dataflows.append(dataflow)
-        return dataflows
 
     def _execute_download(self, data_model: MarketDataModel) -> bytes | None:
         self.logger.debug(f'downloading {data_model}')
@@ -128,8 +103,9 @@ class BybitMarketFeed(CryptoMarketFeed):
         data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
+        to_storage: tSTORAGE='cache',
         storage_configs: dict | None=None,
-        skip_retrieve: bool=False,
+        force_download: bool=False,
         **product_specs
     ) -> tDataFrame | None | BybitMarketFeed:
         return super().get_historical_data(
@@ -142,8 +118,9 @@ class BybitMarketFeed(CryptoMarketFeed):
             data_domain=data_domain,
             data_origin=data_origin,
             from_storage=from_storage,
+            to_storage=to_storage,
             storage_configs=storage_configs,
-            skip_retrieve=skip_retrieve,
+            force_download=force_download,
             **product_specs
         )
         

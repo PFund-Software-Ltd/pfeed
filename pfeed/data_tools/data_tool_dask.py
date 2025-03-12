@@ -7,7 +7,6 @@ import io
 
 import pandas as pd
 import dask.dataframe as dd
-from deltalake import DeltaTable
 
 from pfeed.enums import DataTool
 
@@ -37,8 +36,17 @@ def read_parquet(
 
 
 # TODO: may use dask-deltalake, currently it doesn't look well-maintained
-def read_delta(delta_table: DeltaTable, **kwargs) -> dd.DataFrame:
-    return dd.from_pandas(delta_table.to_pandas(**kwargs))
+def read_delta(
+    paths: list[str] | str,
+    storage_options: dict[str, Any] | None=None,
+    version: int | None=None,
+    **kwargs
+) -> dd.DataFrame:
+    from deltalake import DeltaTable
+    if isinstance(paths, str):
+        paths = [paths]
+    dts = [DeltaTable(path, storage_options=storage_options, version=version) for path in paths]
+    return dd.from_pandas(pd.concat([dt.to_pandas(**kwargs) for dt in dts]))
 
 
 # def concat(dfs: list[dd.DataFrame]) -> dd.DataFrame:

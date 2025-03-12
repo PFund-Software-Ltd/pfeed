@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
@@ -13,7 +13,8 @@ import datetime
 import narwhals as nw
 
 from pfund import cprint
-from pfeed.feeds.base_feed import BaseFeed, clear_subflows
+from pfeed.feeds.base_feed import clear_subflows
+from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.enums import DataAccessType
 from pfeed.utils.utils import lambda_with_name
 
@@ -25,7 +26,7 @@ e.g. if getting today's data, the next API call could have more data,
 e.g. if changing the params for the same API call, the data could be different.
 how to handle this? handled by metadata?
 '''
-class NewsFeed(BaseFeed):
+class NewsFeed(TimeBasedFeed):
     DATA_DOMAIN = 'news_data'
 
     def create_data_model(
@@ -67,9 +68,10 @@ class NewsFeed(BaseFeed):
         to_storage: tSTORAGE='local',
         storage_configs: dict | None=None,
         auto_transform: bool=True,
-        concat_output: bool=True,
+        dataflow_per_date: bool=False,
+        include_metadata: bool=False,
         **product_specs
-    ) -> tDataFrame | None | NewsFeed:
+    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | NewsFeed:
         '''
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
@@ -83,13 +85,13 @@ class NewsFeed(BaseFeed):
         # if no default and no custom transformations, set data_layer to 'raw'
         if not auto_transform and not self._pipeline_mode:
             data_layer = 'raw' 
-        if start_date and end_date:
-            cprint(f'Downloading historical news data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold yellow')
+        cprint(f'Downloading historical news data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold green')
         self._create_download_dataflows(
             start_date,
             end_date,
             product=product,
             data_origin=data_origin,
+            dataflow_per_date=dataflow_per_date,
         )
         if auto_transform:
             self._add_default_transformations_to_download(product=product)
@@ -100,7 +102,9 @@ class NewsFeed(BaseFeed):
                 data_domain=data_domain or self.DATA_DOMAIN,
                 storage_configs=storage_configs,
             )
-        return self._run(concat_output=concat_output)
+            return self._eager_run(include_metadata=include_metadata)
+        else:
+            return self
     
     def _create_download_dataflows(
         self,
@@ -108,6 +112,7 @@ class NewsFeed(BaseFeed):
         end_date: datetime.date,
         product: BaseProduct | None=None,
         data_origin: str='',
+        dataflow_per_date: bool=False,
     ) -> list[DataFlow]:
         # NOTE: one data model for the entire date range
         data_model = self.create_data_model(
@@ -150,9 +155,10 @@ class NewsFeed(BaseFeed):
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
         auto_transform: bool=True,
-        concat_output: bool=True,
+        dataflow_per_date: bool=False,
+        include_metadata: bool=False,
         **product_specs
-    ) -> tDataFrame | None | NewsFeed:
+    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | NewsFeed:
         if product:
             product: BaseProduct = self.create_product(product, **product_specs)
         else:
@@ -167,10 +173,14 @@ class NewsFeed(BaseFeed):
             product=product,
             from_storage=from_storage,
             storage_configs=storage_configs,
+            dataflow_per_date=dataflow_per_date,
         )
         if auto_transform:
             self._add_default_transformations_to_retrieve()
-        return self._run(concat_output=concat_output)
+        if not self._pipeline_mode:
+            return self._eager_run(include_metadata=include_metadata)
+        else:
+            return self
 
     def _create_retrieve_dataflows(
         self,
@@ -182,6 +192,7 @@ class NewsFeed(BaseFeed):
         product: BaseProduct | None=None,
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
+        dataflow_per_date: bool=False,
     ) -> list[DataFlow]:
         from pandas import date_range
 
@@ -223,7 +234,9 @@ class NewsFeed(BaseFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
+        to_storage: tSTORAGE='cache',
         storage_configs: dict | None=None,
+        force_download: bool=False,
         **product_specs
     ):
         '''
@@ -247,7 +260,6 @@ class NewsFeed(BaseFeed):
                 data_domain=data_domain,
                 from_storage=from_storage,
                 storage_configs=storage_configs,
-                concat_output=False,
                 **product_specs
             )
             missing_dates = [date for date in dfs_from_storage_per_date if dfs_from_storage_per_date[date] is None]
@@ -270,9 +282,8 @@ class NewsFeed(BaseFeed):
                     data_origin=data_origin,
                     data_layer=data_layer,
                     data_domain=data_domain,
-                    to_storage='cache',
+                    to_storage=to_storage,
                     storage_configs=storage_configs,
-                    concat_output=False,
                     **product_specs
                 )
 
@@ -287,7 +298,7 @@ class NewsFeed(BaseFeed):
             )
         
         dfs: list[Frame] = [nw.from_native(df) for df in dfs_from_storage + dfs_from_source]
-        df: Frame | None = nw.concat(df for df in dfs) if dfs else None
+        df: Frame | None = nw.concat(dfs) if dfs else None
         if df is not None:
             df: Frame = df.sort(by='date', descending=False)
             df: tDataFrame = df.to_native()

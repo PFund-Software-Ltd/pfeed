@@ -1,9 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable
+from typing import TYPE_CHECKING, Literal, Callable, Any
 from types import ModuleType
 if TYPE_CHECKING:
-    import pandas as pd
-    from narwhals.typing import Frame
     from prefect import Flow as PrefectFlow
     from bytewax.dataflow import Dataflow as BytewaxDataFlow
     from bytewax.inputs import Source as BytewaxSource
@@ -11,23 +9,21 @@ if TYPE_CHECKING:
     from bytewax.dataflow import Stream as BytewaxStream
     from pfund.products.product_base import BaseProduct
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing.core import tData, tDataFrame
+    from pfeed.typing.core import tData
     from pfeed.typing.literals import tSTORAGE, tDATA_TOOL, tDATA_LAYER
     from pfeed.enums import DataSource
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
+    from pfeed.flows.result import FlowResult
     
 import os
 from abc import ABC, abstractmethod
 import importlib
-import datetime
 import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
-
-import narwhals as nw
 
 from pfeed.enums import DataTool, DataStorage
 
@@ -96,9 +92,8 @@ class BaseFeed(ABC):
     def api(self):
         return self.data_source.api if hasattr(self.data_source, 'api') else None
     
-    @staticmethod
     @abstractmethod
-    def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
+    def _normalize_raw_data(self, data: Any) -> Any:
         pass
     
     @abstractmethod
@@ -197,10 +192,10 @@ class BaseFeed(ABC):
         data_domain: str, 
         from_storage: tSTORAGE | None=None,
         storage_configs: dict | None=None,
-    ) -> tData | None:
+    ) -> tuple[tData | None, dict[str, Any]]:
         from minio import ServerError as MinioServerError
         search_storages = ['cache', 'local', 'minio', 'duckdb'] if from_storage is None else [from_storage]
-        data = None
+        data: tData | None = None
         storage_configs = storage_configs or {}
         if storage_configs:
             assert from_storage is not None, 'from_storage is required when storage_configs is provided'
@@ -216,7 +211,7 @@ class BaseFeed(ABC):
                     use_deltalake=self._use_deltalake,
                     **search_storage_configs,
                 )
-                data = storage.read_data(data_tool=self.data_tool.name)
+                data, metadata = storage.read_data(data_tool=self.data_tool.name)
                 if data is not None:
                     self.logger.debug(f'found data {data_model} in {search_storage.upper()}')
                     break
@@ -224,49 +219,11 @@ class BaseFeed(ABC):
                 if not isinstance(e, MinioServerError):
                     self.logger.exception(f'Error in retrieving data {data_model} from {search_storage.upper()}:')
                 continue
-        return data
+        return data, metadata
 
     # TODO
     def _execute_fetch(self, data_model: BaseDataModel, *args, **kwargs) -> tData | None:
         raise NotImplementedError(f'{self.name} _execute_fetch() is not implemented')
-    
-    def _standardize_dates(self, start_date: str, end_date: str, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
-        '''Standardize start_date and end_date based on input parameters.
-
-        Args:
-            start_date: Start date string in YYYY-MM-DD format.
-                If not provided, will be determined by rollback_period.
-            end_date: End date string in YYYY-MM-DD format.
-                If not provided and start_date is provided, defaults to yesterday.
-                If not provided and start_date is not provided, will be determined by rollback_period.
-            rollback_period: Period to rollback from today if start_date is not provided.
-                Can be a period string like '1d', '1w', '1m', '1y' etc.
-                Or 'ytd' to use the start date of the current year.
-                Or 'max' to use data source's start_date if available.
-
-        Returns:
-            tuple[datetime.date, datetime.date]: Standardized (start_date, end_date)
-
-        Raises:
-            ValueError: If rollback_period='max' but data source has no start_date attribute
-        '''
-        from pfeed.utils.utils import rollback_date_range
-        if start_date or rollback_period == 'max':
-            if start_date:
-                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-            else:
-                if self.data_source.start_date:
-                    start_date = self.data_source.start_date
-                else:
-                    raise ValueError(f'{self.name} {rollback_period=} is not supported')
-            if end_date:
-                end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
-            else:
-                yesterday = datetime.datetime.now(tz=datetime.timezone.utc).date() - datetime.timedelta(days=1)
-                end_date = yesterday
-        else:
-            start_date, end_date = rollback_date_range(rollback_period)
-        return start_date, end_date
     
     def create_dataflow(self, faucet: Faucet) -> DataFlow:
         from pfeed.flows.dataflow import DataFlow
@@ -372,27 +329,6 @@ class BaseFeed(ABC):
                 dataflow.set_bytewax_sink(bytewax_sink or StdOutSink())
         return self
     
-    def _run(self, concat_output: bool=True) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BaseFeed:
-        if not self._pipeline_mode:
-            completed_dataflows, failed_dataflows = self.run()
-            missing_dates = [dataflow.data_model.date for dataflow in failed_dataflows]
-            dfs: dict[datetime.date, tDataFrame | None] = {}
-            for dataflow in completed_dataflows + failed_dataflows:
-                date = dataflow.data_model.date
-                dfs[date] = dataflow.output if date not in missing_dates else None
-            if concat_output:
-                dfs: list[Frame] = [nw.from_native(df) for df in dfs.values() if df is not None]
-                if dfs:
-                    df: Frame = nw.concat(df for df in dfs)
-                    df: tDataFrame = nw.to_native(df)
-                else:
-                    df = None
-                return df
-            else:
-                return dfs
-        else:
-            return self
-    
     def run(
         self, 
         ray_kwargs: dict | None=None,
@@ -412,15 +348,16 @@ class BaseFeed(ABC):
         color = generate_color(self.name.value)
     
 
-        def _run_dataflow(dataflow: DataFlow) -> bool:
+        def _run_dataflow(dataflow: DataFlow) -> FlowResult:
             if self._use_prefect:
                 flow_type = 'prefect'
             elif self._use_bytewax:
                 flow_type = 'bytewax'
             else:
                 flow_type = 'native'
-            res: tData | None = dataflow.run(flow_type=flow_type)
-            success = res is not None
+            result: FlowResult = dataflow.run(flow_type=flow_type)
+            # NOTE: EMPTY dataframe is considered as success
+            success = result.data is not None
             return success
 
 

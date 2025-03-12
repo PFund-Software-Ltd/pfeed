@@ -3,12 +3,10 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
-    from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
     from pfeed.typing.core import tDataFrame
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfeed.flows.dataflow import DataFlow
 
 import time
 import datetime
@@ -54,7 +52,6 @@ class YahooFinanceMarketFeed(MarketFeed):
     
     _yfinance_kwargs: dict | None = None
     
-
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         # convert to UTC and reset index
@@ -121,7 +118,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         to_storage: tSTORAGE='local',
         storage_configs: dict | None=None,
         auto_transform: bool=True,
-        concat_output: bool=True,
+        dataflow_per_date: bool=False,
         yfinance_kwargs: dict | None=None,
         **product_specs
     ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | YahooFinanceMarketFeed:
@@ -143,14 +140,11 @@ class YahooFinanceMarketFeed(MarketFeed):
                     Otherwise, use yesterday's date as the default start date.
             end_date: End date.
                 If not specified, use today's date as the end date.
-            concat_output: Whether to concatenate the data from different dates.
-                If True, the data from different dates will be concatenated into a single DataFrame.
-                If False, the data from different dates will be returned as a dictionary of DataFrames with date as the key.
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         '''
         self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
-        if rollback_period == 'max':
+        if rollback_period == 'max' and not start_date:
             start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
         return super().download(
             product=product,
@@ -164,31 +158,10 @@ class YahooFinanceMarketFeed(MarketFeed):
             to_storage=to_storage,
             storage_configs=storage_configs,
             auto_transform=auto_transform,
-            concat_output=concat_output,
+            dataflow_per_date=dataflow_per_date,
             **product_specs
         )
     
-    def _create_download_dataflows(
-        self,
-        product: BaseProduct,
-        unit_resolution: Resolution,
-        start_date: datetime.date,
-        end_date: datetime.date,
-        data_origin: str='',
-    ) -> list[DataFlow]:
-        assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        # NOTE: one data model for the entire date range
-        data_model = self.create_data_model(
-            product,
-            unit_resolution,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-        )
-        # create a dataflow that schedules _execute_download()
-        dataflow = self._extract_download(data_model)
-        return [dataflow]
-
     def _execute_download(self, data_model: MarketDataModel) -> pd.DataFrame | None:
         # convert pfund's resolution format to yfinance's interval
         resolution = data_model.resolution
@@ -254,8 +227,9 @@ class YahooFinanceMarketFeed(MarketFeed):
         data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
+        to_storage: tSTORAGE='cache',
         storage_configs: dict | None=None,
-        skip_retrieve: bool=False,
+        force_download: bool=False,
         yfinance_kwargs: dict | None=None,
         **product_specs,
     ) -> tDataFrame | None:
@@ -280,7 +254,7 @@ class YahooFinanceMarketFeed(MarketFeed):
                     - mapping: 'buy' -> 1, 'sell' -> -1
                 'original' (most raw): keep the original data from yfinance, no transformation will be performed.
                 It will be ignored if the data is loaded from storage but not downloaded.
-            skip_retrieve: Whether to skip retrieving data from storage.
+            force_download: Whether to skip retrieving data from storage.
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py
         """
@@ -289,7 +263,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
             # HACK: for daily data with rollback_period='max', retrieving data from storage takes too long (too many dates), skip it
             if start_date == '1900-01-01':
-                skip_retrieve = True
+                force_download = True
         df = super().get_historical_data(
             product,
             resolution,
@@ -301,8 +275,9 @@ class YahooFinanceMarketFeed(MarketFeed):
             data_domain=data_domain,
             data_origin=data_origin,
             from_storage=from_storage,
+            to_storage=to_storage,
             storage_configs=storage_configs,
-            skip_retrieve=skip_retrieve,
+            force_download=force_download,
             **product_specs,
         )
         self._yfinance_kwargs.clear()

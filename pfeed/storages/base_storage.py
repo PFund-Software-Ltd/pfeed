@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
@@ -162,14 +162,14 @@ class BaseStorage(ABC):
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
             return False
 
-    def read_data(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tData | None:
+    def read_data(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[tData | None, dict[str, Any]]:
         '''
         Args:
             delta_version: version of the deltalake table to read, if None, read the latest version.
         '''
         try:
-            data = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
-            return data
+            data, metadata = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
+            return data, metadata
         except Exception:
             self._logger.exception(f'Failed to read data (data_tool={data_tool.name}, {delta_version=}) from {self.name}')
-            return None
+            return None, {}

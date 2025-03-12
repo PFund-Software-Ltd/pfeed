@@ -45,11 +45,11 @@ class BaseDataModel(BaseModel, ABC):
         '''
         return self.data_origin != self.data_source.name.value
     
-    # def add_metadata(self, metadata: dict) -> None:
+    # def set_metadata(self, metadata: dict) -> None:
     #     assert not self.metadata, 'metadata is already set, use update_metadata() instead'
     #     self.metadata = metadata
 
-    # def update_metadata(self, key: str, value: Any) -> None:
+    # def add_metadata(self, key: str, value: Any) -> None:
     #     self.metadata[key] = value
 
     def __str__(self):
@@ -59,9 +59,9 @@ class BaseDataModel(BaseModel, ABC):
             return f'{self.data_source.name.value}'
 
     @abstractmethod
-    def _create_filename(self) -> str:
+    def _create_filename(self, *args, **kwargs) -> str:
         pass
     
     @abstractmethod
-    def _create_storage_path(self) -> Path:
+    def _create_storage_path(self, *args, **kwargs) -> Path:
         pass

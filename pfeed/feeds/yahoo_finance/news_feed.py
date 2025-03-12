@@ -11,7 +11,8 @@ from pfeed.feeds.news_feed import NewsFeed
 
 class YahooFinanceNewsFeed(NewsFeed):
     # REVIEW: better handle some potentially useful attributes: "storyline" and "editorsPick"
-    def _normalize_raw_data(self, data: list[dict]) -> pd.DataFrame:
+    @staticmethod
+    def _normalize_raw_data(data: list[dict]) -> pd.DataFrame:
         import pandas as pd
         # extract contents only
         data = [item['content'] for item in data]

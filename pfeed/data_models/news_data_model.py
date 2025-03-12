@@ -1,3 +1,4 @@
+import datetime
 from pathlib import Path
 
 from pydantic import model_validator
@@ -22,15 +23,15 @@ class NewsDataModel(TimeBasedDataModel):
             assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
         return data
     
-    def _create_filename(self) -> str:
+    def _create_filename_per_date(self, date: datetime.date) -> str:
         if self.product is None:
-            filename = '_'.join(["GENERAL_MARKET_NEWS", str(self.date)])
+            filename = '_'.join(["GENERAL_MARKET_NEWS", str(date)])
         else:
-            filename = '_'.join([self.product.name, str(self.date)])
+            filename = '_'.join([self.product.name, str(date)])
         return filename + self.file_extension
 
-    def _create_storage_path(self) -> Path:
-        year, month, day = str(self.date).split('-')
+    def _create_storage_path_per_date(self, date: datetime.date) -> Path:
+        year, month, day = str(date).split('-')
         if self.product is None:
             return (
                 Path(f'env={self.env.value}')

@@ -6,7 +6,6 @@ if TYPE_CHECKING:
 import io
 
 import pandas as pd
-from deltalake import DeltaTable
 
 from pfeed.enums import DataTool
 
@@ -50,8 +49,18 @@ def read_parquet(
             )
             return df_polars.collect().to_pandas()
 
-def read_delta(delta_table: DeltaTable, **kwargs) -> pd.DataFrame:
-    return delta_table.to_pandas(**kwargs)
+
+def read_delta(
+    paths: list[str] | str,
+    storage_options: dict[str, Any] | None=None,
+    version: int | None=None,
+    **kwargs
+) -> pd.DataFrame:
+    from deltalake import DeltaTable
+    if isinstance(paths, str):
+        paths = [paths]
+    dts = [DeltaTable(path, storage_options=storage_options, version=version) for path in paths]
+    return pd.concat([dt.to_pandas(**kwargs) for dt in dts])
 
 
 # def concat(dfs: list[pd.DataFrame], ignore_index: bool=True) -> pd.DataFrame:

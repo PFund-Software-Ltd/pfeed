@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
-    from deltalake import DeltaTable
     
 import polars as pl
 
@@ -28,13 +27,15 @@ def read_parquet(
 
 
 def read_delta(
-    path: str, 
+    paths: list[str] | str,
     storage_options: dict[str, Any] | None=None,
     version: int | None=None,
     **kwargs
 ) -> pl.LazyFrame:
-    return pl.scan_delta(path, storage_options=storage_options, version=version, **kwargs)
-    
+    if isinstance(paths, str):
+        paths = [paths]
+    lfs = [pl.scan_delta(path, storage_options=storage_options, version=version, **kwargs) for path in paths]
+    return pl.concat(lfs)
 
 # def concat(dfs: list[pl.DataFrame | pl.LazyFrame]) -> pl.DataFrame | pl.LazyFrame:
 #     return pl.concat(dfs)

@@ -25,6 +25,6 @@ class BaseDataHandler(ABC):
     def _validate_schema(self, data: tData) -> tData:
         pass
 
-    def _create_file_path(self, data_model: BaseDataModel | None=None) -> str:
+    def _create_file_paths(self, data_model: BaseDataModel | None=None) -> str:
         data_model = data_model or self._data_model
         return self._data_path + '/' + str(data_model.storage_path) + '/' + data_model.filename

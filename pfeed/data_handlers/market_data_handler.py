@@ -1,14 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import pandas as pd
     from pfund.datas.resolution import Resolution
 
-import pandas as pd
-
-from pfeed.data_handlers.tabular_data_handler import TabularDataHandler
+from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
 
-class MarketDataHandler(TabularDataHandler):
+class MarketDataHandler(TimeBasedDataHandler):
     def _validate_schema(self, data: pd.DataFrame) -> pd.DataFrame:
         from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema
         resolution: Resolution = self._data_model.resolution

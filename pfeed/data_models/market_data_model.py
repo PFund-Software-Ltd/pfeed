@@ -1,3 +1,4 @@
+import datetime
 from pathlib import Path
 
 from pydantic import model_validator
@@ -60,14 +61,12 @@ class MarketDataModel(TimeBasedDataModel):
         self._validate_resolution()
         self.storage_path = self._create_storage_path()
 
-    def _create_filename(self) -> str:
-        # NOTE: since storage is per date, only uses self.date (start_date) to create filename
-        filename = '_'.join([self.product.name, str(self.date)])
+    def _create_filename_per_date(self, date: datetime.date) -> str:
+        filename = '_'.join([self.product.name, str(date)])
         return filename + self.file_extension
 
-    def _create_storage_path(self) -> Path:
-        # NOTE: since storage is per date, only uses self.date (start_date) to create storage path
-        year, month, day = str(self.date).split('-')
+    def _create_storage_path_per_date(self, date: datetime.date) -> Path:
+        year, month, day = str(date).split('-')
         return (
             Path(f'env={self.env.value}')
             / f'data_source={self.data_source.name}'

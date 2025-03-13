@@ -124,13 +124,14 @@ class MarketFeed(TimeBasedFeed):
         if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
             self.logger.debug(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
             data_layer = 'raw'
+        data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Downloading historical {unit_resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
-        return self._download_impl(
+        return self._run_download(
             partial(self.create_data_model, product, data_resolution, data_origin=data_origin),
             start_date, 
             end_date,
             data_layer,
-            data_domain or self.DATA_DOMAIN,
+            data_domain,
             to_storage,
             storage_configs,
             dataflow_per_date, 
@@ -237,13 +238,14 @@ class MarketFeed(TimeBasedFeed):
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
         unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+        data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Retrieving {self.name} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
-        return self._retrieve_impl(
+        return self._run_retrieve(
             partial(self.create_data_model, product, unit_resolution, data_origin=data_origin),
             start_date,
             end_date,
             data_layer,
-            data_domain or self.DATA_DOMAIN,
+            data_domain,
             from_storage,
             storage_configs,
             lambda: self._add_default_transformations_to_retrieve(resolution) if auto_transform else None,
@@ -251,7 +253,7 @@ class MarketFeed(TimeBasedFeed):
             include_metadata,
         )
     
-    def _execute_retrieve(
+    def _retrieve_impl(
         self,
         data_model: MarketDataModel,
         data_layer: tDATA_LAYER,
@@ -276,7 +278,7 @@ class MarketFeed(TimeBasedFeed):
         metadata: dict[str, list[datetime.date]] = {}
         for search_resolution in search_resolutions:
             data_model.update_resolution(search_resolution)
-            data, metadata = super()._execute_retrieve(
+            data, metadata = super()._retrieve_impl(
                 data_model,
                 data_layer,
                 data_domain,

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, Any
+from typing import TYPE_CHECKING, Callable, Any
 from types import ModuleType
 if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
@@ -25,7 +25,7 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
-from pfeed.enums import DataTool, DataStorage
+from pfeed.enums import DataTool, DataStorage, ExtractType
 
 
 __all__ = ["BaseFeed"]
@@ -175,17 +175,17 @@ class BaseFeed(ABC):
         raise NotImplementedError(f'{self.name} get_realtime_data() is not implemented')
     
     @abstractmethod
-    def _execute_download(self, data_model: BaseDataModel) -> tData:
+    def _download_impl(self, data_model: BaseDataModel) -> tData:
         pass
     
-    def _execute_stream(
+    def _stream_impl(
         self, 
         data_model: BaseDataModel, 
         bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
     ) -> tData | BytewaxSource | BytewaxStream:
-        raise NotImplementedError(f"{self.name} _execute_stream() is not implemented")
+        raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
 
-    def _execute_retrieve(
+    def _retrieve_impl(
         self,
         data_model: BaseDataModel, 
         data_layer: tDATA_LAYER, 
@@ -215,6 +215,8 @@ class BaseFeed(ABC):
                 if data is not None:
                     self.logger.debug(f'found data {data_model} in {search_storage.upper()}')
                     break
+                else:
+                    self.logger.debug(f'No {data_model} data found in {search_storage.upper()}')
             except Exception as e:  # e.g. minio's ServerError if server is not running
                 if not isinstance(e, MinioServerError):
                     self.logger.exception(f'Error in retrieving data {data_model} from {search_storage.upper()}:')
@@ -222,8 +224,8 @@ class BaseFeed(ABC):
         return data, metadata
 
     # TODO
-    def _execute_fetch(self, data_model: BaseDataModel, *args, **kwargs) -> tData | None:
-        raise NotImplementedError(f'{self.name} _execute_fetch() is not implemented')
+    def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> tData | None:
+        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     def create_dataflow(self, faucet: Faucet) -> DataFlow:
         from pfeed.flows.dataflow import DataFlow
@@ -233,9 +235,9 @@ class BaseFeed(ABC):
         return dataflow
     
     @staticmethod
-    def create_faucet(data_model: BaseDataModel, execute_func: Callable, op_type: Literal['download', 'stream', 'retrieve', 'fetch']) -> Faucet:
+    def create_faucet(data_model: BaseDataModel, extract_func: Callable, extract_type: ExtractType) -> Faucet:
         from pfeed.flows.faucet import Faucet
-        return Faucet(data_model, execute_func, op_type)
+        return Faucet(data_model, extract_func, extract_type)
     
     def _clear_subflows(self):
         '''Clear subflows
@@ -246,47 +248,6 @@ class BaseFeed(ABC):
         3. subflows: stream(...).transform(...).load(...)
         '''
         self._subflows.clear()
-    
-    def _extract_download(self, data_model: BaseDataModel) -> DataFlow:
-        faucet = self.create_faucet(data_model, lambda: self._execute_download(data_model), op_type='download')
-        return self.create_dataflow(faucet)
-    
-    def _extract_stream(
-        self, 
-        data_model: BaseDataModel, 
-        bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
-    ) -> DataFlow:
-        faucet = self.create_faucet(
-            data_model, 
-            lambda: self._execute_stream(data_model, bytewax_source=bytewax_source), 
-            op_type='stream',
-        )
-        return self.create_dataflow(faucet)
-    
-    def _extract_retrieve(
-        self, 
-        data_model: BaseDataModel,
-        data_layer: tDATA_LAYER,
-        data_domain: str,
-        from_storage: tSTORAGE | None=None,
-        storage_configs: dict | None=None,
-    ) -> DataFlow:
-        faucet = self.create_faucet(
-            data_model, 
-            lambda: self._execute_retrieve(
-                data_model,
-                data_layer,
-                data_domain or self.DATA_DOMAIN,
-                from_storage=from_storage,
-                storage_configs=storage_configs,
-            ),
-            op_type='retrieve',
-        )
-        return self.create_dataflow(faucet)
-    
-    def _extract_fetch(self, data_model: BaseDataModel) -> DataFlow:
-        faucet = self.create_faucet(data_model, lambda: self._execute_fetch(data_model), op_type='fetch')
-        return self.create_dataflow(faucet)
     
     def transform(self, *funcs) -> BaseFeed:
         for dataflow in self._subflows:
@@ -429,8 +390,8 @@ class BaseFeed(ABC):
                 self.logger.exception(f'Error in running {self.name} dataflows:')
 
         if failed_dataflows:
-            # retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type == 'retrieve']
-            non_retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.op_type != 'retrieve']
+            # retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.extract_type == 'retrieve']
+            non_retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.extract_type != ExtractType.retrieve]
             if non_retrieve_dataflows:
                 self.logger.warning(
                     f'{self.name} failed dataflows:\n'

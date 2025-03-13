@@ -62,9 +62,9 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
         df.rename(columns={'publishedDate': 'date', 'text': 'content'}, inplace=True)
         return df
     
-    def _execute_download(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
+    def _download_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
         self.logger.debug(f'downloading {data_model}')
-        datas: dict[str, list[list[dict] | []]] = asyncio.run(self._aexecute_download(data_model))
+        datas: dict[str, list[list[dict] | []]] = asyncio.run(self._adownload_impl(data_model))
         for func, data in datas.items():
             if not data:
                 self.logger.warning(f'no data downloaded using function {func} for {data_model}')
@@ -72,7 +72,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
                 self.logger.debug(f'downloaded using function {func} for {data_model}')
         return datas
 
-    async def _aexecute_download(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
+    async def _adownload_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
         product = data_model.product
         start_date, end_date = str(data_model.start_date), str(data_model.end_date)
         tasks = {}

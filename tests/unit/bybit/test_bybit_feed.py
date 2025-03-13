@@ -13,7 +13,7 @@ class TestDownload:
         from pfeed.feeds import BybitFeed
         dicts = BybitFeed.__dict__
         assert 'download' in dicts
-        assert '_execute_download' in dicts
+        assert '_download_impl' in dicts
     
     def test_dataflows_cleared_before_download(self, feed, mocker):
         spy = mocker.spy(feed, '_clear_subflows')
@@ -24,16 +24,16 @@ class TestDownload:
         # and once after the load operation is added
         assert spy.call_count == 2
 
-    def test_execute_download_return_none_if_download_fails(self, feed, mocker):
+    def test_download_impl_return_none_if_download_fails(self, feed, mocker):
         mocker.patch.object(feed.api, 'get_data', return_value=None)
         data_model = mocker.Mock(product='BTC_USDT_PERP', date='2024-01-01')
-        result = feed._execute_download(data_model)
+        result = feed._download_impl(data_model)
         assert result is None
         
-    def test_execute_download_return_df_if_download_succeeds(self, feed, mocker):
+    def test_download_impl_return_df_if_download_succeeds(self, feed, mocker):
         mocker.patch.object(feed.api, 'get_data', return_value=b"column1,column2\n1,2\n3,4\n5,6")
         data_model = mocker.Mock(product='BTC_USDT_PERP', date='2024-01-01')
-        result = feed._execute_download(data_model)
+        result = feed._download_impl(data_model)
         assert isinstance(result, bytes)
 
 

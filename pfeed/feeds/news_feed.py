@@ -79,13 +79,14 @@ class NewsFeed(TimeBasedFeed):
         if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
             self.logger.debug(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
             data_layer = 'raw' 
+        data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Downloading historical news data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
-        return self._download_impl(
+        return self._run_download(
             partial(self.create_data_model, product=product, data_origin=data_origin),
             start_date,
             end_date,
             data_layer,
-            data_domain or self.DATA_DOMAIN,
+            data_domain,
             to_storage,
             storage_configs,
             dataflow_per_date,
@@ -128,13 +129,14 @@ class NewsFeed(TimeBasedFeed):
     ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | NewsFeed:
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+        data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Retrieving {self.name} {product=} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
-        return self._retrieve_impl(
+        return self._run_retrieve(
             partial(self.create_data_model, product=product, data_origin=data_origin),
             start_date,
             end_date,
             data_layer,
-            data_domain or self.DATA_DOMAIN,
+            data_domain,
             from_storage,
             storage_configs,
             lambda: self._add_default_transformations_to_retrieve() if auto_transform else None,

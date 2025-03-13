@@ -85,7 +85,7 @@ class BybitMarketFeed(CryptoMarketFeed):
             **product_specs
         )
 
-    def _execute_download(self, data_model: MarketDataModel) -> bytes | None:
+    def _download_impl(self, data_model: MarketDataModel) -> bytes | None:
         self.logger.debug(f'downloading {data_model}')
         data = self.api.get_data(data_model.product, data_model.date)
         self.logger.debug(f'downloaded {data_model}')
@@ -129,7 +129,7 @@ class BybitMarketFeed(CryptoMarketFeed):
         return self
     
     # TODO
-    def _execute_stream(
+    def _stream_impl(
         self, 
         data_model: MarketDataModel, 
         bytewax_source: BytewaxSource | BytewaxStream | str | None=None,

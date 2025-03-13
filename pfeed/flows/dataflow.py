@@ -24,6 +24,7 @@ except ImportError:
         pass
     bytewax_op = None
 
+from pfeed.enums import ExtractType
 from pfeed.flows.result import FlowResult
 
 
@@ -62,15 +63,15 @@ class DataFlow:
         return self._faucet
 
     @property
-    def op_type(self) -> str:
-        return self._faucet.op_type
+    def extract_type(self) -> ExtractType:
+        return self._faucet.extract_type
     
     @property
     def data_model(self) -> str:
         return self._faucet.data_model
     
     def __str__(self):
-        return f'{self.name}.{self.op_type}'
+        return f'{self.name}.{self.extract_type}'
     
     def is_streaming(self) -> bool:
         return self._faucet._streaming
@@ -109,7 +110,7 @@ class DataFlow:
             extract = task(self._faucet.open) if flow_type == FlowType.prefect else self._faucet.open
             data, metadata = extract()
             if metadata:
-                self._result.set_metadata(**metadata)
+                self._result.set_metadata(metadata)
             if data is not None:
                 self.logger.debug(f"extracted {self.data_model} data by '{self._faucet.name}'")
             else:
@@ -153,7 +154,7 @@ class DataFlow:
     
     def _load(self, data: tData | BytewaxStream, flow_type: FlowType=FlowType.native):
         if self._storage_creator is None:
-            if self.op_type != "retrieve":
+            if self.extract_type != ExtractType.retrieve:
                 raise Exception(f'{self.name} has no destination storage')
             else:
                 return

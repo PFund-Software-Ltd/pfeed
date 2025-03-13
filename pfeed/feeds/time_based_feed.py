@@ -12,6 +12,7 @@ from pprint import pformat
 
 import narwhals as nw
 
+from pfeed.enums.extract_type import ExtractType
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 
 
@@ -65,12 +66,15 @@ class TimeBasedFeed(BaseFeed):
         dataflow_per_date: bool, 
         start_date: datetime.date, 
         end_date: datetime.date,
+        extract_type: ExtractType,
     ) -> list[DataFlow]:
         from pandas import date_range
+
         dataflows: list[DataFlow] = []
         def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
             data_model = partial_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
-            dataflow: DataFlow = extract_func(data_model)
+            faucet = self.create_faucet(data_model, extract_func, extract_type)
+            dataflow: DataFlow = self.create_dataflow(faucet)
             dataflows.append(dataflow)
         
         if dataflow_per_date:
@@ -82,7 +86,7 @@ class TimeBasedFeed(BaseFeed):
             _add_dataflow(start_date, end_date)
         return dataflows
     
-    def _retrieve_impl(
+    def _run_retrieve(
         self,
         partial_data_model: Callable,
         start_date: datetime.date,
@@ -96,7 +100,7 @@ class TimeBasedFeed(BaseFeed):
         include_metadata: bool,
     ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | TimeBasedFeed:
         self._create_dataflows(
-            lambda _data_model: self._extract_retrieve(
+            lambda _data_model: self._retrieve_impl(
                 _data_model,
                 data_layer,
                 data_domain,
@@ -107,6 +111,7 @@ class TimeBasedFeed(BaseFeed):
             dataflow_per_date,
             start_date,
             end_date,
+            extract_type=ExtractType.retrieve,
         )
         if add_default_transformations:
             add_default_transformations()
@@ -115,7 +120,7 @@ class TimeBasedFeed(BaseFeed):
         else:
             return self
         
-    def _download_impl(
+    def _run_download(
         self,
         partial_data_model: Callable,
         start_date: datetime.date, 
@@ -129,11 +134,12 @@ class TimeBasedFeed(BaseFeed):
         add_default_transformations: Callable | None,
     ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | TimeBasedFeed:
         self._create_dataflows(
-            lambda _data_model: self._extract_download(_data_model),
+            lambda _data_model: self._download_impl(_data_model),
             partial_data_model, 
             dataflow_per_date, 
             start_date, 
-            end_date
+            end_date,
+            extract_type=ExtractType.download,
         )
         if add_default_transformations:
             add_default_transformations()
@@ -198,6 +204,9 @@ class TimeBasedFeed(BaseFeed):
         from pfeed.enums import DataAccessType
         
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
+        kwargs = product_specs or {}
+        kwargs.update(feed_kwargs)
+        
         is_download_required = force_download
         df_from_storage: tDataFrame | None = None
         df_from_source: tDataFrame | None = None
@@ -215,7 +224,7 @@ class TimeBasedFeed(BaseFeed):
                 from_storage=from_storage,
                 storage_configs=storage_configs,
                 include_metadata=True,
-                **product_specs.update(feed_kwargs)
+                **kwargs
             )
             
             if missing_dates := metadata['missing_dates']:
@@ -236,7 +245,7 @@ class TimeBasedFeed(BaseFeed):
 
         if is_download_required:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
-            if self.data_source.access_type != DataAccessType.PAID_BY_USAGE:
+            if self.data_source.access_type == DataAccessType.PAID_BY_USAGE:
                 if to_storage.lower() == 'cache':
                     self.logger.warning('prevent downloading paid data to cache, set `to_storage` to "local"')
                     to_storage = 'local'
@@ -251,11 +260,13 @@ class TimeBasedFeed(BaseFeed):
                 data_domain=data_domain,
                 to_storage=to_storage,
                 storage_configs=storage_configs,
-                **product_specs.update(feed_kwargs)
+                **kwargs
             )
             if df_from_source is not None:
                 df_from_source: Frame = nw.from_native(df_from_source)
             
+        df_from_storage: Frame | None
+        df_from_source: Frame | None
         if df_from_storage is not None and df_from_source is not None:
             df: Frame = nw.concat([df_from_storage, df_from_source])
         elif df_from_storage is not None:

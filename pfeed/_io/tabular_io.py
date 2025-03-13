@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+from pyarrow.parquet import ParquetFile
 import pandas as pd
 try:
     from deltalake import DeltaTable
@@ -69,26 +70,33 @@ class TabularIO(BaseIO):
         if isinstance(file_paths, str):
             file_paths = [file_paths]
             
+        data = None
         metadata = {}
         data_tool: ModuleType = get_data_tool(data_tool)
         if self._use_deltalake:
-            if exists_file_paths := [
-                file_path for file_path in file_paths
-                if DeltaTable.is_deltatable(file_path.rsplit('/', 1)[0], storage_options=self._storage_options)
-            ]:
+            file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths]
+            delta_table_file_dirs = [file_dir for file_dir in file_dirs if DeltaTable.is_deltatable(file_dir, storage_options=self._storage_options)]
+            # empty dfs were written as parquet files
+            empty_parquet_file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths if self._exists(file_path)]
+            if delta_table_file_dirs:
                 data: tDataFrame = data_tool.read_delta(
-                    exists_file_paths,
+                    delta_table_file_dirs,
                     storage_options=self._storage_options,
                     version=delta_version
                 )
+            metadata['missing_file_paths'] = list(set(file_dirs) - set(delta_table_file_dirs) - set(empty_parquet_file_dirs))
         else:
             if exists_file_paths := [file_path for file_path in file_paths if self._exists(file_path)]:
+                non_empty_file_paths = [
+                    file_path for file_path in exists_file_paths
+                    if ParquetFile(file_path).metadata.num_rows > 0
+                ]
                 data: tDataFrame = data_tool.read_parquet(
-                    exists_file_paths,
+                    non_empty_file_paths,
                     storage_options=self._storage_options,
                     filesystem=self._filesystem if not self.is_local_fs else None,
                 )
-        metadata['missing_file_paths'] = list(set(file_paths) - set(exists_file_paths))
+            metadata['missing_file_paths'] = list(set(file_paths) - set(exists_file_paths))
         # REVIEW: parquet files metadata not in use for now
         # for file_path in exists_file_paths:
         #     file_path = file_path.replace('s3://', '')

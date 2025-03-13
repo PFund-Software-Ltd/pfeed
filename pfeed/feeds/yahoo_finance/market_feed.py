@@ -102,8 +102,8 @@ class YahooFinanceMarketFeed(MarketFeed):
         return self
 
     # TODO
-    def _execute_stream(self, data_model: MarketDataModel):
-        raise NotImplementedError(f'{self.name} _execute_stream() is not implemented')
+    def _stream_impl(self, data_model: MarketDataModel):
+        raise NotImplementedError(f'{self.name} _stream_impl() is not implemented')
     
     def download(
         self,
@@ -161,7 +161,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             **product_specs
         )
     
-    def _execute_download(self, data_model: MarketDataModel) -> pd.DataFrame | None:
+    def _download_impl(self, data_model: MarketDataModel) -> pd.DataFrame | None:
         # convert pfund's resolution format to yfinance's interval
         resolution = data_model.resolution
         timeframe = repr(resolution.timeframe)
@@ -191,7 +191,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             no_df = (df is None or df.empty)
             if no_df:
                 self.logger.info(f'failed to download {product.name} {resolution} data, retrying...')
-                time.sleep(0.1)
+                time.sleep(1)
             else:
                 self.logger.debug(f'downloaded {data_model}')
                 if str(data_model.start_date) == '1900-01-01':  # rollback_period='max' for daily data

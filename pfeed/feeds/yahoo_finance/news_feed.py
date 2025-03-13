@@ -37,7 +37,7 @@ class YahooFinanceNewsFeed(NewsFeed):
             })
         return df
     
-    def _execute_download(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
+    def _download_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
         self.logger.debug(f'downloading {data_model}')
         symbol = data_model.product.symbol
         assert symbol, f'symbol is required for {data_model}'

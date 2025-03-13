@@ -2,24 +2,18 @@ from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pandas as pd
-    from narwhals.typing import Frame
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.dataflow import Stream as BytewaxStream
     from pfeed.typing.core import tDataFrame
     from pfeed.typing.literals import tSTORAGE, tENVIRONMENT, tDATA_LAYER
-    from pfeed.flows.dataflow import DataFlow
     from pfeed.data_models.market_data_model import MarketDataModel
 
 import datetime
+from functools import partial
 
-import narwhals as nw
-
-from pfund import cprint
-from pfeed.feeds.base_feed import clear_subflows
 from pfeed.feeds.time_based_feed import TimeBasedFeed
-from pfeed.enums import DataAccessType
 
 
 tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
@@ -28,13 +22,12 @@ tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'secon
 class MarketFeed(TimeBasedFeed):
     DATA_DOMAIN = 'market_data'
     
-    @property
-    def global_min_resolution(self) -> Resolution:
-        return self.create_resolution('1d')
-    
-    def create_resolution(self, resolution: str | Resolution) -> Resolution:
+    @staticmethod
+    def create_resolution(resolution: str | Resolution) -> Resolution:
         from pfund.datas.resolution import Resolution
         return Resolution(resolution) if isinstance(resolution, str) else resolution
+    
+    SUPPORTED_LOWEST_RESOLUTION = create_resolution('1d')
     
     def create_data_model(
         self,
@@ -63,12 +56,11 @@ class MarketFeed(TimeBasedFeed):
             end_date=end_date or start_date,
         )
         
-    @clear_subflows
     def download(
         self,
         product: str,
         symbol: str='',
-        resolution: Resolution | str | tDATA_TYPE='1m',
+        resolution: Resolution | str | tDATA_TYPE | Literal['max']='max',
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
@@ -115,66 +107,36 @@ class MarketFeed(TimeBasedFeed):
                 If False, a single dataflow will be created for the entire date range.
         '''
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
-        resolution: Resolution = self.create_resolution(resolution)
-        assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
+        if resolution == 'max':
+            resolution: Resolution = self.data_source.highest_resolution
+        else:
+            resolution: Resolution = self.create_resolution(resolution)
+        assert self.data_source.highest_resolution >= resolution >= self.SUPPORTED_LOWEST_RESOLUTION, \
+            f'resolution must be >= {self.SUPPORTED_LOWEST_RESOLUTION} and <= {self.data_source.highest_resolution}'
+        # download data must be of unit resolution
         unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
-        adjusted_resolution: Resolution = min(
-            self.data_source.highest_resolution,
-            max(unit_resolution, self.data_source.lowest_resolution)
-        )
+        # allow specified resolution to be lower than the lowest resolution supported by the data source above
+        # because that can be handled by resampling, but for the resolution of the actual data to be downloaded, 
+        # it must be >= the lowest resolution supported by the data source
+        data_resolution: Resolution = max(unit_resolution, self.data_source.lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         # if no default and no custom transformations, set data_layer to 'raw'
-        if not auto_transform and not self._pipeline_mode:
+        if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
+            self.logger.debug(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
             data_layer = 'raw'
-        cprint(f'Downloading historical {resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold green')
-        self._create_download_dataflows(
-            product,
-            resolution,
-            start_date,
+        self.logger.info(f'Downloading historical {unit_resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
+        return self._download_impl(
+            partial(self.create_data_model, product, data_resolution, data_origin=data_origin),
+            start_date, 
             end_date,
-            data_origin=data_origin,
-            dataflow_per_date=dataflow_per_date,
+            data_layer,
+            data_domain or self.DATA_DOMAIN,
+            to_storage,
+            storage_configs,
+            dataflow_per_date, 
+            include_metadata,
+            lambda: self._add_default_transformations_to_download(data_resolution, resolution, product) if auto_transform else None,
         )
-        if auto_transform:
-            self._add_default_transformations_to_download(adjusted_resolution, resolution, product)
-        if not self._pipeline_mode:    
-            self.load(
-                to_storage=to_storage,
-                data_layer=data_layer,
-                data_domain=data_domain or self.DATA_DOMAIN,
-                storage_configs=storage_configs,
-            )
-            return self._eager_run(include_metadata=include_metadata)
-        else:
-            return self
-    
-    def _create_download_dataflows(
-        self,
-        product: BaseProduct,
-        unit_resolution: Resolution,
-        start_date: datetime.date,
-        end_date: datetime.date,
-        data_origin: str='',
-        dataflow_per_date: bool=True,
-    ) -> list[DataFlow]:
-        from pandas import date_range
-        assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        
-        dataflows: list[DataFlow] = []
-
-        def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
-            data_model = self.create_data_model(product, unit_resolution, start_date=data_model_start_date, end_date=data_model_end_date, data_origin=data_origin)
-            dataflow: DataFlow = self._extract_download(data_model)
-            dataflows.append(dataflow)
-        
-        if dataflow_per_date:
-            # one dataflow per date
-            for date in date_range(start_date, end_date).date:
-                _add_dataflow(date, date)
-        else:
-            # one dataflow for the entire date range
-            _add_dataflow(start_date, end_date)
-        return dataflows
     
     def _add_default_transformations_to_download(
         self, 
@@ -210,7 +172,6 @@ class MarketFeed(TimeBasedFeed):
             )
         )
 
-    @clear_subflows
     def retrieve(
         self,
         product: str,
@@ -273,28 +234,22 @@ class MarketFeed(TimeBasedFeed):
         '''
         product: BaseProduct = self.create_product(product, **product_specs)
         resolution: Resolution = self.create_resolution(resolution)
-        assert resolution >= self.global_min_resolution, f'resolution must be >= minimum resolution {self.global_min_resolution}'
+        assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
         unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        cprint(f'Retrieving {self.name} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}', style='bold blue')
-        self._create_retrieve_dataflows(
-            product,
-            unit_resolution,
+        self.logger.info(f'Retrieving {self.name} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
+        return self._retrieve_impl(
+            partial(self.create_data_model, product, unit_resolution, data_origin=data_origin),
             start_date,
             end_date,
-            data_origin,
             data_layer,
             data_domain or self.DATA_DOMAIN,
-            from_storage=from_storage,
-            storage_configs=storage_configs,
-            dataflow_per_date=dataflow_per_date,
+            from_storage,
+            storage_configs,
+            lambda: self._add_default_transformations_to_retrieve(resolution) if auto_transform else None,
+            dataflow_per_date,
+            include_metadata,
         )
-        if auto_transform:
-            self._add_default_transformations_to_retrieve(resolution)
-        if not self._pipeline_mode:
-            return self._eager_run(include_metadata=include_metadata)
-        else:
-            return self
     
     def _execute_retrieve(
         self,
@@ -331,44 +286,6 @@ class MarketFeed(TimeBasedFeed):
             if data is not None:
                 break
         return data, metadata
-        
-    def _create_retrieve_dataflows(
-        self,
-        product: BaseProduct,
-        unit_resolution: Resolution,
-        start_date: datetime.date,
-        end_date: datetime.date,
-        data_origin: str,
-        data_layer: tDATA_LAYER,
-        data_domain: str,
-        from_storage: tSTORAGE | None=None,
-        storage_configs: dict | None=None,
-        dataflow_per_date: bool=False,
-    ) -> list[DataFlow]:
-        from pandas import date_range
-        assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        
-        dataflows: list[DataFlow] = []
-        
-        def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
-            data_model = self.create_data_model(product, unit_resolution, start_date=data_model_start_date, end_date=data_model_end_date, data_origin=data_origin)
-            dataflow: DataFlow = self._extract_retrieve(
-                data_model,
-                data_layer,
-                data_domain,
-                from_storage=from_storage,
-                storage_configs=storage_configs,
-            )
-            dataflows.append(dataflow)
-        
-        if dataflow_per_date:
-            # one dataflow per date
-            for date in date_range(start_date, end_date).date:
-                _add_dataflow(date, date)
-        else:
-            # one dataflow for the entire date range
-            _add_dataflow(start_date, end_date)
-        return dataflows
     
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
         from pfeed._etl import market as etl
@@ -390,7 +307,7 @@ class MarketFeed(TimeBasedFeed):
     def get_historical_data(
         self,
         product: str,
-        resolution: Resolution | str | tDATA_TYPE,
+        resolution: Resolution | str | tDATA_TYPE | Literal['max'],
         symbol: str='',
         rollback_period: str | Literal['ytd', 'max']="1w",
         start_date: str='',
@@ -405,104 +322,41 @@ class MarketFeed(TimeBasedFeed):
         **product_specs
     ) -> tDataFrame | None:
         from pfeed._etl import market as etl
-        from pfeed._etl.base import convert_to_user_df
-        from pandas import date_range
-        assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
+        from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
+
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
-        adjusted_resolution: Resolution = max(resolution, self.global_min_resolution)
+        data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
 
-        is_download_required = force_download
-        df_from_storage: tDataFrame | None = None
-        df_from_source: tDataFrame | None = None
-        missing_dates: list[datetime.date] = []
-
-        if not force_download:
-            # NOTE: returned df from retrieve-dataflows should be of adjusted_resolution
-            df_from_storage, metadata = self.retrieve(
-                product,
-                adjusted_resolution,
-                rollback_period=rollback_period,
-                start_date=start_date,
-                end_date=end_date,
-                data_origin=data_origin,
-                data_layer=data_layer,
-                data_domain=data_domain,
-                from_storage=from_storage,
-                storage_configs=storage_configs,
-                include_metadata=True,
-                **product_specs
-            )
-            
-            if missing_dates := metadata['missing_dates']:
-                is_download_required = True
-                # fill gaps between missing dates 
-                start_missing_date = str(min(missing_dates))
-                end_missing_date = str(max(missing_dates))
-                missing_dates = date_range(start_missing_date, end_missing_date).date.tolist()
-            
-            if df_from_storage is not None:
-                df_from_storage: Frame = nw.from_native(df_from_storage)
-                if missing_dates:
-                    # remove missing dates in df_from_storage to avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
-                    df_from_storage: Frame = df_from_storage.filter(~nw.col('date').dt.date().is_in(missing_dates))
-        else:
-            start_missing_date = start_date
-            end_missing_date = end_date
-
-        if is_download_required:
-            # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
-            if self.data_source.access_type != DataAccessType.PAID_BY_USAGE:
-                df_from_source, metadata = self.download(
-                    product,
-                    symbol=symbol,
-                    resolution=adjusted_resolution,
-                    rollback_period=rollback_period,
-                    start_date=start_missing_date,
-                    end_date=end_missing_date,
-                    data_origin=data_origin,
-                    data_layer=data_layer,
-                    data_domain=data_domain,
-                    to_storage=to_storage,
-                    storage_configs=storage_configs,
-                    include_metadata=True,
-                    **product_specs
-                )
-                missing_dates = metadata['missing_dates']
-                if df_from_source is not None:
-                    df_from_source: Frame = nw.from_native(df_from_source)
-
-        if missing_dates:
-            self.logger.warning(
-                f'output data is INCOMPLETE, '
-                f'there are missing data when getting historical {resolution} data for {product},\n'
-                f'missing dates: {missing_dates}'
-            )
-            
-        df_from_storage: Frame | None
-        df_from_source: Frame | None
-        if df_from_storage is not None and df_from_source is not None:
-            df: Frame = nw.concat([df_from_storage, df_from_source])
-        elif df_from_storage is not None:
-            df: Frame = df_from_storage
-        elif df_from_source is not None:
-            df: Frame = df_from_source
-        else:
-            df = None
-
+        df: tDataFrame | None = self._get_historical_data_impl(
+            product=product,
+            symbol=symbol,
+            rollback_period=rollback_period,
+            start_date=start_date,
+            end_date=end_date,
+            data_origin=data_origin,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            from_storage=from_storage,
+            to_storage=to_storage,
+            storage_configs=storage_configs,
+            force_download=force_download,
+            product_specs=product_specs,
+            # NOTE: feed specific kwargs
+            resolution=data_resolution,
+        )
+        
+        # NOTE: df from storage/source should have been resampled, 
+        # this is only called when resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         if df is not None:
-            df: Frame = df.sort(by='date', descending=False)
-            is_resample_required = resolution < adjusted_resolution
+            is_resample_required = resolution < data_resolution
             if is_resample_required:
-                df: pd.DataFrame = etl.resample_data(df, resolution)
-                self.logger.debug(f'resampled {product.name} {adjusted_resolution} data to {resolution}')
-            else:
-                df: tDataFrame = df.to_native()
+                df: pd.DataFrame = etl.resample_data(convert_to_pandas_df(df), resolution)
+                self.logger.debug(f'resampled {product.name} {data_resolution} data to {resolution}')
             df: tDataFrame = convert_to_user_df(df, self.data_tool.name)
         return df
     
     # TODO
-    @clear_subflows
     def stream(
         self,
         products: list[str],
@@ -516,20 +370,10 @@ class MarketFeed(TimeBasedFeed):
         raise NotImplementedError(f"{self.name} stream() is not implemented")
         
     # TODO
-    def _create_stream_dataflow(
-        self,
-        bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
-    ) -> DataFlow:
-        data_model = self.create_data_model(...)
-        dataflow: DataFlow = self._extract_stream(data_model, bytewax_source=bytewax_source)
-        return dataflow
-        
-    # TODO
     def _add_default_transformations_to_stream(self):
         pass
     
-    # TODO: General-purpose data fetching without storage overhead
-    @clear_subflows
+    # TODO: General-purpose data fetching/LLM call? without storage overhead
     def fetch(self) -> tDataFrame | None | MarketFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
     

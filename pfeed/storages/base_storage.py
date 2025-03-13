@@ -11,9 +11,6 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pfeed.enums import DataStorage, DataLayer
-from pfeed.data_models import MarketDataModel, NewsDataModel
-
 
 class BaseStorage(ABC):
     def __new__(cls, *args, use_deltalake=False, **kwargs):
@@ -36,6 +33,7 @@ class BaseStorage(ABC):
         use_deltalake: bool=False,
         **kwargs
     ):
+        from pfeed.enums import DataStorage, DataLayer
         self.name = DataStorage[name.upper()]
         self.data_layer = DataLayer[data_layer.upper()]
         self.data_domain = data_domain.lower()
@@ -84,7 +82,6 @@ class BaseStorage(ABC):
         self._data_model = data_model
     
     def initialize_data_handler(self):
-        from pfeed.data_handlers import MarketDataHandler, NewsDataHandler
         data_handler_configs = {
             'data_path': str(self.data_path),
             'filesystem': self.get_filesystem(),
@@ -92,12 +89,7 @@ class BaseStorage(ABC):
         }
         if self.data_model.file_extension == '.parquet':
             data_handler_configs['use_deltalake'] = self.use_deltalake
-        if isinstance(self.data_model, MarketDataModel):
-            self._data_handler = MarketDataHandler(self.data_model, **data_handler_configs)
-        elif isinstance(self.data_model, NewsDataModel):
-            self._data_handler = NewsDataHandler(self.data_model, **data_handler_configs)
-        else:
-            raise NotImplementedError(f'No data handler is available for {type(self.data_model)}')
+        self._data_handler = self.data_model.create_data_handler(**data_handler_configs)
     
     def initialize_logger(self):
         name = self._data_model.data_source.name.lower()

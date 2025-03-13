@@ -11,6 +11,8 @@ from pfeed.enums import DataTool
 name = DataTool.polars
 
 
+# TODO: if no more data tool specific functions are needed, remove data_tool_xxx.py files
+# and use polars to do everything
 def read_parquet(
     paths_or_obj: list[str] | str | bytes, 
     *args, 

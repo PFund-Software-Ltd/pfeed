@@ -1,3 +1,8 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import pyarrow.fs as pa_fs
+
 import datetime
 from pathlib import Path
 
@@ -5,6 +10,7 @@ from pydantic import model_validator
 
 from pfund.products.product_base import BaseProduct
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+from pfeed.data_handlers import NewsDataHandler
 
 
 class NewsDataModel(TimeBasedDataModel):
@@ -54,3 +60,12 @@ class NewsDataModel(TimeBasedDataModel):
                 / f'month={month}'
                 / f'day={day}'
             )
+
+    def create_data_handler(
+        self, 
+        data_path: str,
+        filesystem: pa_fs.FileSystem,
+        storage_options: dict | None = None,
+        use_deltalake: bool = False,                        
+    ) -> NewsDataHandler:
+        return NewsDataHandler(self, data_path, filesystem, storage_options=storage_options, use_deltalake=use_deltalake)

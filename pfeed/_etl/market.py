@@ -4,7 +4,6 @@ ETL for market data.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from narwhals.typing import IntoFrame
     from pfeed.typing.literals import tPRODUCT_TYPE
 
 import pandas as pd
@@ -57,7 +56,7 @@ def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
     
 
-def resample_data(df: IntoFrame, resolution: str | Resolution) -> pd.DataFrame:
+def resample_data(df: pd.DataFrame, resolution: str | Resolution) -> pd.DataFrame:
     '''Resamples the input dataframe based on the target resolution.
     Args:
         df: The input dataframe to be resampled.
@@ -65,8 +64,6 @@ def resample_data(df: IntoFrame, resolution: str | Resolution) -> pd.DataFrame:
     Returns:
         The resampled dataframe.
     '''
-    from pfeed._etl.base import convert_to_pandas_df
-    df = convert_to_pandas_df(df)
     if isinstance(resolution, str):
         resolution = Resolution(resolution)
         

@@ -47,7 +47,7 @@ class BybitMarketFeed(CryptoMarketFeed):
     def download(
         self,
         product: str, 
-        resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day']='tick',
+        resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day', 'max']='tick',
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
@@ -56,7 +56,6 @@ class BybitMarketFeed(CryptoMarketFeed):
         to_storage: tSTORAGE='local',
         storage_configs: dict | None=None,
         auto_transform: bool=True,
-        dataflow_per_date: bool=True,
         **product_specs
     ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitMarketFeed:
         '''
@@ -82,7 +81,7 @@ class BybitMarketFeed(CryptoMarketFeed):
             to_storage=to_storage,
             storage_configs=storage_configs,
             auto_transform=auto_transform,
-            dataflow_per_date=dataflow_per_date,
+            dataflow_per_date=True,
             **product_specs
         )
 

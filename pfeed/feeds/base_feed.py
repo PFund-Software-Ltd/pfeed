@@ -100,6 +100,10 @@ class BaseFeed(ABC):
     def create_data_model(self, *args, **kwargs) -> BaseDataModel:
         pass
 
+    @abstractmethod
+    def _create_dataflows(self, *args, **kwargs) -> list[DataFlow]:
+        pass
+
     def create_storage(
         self,
         storage: tSTORAGE,
@@ -169,10 +173,6 @@ class BaseFeed(ABC):
     
     def get_realtime_data(self, *args, **kwargs) -> tData | None:
         raise NotImplementedError(f'{self.name} get_realtime_data() is not implemented')
-    
-    @abstractmethod
-    def _create_download_dataflows(self, *args, **kwargs) -> list[DataFlow]:
-        pass
     
     @abstractmethod
     def _execute_download(self, data_model: BaseDataModel) -> tData:

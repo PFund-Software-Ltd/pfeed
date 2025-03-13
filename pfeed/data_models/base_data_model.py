@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pfeed.enums.env import Environment
 from pfeed.sources.base_source import BaseSource
+from pfeed.data_handlers.base_data_handler import BaseDataHandler
 
 
 class BaseDataModel(BaseModel, ABC):
@@ -64,4 +65,8 @@ class BaseDataModel(BaseModel, ABC):
     
     @abstractmethod
     def _create_storage_path(self, *args, **kwargs) -> Path:
+        pass
+
+    @abstractmethod
+    def create_data_handler(self, *args, **kwargs) -> BaseDataHandler:
         pass

@@ -109,7 +109,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         self,
         product: str,
         symbol: str='',
-        resolution: Resolution | str | Literal['minute', 'hour', 'day']='day',
+        resolution: Resolution | str | Literal['minute', 'hour', 'day', 'max']='day',
         rollback_period: str | Literal["ytd", "max"]='max',
         start_date: str='',
         end_date: str='',
@@ -118,7 +118,6 @@ class YahooFinanceMarketFeed(MarketFeed):
         to_storage: tSTORAGE='local',
         storage_configs: dict | None=None,
         auto_transform: bool=True,
-        dataflow_per_date: bool=False,
         yfinance_kwargs: dict | None=None,
         **product_specs
     ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | YahooFinanceMarketFeed:
@@ -158,7 +157,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             to_storage=to_storage,
             storage_configs=storage_configs,
             auto_transform=auto_transform,
-            dataflow_per_date=dataflow_per_date,
+            dataflow_per_date=False,
             **product_specs
         )
     

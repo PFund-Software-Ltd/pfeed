@@ -1,3 +1,8 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import pyarrow.fs as pa_fs
+
 import datetime
 from pathlib import Path
 
@@ -6,6 +11,7 @@ from pfund.datas.resolution import Resolution
 from pfund.products.product_base import BaseProduct
 
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+from pfeed.data_handlers import MarketDataHandler
 
 
 class MarketDataModel(TimeBasedDataModel):
@@ -43,17 +49,12 @@ class MarketDataModel(TimeBasedDataModel):
         self._validate_resolution()
         return self
     
-    @property
-    def global_min_resolution(self) -> Resolution:
-        return Resolution('1d')
-    
     def _validate_resolution(self):
         '''Validates the resolution of the data model.
         Resolution must be >= '1d' and <= the highest resolution supported by the data source.
         '''
-        # lowest_supported_resolution = Resolution('1' + [dt.name for dt in MarketDataType][-1])
-        lowest_supported_resolution = self.global_min_resolution
-        assert lowest_supported_resolution <= self.resolution <= self.data_source.highest_resolution, f'{self.resolution=} is not supported for {self.data_source.name}'
+        from pfeed.feeds.market_feed import MarketFeed
+        assert MarketFeed.SUPPORTED_LOWEST_RESOLUTION <= self.resolution <= self.data_source.highest_resolution, f'{self.resolution=} is not supported for {self.data_source.name}'
         return self.resolution
 
     def update_resolution(self, resolution: Resolution) -> None:
@@ -78,3 +79,12 @@ class MarketDataModel(TimeBasedDataModel):
             / f'month={month}'
             / f'day={day}'
         )
+    
+    def create_data_handler(
+        self, 
+        data_path: str,
+        filesystem: pa_fs.FileSystem,
+        storage_options: dict | None = None,
+        use_deltalake: bool = False,                        
+    ) -> MarketDataHandler:
+        return MarketDataHandler(self, data_path, filesystem, storage_options=storage_options, use_deltalake=use_deltalake)

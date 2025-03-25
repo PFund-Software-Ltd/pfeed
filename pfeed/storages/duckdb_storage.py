@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import pandas as pd
     from duckdb import DuckDBPyConnection
-    from pfeed.typing.literals import tDATA_TOOL, tDATA_LAYER
-    from pfeed.typing.core import tDataFrame
+    from pfeed.typing import tDATA_TOOL, tDATA_LAYER
+    from pfeed.typing import GenericFrame
     from pfeed.data_models.base_data_model import BaseDataModel
 
 import json
@@ -330,7 +330,7 @@ class DuckDBStorage(BaseStorage):
         if self._conn_exists():
             self.conn.close()
 
-    def write_data(self, data: tDataFrame) -> bool:
+    def write_data(self, data: GenericFrame) -> bool:
         from pfeed._etl.base import convert_to_pandas_df
         try:
             if not self._conn_exists():
@@ -350,7 +350,7 @@ class DuckDBStorage(BaseStorage):
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
             return False
         
-    def read_data(self, data_tool: DataTool | tDATA_TOOL='polars') -> tDataFrame | None:
+    def read_data(self, data_tool: DataTool | tDATA_TOOL='polars') -> GenericFrame | None:
         from pfeed._etl.base import convert_to_user_df
         try:
             if not self._conn_exists():
@@ -360,7 +360,7 @@ class DuckDBStorage(BaseStorage):
             with self:
                 df: pd.DataFrame = self._get_table()
                 data_tool = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
-                df: tDataFrame = convert_to_user_df(df, data_tool)
+                df: GenericFrame = convert_to_user_df(df, data_tool)
                 return df
         except Exception:
             self._logger.exception(f'Failed to read data (data_tool={data_tool.name}) from {self.name}')

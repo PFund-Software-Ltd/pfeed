@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from pfeed.typing.core import tData
+    from pfeed.typing import GenericData
 
 
 class FlowResult:
@@ -13,18 +13,18 @@ class FlowResult:
             _metadata: Additional information about the flow.
                 e.g. missing_dates, etc.
         '''
-        self._data: tData | None = None
+        self._data: GenericData | None = None
         self._metadata: dict[str, Any] = {}
     
     @property
-    def data(self) -> tData | None:
+    def data(self) -> GenericData | None:
         return self._data
     
     @property
     def metadata(self) -> dict[str, Any]:
         return self._metadata
         
-    def set_data(self, data: tData):
+    def set_data(self, data: GenericData):
         self._data = data
     
     def set_metadata(self, metadata: dict[str, Any]):

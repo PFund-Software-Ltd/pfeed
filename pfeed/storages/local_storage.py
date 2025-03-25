@@ -2,7 +2,7 @@ from typing import Literal
 
 import pyarrow.fs as pa_fs
 
-from pfeed.typing.literals import tDATA_LAYER
+from pfeed.typing import tDATA_LAYER
 from pfeed.storages.base_storage import BaseStorage
 
 

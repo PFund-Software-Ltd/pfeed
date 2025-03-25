@@ -1,7 +1,7 @@
 import pandas as pd
 import polars as pl
 import narwhals as nw
-from pfeed.typing.core import dd, ps, SparkDataFrame
+from pfeed.typing import dd, ps, SparkDataFrame
 
 
 def is_dataframe(value, include_narwhals=True) -> bool:

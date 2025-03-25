@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfeed.typing.core import tDataFrame
-    from pfeed.typing.literals import tDATA_LAYER, tSTORAGE, tENVIRONMENT
+    from pfeed.typing import GenericFrame
+    from pfeed.typing import tDATA_LAYER, tSTORAGE, tENVIRONMENT
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
@@ -59,12 +59,12 @@ class NewsFeed(TimeBasedFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         to_storage: tSTORAGE='local',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
-    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | NewsFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | NewsFeed:
         '''
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
@@ -88,7 +88,7 @@ class NewsFeed(TimeBasedFeed):
             data_layer,
             data_domain,
             to_storage,
-            storage_configs,
+            storage_options,
             dataflow_per_date,
             include_metadata,
             lambda: self._add_default_transformations_to_download(product=product) if auto_transform else None,
@@ -121,12 +121,12 @@ class NewsFeed(TimeBasedFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
-    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | NewsFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | NewsFeed:
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_domain = data_domain or self.DATA_DOMAIN
@@ -138,7 +138,7 @@ class NewsFeed(TimeBasedFeed):
             data_layer,
             data_domain,
             from_storage,
-            storage_configs,
+            storage_options,
             lambda: self._add_default_transformations_to_retrieve() if auto_transform else None,
             dataflow_per_date,
             include_metadata,
@@ -165,10 +165,10 @@ class NewsFeed(TimeBasedFeed):
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE='cache',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         force_download: bool=False,
         **product_specs
-    ) -> tDataFrame | None:
+    ) -> GenericFrame | None:
         '''
         Get news data from data source.
         Data will be stored in cache by default.
@@ -187,11 +187,11 @@ class NewsFeed(TimeBasedFeed):
             data_domain=data_domain,
             from_storage=from_storage,
             to_storage=to_storage,
-            storage_configs=storage_configs,
+            storage_options=storage_options,
             force_download=force_download,
             product_specs=product_specs,
         )
 
     # TODO:
-    def fetch(self) -> tDataFrame | None | NewsFeed:
+    def fetch(self) -> GenericFrame | None | NewsFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")

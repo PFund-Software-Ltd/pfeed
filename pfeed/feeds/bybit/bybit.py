@@ -6,10 +6,10 @@ if TYPE_CHECKING:
     import pandas as pd
     from bytewax.dataflow import Stream as BytewaxStream
     from bytewax.inputs import Source as BytewaxSource
-    from pfeed.typing.core import tDataFrame
+    from pfeed.typing import GenericFrame
     from pfund.datas.resolution import Resolution
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
+    from pfeed.typing import tSTORAGE, tDATA_LAYER
 
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
 from pfeed.sources.bybit.source import BybitSource
@@ -54,10 +54,10 @@ class BybitMarketFeed(CryptoMarketFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         to_storage: tSTORAGE='local',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         auto_transform: bool=True,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | BybitMarketFeed:
+    ) -> GenericFrame | None | dict[datetime.date, GenericFrame | None] | BybitMarketFeed:
         '''
         Args:
             product_specs: The specifications for the product.
@@ -79,7 +79,7 @@ class BybitMarketFeed(CryptoMarketFeed):
             data_layer=data_layer,
             data_domain=data_domain,
             to_storage=to_storage,
-            storage_configs=storage_configs,
+            storage_options=storage_options,
             auto_transform=auto_transform,
             dataflow_per_date=True,
             **product_specs
@@ -103,10 +103,10 @@ class BybitMarketFeed(CryptoMarketFeed):
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE='cache',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         force_download: bool=False,
         **product_specs
-    ) -> tDataFrame | None | BybitMarketFeed:
+    ) -> GenericFrame | None | BybitMarketFeed:
         return super().get_historical_data(
             product,
             resolution,
@@ -118,7 +118,7 @@ class BybitMarketFeed(CryptoMarketFeed):
             data_origin=data_origin,
             from_storage=from_storage,
             to_storage=to_storage,
-            storage_configs=storage_configs,
+            storage_options=storage_options,
             force_download=force_download,
             **product_specs
         )

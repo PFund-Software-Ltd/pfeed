@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Any
 from types import ModuleType
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
-    from pfeed.typing.core import tDataFrame
-    from pfeed.typing.literals import tDATA_TOOL
+    from pfeed.typing import GenericFrame
+    from pfeed.typing import tDATA_TOOL
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -64,7 +64,7 @@ class TabularIO(BaseIO):
         file_paths: str | list[str],
         data_tool: tDATA_TOOL='polars',
         delta_version: int | None=None,
-    ) -> tuple[tDataFrame | None, dict[str, Any]]:
+    ) -> tuple[GenericFrame | None, dict[str, Any]]:
         from pfeed._etl.base import get_data_tool
         
         if isinstance(file_paths, str):
@@ -79,7 +79,7 @@ class TabularIO(BaseIO):
             # empty dfs were written as parquet files
             empty_parquet_file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths if self._exists(file_path)]
             if delta_table_file_dirs:
-                data: tDataFrame = data_tool.read_delta(
+                data: GenericFrame = data_tool.read_delta(
                     delta_table_file_dirs,
                     storage_options=self._storage_options,
                     version=delta_version
@@ -91,7 +91,7 @@ class TabularIO(BaseIO):
                     file_path for file_path in exists_file_paths
                     if ParquetFile(file_path).metadata.num_rows > 0
                 ]
-                data: tDataFrame = data_tool.read_parquet(
+                data: GenericFrame = data_tool.read_parquet(
                     non_empty_file_paths,
                     storage_options=self._storage_options,
                     filesystem=self._filesystem if not self.is_local_fs else None,

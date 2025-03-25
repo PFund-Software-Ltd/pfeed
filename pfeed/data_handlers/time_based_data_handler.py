@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
-    from pfeed.typing.core import tDataFrame
-    from pfeed.typing.literals import tDATA_TOOL
+    from pfeed.typing import GenericFrame
+    from pfeed.typing import tDATA_TOOL
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 from abc import abstractmethod
@@ -47,7 +47,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         else:
             return super()._create_file_paths(data_model)
         
-    def write(self, data: tDataFrame):
+    def write(self, data: GenericFrame):
         from pfeed._etl.base import convert_to_pandas_df
         data: pd.DataFrame = convert_to_pandas_df(data)
         data = self._validate_schema(data)
@@ -66,7 +66,7 @@ class TimeBasedDataHandler(BaseDataHandler):
                 file_path=self._create_file_paths(data_model=data_model_copy),
             )
 
-    def read(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[tDataFrame | None, dict[str, Any]]:
+    def read(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[GenericFrame | None, dict[str, Any]]:
         df, metadata = self._io.read(
             file_paths=self._create_file_paths(),
             data_tool=data_tool, 

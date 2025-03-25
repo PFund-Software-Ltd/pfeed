@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     except ImportError:
         pass
     from typing import Generator
-    from pfeed.typing.literals import tDATA_LAYER
+    from pfeed.typing import tDATA_LAYER
 
 import os
 import io

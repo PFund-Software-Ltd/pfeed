@@ -4,8 +4,8 @@ if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
     from pfund.datas.resolution import Resolution
-    from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
-    from pfeed.typing.core import tDataFrame
+    from pfeed.typing import tSTORAGE, tDATA_LAYER
+    from pfeed.typing import GenericFrame
     from pfeed.data_models.market_data_model import MarketDataModel
 
 import time
@@ -116,11 +116,11 @@ class YahooFinanceMarketFeed(MarketFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         to_storage: tSTORAGE='local',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         auto_transform: bool=True,
         yfinance_kwargs: dict | None=None,
         **product_specs
-    ) -> tDataFrame | None | dict[datetime.date, tDataFrame | None] | YahooFinanceMarketFeed:
+    ) -> GenericFrame | None | dict[datetime.date, GenericFrame | None] | YahooFinanceMarketFeed:
         '''
         Download historical data from Yahoo Finance.
         Be reminded that if you include today's data, it can be incomplete, this especially applies to the usage of rollback_period.
@@ -136,7 +136,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             start_date: Start date.
                 If not specified:
                     If the data source has a 'start_date' attribute, use it as the start date.
-                    Otherwise, use yesterday's date as the default start date.
+                    Otherwise, use rollback_period to determine the start date.
             end_date: End date.
                 If not specified, use today's date as the end date.
             yfinance_kwargs: kwargs supported by `yfinance`
@@ -155,7 +155,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             data_layer=data_layer,
             data_domain=data_domain,
             to_storage=to_storage,
-            storage_configs=storage_configs,
+            storage_options=storage_options,
             auto_transform=auto_transform,
             dataflow_per_date=False,
             **product_specs
@@ -227,11 +227,11 @@ class YahooFinanceMarketFeed(MarketFeed):
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE='cache',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         force_download: bool=False,
         yfinance_kwargs: dict | None=None,
         **product_specs,
-    ) -> tDataFrame | None:
+    ) -> GenericFrame | None:
         """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
         Args:
             product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP
@@ -275,7 +275,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             data_origin=data_origin,
             from_storage=from_storage,
             to_storage=to_storage,
-            storage_configs=storage_configs,
+            storage_options=storage_options,
             force_download=force_download,
             **product_specs,
         )
@@ -293,7 +293,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         return expirations
 
     # TODO: standardize the df? e.g. standardize column names, date format etc.
-    def get_option_chain(self, symbol: str, expiration: str, option_type: Literal['CALL', 'PUT']) -> tDataFrame:
+    def get_option_chain(self, symbol: str, expiration: str, option_type: Literal['CALL', 'PUT']) -> GenericFrame:
         '''Get the option chain for a given symbol, expiration, and option type.
         Args:
             expiration: e.g. '2024-12-13', it must be one of the values returned by `get_option_expirations`.

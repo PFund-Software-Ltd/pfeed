@@ -9,8 +9,8 @@ if TYPE_CHECKING:
     from bytewax.dataflow import Stream as BytewaxStream
     from pfund.products.product_base import BaseProduct
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing.core import tData
-    from pfeed.typing.literals import tSTORAGE, tDATA_TOOL, tDATA_LAYER
+    from pfeed.typing import GenericData
+    from pfeed.typing import tSTORAGE, tDATA_TOOL, tDATA_LAYER
     from pfeed.enums import DataSource
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
@@ -53,15 +53,15 @@ class BaseFeed(ABC):
     ):
         '''
         Args:
-            storage_configs: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
+            storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
-        from pfund.plogging import set_up_loggers
+        from pfund.plogging import setup_loggers
         from pfeed.config import get_config
 
         is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
         if not is_loggers_set_up:
             config = get_config()
-            set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
+            setup_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
         self.data_tool: ModuleType = importlib.import_module(f'pfeed.data_tools.data_tool_{DataTool[data_tool.lower()]}')
         if data_source is None:
             assert hasattr(self, '_create_data_source'), '_create_data_source() is not implemented'
@@ -86,7 +86,7 @@ class BaseFeed(ABC):
         self._subflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
-        self._storage_configs: dict[tSTORAGE, dict] = {}
+        self._storage_options: dict[tSTORAGE, dict] = {}
     
     @property
     def api(self):
@@ -110,27 +110,27 @@ class BaseFeed(ABC):
         data_model: BaseDataModel,
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
     ) -> BaseStorage:
-        storage_configs = storage_configs or {}
+        storage_options = storage_options or self._storage_options.get(storage, {})
         Storage = DataStorage[storage.upper()].storage_class
         return Storage.from_data_model(
             data_model,
             data_layer,
             data_domain=data_domain or self.DATA_DOMAIN,
             use_deltalake=self._use_deltalake,
-            **storage_configs,
+            **storage_options,
         )
     
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
         return self.data_source.create_product(product_basis, symbol=symbol, **product_specs)
 
-    def configure_storage(self, storage: tSTORAGE, storage_configs: dict) -> BaseFeed:
+    def configure_storage(self, storage: tSTORAGE, storage_options: dict) -> BaseFeed:
         '''Configure storage kwargs for the given storage
         Args:
-            storage_configs: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
+            storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
-        self._storage_configs[storage] = storage_configs
+        self._storage_options[storage] = storage_options
         return self
 
     def is_pipeline(self) -> bool:
@@ -147,7 +147,7 @@ class BaseFeed(ABC):
             ray.shutdown()
 
     @abstractmethod
-    def download(self, *args, **kwargs) -> tData | None | BaseFeed:
+    def download(self, *args, **kwargs) -> GenericData | None | BaseFeed:
         pass
     
     def stream(
@@ -161,28 +161,28 @@ class BaseFeed(ABC):
         raise NotImplementedError(f"{self.name} stream() is not implemented")
 
     @abstractmethod
-    def retrieve(self, *args, **kwargs) -> tData | None:
+    def retrieve(self, *args, **kwargs) -> GenericData | None:
         pass
     
     # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
-    def fetch(self, *args, **kwargs) -> tData | None | BaseFeed:
+    def fetch(self, *args, **kwargs) -> GenericData | None | BaseFeed:
         raise NotImplementedError(f'{self.name} fetch() is not implemented')
     
-    def get_historical_data(self, *args, **kwargs) -> tData | None:
+    def get_historical_data(self, *args, **kwargs) -> GenericData | None:
         raise NotImplementedError(f'{self.name} get_historical_data() is not implemented')
     
-    def get_realtime_data(self, *args, **kwargs) -> tData | None:
+    def get_realtime_data(self, *args, **kwargs) -> GenericData | None:
         raise NotImplementedError(f'{self.name} get_realtime_data() is not implemented')
     
     @abstractmethod
-    def _download_impl(self, data_model: BaseDataModel) -> tData:
+    def _download_impl(self, data_model: BaseDataModel) -> GenericData:
         pass
     
     def _stream_impl(
         self, 
         data_model: BaseDataModel, 
         bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
-    ) -> tData | BytewaxSource | BytewaxStream:
+    ) -> GenericData | BytewaxSource | BytewaxStream:
         raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
 
     def _retrieve_impl(
@@ -191,17 +191,17 @@ class BaseFeed(ABC):
         data_layer: tDATA_LAYER, 
         data_domain: str, 
         from_storage: tSTORAGE | None=None,
-        storage_configs: dict | None=None,
-    ) -> tuple[tData | None, dict[str, Any]]:
+        storage_options: dict | None=None,
+    ) -> tuple[GenericData | None, dict[str, Any]]:
         from minio import ServerError as MinioServerError
         search_storages = ['cache', 'local', 'minio', 'duckdb'] if from_storage is None else [from_storage]
-        data: tData | None = None
-        storage_configs = storage_configs or {}
-        if storage_configs:
-            assert from_storage is not None, 'from_storage is required when storage_configs is provided'
+        data: GenericData | None = None
+        storage_options = storage_options or {}
+        if storage_options:
+            assert from_storage is not None, 'from_storage is required when storage_options is provided'
         for search_storage in search_storages:
             self.logger.debug(f'searching for data {data_model} in {search_storage.upper()}...')
-            search_storage_configs = storage_configs or self._storage_configs.get(search_storage, {})
+            search_storage_options = storage_options or self._storage_options.get(search_storage, {})
             Storage = DataStorage[search_storage.upper()].storage_class
             try:
                 storage: BaseStorage = Storage.from_data_model(
@@ -209,7 +209,7 @@ class BaseFeed(ABC):
                     data_layer, 
                     data_domain,
                     use_deltalake=self._use_deltalake,
-                    **search_storage_configs,
+                    **search_storage_options,
                 )
                 data, metadata = storage.read_data(data_tool=self.data_tool.name)
                 if data is not None:
@@ -224,7 +224,7 @@ class BaseFeed(ABC):
         return data, metadata
 
     # TODO
-    def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> tData | None:
+    def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> GenericData | None:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     def create_dataflow(self, faucet: Faucet) -> DataFlow:
@@ -259,7 +259,7 @@ class BaseFeed(ABC):
         to_storage: tSTORAGE='local',   
         data_layer: tDATA_LAYER='curated',
         data_domain: str='',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         bytewax_sink: BytewaxSink | str | None=None,
     ) -> BaseFeed:
         '''
@@ -269,7 +269,7 @@ class BaseFeed(ABC):
         '''
         if self._use_ray:
             assert to_storage.lower() != 'duckdb', 'DuckDB is not thread-safe, cannot be used with Ray'
-        storage_configs = storage_configs or self._storage_configs.get(to_storage, {})
+        storage_options = storage_options or self._storage_options.get(to_storage, {})
         Storage = DataStorage[to_storage.upper()].storage_class
 
         # NOTE: lazy creation of storage to avoid pickle errors when using ray
@@ -280,7 +280,7 @@ class BaseFeed(ABC):
                 data_layer,
                 data_domain or self.DATA_DOMAIN,
                 use_deltalake=self._use_deltalake,
-                **storage_configs,
+                **storage_options,
             )
 
         for dataflow in self._subflows:

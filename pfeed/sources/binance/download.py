@@ -17,7 +17,7 @@ from pfeed.sources.binance.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_
 from pfeed.sources.binance import api
 from pfund.products.product_base import BaseProduct
 from pfund.exchanges.binance.exchange import Exchange
-from pfund.plogging import set_up_loggers
+from pfund.plogging import setup_loggers
 
 
 logger = logging.getLogger(DATA_SOURCE.lower() + '_data')
@@ -93,7 +93,7 @@ def download_historical_data(
         if 'handlers' not in config.logging_config:
             config.logging_config['handlers'] = {}
         config.logging_config['handlers']['stream_handler'] = {'level': 'INFO'}
-    set_up_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
+    setup_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
     
     # prepare dtypes
     if dtypes is None:

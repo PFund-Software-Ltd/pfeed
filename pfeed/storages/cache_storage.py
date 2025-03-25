@@ -2,7 +2,7 @@ import shutil
 import datetime
 from pathlib import Path
 
-from pfeed.typing.literals import tDATA_LAYER
+from pfeed.typing import tDATA_LAYER
 from pfeed.storages import LocalStorage
 
 

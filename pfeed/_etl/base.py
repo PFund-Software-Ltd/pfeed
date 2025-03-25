@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING
 from types import ModuleType
 if TYPE_CHECKING:
     from narwhals.typing import Frame
-    from pfeed.typing.literals import tDATA_TOOL
-    from pfeed.typing.core import tDataFrame, tData
+    from pfeed.typing import tDATA_TOOL
+    from pfeed.typing import GenericFrame, GenericData
     
 import importlib
 
@@ -12,7 +12,7 @@ import pandas as pd
 import polars as pl
 import narwhals as nw
 
-from pfeed.typing.core import dd
+from pfeed.typing import dd
 from pfeed.enums import DataTool
 from pfeed.utils.dataframe import is_dataframe
 
@@ -38,7 +38,7 @@ def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def convert_to_pandas_df(data: tData) -> pd.DataFrame:
+def convert_to_pandas_df(data: GenericData) -> pd.DataFrame:
     import io
     from pfeed.utils.file_formats import decompress_data, is_parquet, is_likely_csv
     if isinstance(data, bytes):
@@ -60,7 +60,7 @@ def convert_to_pandas_df(data: tData) -> pd.DataFrame:
         raise ValueError(f'{type(data)=}')
 
 
-def convert_to_user_df(df: tDataFrame, data_tool: DataTool | tDATA_TOOL) -> tDataFrame:
+def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDATA_TOOL) -> GenericFrame:
     '''Converts the input dataframe to the user's desired data tool.
     Args:
         df: The input dataframe to be converted.

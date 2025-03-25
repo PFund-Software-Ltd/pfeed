@@ -6,8 +6,8 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.dataflow import Stream as BytewaxStream
-    from pfeed.typing.core import tDataFrame
-    from pfeed.typing.literals import tSTORAGE, tENVIRONMENT, tDATA_LAYER
+    from pfeed.typing import GenericFrame
+    from pfeed.typing import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.data_models.market_data_model import MarketDataModel
 
 import datetime
@@ -68,12 +68,12 @@ class MarketFeed(TimeBasedFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         to_storage: tSTORAGE='local',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=True,
         include_metadata: bool=False,
         **product_specs
-    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | MarketFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | MarketFeed:
         '''
         Download historical data from data source.
         
@@ -83,7 +83,7 @@ class MarketFeed(TimeBasedFeed):
             start_date: Start date.
                 If not specified:
                     If the data source has a 'start_date' attribute, use it as the start date.
-                    Otherwise, use yesterday's date as the default start date.
+                    Otherwise, use rollback_period to determine the start date.
             end_date: End date.
                 If not specified, use today's date as the end date.
             product_specs: The specifications for the product.
@@ -133,7 +133,7 @@ class MarketFeed(TimeBasedFeed):
             data_layer,
             data_domain,
             to_storage,
-            storage_configs,
+            storage_options,
             dataflow_per_date, 
             include_metadata,
             lambda: self._add_default_transformations_to_download(data_resolution, resolution, product) if auto_transform else None,
@@ -184,12 +184,12 @@ class MarketFeed(TimeBasedFeed):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
-    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | MarketFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | MarketFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -201,7 +201,7 @@ class MarketFeed(TimeBasedFeed):
             start_date: Start date.
                 If not specified:
                     If the data source has a 'start_date' attribute, use it as the start date.
-                    Otherwise, use yesterday's date as the default start date.
+                    Otherwise, use rollback_period to determine the start date.
             end_date: End date.
                 If not specified, use today's date as the end date.
             data_layer:
@@ -247,7 +247,7 @@ class MarketFeed(TimeBasedFeed):
             data_layer,
             data_domain,
             from_storage,
-            storage_configs,
+            storage_options,
             lambda: self._add_default_transformations_to_retrieve(resolution) if auto_transform else None,
             dataflow_per_date,
             include_metadata,
@@ -259,8 +259,8 @@ class MarketFeed(TimeBasedFeed):
         data_layer: tDATA_LAYER,
         data_domain: str,
         from_storage: tSTORAGE | None=None,
-        storage_configs: dict | None=None,
-    ) -> tuple[tDataFrame | None, dict[str, Any]]:
+        storage_options: dict | None=None,
+    ) -> tuple[GenericFrame | None, dict[str, Any]]:
         '''Retrieve data from storage.
         If data is not found, search for higher resolutions.
         NOTE: This will change the resolution of the data model.
@@ -274,7 +274,7 @@ class MarketFeed(TimeBasedFeed):
             # remove resolutions that are not supported by the data source
             if resolution <= self.data_source.highest_resolution
         ]
-        data: tDataFrame | None = None
+        data: GenericFrame | None = None
         metadata: dict[str, list[datetime.date]] = {}
         for search_resolution in search_resolutions:
             data_model.update_resolution(search_resolution)
@@ -283,7 +283,7 @@ class MarketFeed(TimeBasedFeed):
                 data_layer,
                 data_domain,
                 from_storage=from_storage,
-                storage_configs=storage_configs,
+                storage_options=storage_options,
             )
             if data is not None:
                 break
@@ -319,10 +319,10 @@ class MarketFeed(TimeBasedFeed):
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE='cache',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         force_download: bool=False,
         **product_specs
-    ) -> tDataFrame | None:
+    ) -> GenericFrame | None:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
 
@@ -330,7 +330,7 @@ class MarketFeed(TimeBasedFeed):
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
 
-        df: tDataFrame | None = self._get_historical_data_impl(
+        df: GenericFrame | None = self._get_historical_data_impl(
             product=product,
             symbol=symbol,
             rollback_period=rollback_period,
@@ -341,7 +341,7 @@ class MarketFeed(TimeBasedFeed):
             data_domain=data_domain,
             from_storage=from_storage,
             to_storage=to_storage,
-            storage_configs=storage_configs,
+            storage_options=storage_options,
             force_download=force_download,
             product_specs=product_specs,
             # NOTE: feed specific kwargs
@@ -355,7 +355,7 @@ class MarketFeed(TimeBasedFeed):
             if is_resample_required:
                 df: pd.DataFrame = etl.resample_data(convert_to_pandas_df(df), resolution)
                 self.logger.debug(f'resampled {product.name} {data_resolution} data to {resolution}')
-            df: tDataFrame = convert_to_user_df(df, self.data_tool.name)
+            df: GenericFrame = convert_to_user_df(df, self.data_tool.name)
         return df
     
     # TODO
@@ -376,10 +376,10 @@ class MarketFeed(TimeBasedFeed):
         pass
     
     # TODO: General-purpose data fetching/LLM call? without storage overhead
-    def fetch(self) -> tDataFrame | None | MarketFeed:
+    def fetch(self) -> GenericFrame | None | MarketFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
     
     # TODO
-    def get_realtime_data(self) -> tDataFrame | None:
+    def get_realtime_data(self) -> GenericFrame | None:
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_realtime_data()'
         self.fetch()

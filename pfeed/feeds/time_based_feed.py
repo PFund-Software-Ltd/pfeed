@@ -2,10 +2,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any, Callable
 if TYPE_CHECKING:
     from narwhals.typing import Frame
-    from pfeed.typing.core import tDataFrame
+    from pfeed.typing import GenericFrame
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow
-    from pfeed.typing.literals import tSTORAGE, tDATA_LAYER
+    from pfeed.typing import tSTORAGE, tDATA_LAYER
 
 import datetime
 from pprint import pformat
@@ -94,18 +94,18 @@ class TimeBasedFeed(BaseFeed):
         data_layer: tDATA_LAYER,
         data_domain: str,
         from_storage: tSTORAGE | None,
-        storage_configs: dict | None,
+        storage_options: dict | None,
         add_default_transformations: Callable | None,
         dataflow_per_date: bool,
         include_metadata: bool,
-    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | TimeBasedFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | TimeBasedFeed:
         self._create_dataflows(
             lambda _data_model: self._retrieve_impl(
                 _data_model,
                 data_layer,
                 data_domain,
                 from_storage=from_storage,
-                storage_configs=storage_configs,
+                storage_options=storage_options,
             ),
             partial_data_model,
             dataflow_per_date,
@@ -128,11 +128,11 @@ class TimeBasedFeed(BaseFeed):
         data_layer: tDATA_LAYER,
         data_domain: str,
         to_storage: tSTORAGE | None,
-        storage_configs: dict | None,
+        storage_options: dict | None,
         dataflow_per_date: bool, 
         include_metadata: bool,
         add_default_transformations: Callable | None,
-    ) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]] | TimeBasedFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | TimeBasedFeed:
         self._create_dataflows(
             lambda _data_model: self._download_impl(_data_model),
             partial_data_model, 
@@ -148,7 +148,7 @@ class TimeBasedFeed(BaseFeed):
                 to_storage=to_storage,
                 data_layer=data_layer,
                 data_domain=data_domain,
-                storage_configs=storage_configs,
+                storage_options=storage_options,
             )
             df, metadata = self._eager_run(include_metadata=True)
             if missing_dates := metadata['missing_dates']:
@@ -172,11 +172,11 @@ class TimeBasedFeed(BaseFeed):
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE='cache',
-        storage_configs: dict | None=None,
+        storage_options: dict | None=None,
         force_download: bool=False,
         product_specs: dict | None=None,
         **feed_kwargs
-    ) -> tDataFrame | None:
+    ) -> GenericFrame | None:
         '''
         """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
         Args:
@@ -208,8 +208,8 @@ class TimeBasedFeed(BaseFeed):
         kwargs.update(feed_kwargs)
         
         is_download_required = force_download
-        df_from_storage: tDataFrame | None = None
-        df_from_source: tDataFrame | None = None
+        df_from_storage: GenericFrame | None = None
+        df_from_source: GenericFrame | None = None
         missing_dates: list[datetime.date] = []
 
         if not force_download:
@@ -222,7 +222,7 @@ class TimeBasedFeed(BaseFeed):
                 data_layer=data_layer,
                 data_domain=data_domain,
                 from_storage=from_storage,
-                storage_configs=storage_configs,
+                storage_options=storage_options,
                 include_metadata=True,
                 **kwargs
             )
@@ -259,7 +259,7 @@ class TimeBasedFeed(BaseFeed):
                 data_layer=data_layer,
                 data_domain=data_domain,
                 to_storage=to_storage,
-                storage_configs=storage_configs,
+                storage_options=storage_options,
                 **kwargs
             )
             if df_from_source is not None:
@@ -277,19 +277,19 @@ class TimeBasedFeed(BaseFeed):
             df = None
         if df is not None:
             df: Frame = df.sort(by='date', descending=False)
-            df: tDataFrame = df.to_native()
+            df: GenericFrame = df.to_native()
         return df
   
-    def _eager_run(self, include_metadata: bool=False) -> tDataFrame | None | tuple[tDataFrame | None, dict[str, Any]]:
+    def _eager_run(self, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]]:
         '''Runs dataflows and handles the results.'''
         assert not self._pipeline_mode, 'eager_run() is not supported in pipeline mode'
         completed_dataflows, failed_dataflows = self.run()
-        dfs: dict[datetime.date, tDataFrame | None] = {}
+        dfs: dict[datetime.date, GenericFrame | None] = {}
         metadata = {'missing_dates': []}
         for dataflow in completed_dataflows + failed_dataflows:
             data_model: TimeBasedDataModel = dataflow.data_model
             result = dataflow.result
-            df: tDataFrame | None = result.data
+            df: GenericFrame | None = result.data
             # e.g. retrieve(), yahoo_finance.market_feed.download() all use one dataflow for the entire date range
             if data_model.is_date_range():
                 assert len(completed_dataflows) + len(failed_dataflows) == 1, 'only one date-range dataflow is supported'
@@ -304,7 +304,7 @@ class TimeBasedFeed(BaseFeed):
             metadata['missing_dates'] = [date for date, df in dfs.items() if df is None]
             if dfs := [nw.from_native(df) for df in dfs.values() if df is not None]:
                 df: Frame = nw.concat(dfs)
-                df: tDataFrame = nw.to_native(df)
+                df: GenericFrame = nw.to_native(df)
             else:
                 df = None
 

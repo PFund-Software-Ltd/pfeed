@@ -33,15 +33,13 @@ class MarketDataModel(TimeBasedDataModel):
     @model_validator(mode='before')
     @classmethod
     def check_and_convert(cls, data: dict) -> dict:
-        if 'product' in data:
-            product = data['product']
-            assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
-        if 'resolution' in data:
-            # convert resolution to Resolution object if it is a string
-            resolution = data['resolution']
-            if isinstance(resolution, str):
-                resolution = Resolution(resolution)
-            data['resolution'] = resolution
+        product = data['product']
+        assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
+        # convert resolution to Resolution object if it is a string
+        resolution = data['resolution']
+        if isinstance(resolution, str):
+            resolution = Resolution(resolution)
+        data['resolution'] = resolution
         return data
     
     @model_validator(mode='after')

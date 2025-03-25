@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from prefect import Flow as PrefectDataFlow
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.outputs import Sink as BytewaxSink
-    from pfeed.typing.core import tData
+    from pfeed.typing import GenericData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.faucet import Faucet
 
@@ -83,7 +83,7 @@ class DataFlow:
         flow_type = FlowType[flow_type.lower()]
         if flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow()
-            data: tData | None = prefect_dataflow()
+            data: GenericData | None = prefect_dataflow()
             self._result.set_data(data)
         elif flow_type == FlowType.bytewax:
             bytewax_dataflow = self.to_bytewax_dataflow()
@@ -92,19 +92,19 @@ class DataFlow:
             run_main(bytewax_dataflow)
             self._result.set_data(bytewax_dataflow)
         else:
-            data: tData | None = self._run()
+            data: GenericData | None = self._run()
             self._result.set_data(data)
         return self._result
     
-    def _run(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxDataFlow:
+    def _run(self, flow_type: FlowType=FlowType.native) -> GenericData | None | BytewaxDataFlow:
         from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
-        data: tData | None | BytewaxStream = self._extract(flow_type=flow_type)
+        data: GenericData | None | BytewaxStream = self._extract(flow_type=flow_type)
         if (data is not None) and not (is_dataframe(data) and is_empty_dataframe(data)):
-            data: tData | BytewaxStream = self._transform(data, flow_type=flow_type)
+            data: GenericData | BytewaxStream = self._transform(data, flow_type=flow_type)
             self._load(data, flow_type=flow_type)
         return data
     
-    def _extract(self, flow_type: FlowType=FlowType.native) -> tData | None | BytewaxStream:
+    def _extract(self, flow_type: FlowType=FlowType.native) -> GenericData | None | BytewaxStream:
         # self.logger.debug(f"extracting {self.data_model} data by '{self._faucet.name}'")
         if not self.is_streaming():
             extract = task(self._faucet.open) if flow_type == FlowType.prefect else self._faucet.open
@@ -131,9 +131,9 @@ class DataFlow:
     
     def _transform(
         self, 
-        data: tData | BytewaxStream, 
+        data: GenericData | BytewaxStream, 
         flow_type: FlowType=FlowType.native,
-    ) -> tData | BytewaxStream:
+    ) -> GenericData | BytewaxStream:
         if self.is_streaming():
             stream = data
         for func in self._transformations:
@@ -141,7 +141,7 @@ class DataFlow:
             if not self.is_streaming():
                 transform = task(func) if flow_type == FlowType.prefect else func
                 # NOTE: Removing prefect's task introspection with `quote(data)` to save time
-                data: tData = transform(quote(data)) if flow_type == FlowType.prefect else transform(data)
+                data: GenericData = transform(quote(data)) if flow_type == FlowType.prefect else transform(data)
                 self.logger.debug(f"transformed {self.data_model} data by '{func.__name__}'")
             else:
                 if flow_type == FlowType.bytewax:
@@ -152,7 +152,7 @@ class DataFlow:
                     pass
         return data
     
-    def _load(self, data: tData | BytewaxStream, flow_type: FlowType=FlowType.native):
+    def _load(self, data: GenericData | BytewaxStream, flow_type: FlowType=FlowType.native):
         if self._storage_creator is None:
             if self.extract_type != ExtractType.retrieve:
                 raise Exception(f'{self.name} has no destination storage')

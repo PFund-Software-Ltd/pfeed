@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from fmp_api_client import FMPClient
-    from pfeed.typing.literals import tDATA_TOOL
+    from pfeed.typing import tDATA_TOOL
 
 from enum import StrEnum
 

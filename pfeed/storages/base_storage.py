@@ -4,8 +4,8 @@ if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing.literals import tSTORAGE, tDATA_TOOL, tDATA_LAYER
-    from pfeed.typing.core import tData
+    from pfeed.typing import tSTORAGE, tDATA_TOOL, tDATA_LAYER
+    from pfeed.typing import GenericData
 
 import logging
 from abc import ABC, abstractmethod
@@ -146,7 +146,7 @@ class BaseStorage(ABC):
         else:
             return f'{self.name}'
     
-    def write_data(self, data: tData) -> bool:
+    def write_data(self, data: GenericData) -> bool:
         try:
             self.data_handler.write(data)
             return True
@@ -154,7 +154,7 @@ class BaseStorage(ABC):
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
             return False
 
-    def read_data(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[tData | None, dict[str, Any]]:
+    def read_data(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[GenericData | None, dict[str, Any]]:
         '''
         Args:
             delta_version: version of the deltalake table to read, if None, read the latest version.

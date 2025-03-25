@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from bytewax.inputs import Source as BytewaxSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.sources.base_source import BaseSource
-    from pfeed.typing.core import tData
+    from pfeed.typing import GenericData
     
 from pfeed.enums.extract_type import ExtractType
 from pfeed.utils.utils import lambda_with_name
@@ -40,7 +40,7 @@ class Faucet:
             name_list.append(name)
         return '.'.join(name_list)
     
-    def open(self) -> BytewaxSource | BytewaxStream | tuple[tData | None, dict[str, Any]]:
+    def open(self) -> BytewaxSource | BytewaxStream | tuple[GenericData | None, dict[str, Any]]:
         if self._streaming:
             # TODO: streaming without bytewax
             source: BytewaxSource | BytewaxStream = self.extract_func(self.data_model)
@@ -49,7 +49,7 @@ class Faucet:
             if self.extract_type == ExtractType.retrieve:
                 data, metadata = self.extract_func(self.data_model)
             else:
-                data: tData | None = self.extract_func(self.data_model)
+                data: GenericData | None = self.extract_func(self.data_model)
                 # currently no metadata for other extract_types
                 metadata = {}
             return data, metadata

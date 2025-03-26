@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyarrow.parquet import ParquetFile
 import pandas as pd
 try:
     from deltalake import DeltaTable
@@ -35,8 +34,8 @@ class TabularIO(BaseIO):
         from deltalake import write_deltalake
         file_path_without_filename, filename = file_path.rsplit('/', 1)
         write_deltalake(file_path_without_filename, table, mode='overwrite', storage_options=self._storage_options)
+        # HACK: delta-rs doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
         if metadata:
-            # HACK: delta-rs doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
             empty_df_with_metadata = pd.DataFrame()
             table = pa.Table.from_pandas(empty_df_with_metadata, preserve_index=False)
             file_path = file_path_without_filename + '/.metadata/' + filename
@@ -49,6 +48,22 @@ class TabularIO(BaseIO):
             table = table.replace_schema_metadata(schema.metadata)
         with self._filesystem.open_output_stream(file_path) as f:
             pq.write_table(table, f, compression=self._compression)
+            
+    def _is_empty_parquet_file(self, file_path: str) -> bool:
+        return self._exists(file_path) and pq.read_metadata(file_path).num_rows == 0
+    
+    def _find_deltalake_metadata_file_paths(self, file_paths: list[str], delta_table_file_dirs: list[str]) -> list[str]:
+        metadata_file_paths: list[str] = []
+        for file_path in file_paths:
+            file_dir, filename = file_path.rsplit('/', 1)
+            metadata_file_path = file_dir + '/.metadata/' + filename
+            is_delta_table_metadata = file_dir in delta_table_file_dirs and self._is_empty_parquet_file(metadata_file_path)
+            is_empty_parquet_file_metadata = self._is_empty_parquet_file(file_path)
+            if is_delta_table_metadata:
+                metadata_file_paths.append(metadata_file_path)
+            elif is_empty_parquet_file_metadata:
+                metadata_file_paths.append(file_path)
+        return metadata_file_paths
     
     def write(self, data: pd.DataFrame, file_path: str):
         self._mkdir(file_path)
@@ -71,39 +86,42 @@ class TabularIO(BaseIO):
             file_paths = [file_paths]
             
         data = None
-        metadata = {}
         data_tool: ModuleType = get_data_tool(data_tool)
         if self._use_deltalake:
             file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths]
             delta_table_file_dirs = [file_dir for file_dir in file_dirs if DeltaTable.is_deltatable(file_dir, storage_options=self._storage_options)]
             # empty dfs were written as parquet files
-            empty_parquet_file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths if self._exists(file_path)]
+            empty_parquet_file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths if self._is_empty_parquet_file(file_path)]
             if delta_table_file_dirs:
                 data: GenericFrame = data_tool.read_delta(
                     delta_table_file_dirs,
                     storage_options=self._storage_options,
                     version=delta_version
                 )
+            metadata_file_paths = self._find_deltalake_metadata_file_paths(file_paths, delta_table_file_dirs)
+            metadata = self._read_pyarrow_table_metadata(metadata_file_paths)
             metadata['missing_file_paths'] = list(set(file_dirs) - set(delta_table_file_dirs) - set(empty_parquet_file_dirs))
         else:
-            if exists_file_paths := [file_path for file_path in file_paths if self._exists(file_path)]:
-                non_empty_file_paths = [
-                    file_path for file_path in exists_file_paths
-                    if ParquetFile(file_path).metadata.num_rows > 0
-                ]
+            exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path)]
+            non_empty_file_paths = [file_path for file_path in exists_file_paths if not self._is_empty_parquet_file(file_path)]
+            if non_empty_file_paths:
                 data: GenericFrame = data_tool.read_parquet(
                     non_empty_file_paths,
                     storage_options=self._storage_options,
                     filesystem=self._filesystem if not self.is_local_fs else None,
                 )
+            metadata = self._read_pyarrow_table_metadata(exists_file_paths)
             metadata['missing_file_paths'] = list(set(file_paths) - set(exists_file_paths))
-        # REVIEW: parquet files metadata not in use for now
-        # for file_path in exists_file_paths:
-        #     file_path = file_path.replace('s3://', '')
-        #     with self._filesystem.open_input_file(file_path) as f:
-        #         parquet_file = pq.ParquetFile(f)
-        #         parquet_file_metadata = parquet_file.schema.to_arrow_schema().metadata
-        #         parquet_file_metadata = {k.decode(): v.decode() for k, v in parquet_file_metadata.items()}
-        #         if parquet_file_metadata:
-        #             metadata[file_path] = parquet_file_metadata
         return data, metadata
+            
+    def _read_pyarrow_table_metadata(self, file_paths: list[str]) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        for file_path in file_paths:
+            file_path = file_path.replace('s3://', '')
+            with self._filesystem.open_input_file(file_path) as f:
+                parquet_file = pq.ParquetFile(f)
+                parquet_file_metadata = parquet_file.schema.to_arrow_schema().metadata
+                parquet_file_metadata = {k.decode(): v.decode() for k, v in parquet_file_metadata.items()}
+                if parquet_file_metadata:
+                    metadata[file_path] = parquet_file_metadata
+        return metadata

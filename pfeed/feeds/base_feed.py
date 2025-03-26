@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal
 from types import ModuleType
 if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
     from pfeed.flows.result import FlowResult
+    from pfeed.storages import DuckDBStorage, MinioStorage
     
 import os
 from abc import ABC, abstractmethod
@@ -103,6 +104,26 @@ class BaseFeed(ABC):
     @abstractmethod
     def _create_dataflows(self, *args, **kwargs) -> list[DataFlow]:
         pass
+
+    @overload
+    def create_storage(self,
+        storage: Literal['duckdb'],
+        data_model: BaseDataModel,
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        storage_options: dict | None=None,
+    ) -> DuckDBStorage:
+        ...
+        
+    @overload
+    def create_storage(self,
+        storage: Literal['minio'],
+        data_model: BaseDataModel,
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
+        storage_options: dict | None=None,
+    ) -> MinioStorage:
+        ...
 
     def create_storage(
         self,

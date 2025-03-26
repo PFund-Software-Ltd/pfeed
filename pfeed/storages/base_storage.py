@@ -161,7 +161,8 @@ class BaseStorage(ABC):
         '''
         try:
             data, metadata = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
+            metadata['from_storage'] = self.name
             return data, metadata
         except Exception:
             self._logger.exception(f'Failed to read data (data_tool={data_tool.name}, {delta_version=}) from {self.name}')
-            return None, {}
+            return None, {'from_storage': self.name}

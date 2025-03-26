@@ -291,10 +291,11 @@ class MarketFeed(TimeBasedFeed):
     
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
         from pfeed._etl import market as etl
-        from pfeed._etl.base import convert_to_user_df
+        from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
         from pfeed.utils.utils import lambda_with_name
 
         self.transform(
+            convert_to_pandas_df,
             lambda_with_name(
                 'resample_data_if_necessary', 
                 lambda df: etl.resample_data(df, target_resolution)

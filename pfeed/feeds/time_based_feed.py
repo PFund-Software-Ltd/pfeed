@@ -4,14 +4,16 @@ if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfeed.typing import GenericFrame
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
-    from pfeed.flows.dataflow import DataFlow
+    from pfeed.flows.dataflow import DataFlow, FlowResult
     from pfeed.typing import tSTORAGE, tDATA_LAYER
 
 import datetime
 from pprint import pformat
 
+import pandas as pd
 import narwhals as nw
 
+from pfeed.enums import DataStorage
 from pfeed.enums.extract_type import ExtractType
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 
@@ -20,7 +22,7 @@ __all__ = ["TimeBasedFeed"]
 
 
 class TimeBasedFeed(BaseFeed):
-    def _standardize_dates(self, start_date: str, end_date: str, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
+    def _standardize_dates(self, start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.
 
         Args:
@@ -43,14 +45,16 @@ class TimeBasedFeed(BaseFeed):
         from pfeed.utils.utils import rollback_date_range
         if start_date or rollback_period == 'max':
             if start_date:
-                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+                if isinstance(start_date, str):
+                    start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
             else:
                 if self.data_source.start_date:
                     start_date = self.data_source.start_date
                 else:
                     raise ValueError(f'{self.name} {rollback_period=} is not supported')
             if end_date:
-                end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+                if isinstance(end_date, str):
+                    end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
             else:
                 yesterday = datetime.datetime.now(tz=datetime.timezone.utc).date() - datetime.timedelta(days=1)
                 end_date = yesterday
@@ -68,8 +72,6 @@ class TimeBasedFeed(BaseFeed):
         end_date: datetime.date,
         extract_type: ExtractType,
     ) -> list[DataFlow]:
-        from pandas import date_range
-
         dataflows: list[DataFlow] = []
         def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
             data_model = partial_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
@@ -79,7 +81,7 @@ class TimeBasedFeed(BaseFeed):
         
         if dataflow_per_date:
             # one dataflow per date
-            for date in date_range(start_date, end_date).date:
+            for date in pd.date_range(start_date, end_date).date:
                 _add_dataflow(date, date)
         else:
             # one dataflow for the entire date range
@@ -200,7 +202,6 @@ class TimeBasedFeed(BaseFeed):
             feed_kwargs: kwargs specific to the feed, e.g. "resolution" for MarketFeed
         """
         '''
-        from pandas import date_range
         from pfeed.enums import DataAccessType
         
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
@@ -226,15 +227,19 @@ class TimeBasedFeed(BaseFeed):
                 include_metadata=True,
                 **kwargs
             )
-            
+
             if missing_dates := metadata['missing_dates']:
                 is_download_required = True
                 # fill gaps between missing dates 
                 start_missing_date = str(min(missing_dates))
                 end_missing_date = str(max(missing_dates))
-                missing_dates = date_range(start_missing_date, end_missing_date).date.tolist()
+                missing_dates = pd.date_range(start_missing_date, end_missing_date).date.tolist()
             
             if df_from_storage is not None:
+                if isinstance(df_from_storage, pd.DataFrame):
+                    # convert to pyarrow's dtypes to avoid narwhals error: Accessing `date` on the default pandas backend will return a Series of type `object`. 
+                    # This differs from polars API and will prevent `.dt` chaining. Please switch to the `pyarrow` backend
+                    df_from_storage = df_from_storage.convert_dtypes(dtype_backend="pyarrow")
                 df_from_storage: Frame = nw.from_native(df_from_storage)
                 if missing_dates:
                     # remove missing dates in df_from_storage to avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
@@ -286,21 +291,25 @@ class TimeBasedFeed(BaseFeed):
         completed_dataflows, failed_dataflows = self.run()
         dfs: dict[datetime.date, GenericFrame | None] = {}
         metadata = {'missing_dates': []}
+        num_dataflows = len(completed_dataflows) + len(failed_dataflows)
         for dataflow in completed_dataflows + failed_dataflows:
             data_model: TimeBasedDataModel = dataflow.data_model
-            result = dataflow.result
+            result: FlowResult = dataflow.result
             df: GenericFrame | None = result.data
             # e.g. retrieve(), yahoo_finance.market_feed.download() all use one dataflow for the entire date range
             if data_model.is_date_range():
-                assert len(completed_dataflows) + len(failed_dataflows) == 1, 'only one date-range dataflow is supported'
-                missing_file_paths: list[str] = result.metadata.get('missing_file_paths', [])
-                missing_dates = [fp.split('/')[-1].rsplit('_', 1)[-1].removesuffix(data_model.file_extension) for fp in missing_file_paths]
-                metadata['missing_dates'] = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
-                break
+                assert num_dataflows == 1, 'only one date-range dataflow is supported'
+                if 'missing_file_paths' in result.metadata:
+                    missing_file_paths: list[str] = result.metadata['missing_file_paths']
+                    missing_dates = [fp.split('/')[-1].rsplit('_', 1)[-1].removesuffix(data_model.file_extension) for fp in missing_file_paths]
+                    metadata['missing_dates'] = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
+                elif 'from_storage' in result.metadata and result.metadata['from_storage'] == DataStorage.DUCKDB:
+                    metadata['missing_dates'] = [date for date in data_model.dates if date not in result.metadata['dates']]
             else:
                 dfs[data_model.date] = df
+
         # Case: Multi-Dataflows (dataflow_per_date = True)
-        else:
+        if num_dataflows > 1:
             metadata['missing_dates'] = [date for date, df in dfs.items() if df is None]
             if dfs := [nw.from_native(df) for df in dfs.values() if df is not None]:
                 df: Frame = nw.concat(dfs)

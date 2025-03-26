@@ -9,16 +9,18 @@ duckdb storage structure:
 '''
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
+from typing_extensions import TypedDict
 if TYPE_CHECKING:
-    import pandas as pd
     from duckdb import DuckDBPyConnection
     from pfeed.typing import tDATA_TOOL, tDATA_LAYER
     from pfeed.typing import GenericFrame
     from pfeed.data_models.base_data_model import BaseDataModel
 
-import json
+import datetime
 from pathlib import Path
 
+import pandas as pd
+from pandas.api.types import is_datetime64_ns_dtype
 import duckdb
 
 from pfund import print_warning
@@ -30,6 +32,12 @@ from pfeed import get_config
 
 config = get_config()
 
+
+class DuckDBMetadata(TypedDict):
+    table_name: str  # product_name_resolution, e.g. aapl_usd_stk_1_day
+    dates: list[datetime.date]
+    updated_at: datetime.datetime
+    
 
 # EXTEND: only supports MarketDataModel for now
 class DuckDBStorage(BaseStorage):
@@ -57,9 +65,8 @@ class DuckDBStorage(BaseStorage):
         )
         self._schema_name = ''
         self._table_name = ''
-        self.conn = None
-        if self._in_memory:
-            self.conn: DuckDBPyConnection = self._create_connection()
+        self._metadata_table_name = 'metadata'
+        self.conn: DuckDBPyConnection | None = None
     
     def _create_connection(self) -> DuckDBPyConnection:
         if self._in_memory:
@@ -93,8 +100,7 @@ class DuckDBStorage(BaseStorage):
         instance.initialize_logger()
         instance._schema_name = instance._create_schema_name()
         instance._table_name = instance._create_table_name()
-        if not instance._in_memory:
-            instance.conn = instance._create_connection()
+        instance.conn = instance._create_connection()
         return instance
     
     @staticmethod
@@ -117,7 +123,6 @@ class DuckDBStorage(BaseStorage):
         if isinstance(self.data_model, MarketDataModel):
             return (
                 # '_' is SQL-safe, and is used as a separator in the table name
-                # NOTE: use str(resolution) instead of repr() to avoid case-sensitive table names, e.g. '1m' and '1M'
                 '_'.join([self.data_model.product.name.lower(), str(self.data_model.resolution).lower()])
                 .replace('-', '_')
                 .replace(':', '_')
@@ -132,7 +137,7 @@ class DuckDBStorage(BaseStorage):
         
     @property
     def _metadata_schema_table_name(self) -> str:
-        return f'{self._schema_name}.metadata'
+        return f'{self._schema_name}.{self._metadata_table_name}'
     
     @property
     def filename(self) -> str:
@@ -165,45 +170,10 @@ class DuckDBStorage(BaseStorage):
                 / f'data_domain={self.data_domain}'
             )
     
-    def _exists(self) -> bool:
-        return self.file_path.exists() and self._table_exists() and self._data_exists()
-
-    def _data_exists(self) -> bool:
-        '''Checks if data exists in the table for specified date(s).
-        Data is considered to exist if either:
-        1. The data is present in the table
-        2. A placeholder date exists in the metadata for that date
-        '''
-        if not self._table_exists():
-            return False
-        df: pd.DataFrame = self._get_table()
-        metadata = self._get_metadata(include_placeholder_dates=True)
-        placeholder_dates: list[str] = metadata['placeholder_dates']
-        dates_in_table: list[str] = df['date'].dt.strftime('%Y-%m-%d').unique().tolist() if not df.empty else []
-        duplicated_dates = set(dates_in_table) & set(placeholder_dates)
-        # This is a rare edge case, occurs when data for a date was missing
-        # during the initial download but becomes available in a subsequent download
-        if duplicated_dates:
-            self._remove_placeholder_dates(metadata, duplicated_dates)
-        total_dates = dates_in_table + placeholder_dates
-        # check if all dates in the data model are present in the table
-        return all(str(date) in total_dates for date in self.data_model.dates)
-
-    # REVIEW
-    def _remove_placeholder_dates(self, metadata: dict, dates_to_remove: list[str]):
-        print_warning(f"""
-            Removing placeholder dates: {dates_to_remove} - This should not occur. 
-            It may indicate a bug in pfeed, an issue with the data provider's API, 
-            or a network-related problem during data download.
-            It is generally safe to ignore this warning.
-        """)
-        metadata['placeholder_dates'] = [date for date in metadata['placeholder_dates'] if date not in dates_to_remove]
-        self._write_metadata(metadata)
-
     def _conn_exists(self) -> bool:
         return self.conn is not None
-    
-    def _table_exists(self, table_name: str | Literal['metadata']='') -> bool:
+
+    def table_exists(self, table_name: str | Literal['metadata']='') -> bool:
         table_name = table_name or self._table_name
         try:
             return self.conn.execute(f"""
@@ -214,104 +184,7 @@ class DuckDBStorage(BaseStorage):
             """).fetchone() is not None
         except Exception:
             return False
-    
-    def _adjust_metadata(self, metadata: dict | None) -> dict:
-        '''Converts is_placeholder to placeholder_dates since duckdb storage is not per date'''
-        metadata = metadata or {}
-        if 'is_placeholder' in metadata:
-            metadata['placeholder_dates'] = []
-            if metadata['is_placeholder'] == 'true':
-                placeholder_date = str(self.data_model.start_date)
-                metadata['placeholder_dates'] = [placeholder_date]
-            metadata.pop('is_placeholder', None)
-        return metadata
         
-    def _write_table(self, df: pd.DataFrame, metadata: dict | None=None):
-        from pandas.api.types import is_datetime64_ns_dtype
-        from pfeed.utils.dataframe import is_dataframe
-
-        if not is_dataframe(df):
-            raise ValueError(f'{type(df)=} is not a dataframe, cannot write to duckdb')
-        
-        self.conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self._schema_name}")
-        if not df.empty:
-            if 'date' not in df.columns:
-                raise ValueError("DataFrame must have a 'date' column.")
-            # duckdb doesn't support datetime64[ns]
-            if is_datetime64_ns_dtype(df['date'].dtype):
-                df['date'] = df['date'].astype('datetime64[us]')
-                print_warning(f"Converting 'date' column from datetime64[ns] to datetime64[us] for {self.name} {self.data_model} compatibility")
-            
-            # Create a table with the same structure as df but without data by using WHERE 1=0 trick
-            self.conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self._schema_table_name} AS 
-                SELECT * FROM df WHERE 1=0
-            """)
-            
-            # Delete any overlapping data within the date range before inserting
-            start_ts, end_ts = df['date'].iloc[0], df['date'].iloc[-1]
-            self.conn.execute(f"""
-                DELETE FROM {self._schema_table_name} 
-                WHERE date >= '{start_ts}' AND date <= '{end_ts}'
-            """)
-            
-            self.conn.execute(f"INSERT INTO {self._schema_table_name} SELECT * FROM df")
-        metadata = self._adjust_metadata(metadata)
-        if existing_metadata := self._get_metadata(include_placeholder_dates=True):
-            metadata['placeholder_dates'] += existing_metadata['placeholder_dates']
-            metadata['placeholder_dates'] = list(set(metadata['placeholder_dates']))
-        self._write_metadata(metadata)
-    
-    def _write_metadata(self, metadata: dict):
-        self.conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self._schema_name}")
-        self.conn.execute(f"""
-            CREATE TABLE IF NOT EXISTS {self._metadata_schema_table_name} (
-                table_name VARCHAR,
-                metadata_json JSON,
-                PRIMARY KEY (table_name)
-            )
-        """)
-        self.conn.execute(f"""
-            INSERT OR REPLACE INTO {self._metadata_schema_table_name} (table_name, metadata_json)
-            VALUES (?, ?)
-        """, [self._table_name, metadata])
-    
-    def _get_table(self) -> pd.DataFrame:
-        if not self._table_exists(table_name=self._table_name):
-            return None
-        start_date, end_date = self.data_model.start_date, self.data_model.end_date
-        conn = self.conn.execute(f"""
-            SELECT * FROM {self._schema_table_name} 
-            WHERE CAST(date AS DATE) 
-            BETWEEN CAST('{start_date}' AS DATE) AND CAST('{end_date}' AS DATE) 
-            ORDER BY date
-        """)
-        # REVIEW: this should return pl.LazyFrame ideally if duckdb supports it    
-        df: pd.DataFrame = conn.df()
-        return df
-    
-    def _get_metadata(self, include_placeholder_dates: bool=False) -> dict:
-        '''
-        Args:
-            include_placeholder_dates: whether to include key 'placeholder_dates' in the metadata
-            'placeholder_dates' is a key specific to duckdb storage, since duckdb storage is not per date
-            and cannot write an empty dataframe for a date that has no data
-        '''
-        if not self._table_exists(table_name='metadata'):
-            return {}
-        try:
-            result = self.conn.execute(f"""
-                SELECT metadata_json 
-                FROM {self._metadata_schema_table_name} 
-                WHERE table_name = '{self._table_name}'
-            """).fetchone()
-            metadata = json.loads(result[0]) if result else {}
-            if not include_placeholder_dates:
-                metadata.pop('placeholder_dates', None)
-            return metadata
-        except Exception:
-            return {}
-
     def show_tables(self, include_schema: bool=False) -> list[tuple[str, str] | str]:
         if include_schema:
             result: list[tuple[str, str]] = self.conn.execute("""
@@ -326,45 +199,130 @@ class DuckDBStorage(BaseStorage):
             """).fetchall()
         return [row[0] if not include_schema else (row[0], row[1]) for row in result]
     
-    def close(self):
-        if self._conn_exists():
-            self.conn.close()
+    def _write_df(self, df: pd.DataFrame):
+        if 'date' not in df.columns:
+            raise ValueError("DataFrame must have a 'date' column.")
+
+        # duckdb doesn't support datetime64[ns]
+        if is_datetime64_ns_dtype(df['date'].dtype):
+            df['date'] = df['date'].astype('datetime64[us]')
+            print_warning(f"Converting 'date' column from datetime64[ns] to datetime64[us] for {self.name} {self.data_model} compatibility")
+
+        self.conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self._schema_name}")
+        
+        # Create a table with the same structure as df but without data by using WHERE 1=0 trick
+        self.conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self._schema_table_name} AS 
+            SELECT * FROM df WHERE 1=0
+        """)
+        
+        # Delete any overlapping data within the date range before inserting
+        start_ts, end_ts = df['date'].iloc[0], df['date'].iloc[-1]
+        self.conn.execute(f"""
+            DELETE FROM {self._schema_table_name} 
+            WHERE date >= '{start_ts}' AND date <= '{end_ts}'
+        """)
+        
+        self.conn.execute(f"INSERT INTO {self._schema_table_name} SELECT * FROM df")
+    
+    def _read_df(self) -> pd.DataFrame | None:
+        if not self.table_exists(table_name=self._table_name):
+            return None
+        start_date, end_date = self.data_model.start_date, self.data_model.end_date
+        conn = self.conn.execute(f"""
+            SELECT * FROM {self._schema_table_name} 
+            WHERE CAST(date AS DATE) 
+            BETWEEN CAST('{start_date}' AS DATE) AND CAST('{end_date}' AS DATE) 
+            ORDER BY date
+        """)
+        df: pd.DataFrame = conn.df()
+        return df
+
+    def _write_metadata(self, metadata: DuckDBMetadata) -> None:
+        self.conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self._schema_name}")
+        self.conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self._metadata_schema_table_name} (
+                table_name VARCHAR PRIMARY KEY,
+                dates DATE[],
+                updated_at TIMESTAMPTZ DEFAULT now()
+            )
+        """)
+        self.conn.execute(f"""
+            INSERT OR REPLACE INTO {self._metadata_schema_table_name} (table_name, dates) VALUES (?, ?)
+        """, (
+            metadata['table_name'],
+            metadata['dates'],
+        ))
+    
+    def _read_metadata(self) -> DuckDBMetadata | dict:
+        if not self.table_exists(table_name=self._metadata_table_name):
+            return {}
+        try:
+            conn = self.conn.execute(f"""
+                SELECT * FROM {self._metadata_schema_table_name}
+                WHERE table_name = '{self._table_name}'
+            """)
+            metadata: DuckDBMetadata = conn.df().to_dict(orient='records')
+            if not metadata:
+                return {}
+            else:
+                metadata = metadata[0]
+                metadata['dates'] = [date.item().date() for date in metadata['dates']]
+                return metadata
+        except Exception:
+            self._logger.exception(f'Failed to read metadata from {self.name} using table_name={self._table_name}')
+            return {}
 
     def write_data(self, data: GenericFrame) -> bool:
         from pfeed._etl.base import convert_to_pandas_df
         try:
-            if not self._conn_exists():
-                self.conn = self._create_connection()
-            data: pd.DataFrame = convert_to_pandas_df(data)
             with self:
-                metadata = {}
-                data_chunks_per_date = {} if data.empty else {date: group for date, group in data.groupby(data['date'].dt.date)}
-                for date in self.data_model.dates:
-                    if date not in data_chunks_per_date:
-                        metadata['is_placeholder'] = 'true'
-                    else:
-                        metadata['is_placeholder'] = 'false'
-                self._write_table(data, metadata=metadata)
+                df: pd.DataFrame = convert_to_pandas_df(data)
+                if df.empty:
+                    self._logger.warning(f'Empty DataFrame for {self.name} {self.data_model}')
+                    return False
+                self._write_df(df)
+                current_metadata = self._read_metadata()
+                current_dates_in_storage = current_metadata.get('dates', [])
+                total_dates = list(set(self.data_model.dates + current_dates_in_storage))
+                metadata: DuckDBMetadata = {
+                    'table_name': self._table_name,
+                    'dates': total_dates,
+                }
+                self._write_metadata(metadata)
                 return True
         except Exception:
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
             return False
-        
-    def read_data(self, data_tool: DataTool | tDATA_TOOL='polars') -> GenericFrame | None:
+    
+    def read_data(self, data_tool: DataTool | tDATA_TOOL='polars') -> tuple[GenericFrame | None, DuckDBMetadata]:
         from pfeed._etl.base import convert_to_user_df
         try:
-            if not self._conn_exists():
-                self.conn = self._create_connection()
-            if not self._exists():
-                return None
             with self:
-                df: pd.DataFrame = self._get_table()
+                df: pd.DataFrame | None = self._read_df()
+                metadata = self._read_metadata()
+                metadata['from_storage'] = self.name
                 data_tool = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
-                df: GenericFrame = convert_to_user_df(df, data_tool)
-                return df
+                if df is not None:
+                    df: GenericFrame = convert_to_user_df(df, data_tool)
+                return df, metadata
         except Exception:
-            self._logger.exception(f'Failed to read data (data_tool={data_tool.name}) from {self.name}')
-            return None
+            self._logger.exception(f'Failed to read data (data_tool={data_tool.name}) (table_name={self._table_name}) from {self.name}')
+            return None, {'from_storage': self.name}
+    
+    def start_ui(self, port: int=4213, no_browser: bool=False):
+        self.conn.execute(f"SET ui_local_port={port}")
+        if not no_browser:
+            self.conn.execute("CALL start_ui()")
+        else:
+            self.conn.execute("CALL start_ui_server()")
+        
+    def stop_ui(self):
+        self.conn.execute("CALL stop_ui_server()")
+    
+    def close(self):
+        if self._conn_exists():
+            self.conn.close()
     
     def __enter__(self):
         return self  # Setup - returns the object to be used in 'with'
@@ -374,5 +332,4 @@ class DuckDBStorage(BaseStorage):
     
     def __del__(self):
         """Ensure connection is closed when object is garbage collected"""
-        if self._conn_exists():
-            self.close()
+        self.close()

@@ -8,7 +8,7 @@ from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
 
 class MarketDataHandler(TimeBasedDataHandler):
-    def _validate_schema(self, data: pd.DataFrame) -> pd.DataFrame:
+    def _validate_schema(self, df: pd.DataFrame) -> pd.DataFrame:
         from pfeed.schemas import MarketDataSchema, TickDataSchema, BarDataSchema
         resolution: Resolution = self._data_model.resolution
         if resolution.is_quote():
@@ -19,5 +19,7 @@ class MarketDataHandler(TimeBasedDataHandler):
             schema = BarDataSchema
         else:
             schema = MarketDataSchema
-        return schema.validate(data)
+        # reset index to avoid pandera.errors.SchemaError: DataFrameSchema failed series or dataframe validator 0: <Check validate_index_reset>
+        df = df.reset_index(drop=True)
+        return schema.validate(df)
  

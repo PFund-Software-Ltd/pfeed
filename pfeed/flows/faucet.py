@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Literal, Any
+from typing import Callable, TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from bytewax.dataflow import Stream as BytewaxStream
     from bytewax.inputs import Source as BytewaxSource

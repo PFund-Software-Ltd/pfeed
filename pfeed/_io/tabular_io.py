@@ -44,6 +44,7 @@ class TabularIO(BaseIO):
     def _write_pyarrow_table(self, table: pa.Table, file_path: str, metadata: dict | None=None):
         file_path = file_path.replace('s3://', '')
         if metadata:
+            metadata = {str(k).encode(): str(v).encode() for k, v in metadata.items()}
             schema = table.schema.with_metadata(metadata)
             table = table.replace_schema_metadata(schema.metadata)
         with self._filesystem.open_output_stream(file_path) as f:
@@ -65,27 +66,24 @@ class TabularIO(BaseIO):
                 metadata_file_paths.append(file_path)
         return metadata_file_paths
     
-    def write(self, data: pd.DataFrame, file_path: str):
+    def write(self, df: pd.DataFrame, file_path: str, metadata: dict | None=None):
         self._mkdir(file_path)
-        table = pa.Table.from_pandas(data, preserve_index=False)
+        table = pa.Table.from_pandas(df, preserve_index=False)
         # NOTE: delta lake doesn't support writing empty df, so we need to write a parquet file for empty df
-        if self._use_deltalake and not data.empty:
-            self._write_deltalake(table, file_path)
+        if self._use_deltalake and not df.empty:
+            self._write_deltalake(table, file_path, metadata=metadata)
         else:
-            self._write_pyarrow_table(table, file_path)
+            self._write_pyarrow_table(table, file_path, metadata=metadata)
 
     def read(
         self,
-        file_paths: str | list[str],
+        file_paths: list[str],
         data_tool: tDATA_TOOL='polars',
         delta_version: int | None=None,
     ) -> tuple[GenericFrame | None, dict[str, Any]]:
         from pfeed._etl.base import get_data_tool
         
-        if isinstance(file_paths, str):
-            file_paths = [file_paths]
-            
-        data = None
+        df: GenericFrame | None = None
         data_tool: ModuleType = get_data_tool(data_tool)
         if self._use_deltalake:
             file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths]
@@ -93,7 +91,7 @@ class TabularIO(BaseIO):
             # empty dfs were written as parquet files
             empty_parquet_file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths if self._is_empty_parquet_file(file_path)]
             if delta_table_file_dirs:
-                data: GenericFrame = data_tool.read_delta(
+                df: GenericFrame = data_tool.read_delta(
                     delta_table_file_dirs,
                     storage_options=self._storage_options,
                     version=delta_version
@@ -105,14 +103,14 @@ class TabularIO(BaseIO):
             exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path)]
             non_empty_file_paths = [file_path for file_path in exists_file_paths if not self._is_empty_parquet_file(file_path)]
             if non_empty_file_paths:
-                data: GenericFrame = data_tool.read_parquet(
+                df: GenericFrame = data_tool.read_parquet(
                     non_empty_file_paths,
                     storage_options=self._storage_options,
                     filesystem=self._filesystem if not self.is_local_fs else None,
                 )
             metadata = self._read_pyarrow_table_metadata(exists_file_paths)
             metadata['missing_file_paths'] = list(set(file_paths) - set(exists_file_paths))
-        return data, metadata
+        return df, metadata
             
     def _read_pyarrow_table_metadata(self, file_paths: list[str]) -> dict[str, Any]:
         metadata: dict[str, Any] = {}

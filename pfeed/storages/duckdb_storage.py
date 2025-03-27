@@ -24,6 +24,7 @@ from pandas.api.types import is_datetime64_ns_dtype
 import duckdb
 
 from pfund import print_warning
+from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
 from pfeed.enums import DataTool
@@ -140,26 +141,7 @@ class DuckDBStorage(BaseStorage):
         return f'{self._schema_name}.{self._metadata_table_name}'
     
     @property
-    def filename(self) -> str:
-        name = self.data_model.data_source.name.lower()
-        if self.data_model.is_data_origin_effective():
-            name = self.data_model.data_origin.lower()
-        return name + '.duckdb'
-    
-    @property
-    def file_path(self) -> Path | str | None:
-        return None if self._in_memory else super().file_path
-
-    @property
-    def storage_path(self) -> Path | None:
-        return (
-            Path(f'env={self.data_model.env.value}')
-            / f'data_source={self.data_model.data_source.name}'
-            / f'data_origin={self.data_model.data_origin}'
-        )
-    
-    @property
-    def data_path(self) -> Path | str | None:
+    def data_path(self) -> Path | None:
         if self._in_memory:
             return None
         else:
@@ -169,6 +151,26 @@ class DuckDBStorage(BaseStorage):
                 / f'data_layer={self.data_layer.name.lower()}'
                 / f'data_domain={self.data_domain}'
             )
+    
+    # NOTE: only duckdb has filename, file_path and storage_path; for other storages, they are handled by data handler
+    @property
+    def filename(self) -> str:
+        name = self.data_model.data_source.name.lower()
+        if self.data_model.is_data_origin_effective():
+            name = self.data_model.data_origin.lower()
+        return name + '.duckdb'
+    
+    @property
+    def file_path(self) -> Path | str | None:
+        return self.data_path / self.storage_path / self.filename if not self._in_memory else None
+    
+    @property
+    def storage_path(self) -> Path | None:
+        return (
+            Path(f'env={self.data_model.env.value}')
+            / f'data_source={self.data_model.data_source.name}'
+            / f'data_origin={self.data_model.data_origin}'
+        )
     
     def _conn_exists(self) -> bool:
         return self.conn is not None
@@ -268,6 +270,9 @@ class DuckDBStorage(BaseStorage):
             else:
                 metadata = metadata[0]
                 metadata['dates'] = [date.item().date() for date in metadata['dates']]
+                if isinstance(self.data_model, TimeBasedDataModel):
+                    existing_dates_in_duckdb = metadata['dates']
+                    metadata['missing_dates'] = [date for date in self.data_model.dates if date not in existing_dates_in_duckdb]
                 return metadata
         except Exception:
             self._logger.exception(f'Failed to read metadata from {self.name} using table_name={self._table_name}')

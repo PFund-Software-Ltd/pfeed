@@ -26,7 +26,7 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
-from pfeed.enums import DataTool, DataStorage, ExtractType
+from pfeed.enums import DataTool, DataStorage, LocalDataStorage, DataLayer, ExtractType
 
 
 __all__ = ["BaseFeed"]
@@ -109,8 +109,8 @@ class BaseFeed(ABC):
     def create_storage(self,
         storage: Literal['duckdb'],
         data_model: BaseDataModel,
-        data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
+        data_layer: tDATA_LAYER,
+        data_domain: str,
         storage_options: dict | None=None,
     ) -> DuckDBStorage:
         ...
@@ -119,8 +119,8 @@ class BaseFeed(ABC):
     def create_storage(self,
         storage: Literal['minio'],
         data_model: BaseDataModel,
-        data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
+        data_layer: tDATA_LAYER,
+        data_domain: str,
         storage_options: dict | None=None,
     ) -> MinioStorage:
         ...
@@ -129,8 +129,8 @@ class BaseFeed(ABC):
         self,
         storage: tSTORAGE,
         data_model: BaseDataModel,
-        data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
+        data_layer: tDATA_LAYER,
+        data_domain: str,
         storage_options: dict | None=None,
     ) -> BaseStorage:
         storage_options = storage_options or self._storage_options.get(storage, {})
@@ -138,7 +138,7 @@ class BaseFeed(ABC):
         return Storage.from_data_model(
             data_model,
             data_layer,
-            data_domain=data_domain or self.DATA_DOMAIN,
+            data_domain,
             use_deltalake=self._use_deltalake,
             **storage_options,
         )
@@ -202,46 +202,48 @@ class BaseFeed(ABC):
     def _stream_impl(
         self, 
         data_model: BaseDataModel, 
-        bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
+        bytewax_source: BytewaxSource | BytewaxStream | str | None,
     ) -> GenericData | BytewaxSource | BytewaxStream:
         raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
 
     def _retrieve_impl(
         self,
         data_model: BaseDataModel, 
-        data_layer: tDATA_LAYER, 
         data_domain: str, 
-        from_storage: tSTORAGE | None=None,
-        storage_options: dict | None=None,
+        data_layer: tDATA_LAYER | None,
+        from_storage: tSTORAGE | None,
+        storage_options: dict | None,
     ) -> tuple[GenericData | None, dict[str, Any]]:
         from minio import ServerError as MinioServerError
-        search_storages = ['cache', 'local', 'minio', 'duckdb'] if from_storage is None else [from_storage]
+        search_storages = [_storage for _storage in LocalDataStorage.__members__] if from_storage is None else [from_storage]
+        search_data_layers = [_data_layer for _data_layer in DataLayer.__members__][::-1] if data_layer is None else [data_layer]
         data: GenericData | None = None
+        metadata: dict[str, Any] = {}
         storage_options = storage_options or {}
         if storage_options:
             assert from_storage is not None, 'from_storage is required when storage_options is provided'
         for search_storage in search_storages:
-            self.logger.debug(f'searching for data {data_model} in {search_storage.upper()}...')
             search_storage_options = storage_options or self._storage_options.get(search_storage, {})
             Storage = DataStorage[search_storage.upper()].storage_class
-            try:
-                storage: BaseStorage = Storage.from_data_model(
-                    data_model,
-                    data_layer, 
-                    data_domain,
-                    use_deltalake=self._use_deltalake,
-                    **search_storage_options,
-                )
-                data, metadata = storage.read_data(data_tool=self.data_tool.name)
-                if data is not None:
-                    self.logger.debug(f'found data {data_model} in {search_storage.upper()}')
-                    break
-                else:
-                    self.logger.debug(f'No {data_model} data found in {search_storage.upper()}')
-            except Exception as e:  # e.g. minio's ServerError if server is not running
-                if not isinstance(e, MinioServerError):
-                    self.logger.exception(f'Error in retrieving data {data_model} from {search_storage.upper()}:')
-                continue
+            for search_data_layer in search_data_layers:
+                self.logger.debug(f'searching for data {data_model} in {search_storage} (data_layer={search_data_layer})...')
+                try:
+                    storage: BaseStorage = Storage.from_data_model(
+                        data_model,
+                        search_data_layer, 
+                        data_domain,
+                        use_deltalake=self._use_deltalake,
+                        **search_storage_options,
+                    )
+                    data, metadata = storage.read_data(data_tool=self.data_tool.name)
+                    if data is not None:
+                        break
+                except Exception as e:  # e.g. minio's ServerError if server is not running
+                    if not isinstance(e, MinioServerError):
+                        self.logger.exception(f'Error in retrieving data {data_model} from {search_storage}:')
+            if data is not None:
+                self.logger.debug(f'found data {data_model} in {search_storage} (data_layer={search_data_layer})')
+                break
         return data, metadata
 
     # TODO
@@ -277,9 +279,9 @@ class BaseFeed(ABC):
     
     def load(
         self, 
-        to_storage: tSTORAGE='local',   
-        data_layer: tDATA_LAYER='curated',
-        data_domain: str='',
+        to_storage: tSTORAGE,
+        data_layer: tDATA_LAYER,
+        data_domain: str,
         storage_options: dict | None=None,
         bytewax_sink: BytewaxSink | str | None=None,
     ) -> BaseFeed:
@@ -297,9 +299,9 @@ class BaseFeed(ABC):
         # e.g. minio client is using socket, which is not picklable
         def _create_storage(data_model: BaseDataModel):
             return Storage.from_data_model(
-                data_model,
-                data_layer,
-                data_domain or self.DATA_DOMAIN,
+                data_model=data_model,
+                data_layer=data_layer,
+                data_domain=data_domain,
                 use_deltalake=self._use_deltalake,
                 **storage_options,
             )

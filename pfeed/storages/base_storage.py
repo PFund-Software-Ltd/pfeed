@@ -83,6 +83,7 @@ class BaseStorage(ABC):
     
     def initialize_data_handler(self):
         data_handler_configs = {
+            'data_layer': self.data_layer,
             'data_path': str(self.data_path),
             'filesystem': self.get_filesystem(),
             'storage_options': self.get_storage_options(),
@@ -107,29 +108,6 @@ class BaseStorage(ABC):
             raise ValueError("No data handler has been initialized for this storage instance")
         return self._data_handler
 
-    @property
-    def filename(self) -> str | None:
-        return None if self.use_deltalake else self.data_model.filename
-    
-    @property
-    def file_path(self) -> Path | str | None:
-        if isinstance(self.data_path, Path):
-            file_path = self.data_path / self.storage_path
-            if not self.use_deltalake:
-                file_path /= self.filename
-            return file_path
-        elif isinstance(self.data_path, str):
-            file_path = self.data_path + '/' + str(self.storage_path)
-            if not self.use_deltalake:
-                file_path += '/' + self.filename
-            return file_path
-        else:
-            raise ValueError(f'{type(self.data_path)} is not supported')
-
-    @property
-    def storage_path(self) -> Path:
-        return self.data_model.storage_path
-    
     @property
     def data_path(self) -> Path:
         from pfeed.config import get_config

@@ -93,7 +93,7 @@ class TimeBasedFeed(BaseFeed):
         partial_data_model: Callable,
         start_date: datetime.date,
         end_date: datetime.date,
-        data_layer: tDATA_LAYER,
+        data_layer: tDATA_LAYER | None,
         data_domain: str,
         from_storage: tSTORAGE | None,
         storage_options: dict | None,
@@ -103,9 +103,9 @@ class TimeBasedFeed(BaseFeed):
     ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | TimeBasedFeed:
         self._create_dataflows(
             lambda _data_model: self._retrieve_impl(
-                _data_model,
-                data_layer,
-                data_domain,
+                data_model=_data_model,
+                data_layer=data_layer,
+                data_domain=data_domain,
                 from_storage=from_storage,
                 storage_options=storage_options,
             ),
@@ -129,7 +129,7 @@ class TimeBasedFeed(BaseFeed):
         end_date: datetime.date,
         data_layer: tDATA_LAYER,
         data_domain: str,
-        to_storage: tSTORAGE | None,
+        to_storage: tSTORAGE,
         storage_options: dict | None,
         dataflow_per_date: bool, 
         include_metadata: bool,
@@ -147,13 +147,13 @@ class TimeBasedFeed(BaseFeed):
             add_default_transformations()
         if not self._pipeline_mode:
             self.load(
-                to_storage=to_storage,
-                data_layer=data_layer,
-                data_domain=data_domain,
+                to_storage=to_storage, 
+                data_layer=data_layer, 
+                data_domain=data_domain, 
                 storage_options=storage_options,
             )
             df, metadata = self._eager_run(include_metadata=True)
-            if missing_dates := metadata['missing_dates']:
+            if missing_dates := metadata.get('missing_dates', []):
                 self.logger.warning(
                     f'[INCOMPLETE] Download, missing dates:\n'
                     f'{pformat([str(date) for date in missing_dates])}'
@@ -164,19 +164,19 @@ class TimeBasedFeed(BaseFeed):
     
     def _get_historical_data_impl(
         self,
-        product: str='',
-        symbol: str='',
-        rollback_period: str | Literal['ytd', 'max']="1w",
-        start_date: str='',
-        end_date: str='',
-        data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
-        from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE='cache',
-        storage_options: dict | None=None,
-        force_download: bool=False,
-        product_specs: dict | None=None,
+        product: str,
+        symbol: str,
+        rollback_period: str | Literal['ytd', 'max'],
+        start_date: str,
+        end_date: str,
+        data_origin: str,
+        data_layer: tDATA_LAYER | None,
+        data_domain: str,
+        from_storage: tSTORAGE | None,
+        to_storage: tSTORAGE,
+        storage_options: dict | None,
+        force_download: bool,
+        product_specs: dict | None,
         **feed_kwargs
     ) -> GenericFrame | None:
         '''
@@ -247,7 +247,7 @@ class TimeBasedFeed(BaseFeed):
         else:
             start_missing_date = start_date
             end_missing_date = end_date
-
+        
         if is_download_required:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
             if self.data_source.access_type == DataAccessType.PAID_BY_USAGE:
@@ -261,7 +261,7 @@ class TimeBasedFeed(BaseFeed):
                 start_date=start_missing_date,
                 end_date=end_missing_date,
                 data_origin=data_origin,
-                data_layer=data_layer,
+                data_layer='curated',
                 data_domain=data_domain,
                 to_storage=to_storage,
                 storage_options=storage_options,
@@ -288,33 +288,33 @@ class TimeBasedFeed(BaseFeed):
     def _eager_run(self, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]]:
         '''Runs dataflows and handles the results.'''
         assert not self._pipeline_mode, 'eager_run() is not supported in pipeline mode'
+        
         completed_dataflows, failed_dataflows = self.run()
-        dfs: dict[datetime.date, GenericFrame | None] = {}
+
+        dfs: list[GenericFrame | None] = []
         metadata = {'missing_dates': []}
-        num_dataflows = len(completed_dataflows) + len(failed_dataflows)
+        
         for dataflow in completed_dataflows + failed_dataflows:
             data_model: TimeBasedDataModel = dataflow.data_model
             result: FlowResult = dataflow.result
-            df: GenericFrame | None = result.data
-            # e.g. retrieve(), yahoo_finance.market_feed.download() all use one dataflow for the entire date range
-            if data_model.is_date_range():
-                assert num_dataflows == 1, 'only one date-range dataflow is supported'
-                if 'missing_file_paths' in result.metadata:
-                    missing_file_paths: list[str] = result.metadata['missing_file_paths']
-                    missing_dates = [fp.split('/')[-1].rsplit('_', 1)[-1].removesuffix(data_model.file_extension) for fp in missing_file_paths]
-                    metadata['missing_dates'] = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
-                elif 'from_storage' in result.metadata and result.metadata['from_storage'] == DataStorage.DUCKDB:
-                    metadata['missing_dates'] = [date for date in data_model.dates if date not in result.metadata['dates']]
+            _df: GenericFrame | None = result.data
+            
+            # REVIEW: currently metadata's handling is messy, consider split FlowResult into RetrieveResult and DownloadResult etc.
+            # and define their own returned metadata
+            
+            # Handle missing dates
+            if 'missing_dates' in result.metadata:
+                metadata['missing_dates'].extend(result.metadata['missing_dates'])
+            elif _df is None:
+                metadata['missing_dates'].extend(data_model.dates)
             else:
-                dfs[data_model.date] = df
+                dfs.append(_df)
 
-        # Case: Multi-Dataflows (dataflow_per_date = True)
-        if num_dataflows > 1:
-            metadata['missing_dates'] = [date for date, df in dfs.items() if df is None]
-            if dfs := [nw.from_native(df) for df in dfs.values() if df is not None]:
-                df: Frame = nw.concat(dfs)
-                df: GenericFrame = nw.to_native(df)
-            else:
-                df = None
+        dfs: list[Frame] = [nw.from_native(df) for df in dfs]
+        if dfs:
+            df: Frame = nw.concat(dfs)
+            df: GenericFrame = nw.to_native(df)
+        else:
+            df = None
 
         return df if not include_metadata else (df, metadata)

@@ -27,8 +27,6 @@ class BaseDataModel(BaseModel, ABC):
 
     env: Environment
     data_source: BaseSource
-    filename: str = ''
-    storage_path: Path | None = None
     file_extension: str = ''
     compression: str = ''
     data_origin: str = ''
@@ -37,8 +35,6 @@ class BaseDataModel(BaseModel, ABC):
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
             self.data_origin = self.data_source.name.value
-        self.filename = self._create_filename()
-        self.storage_path = self._create_storage_path()
     
     def is_data_origin_effective(self) -> bool:
         '''
@@ -60,11 +56,11 @@ class BaseDataModel(BaseModel, ABC):
             return f'{self.data_source.name.value}'
 
     @abstractmethod
-    def _create_filename(self, *args, **kwargs) -> str:
+    def create_filename(self, *args, **kwargs) -> str:
         pass
     
     @abstractmethod
-    def _create_storage_path(self, *args, **kwargs) -> Path:
+    def create_storage_path(self, *args, **kwargs) -> Path:
         pass
 
     @abstractmethod

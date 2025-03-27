@@ -24,7 +24,7 @@ class FlowResult:
     def metadata(self) -> dict[str, Any]:
         return self._metadata
         
-    def set_data(self, data: GenericData):
+    def set_data(self, data: GenericData | None):
         self._data = data
     
     def set_metadata(self, metadata: dict[str, Any]):

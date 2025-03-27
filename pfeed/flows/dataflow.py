@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.faucet import Faucet
+    from pfeed.data_models.base_data_model import BaseDataModel
 
 import logging
 from enum import StrEnum
@@ -67,7 +68,7 @@ class DataFlow:
         return self._faucet.extract_type
     
     @property
-    def data_model(self) -> str:
+    def data_model(self) -> BaseDataModel:
         return self._faucet.data_model
     
     def __str__(self):
@@ -152,20 +153,44 @@ class DataFlow:
                     pass
         return data
     
+    def _update_data_model_for_storage_after_transform(self, data: GenericData | BytewaxStream) -> BaseDataModel:
+        """
+        Updates the data model in dataflow for storage after transformations.
+
+        For market data model, this method checks if the data has been resampled to a different resolution.
+        If so, it updates the resolution of the data model accordingly. 
+        Note that `self.data_model` represents the data model for the data created by the faucet for the dataflow, 
+        NOT the storage data. 
+        For example, data might be downloaded as tick data but stored as 1-minute data,
+        which means the data model for the storage data is different from the data model for the dataflow.
+        """
+        from pfund.datas.resolution import Resolution
+        from pfeed.data_models.market_data_model import MarketDataModel
+
+        if isinstance(self.data_model, MarketDataModel):
+            data_resolution = Resolution(data['resolution'][0])
+            if data_resolution != self.data_model.resolution:
+                storage_data_model = self.data_model.model_copy(deep=False)
+                storage_data_model.update_resolution(data_resolution)
+        else:
+            storage_data_model = self.data_model
+        return storage_data_model
+    
     def _load(self, data: GenericData | BytewaxStream, flow_type: FlowType=FlowType.native):
         if self._storage_creator is None:
             if self.extract_type != ExtractType.retrieve:
                 raise Exception(f'{self.name} has no destination storage')
             else:
                 return
-        storage = self._storage_creator(self.data_model)
+        storage_data_model = self._update_data_model_for_storage_after_transform(data)
+        storage: BaseStorage = self._storage_creator(storage_data_model)
         if not self.is_streaming():
             load = task(storage.write_data) if flow_type == FlowType.prefect else storage.write_data
             success = load(data)
             if not success:
-                self.logger.warning(f'failed to load {self.data_model} data to {storage.name}')
+                self.logger.warning(f'failed to load {storage_data_model} data to {storage.name}')
             else:
-                self.logger.info(f'loaded {self.data_model} data to {storage.name}')
+                self.logger.info(f'loaded {storage_data_model} data to {storage.name}')
         else:
             stream = data
             if flow_type == FlowType.bytewax:

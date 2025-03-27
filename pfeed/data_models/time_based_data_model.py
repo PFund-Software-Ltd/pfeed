@@ -1,6 +1,4 @@
 import datetime
-from abc import abstractmethod
-from pathlib import Path
 
 from pydantic import field_validator, Field, ValidationInfo
 
@@ -33,9 +31,6 @@ class TimeBasedDataModel(BaseDataModel):
 
     def update_start_date(self, start_date: datetime.date) -> None:
         self.start_date = start_date
-        # update filename and storage path to reflect the new start date
-        self.filename = self._create_filename()
-        self.storage_path = self._create_storage_path()
         
     def update_end_date(self, end_date: datetime.date) -> None:
         self.end_date = end_date
@@ -45,18 +40,3 @@ class TimeBasedDataModel(BaseDataModel):
             return ':'.join([super().__str__(), str(self.start_date)])
         else:
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
-
-    def _create_filename(self, date: datetime.date | None=None) -> str:
-        return self._create_filename_per_date(date=date or self.start_date)
-
-    def _create_storage_path(self, date: datetime.date | None=None) -> Path:
-        return self._create_storage_path_per_date(date=date or self.start_date)
-    
-    @abstractmethod
-    def _create_filename_per_date(self, date: datetime.date) -> str:
-        pass
-    
-    @abstractmethod
-    def _create_storage_path_per_date(self, date: datetime.date) -> Path:
-        pass
-    

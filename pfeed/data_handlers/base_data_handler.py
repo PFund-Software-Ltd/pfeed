@@ -4,13 +4,15 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericData
     from pfeed.typing import tDATA_TOOL
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.enums import DataLayer
 
 from abc import ABC, abstractmethod
 
 
 class BaseDataHandler(ABC):
-    def __init__(self, data_model: BaseDataModel, data_path: str):
+    def __init__(self, data_model: BaseDataModel, data_layer: DataLayer, data_path: str):
         self._data_model = data_model
+        self._data_layer = data_layer
         self._data_path = data_path
 
     @abstractmethod
@@ -25,6 +27,6 @@ class BaseDataHandler(ABC):
     def _validate_schema(self, data: GenericData) -> GenericData:
         pass
 
-    def _create_file_paths(self, data_model: BaseDataModel | None=None) -> str:
-        data_model = data_model or self._data_model
-        return self._data_path + '/' + str(data_model.storage_path) + '/' + data_model.filename
+    @abstractmethod
+    def _create_file_paths(self, data_model: BaseDataModel | None=None) -> list[str]:
+        pass

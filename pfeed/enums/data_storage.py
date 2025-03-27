@@ -5,12 +5,19 @@ if TYPE_CHECKING:
 
 from enum import StrEnum
 
-    
-class DataStorage(StrEnum):
+
+class LocalDataStorage(StrEnum):
     CACHE = 'CACHE'
     LOCAL = 'LOCAL'
     MINIO = 'MINIO'
     DUCKDB = 'DUCKDB'
+
+    
+class DataStorage(StrEnum):
+    CACHE = LocalDataStorage.CACHE
+    LOCAL = LocalDataStorage.LOCAL
+    MINIO = LocalDataStorage.MINIO
+    DUCKDB = LocalDataStorage.DUCKDB
     # TODO:
     # HUGGINGFACE = HF = 'HUGGINGFACE'
     # S3 = 'S3'

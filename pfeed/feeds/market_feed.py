@@ -64,9 +64,9 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_origin: str='',
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='',
+        data_origin: str='',
         to_storage: tSTORAGE='local',
         storage_options: dict | None=None,
         auto_transform: bool=True,
@@ -127,16 +127,16 @@ class MarketFeed(TimeBasedFeed):
         data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Downloading historical {unit_resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
-            partial(self.create_data_model, product, data_resolution, data_origin=data_origin),
-            start_date, 
-            end_date,
-            data_layer,
-            data_domain,
-            to_storage,
-            storage_options,
-            dataflow_per_date, 
-            include_metadata,
-            lambda: self._add_default_transformations_to_download(data_resolution, resolution, product) if auto_transform else None,
+            partial_data_model=partial(self.create_data_model, product, data_resolution, data_origin=data_origin),
+            start_date=start_date, 
+            end_date=end_date,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            to_storage=to_storage,
+            storage_options=storage_options,
+            add_default_transformations=lambda: self._add_default_transformations_to_download(data_resolution, resolution, product) if auto_transform else None,
+            dataflow_per_date=dataflow_per_date, 
+            include_metadata=include_metadata,
         )
     
     def _add_default_transformations_to_download(
@@ -180,9 +180,9 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str="1w",
         start_date: str='',
         end_date: str='',
-        data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
+        data_origin: str='',
         from_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         auto_transform: bool=True,
@@ -241,25 +241,25 @@ class MarketFeed(TimeBasedFeed):
         data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Retrieving {self.name} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
-            partial(self.create_data_model, product, unit_resolution, data_origin=data_origin),
-            start_date,
-            end_date,
-            data_layer,
-            data_domain,
-            from_storage,
-            storage_options,
-            lambda: self._add_default_transformations_to_retrieve(resolution) if auto_transform else None,
-            dataflow_per_date,
-            include_metadata,
+            partial_data_model=partial(self.create_data_model, product, unit_resolution, data_origin=data_origin),
+            start_date=start_date,
+            end_date=end_date,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            from_storage=from_storage,
+            storage_options=storage_options,
+            add_default_transformations=lambda: self._add_default_transformations_to_retrieve(resolution) if auto_transform else None,
+            dataflow_per_date=dataflow_per_date,
+            include_metadata=include_metadata,
         )
     
     def _retrieve_impl(
         self,
         data_model: MarketDataModel,
-        data_layer: tDATA_LAYER,
+        data_layer: tDATA_LAYER | None,
         data_domain: str,
-        from_storage: tSTORAGE | None=None,
-        storage_options: dict | None=None,
+        from_storage: tSTORAGE | None,
+        storage_options: dict | None,
     ) -> tuple[GenericFrame | None, dict[str, Any]]:
         '''Retrieve data from storage.
         If data is not found, search for higher resolutions.
@@ -277,11 +277,12 @@ class MarketFeed(TimeBasedFeed):
         data: GenericFrame | None = None
         metadata: dict[str, list[datetime.date]] = {}
         for search_resolution in search_resolutions:
-            data_model.update_resolution(search_resolution)
+            data_model_copy: MarketDataModel = data_model.model_copy(deep=False)
+            data_model_copy.update_resolution(search_resolution)
             data, metadata = super()._retrieve_impl(
-                data_model,
-                data_layer,
-                data_domain,
+                data_model=data_model_copy,
+                data_domain=data_domain,
+                data_layer=data_layer,
                 from_storage=from_storage,
                 storage_options=storage_options,
             )
@@ -315,9 +316,9 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str | Literal['ytd', 'max']="1w",
         start_date: str='',
         end_date: str='',
-        data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
+        data_origin: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE='cache',
         storage_options: dict | None=None,
@@ -337,9 +338,9 @@ class MarketFeed(TimeBasedFeed):
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            data_origin=data_origin,
             data_layer=data_layer,
             data_domain=data_domain,
+            data_origin=data_origin,
             from_storage=from_storage,
             to_storage=to_storage,
             storage_options=storage_options,

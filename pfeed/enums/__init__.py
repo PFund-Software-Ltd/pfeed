@@ -1,7 +1,7 @@
 from pfund.enums.product_type import ProductType, TradFiProductType, CeFiProductType, DeFiProductType
 from pfeed.enums.env import Environment
 from pfeed.enums.data_source import DataSource
-from pfeed.enums.data_storage import DataStorage
+from pfeed.enums.data_storage import DataStorage, LocalDataStorage
 from pfeed.enums.data_tool import DataTool
 from pfeed.enums.data_layer import DataLayer
 from pfeed.enums.data_type import DataType, MarketDataType

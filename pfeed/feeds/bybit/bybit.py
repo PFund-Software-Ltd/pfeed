@@ -98,7 +98,7 @@ class BybitMarketFeed(CryptoMarketFeed):
         rollback_period: str="1day",
         start_date: str="",
         end_date: str="",
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,

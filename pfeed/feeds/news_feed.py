@@ -82,16 +82,16 @@ class NewsFeed(TimeBasedFeed):
         data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Downloading historical news data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
-            partial(self.create_data_model, product=product, data_origin=data_origin),
-            start_date,
-            end_date,
-            data_layer,
-            data_domain,
-            to_storage,
-            storage_options,
-            dataflow_per_date,
-            include_metadata,
-            lambda: self._add_default_transformations_to_download(product=product) if auto_transform else None,
+            partial_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
+            start_date=start_date,
+            end_date=end_date,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            to_storage=to_storage,
+            storage_options=storage_options,
+            add_default_transformations=lambda: self._add_default_transformations_to_download(product=product) if auto_transform else None,
+            dataflow_per_date=dataflow_per_date,
+            include_metadata=include_metadata,
         )
     
     def _add_default_transformations_to_download(self, product: BaseProduct | None=None):
@@ -118,7 +118,7 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
@@ -132,16 +132,16 @@ class NewsFeed(TimeBasedFeed):
         data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Retrieving {self.name} {product=} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
-            partial(self.create_data_model, product=product, data_origin=data_origin),
-            start_date,
-            end_date,
-            data_layer,
-            data_domain,
-            from_storage,
-            storage_options,
-            lambda: self._add_default_transformations_to_retrieve() if auto_transform else None,
-            dataflow_per_date,
-            include_metadata,
+            partial_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
+            start_date=start_date,
+            end_date=end_date,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            from_storage=from_storage,
+            storage_options=storage_options,
+            add_default_transformations=lambda: self._add_default_transformations_to_retrieve() if auto_transform else None,
+            dataflow_per_date=dataflow_per_date,
+            include_metadata=include_metadata,
         )
 
     def _add_default_transformations_to_retrieve(self):
@@ -161,7 +161,7 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE='cache',

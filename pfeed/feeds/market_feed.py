@@ -274,21 +274,21 @@ class MarketFeed(TimeBasedFeed):
             # remove resolutions that are not supported by the data source
             if resolution <= self.data_source.highest_resolution
         ]
-        data: GenericFrame | None = None
-        metadata: dict[str, list[datetime.date]] = {}
+        df: GenericFrame | None = None
+        metadata: dict[str, Any] = {}
         for search_resolution in search_resolutions:
             data_model_copy: MarketDataModel = data_model.model_copy(deep=False)
             data_model_copy.update_resolution(search_resolution)
-            data, metadata = super()._retrieve_impl(
+            df, metadata = super()._retrieve_impl(
                 data_model=data_model_copy,
                 data_domain=data_domain,
                 data_layer=data_layer,
                 from_storage=from_storage,
                 storage_options=storage_options,
             )
-            if data is not None:
+            if df is not None:
                 break
-        return data, metadata
+        return df, metadata
     
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
         from pfeed._etl import market as etl

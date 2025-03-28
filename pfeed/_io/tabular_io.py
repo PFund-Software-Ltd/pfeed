@@ -84,6 +84,7 @@ class TabularIO(BaseIO):
         from pfeed._etl.base import get_data_tool
         
         df: GenericFrame | None = None
+        metadata: dict[str, Any] = {}
         data_tool: ModuleType = get_data_tool(data_tool)
         if self._use_deltalake:
             file_dirs = [file_path.rsplit('/', 1)[0] for file_path in file_paths]
@@ -97,7 +98,7 @@ class TabularIO(BaseIO):
                     version=delta_version
                 )
             metadata_file_paths = self._find_deltalake_metadata_file_paths(file_paths, delta_table_file_dirs)
-            metadata = self._read_pyarrow_table_metadata(metadata_file_paths)
+            metadata['file_metadata'] = self._read_pyarrow_table_metadata(metadata_file_paths)
             metadata['missing_file_paths'] = list(set(file_dirs) - set(delta_table_file_dirs) - set(empty_parquet_file_dirs))
         else:
             exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path)]
@@ -108,7 +109,7 @@ class TabularIO(BaseIO):
                     storage_options=self._storage_options,
                     filesystem=self._filesystem if not self.is_local_fs else None,
                 )
-            metadata = self._read_pyarrow_table_metadata(exists_file_paths)
+            metadata['file_metadata'] = self._read_pyarrow_table_metadata(exists_file_paths)
             metadata['missing_file_paths'] = list(set(file_paths) - set(exists_file_paths))
         return df, metadata
             

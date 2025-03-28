@@ -8,7 +8,7 @@ duckdb storage structure:
 - one table per product_name/resolution, where year/month/day is removed
 '''
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Any
 from typing_extensions import TypedDict
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
@@ -256,7 +256,8 @@ class DuckDBStorage(BaseStorage):
             metadata['dates'],
         ))
     
-    def _read_metadata(self) -> DuckDBMetadata | dict:
+    def _read_metadata(self) -> DuckDBMetadata:
+        '''Reads metadata from duckdb metadata table'''
         if not self.table_exists(table_name=self._metadata_table_name):
             return {}
         try:
@@ -270,13 +271,20 @@ class DuckDBStorage(BaseStorage):
             else:
                 metadata = metadata[0]
                 metadata['dates'] = [date.item().date() for date in metadata['dates']]
-                if isinstance(self.data_model, TimeBasedDataModel):
-                    existing_dates_in_duckdb = metadata['dates']
-                    metadata['missing_dates'] = [date for date in self.data_model.dates if date not in existing_dates_in_duckdb]
                 return metadata
         except Exception:
             self._logger.exception(f'Failed to read metadata from {self.name} using table_name={self._table_name}')
             return {}
+        
+    def _read_storage_metadata(self) -> dict[str, Any]:
+        '''Reads metadata from duckdb metadata table and consolidates it to follow other storages metadata structure'''
+        storage_metadata: dict[str, Any] = {}
+        duckdb_metadata: DuckDBMetadata = self._read_metadata()
+        storage_metadata['file_metadata'] = {self.filename: duckdb_metadata}
+        if isinstance(self.data_model, TimeBasedDataModel):
+            existing_dates_in_duckdb = duckdb_metadata['dates']
+            storage_metadata['missing_dates'] = [date for date in self.data_model.dates if date not in existing_dates_in_duckdb]
+        return storage_metadata
 
     def write_data(self, data: GenericFrame) -> bool:
         from pfeed._etl.base import convert_to_pandas_df
@@ -287,13 +295,10 @@ class DuckDBStorage(BaseStorage):
                     self._logger.warning(f'Empty DataFrame for {self.name} {self.data_model}')
                     return False
                 self._write_df(df)
-                current_metadata = self._read_metadata()
+                current_metadata: DuckDBMetadata = self._read_metadata()
                 current_dates_in_storage = current_metadata.get('dates', [])
                 total_dates = list(set(self.data_model.dates + current_dates_in_storage))
-                metadata: DuckDBMetadata = {
-                    'table_name': self._table_name,
-                    'dates': total_dates,
-                }
+                metadata: DuckDBMetadata = {'table_name': self._table_name, 'dates': total_dates}
                 self._write_metadata(metadata)
                 return True
         except Exception:
@@ -305,7 +310,7 @@ class DuckDBStorage(BaseStorage):
         try:
             with self:
                 df: pd.DataFrame | None = self._read_df()
-                metadata = self._read_metadata()
+                metadata: dict[str, Any] = self._read_storage_metadata()
                 metadata['from_storage'] = self.name
                 data_tool = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
                 if df is not None:

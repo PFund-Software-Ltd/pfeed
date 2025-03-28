@@ -167,13 +167,12 @@ class DataFlow:
         from pfund.datas.resolution import Resolution
         from pfeed.data_models.market_data_model import MarketDataModel
 
+        storage_data_model = self.data_model
         if isinstance(self.data_model, MarketDataModel):
             data_resolution = Resolution(data['resolution'][0])
             if data_resolution != self.data_model.resolution:
                 storage_data_model = self.data_model.model_copy(deep=False)
                 storage_data_model.update_resolution(data_resolution)
-        else:
-            storage_data_model = self.data_model
         return storage_data_model
     
     def _load(self, data: GenericData | BytewaxStream, flow_type: FlowType=FlowType.native):

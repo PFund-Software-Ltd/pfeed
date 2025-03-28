@@ -298,19 +298,19 @@ class TimeBasedFeed(BaseFeed):
             data_model: TimeBasedDataModel = dataflow.data_model
             result: FlowResult = dataflow.result
             _df: GenericFrame | None = result.data
+            _metadata: dict[str, Any] = result.metadata
             
-            # REVIEW: currently metadata's handling is messy, consider split FlowResult into RetrieveResult and DownloadResult etc.
-            # and define their own returned metadata
+            dfs.append(_df)
             
             # Handle missing dates
-            if 'missing_dates' in result.metadata:
-                metadata['missing_dates'].extend(result.metadata['missing_dates'])
+            # NOTE: only data read from storage will have 'missing_dates' in metadata
+            # downloaded data will need to create 'missing_dates' by itself by checking if _df is None
+            if 'missing_dates' in _metadata:
+                metadata['missing_dates'].extend(_metadata['missing_dates'])
             elif _df is None:
                 metadata['missing_dates'].extend(data_model.dates)
-            else:
-                dfs.append(_df)
 
-        dfs: list[Frame] = [nw.from_native(df) for df in dfs]
+        dfs: list[Frame] = [nw.from_native(df) for df in dfs if df is not None]
         if dfs:
             df: Frame = nw.concat(dfs)
             df: GenericFrame = nw.to_native(df)

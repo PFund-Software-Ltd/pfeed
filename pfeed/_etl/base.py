@@ -69,7 +69,9 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDATA_TOOL) -> Ge
     Returns:
         The converted dataframe.
     '''
-    data_tool = data_tool.lower()
+    if isinstance(data_tool, str):
+        data_tool = DataTool[data_tool.lower()]
+        
     # if the input dataframe is already in the desired data tool, return it directly
     if isinstance(df, pd.DataFrame) and data_tool == DataTool.pandas:
         return df
@@ -79,6 +81,9 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDATA_TOOL) -> Ge
         return df
 
     nw_df = nw.from_native(df)
+    if isinstance(nw_df, nw.LazyFrame):
+        nw_df = nw_df.collect()
+    
     if data_tool == DataTool.pandas:
         return nw_df.to_pandas()
     elif data_tool == DataTool.polars:

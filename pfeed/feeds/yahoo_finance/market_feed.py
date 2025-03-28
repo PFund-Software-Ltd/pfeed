@@ -224,7 +224,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         rollback_period: str | Literal["ytd", "max"] = "max",
         start_date: str = "",
         end_date: str = "",
-        data_layer: tDATA_LAYER | None=None,
+        data_layer: tDATA_LAYER='curated',
         data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,

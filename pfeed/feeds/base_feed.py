@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Any, overload, Literal
 from types import ModuleType
 if TYPE_CHECKING:
+    import polars as pl
     from prefect import Flow as PrefectFlow
     from bytewax.dataflow import Dataflow as BytewaxDataFlow
     from bytewax.inputs import Source as BytewaxSource
@@ -210,41 +211,43 @@ class BaseFeed(ABC):
         self,
         data_model: BaseDataModel, 
         data_domain: str, 
-        data_layer: tDATA_LAYER | None,
+        data_layer: tDATA_LAYER,
         from_storage: tSTORAGE | None,
         storage_options: dict | None,
-    ) -> tuple[GenericData | None, dict[str, Any]]:
+    ) -> tuple[dict[tSTORAGE, pl.LazyFrame | None], dict[tSTORAGE, dict[str, Any]]]:
+        '''Retrieves data by searching through all local storages, using polars for scanning data'''
         from minio import ServerError as MinioServerError
-        search_storages = [_storage for _storage in LocalDataStorage.__members__] if from_storage is None else [from_storage]
-        search_data_layers = [_data_layer for _data_layer in DataLayer.__members__][::-1] if data_layer is None else [data_layer]
-        data: GenericData | None = None
-        metadata: dict[str, Any] = {}
+        
         storage_options = storage_options or {}
         if storage_options:
             assert from_storage is not None, 'from_storage is required when storage_options is provided'
+        # NOTE: skip searching for DUCKDB, should require users to explicitly specify the storage
+        search_storages = [_storage for _storage in LocalDataStorage.__members__ if _storage.upper() != 'DUCKDB'] if from_storage is None else [from_storage]
+        
+        data_in_storages: dict[tSTORAGE, pl.LazyFrame | None] = {}
+        metadata_in_storages: dict[tSTORAGE, dict[str, Any]] = {}
         for search_storage in search_storages:
             search_storage_options = storage_options or self._storage_options.get(search_storage, {})
             Storage = DataStorage[search_storage.upper()].storage_class
-            for search_data_layer in search_data_layers:
-                self.logger.debug(f'searching for data {data_model} in {search_storage} (data_layer={search_data_layer})...')
-                try:
-                    storage: BaseStorage = Storage.from_data_model(
-                        data_model,
-                        search_data_layer, 
-                        data_domain,
-                        use_deltalake=self._use_deltalake,
-                        **search_storage_options,
-                    )
-                    data, metadata = storage.read_data(data_tool=self.data_tool.name)
-                    if data is not None:
-                        break
-                except Exception as e:  # e.g. minio's ServerError if server is not running
-                    if not isinstance(e, MinioServerError):
-                        self.logger.exception(f'Error in retrieving data {data_model} from {search_storage}:')
-            if data is not None:
-                self.logger.debug(f'found data {data_model} in {search_storage} (data_layer={search_data_layer})')
-                break
-        return data, metadata
+            self.logger.debug(f'searching for data {data_model} in {search_storage} ({data_layer=})...')
+            try:
+                storage: BaseStorage = Storage.from_data_model(
+                    data_model,
+                    data_layer, 
+                    data_domain,
+                    use_deltalake=self._use_deltalake,
+                    **search_storage_options,
+                )
+                data, metadata = storage.read_data(data_tool='polars')
+                metadata['from_storage'] = search_storage
+                metadata['data_domain'] = data_domain
+                metadata['data_layer'] = data_layer
+                data_in_storages[search_storage] = data
+                metadata_in_storages[search_storage] = metadata
+            except Exception as e:  # e.g. minio's ServerError if server is not running
+                if not isinstance(e, MinioServerError):
+                    self.logger.exception(f'Error in retrieving data {data_model} in {search_storage} ({data_layer=}):')
+        return data_in_storages, metadata_in_storages
 
     # TODO
     def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> GenericData | None:

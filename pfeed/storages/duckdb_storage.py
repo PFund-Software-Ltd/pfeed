@@ -256,7 +256,7 @@ class DuckDBStorage(BaseStorage):
             metadata['dates'],
         ))
     
-    def _read_metadata(self) -> DuckDBMetadata:
+    def _read_metadata(self) -> DuckDBMetadata | dict:
         '''Reads metadata from duckdb metadata table'''
         if not self.table_exists(table_name=self._metadata_table_name):
             return {}
@@ -279,11 +279,16 @@ class DuckDBStorage(BaseStorage):
     def _read_storage_metadata(self) -> dict[str, Any]:
         '''Reads metadata from duckdb metadata table and consolidates it to follow other storages metadata structure'''
         storage_metadata: dict[str, Any] = {}
-        duckdb_metadata: DuckDBMetadata = self._read_metadata()
+        duckdb_metadata: DuckDBMetadata | dict = self._read_metadata()
         storage_metadata['file_metadata'] = {self.filename: duckdb_metadata}
         if isinstance(self.data_model, TimeBasedDataModel):
-            existing_dates_in_duckdb = duckdb_metadata['dates']
-            storage_metadata['missing_dates'] = [date for date in self.data_model.dates if date not in existing_dates_in_duckdb]
+            if 'dates' in duckdb_metadata:
+                existing_dates_in_duckdb = duckdb_metadata['dates']
+                storage_metadata['missing_dates'] = [date for date in self.data_model.dates if date not in existing_dates_in_duckdb]
+            else:
+                storage_metadata['missing_dates'] = self.data_model.dates
+        else:
+            raise NotImplementedError(f'{type(self.data_model)=}')
         return storage_metadata
 
     def write_data(self, data: GenericFrame) -> bool:
@@ -311,14 +316,13 @@ class DuckDBStorage(BaseStorage):
             with self:
                 df: pd.DataFrame | None = self._read_df()
                 metadata: dict[str, Any] = self._read_storage_metadata()
-                metadata['from_storage'] = self.name
                 data_tool = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
                 if df is not None:
                     df: GenericFrame = convert_to_user_df(df, data_tool)
                 return df, metadata
         except Exception:
-            self._logger.exception(f'Failed to read data (data_tool={data_tool.name}) (table_name={self._table_name}) from {self.name}')
-            return None, {'from_storage': self.name}
+            self._logger.exception(f'Failed to read data ({data_tool=}) (table_name={self._table_name}) from {self.name}')
+            return None, {}
     
     def start_ui(self, port: int=4213, no_browser: bool=False):
         self.conn.execute(f"SET ui_local_port={port}")

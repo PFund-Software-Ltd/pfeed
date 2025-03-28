@@ -105,6 +105,11 @@ class TimeBasedDataHandler(BaseDataHandler):
             missing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
         # data is stored in a single file (no date in the filename)
         else:
-            missing_dates = data_model.dates
+            if file_metadata := list(metadata['file_metadata'].values()):
+                file_metadata = file_metadata[0]
+                current_dates_in_storage = pd.date_range(file_metadata['start_date'], file_metadata['end_date']).date.tolist()
+            else:
+                current_dates_in_storage = []
+            missing_dates = [date for date in data_model.dates if date not in current_dates_in_storage]
         metadata['missing_dates'] = missing_dates
         return df, metadata

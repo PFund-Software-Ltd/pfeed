@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any, Callable
 if TYPE_CHECKING:
+    import polars as pl
     from narwhals.typing import Frame
     from pfeed.typing import GenericFrame
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
@@ -13,7 +14,6 @@ from pprint import pformat
 import pandas as pd
 import narwhals as nw
 
-from pfeed.enums import DataStorage
 from pfeed.enums.extract_type import ExtractType
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 
@@ -162,6 +162,43 @@ class TimeBasedFeed(BaseFeed):
         else:
             return self
     
+    def _retrieve_impl(
+        self,
+        data_model: TimeBasedDataModel,
+        data_layer: tDATA_LAYER,
+        data_domain: str,
+        from_storage: tSTORAGE | None,
+        storage_options: dict | None,
+    ) -> tuple[GenericFrame | None, dict[str, Any]]:
+        '''Retrieves data among all scanned data loaded from local storages.
+        Returns the data from the storage with the least missing dates.
+        '''
+        from pfeed._etl.base import convert_to_user_df
+        df_in_storages, metadata_in_storages = super()._retrieve_impl(
+            data_model=data_model,
+            data_domain=data_domain,
+            data_layer=data_layer,
+            from_storage=from_storage,
+            storage_options=storage_options,
+        )
+
+        # choose the storage with the least missing dates
+        missing_dates_in_storages: dict[tSTORAGE, list[datetime.date]] = {
+            storage: metadata['missing_dates']
+            for storage, metadata in metadata_in_storages.items()
+        }
+        storage_with_the_least_missing_dates = min(missing_dates_in_storages, key=lambda x: len(missing_dates_in_storages[x]))
+        
+        polars_df: pl.LazyFrame | None = df_in_storages[storage_with_the_least_missing_dates]
+        metadata = metadata_in_storages[storage_with_the_least_missing_dates]
+        if polars_df is not None:
+            df: GenericFrame = convert_to_user_df(polars_df, self.data_tool.name)
+            self.logger.info(f'found data {data_model} in {storage_with_the_least_missing_dates} ({data_layer=})')
+        else:
+            df = None
+            self.logger.warning(f'failed to find data {data_model} in any storage ({data_layer=})')
+        return df, metadata
+    
     def _get_historical_data_impl(
         self,
         product: str,
@@ -170,7 +207,7 @@ class TimeBasedFeed(BaseFeed):
         start_date: str,
         end_date: str,
         data_origin: str,
-        data_layer: tDATA_LAYER | None,
+        data_layer: tDATA_LAYER,
         data_domain: str,
         from_storage: tSTORAGE | None,
         to_storage: tSTORAGE,
@@ -189,15 +226,6 @@ class TimeBasedFeed(BaseFeed):
                 Period to rollback from today, only used when `start_date` is not specified.
                 Default is '1M' = 1 month.
                 if 'period' in kwargs is specified, it will be used instead of `rollback_period`.
-            data_layer:
-                'cleaned' (least raw): normalize data (refer to 'normalized' below), also remove all non-standard columns
-                    e.g. standard columns in stock data are ts, product, open, high, low, close, volume, dividends, splits
-                'normalized' (default): perform normalization following pfund's convention, preserve all columns
-                    Normalization example:
-                    - renaming: 'timestamp' -> 'date'
-                    - mapping: 'buy' -> 1, 'sell' -> -1
-                'original' (most raw): keep the original data from yfinance, no transformation will be performed.
-                It will be ignored if the data is loaded from storage but not downloaded.
             force_download: Whether to skip retrieving data from storage.
             feed_kwargs: kwargs specific to the feed, e.g. "resolution" for MarketFeed
         """

@@ -187,9 +187,9 @@ class DataFlow:
             load = task(storage.write_data) if flow_type == FlowType.prefect else storage.write_data
             success = load(data)
             if not success:
-                self.logger.warning(f'failed to load {storage_data_model} data to {storage.name}')
+                self.logger.warning(f'failed to load {storage_data_model} data to {storage.name} data_layer={storage.data_layer=}')
             else:
-                self.logger.info(f'loaded {storage_data_model} data to {storage.name}')
+                self.logger.info(f'loaded {storage_data_model} data to {storage.name} data_layer={storage.data_layer=}')
         else:
             stream = data
             if flow_type == FlowType.bytewax:

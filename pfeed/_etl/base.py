@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from types import ModuleType
 if TYPE_CHECKING:
-    from narwhals.typing import Frame
     from pfeed.typing import tDATA_TOOL
     from pfeed.typing import GenericFrame, GenericData
     
@@ -49,13 +48,8 @@ def convert_to_pandas_df(data: GenericData) -> pd.DataFrame:
             return pd.read_csv(io.BytesIO(data))
         else:
             raise ValueError("Unknown or unsupported format")
-    elif isinstance(data, pd.DataFrame):
-        return data
     elif is_dataframe(data):
-        df: Frame = nw.from_native(data)
-        if isinstance(df, nw.LazyFrame):
-            df = df.collect()
-        return df.to_pandas()
+        return convert_to_user_df(data, DataTool.pandas)
     else:
         raise ValueError(f'{type(data)=}')
 

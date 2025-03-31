@@ -1,12 +1,13 @@
 from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
+    from narwhals.typing import Frame
     from prefect import Flow as PrefectDataFlow
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.outputs import Sink as BytewaxSink
     from pfeed.typing import GenericData
-    from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.faucet import Faucet
+    from pfeed.flows.sink import Sink
     from pfeed.data_models.base_data_model import BaseDataModel
 
 import logging
@@ -36,46 +37,51 @@ class FlowType(StrEnum):
 
 
 class DataFlow:
-    def __init__(self, faucet: Faucet):
-        data_source = faucet.data_source
+    def __init__(self, data_model: BaseDataModel, faucet: Faucet):
+        data_source = data_model.data_source
         self.logger = logging.getLogger(f'{data_source.name.lower()}_data')
         self.name = f'{data_source.name}_DataFlow'
+        self._data_model: BaseDataModel = data_model
         self._faucet: Faucet = faucet
+        self._sink: Sink | None = None
         self._transformations: list[Callable] = []
-        self._storage_creator: Callable[[], BaseStorage] | None = None
         self._bytewax_sink: BytewaxSink | str | None = None
         self._result = FlowResult()
     
-    def add_transformations(self, *funcs: tuple[Callable, ...]):
-        self._transformations.extend(funcs)
-    
-    def lazy_create_storage(self, create_storage_func: Callable[[], BaseStorage]):
-        self._storage_creator = create_storage_func
-    
-    def set_bytewax_sink(self, bytewax_sink: BytewaxSink | str):
-        self._bytewax_sink = bytewax_sink
-
     @property
-    def result(self) -> FlowResult:
-        return self._result
+    def data_model(self) -> BaseDataModel:
+        return self._data_model
 
     @property
     def faucet(self) -> Faucet:
         return self._faucet
+    
+    @property
+    def sink(self) -> Sink:
+        return self._sink
 
     @property
     def extract_type(self) -> ExtractType:
-        return self._faucet.extract_type
+        return self.faucet.extract_type
     
     @property
-    def data_model(self) -> BaseDataModel:
-        return self._faucet.data_model
+    def result(self) -> FlowResult:
+        return self._result
     
+    def add_transformations(self, *funcs: tuple[Callable, ...]):
+        self._transformations.extend(funcs)
+    
+    def set_sink(self, sink: Sink):
+        self._sink = sink
+    
+    def set_bytewax_sink(self, bytewax_sink: BytewaxSink | str):
+        self._bytewax_sink = bytewax_sink
+
     def __str__(self):
         return f'{self.name}.{self.extract_type}'
     
     def is_streaming(self) -> bool:
-        return self._faucet._streaming
+        return self.faucet._streaming
     
     def run(
         self, 
@@ -106,21 +112,16 @@ class DataFlow:
         return data
     
     def _extract(self, flow_type: FlowType=FlowType.native) -> GenericData | None | BytewaxStream:
-        # self.logger.debug(f"extracting {self.data_model} data by '{self._faucet.name}'")
         if not self.is_streaming():
-            extract = task(self._faucet.open) if flow_type == FlowType.prefect else self._faucet.open
+            extract = task(self.faucet.open) if flow_type == FlowType.prefect else self.faucet.open
             data, metadata = extract()
             if metadata:
                 self._result.set_metadata(metadata)
-            if data is not None:
-                self.logger.debug(f"extracted {self.data_model} data by '{self._faucet.name}'")
-            else:
-                self.logger.debug(f'failed to extract {self.data_model} data by {self._faucet.name}')
             return data
         else:
             if flow_type == FlowType.bytewax:
                 assert self._bytewax_dataflow is not None, f'{self.name} has no bytewax dataflow'
-                source: BytewaxSource | BytewaxStream = self._faucet.open()
+                source: BytewaxSource | BytewaxStream = self.faucet.open()
                 if isinstance(source, BytewaxSource):
                     stream: BytewaxStream = bytewax_op.input(self.name, self._bytewax_dataflow, source)
                 else:
@@ -138,12 +139,11 @@ class DataFlow:
         if self.is_streaming():
             stream = data
         for func in self._transformations:
-            # self.logger.debug(f"transforming {self.data_model} data using '{func_name}'")
             if not self.is_streaming():
                 transform = task(func) if flow_type == FlowType.prefect else func
                 # NOTE: Removing prefect's task introspection with `quote(data)` to save time
                 data: GenericData = transform(quote(data)) if flow_type == FlowType.prefect else transform(data)
-                self.logger.debug(f"transformed {self.data_model} data by '{func.__name__}'")
+                self.logger.debug(f"transformed {self.faucet.data_model} data by '{func.__name__}'")
             else:
                 if flow_type == FlowType.bytewax:
                     # REVIEW: only supports passing in stream to the user's function
@@ -153,43 +153,18 @@ class DataFlow:
                     pass
         return data
     
-    def _update_data_model_for_storage_after_transform(self, data: GenericData | BytewaxStream) -> BaseDataModel:
-        """
-        Updates the data model in dataflow for storage after transformations.
-
-        For market data model, this method checks if the data has been resampled to a different resolution.
-        If so, it updates the resolution of the data model accordingly. 
-        Note that `self.data_model` represents the data model for the data created by the faucet for the dataflow, 
-        NOT the storage data. 
-        For example, data might be downloaded as tick data but stored as 1-minute data,
-        which means the data model for the storage data is different from the data model for the dataflow.
-        """
-        from pfund.datas.resolution import Resolution
-        from pfeed.data_models.market_data_model import MarketDataModel
-
-        storage_data_model = self.data_model
-        if isinstance(self.data_model, MarketDataModel):
-            data_resolution = Resolution(data['resolution'][0])
-            if data_resolution != self.data_model.resolution:
-                storage_data_model = self.data_model.model_copy(deep=False)
-                storage_data_model.update_resolution(data_resolution)
-        return storage_data_model
-    
     def _load(self, data: GenericData | BytewaxStream, flow_type: FlowType=FlowType.native):
-        if self._storage_creator is None:
+        if self.sink is None:
             if self.extract_type != ExtractType.retrieve:
-                raise Exception(f'{self.name} has no destination storage')
-            else:
-                return
-        storage_data_model = self._update_data_model_for_storage_after_transform(data)
-        storage: BaseStorage = self._storage_creator(storage_data_model)
+                self.logger.warning(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
+            return
         if not self.is_streaming():
-            load = task(storage.write_data) if flow_type == FlowType.prefect else storage.write_data
+            load = task(self.sink.flush) if flow_type == FlowType.prefect else self.sink.flush
             success = load(data)
             if not success:
-                self.logger.warning(f'failed to load {storage_data_model} data to {storage.name} data_layer={storage.data_layer=}')
+                self.logger.warning(f'failed to load {self.data_model} data to {self.sink}')
             else:
-                self.logger.info(f'loaded {storage_data_model} data to {storage.name} data_layer={storage.data_layer=}')
+                self.logger.info(f'loaded {self.data_model} data to {self.sink}')
         else:
             stream = data
             if flow_type == FlowType.bytewax:
@@ -197,7 +172,7 @@ class DataFlow:
                 bytewax_op.output(self._bytewax_sink.__name__, stream, self._bytewax_sink)
             else:
                 # TODO: streaming without bytewax
-                storage.write_data(...)
+                self.sink.flush(...)
 
     def to_prefect_dataflow(self, **kwargs) -> PrefectDataFlow:
         '''

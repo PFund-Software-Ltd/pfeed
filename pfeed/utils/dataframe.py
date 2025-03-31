@@ -1,40 +1,30 @@
+from narwhals.typing import IntoFrame, Frame
+from pfeed.typing import dd, ps, SparkDataFrame
+
 import pandas as pd
 import polars as pl
 import narwhals as nw
-from pfeed.typing import dd, ps, SparkDataFrame
 
 
-def is_dataframe(value, include_narwhals=True) -> bool:
+def is_dataframe(df: IntoFrame, include_narwhals=True) -> bool:
     return (
-        isinstance(value, (pd.DataFrame, pl.DataFrame, pl.LazyFrame, dd.DataFrame, ps.DataFrame, SparkDataFrame))
-        or (include_narwhals and isinstance(value, (nw.DataFrame, nw.LazyFrame)))
+        isinstance(df, (pd.DataFrame, pl.DataFrame, pl.LazyFrame, dd.DataFrame, ps.DataFrame, SparkDataFrame))
+        or (include_narwhals and isinstance(df, (nw.DataFrame, nw.LazyFrame)))
     )
 
 
-def is_lazyframe(value, include_narwhals=True) -> bool:
+def is_lazyframe(df: IntoFrame, include_narwhals=True) -> bool:
     return (
-        isinstance(value, (pl.LazyFrame, dd.DataFrame, SparkDataFrame))
-        or (include_narwhals and isinstance(value, (nw.LazyFrame)))
+        isinstance(df, (pl.LazyFrame, dd.DataFrame, SparkDataFrame))
+        or (include_narwhals and isinstance(df, (nw.LazyFrame)))
     )
 
 
-def is_empty_dataframe(df) -> bool:
-    if isinstance(df, (pd.DataFrame, ps.DataFrame)):
-        return df.empty
-    elif isinstance(df, pl.DataFrame):
-        return df.is_empty()
-    elif isinstance(df, pl.LazyFrame):
-        return df.limit(1).collect().is_empty()
-    elif isinstance(df, dd.DataFrame):
-        return len(df.index) == 0
-    elif isinstance(df, SparkDataFrame):
-        return df.rdd.isEmpty()
-    elif isinstance(df, nw.LazyFrame):
-        return df.head(1).collect().is_empty()
-    elif isinstance(df, nw.DataFrame):
-        return df.is_empty()
-    else:
-        raise ValueError(f'Unsupported dataframe type: {type(df)}')
+def is_empty_dataframe(df: IntoFrame) -> bool:
+    df: Frame = nw.from_native(df)
+    if isinstance(df, nw.LazyFrame):
+        df = df.head(1).collect()
+    return df.is_empty()
 
 
 def is_series(value, include_narwhals=True) -> bool:

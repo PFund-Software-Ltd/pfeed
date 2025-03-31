@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
+    from pfeed.flows.sink import Sink
     from pfeed.flows.result import FlowResult
     from pfeed.storages import DuckDBStorage, MinioStorage
     
@@ -27,7 +28,7 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
-from pfeed.enums import DataTool, DataStorage, LocalDataStorage, DataLayer, ExtractType
+from pfeed.enums import DataTool, DataStorage, LocalDataStorage, ExtractType
 
 
 __all__ = ["BaseFeed"]
@@ -253,17 +254,22 @@ class BaseFeed(ABC):
     def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> GenericData | None:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
-    def create_dataflow(self, faucet: Faucet) -> DataFlow:
+    def create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
         from pfeed.flows.dataflow import DataFlow
-        dataflow = DataFlow(faucet)
+        dataflow = DataFlow(data_model, faucet)
         self._subflows.append(dataflow)
         self._dataflows.append(dataflow)
         return dataflow
     
     @staticmethod
-    def create_faucet(data_model: BaseDataModel, extract_func: Callable, extract_type: ExtractType) -> Faucet:
+    def _create_faucet(data_model: BaseDataModel, extract_func: Callable, extract_type: ExtractType) -> Faucet:
         from pfeed.flows.faucet import Faucet
         return Faucet(data_model, extract_func, extract_type)
+    
+    @staticmethod
+    def _create_sink(data_model: BaseDataModel, create_storage_func: Callable) -> Sink:
+        from pfeed.flows.sink import Sink
+        return Sink(data_model, create_storage_func)
     
     def _clear_subflows(self):
         '''Clear subflows
@@ -310,7 +316,8 @@ class BaseFeed(ABC):
             )
 
         for dataflow in self._subflows:
-            dataflow.lazy_create_storage(_create_storage)
+            sink: Sink = self._create_sink(dataflow.data_model, _create_storage)
+            dataflow.set_sink(sink)
             if self._use_bytewax:
                 from bytewax.connectors.stdio import StdOutSink
                 dataflow.set_bytewax_sink(bytewax_sink or StdOutSink())

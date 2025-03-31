@@ -10,6 +10,7 @@ from pathlib import Path
 import datetime
 
 import pandas as pd
+import polars as pl
 
 from pfeed.enums import DataLayer
 from pfeed._io.tabular_io import TabularIO
@@ -92,6 +93,7 @@ class TimeBasedDataHandler(BaseDataHandler):
             )
 
     def read(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[GenericFrame | None, dict[str, Any]]:
+        from pfeed._etl.base import convert_to_user_df
         df, metadata = self._io.read(
             file_paths=self._create_file_paths(),
             data_tool=data_tool, 
@@ -111,5 +113,12 @@ class TimeBasedDataHandler(BaseDataHandler):
             else:
                 current_dates_in_storage = []
             missing_dates = [date for date in data_model.dates if date not in current_dates_in_storage]
+            if df is not None:
+                # select the range of data_model.dates in the df
+                # performance should not be an issue since storage.read_data() should be using polars already, call convert_to_user_df again to make sure
+                polars_lf: pl.LazyFrame = convert_to_user_df(df, data_tool='polars')
+                polars_lf = polars_lf.filter(pl.col('date').dt.date().is_in(data_model.dates))
+                df = convert_to_user_df(polars_lf, data_tool=data_tool)
+
         metadata['missing_dates'] = missing_dates
         return df, metadata

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed.typing import GenericFrame
@@ -56,9 +56,9 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: Literal['raw', 'cleaned']='cleaned',
         data_domain: str='',
-        to_storage: tSTORAGE='local',
+        to_storage: tSTORAGE | None='local',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
@@ -77,12 +77,13 @@ class NewsFeed(TimeBasedFeed):
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         # if no default and no custom transformations, set data_layer to 'raw'
         if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
-            self.logger.debug(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
+            self.logger.info(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
             data_layer = 'raw' 
         data_domain = data_domain or self.DATA_DOMAIN
-        self.logger.info(f'Downloading historical news data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
+        self.logger.info(f'Downloading {self.name} historical news data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
-            partial_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
+            partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
+            partial_faucet_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,
@@ -132,7 +133,8 @@ class NewsFeed(TimeBasedFeed):
         data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Retrieving {self.name} {product=} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
-            partial_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
+            partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
+            partial_faucet_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,
@@ -161,10 +163,10 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER='curated',
+        data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE='cache',
+        to_storage: tSTORAGE | None='cache',
         storage_options: dict | None=None,
         force_download: bool=False,
         **product_specs
@@ -176,6 +178,7 @@ class NewsFeed(TimeBasedFeed):
             NOTE: this behavior is different from MarketFeed
             from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
+        data_domain = data_domain or self.DATA_DOMAIN
         return self._get_historical_data_impl(
             product=product,
             symbol=symbol,

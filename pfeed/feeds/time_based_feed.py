@@ -6,15 +6,14 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
+    from pfeed.flows.faucet import Faucet
     from pfeed.typing import tSTORAGE, tDATA_LAYER
 
 import datetime
 from pprint import pformat
 
-import pandas as pd
-import narwhals as nw
-
-from pfeed.enums.extract_type import ExtractType
+from pfeed.utils.dataframe import is_empty_dataframe
+from pfeed.enums import ExtractType, DataLayer
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 
 
@@ -66,22 +65,25 @@ class TimeBasedFeed(BaseFeed):
     def _create_dataflows(
         self, 
         extract_func: Callable,
-        partial_data_model: Callable,
+        partial_dataflow_data_model: Callable,
+        partial_faucet_data_model: Callable,
         dataflow_per_date: bool, 
         start_date: datetime.date, 
         end_date: datetime.date,
         extract_type: ExtractType,
     ) -> list[DataFlow]:
+        from pandas import date_range
         dataflows: list[DataFlow] = []
         def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
-            data_model = partial_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
-            faucet = self.create_faucet(data_model, extract_func, extract_type)
-            dataflow: DataFlow = self.create_dataflow(faucet)
+            dataflow_data_model = partial_dataflow_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
+            faucet_data_model = partial_faucet_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
+            faucet: Faucet = self._create_faucet(faucet_data_model, extract_func, extract_type)
+            dataflow: DataFlow = self.create_dataflow(dataflow_data_model, faucet)
             dataflows.append(dataflow)
         
         if dataflow_per_date:
             # one dataflow per date
-            for date in pd.date_range(start_date, end_date).date:
+            for date in date_range(start_date, end_date).date:
                 _add_dataflow(date, date)
         else:
             # one dataflow for the entire date range
@@ -90,7 +92,8 @@ class TimeBasedFeed(BaseFeed):
     
     def _run_retrieve(
         self,
-        partial_data_model: Callable,
+        partial_dataflow_data_model: Callable,
+        partial_faucet_data_model: Callable,
         start_date: datetime.date,
         end_date: datetime.date,
         data_layer: tDATA_LAYER | None,
@@ -101,6 +104,9 @@ class TimeBasedFeed(BaseFeed):
         dataflow_per_date: bool,
         include_metadata: bool,
     ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | TimeBasedFeed:
+        if dataflow_per_date and data_layer.upper() == DataLayer.CURATED:
+            self.logger.info(f'{dataflow_per_date=} is not supported when data_layer is "curated" (files are NOT per date), set dataflow_per_date to False')
+            dataflow_per_date = False
         self._create_dataflows(
             lambda _data_model: self._retrieve_impl(
                 data_model=_data_model,
@@ -109,7 +115,8 @@ class TimeBasedFeed(BaseFeed):
                 from_storage=from_storage,
                 storage_options=storage_options,
             ),
-            partial_data_model,
+            partial_dataflow_data_model,
+            partial_faucet_data_model,
             dataflow_per_date,
             start_date,
             end_date,
@@ -124,20 +131,23 @@ class TimeBasedFeed(BaseFeed):
         
     def _run_download(
         self,
-        partial_data_model: Callable,
+        partial_dataflow_data_model: Callable,
+        partial_faucet_data_model: Callable,
         start_date: datetime.date, 
         end_date: datetime.date,
-        data_layer: tDATA_LAYER,
+        data_layer: Literal['raw', 'cleaned'],
         data_domain: str,
-        to_storage: tSTORAGE,
+        to_storage: tSTORAGE | None,
         storage_options: dict | None,
         dataflow_per_date: bool, 
         include_metadata: bool,
         add_default_transformations: Callable | None,
     ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | TimeBasedFeed:
+        assert data_layer.upper() != DataLayer.CURATED, 'writing to "curated" data layer is not supported in download()'
         self._create_dataflows(
             lambda _data_model: self._download_impl(_data_model),
-            partial_data_model, 
+            partial_dataflow_data_model,
+            partial_faucet_data_model,
             dataflow_per_date, 
             start_date, 
             end_date,
@@ -146,12 +156,13 @@ class TimeBasedFeed(BaseFeed):
         if add_default_transformations:
             add_default_transformations()
         if not self._pipeline_mode:
-            self.load(
-                to_storage=to_storage, 
-                data_layer=data_layer, 
-                data_domain=data_domain, 
-                storage_options=storage_options,
-            )
+            if to_storage is not None:
+                self.load(
+                    to_storage=to_storage, 
+                    data_layer=data_layer, 
+                    data_domain=data_domain, 
+                    storage_options=storage_options,
+                )
             df, metadata = self._eager_run(include_metadata=True)
             if missing_dates := metadata.get('missing_dates', []):
                 self.logger.warning(
@@ -189,14 +200,14 @@ class TimeBasedFeed(BaseFeed):
         }
         storage_with_the_least_missing_dates = min(missing_dates_in_storages, key=lambda x: len(missing_dates_in_storages[x]))
         
-        polars_df: pl.LazyFrame | None = df_in_storages[storage_with_the_least_missing_dates]
+        polars_lf: pl.LazyFrame | None = df_in_storages[storage_with_the_least_missing_dates]
         metadata = metadata_in_storages[storage_with_the_least_missing_dates]
-        if polars_df is not None:
-            df: GenericFrame = convert_to_user_df(polars_df, self.data_tool.name)
+        if polars_lf is not None:
+            df: GenericFrame = convert_to_user_df(polars_lf, self.data_tool.name)
             self.logger.info(f'found data {data_model} in {storage_with_the_least_missing_dates} ({data_layer=})')
         else:
             df = None
-            self.logger.warning(f'failed to find data {data_model} in any storage ({data_layer=})')
+            self.logger.debug(f'failed to find data {data_model} in any storage ({data_layer=})')
         return df, metadata
     
     def _get_historical_data_impl(
@@ -207,10 +218,10 @@ class TimeBasedFeed(BaseFeed):
         start_date: str,
         end_date: str,
         data_origin: str,
-        data_layer: tDATA_LAYER,
+        data_layer: tDATA_LAYER | None,
         data_domain: str,
         from_storage: tSTORAGE | None,
-        to_storage: tSTORAGE,
+        to_storage: tSTORAGE | None,
         storage_options: dict | None,
         force_download: bool,
         product_specs: dict | None,
@@ -230,6 +241,8 @@ class TimeBasedFeed(BaseFeed):
             feed_kwargs: kwargs specific to the feed, e.g. "resolution" for MarketFeed
         """
         '''
+        import pandas as pd
+        import narwhals as nw
         from pfeed.enums import DataAccessType
         
         assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
@@ -237,51 +250,62 @@ class TimeBasedFeed(BaseFeed):
         kwargs.update(feed_kwargs)
         
         is_download_required = force_download
-        df_from_storage: GenericFrame | None = None
-        df_from_source: GenericFrame | None = None
-        missing_dates: list[datetime.date] = []
 
         if not force_download:
-            df_from_storage, metadata = self.retrieve(
-                product=product,
-                rollback_period=rollback_period,
-                start_date=start_date,
-                end_date=end_date,
-                data_origin=data_origin,
-                data_layer=data_layer,
-                data_domain=data_domain,
-                from_storage=from_storage,
-                storage_options=storage_options,
-                include_metadata=True,
-                **kwargs
-            )
+            search_data_layers = [DataLayer.CURATED, DataLayer.CLEANED] if data_layer is None else [DataLayer[data_layer.upper()]]
+            dfs_from_storage: list[Frame] = []
+            start_missing_date = start_date
+            end_missing_date = end_date
+            for search_data_layer in search_data_layers:
+                df_from_storage, metadata_from_storage = self.retrieve(
+                    product=product,
+                    rollback_period=rollback_period,
+                    start_date=start_missing_date,
+                    end_date=end_missing_date,
+                    data_origin=data_origin,
+                    data_layer=search_data_layer.name,
+                    data_domain=data_domain,
+                    from_storage=from_storage,
+                    storage_options=storage_options,
+                    include_metadata=True,
+                    **kwargs
+                )
 
-            if missing_dates := metadata['missing_dates']:
-                is_download_required = True
-                # fill gaps between missing dates 
-                start_missing_date = str(min(missing_dates))
-                end_missing_date = str(max(missing_dates))
-                missing_dates = pd.date_range(start_missing_date, end_missing_date).date.tolist()
-            
-            if df_from_storage is not None:
-                if isinstance(df_from_storage, pd.DataFrame):
-                    # convert to pyarrow's dtypes to avoid narwhals error: Accessing `date` on the default pandas backend will return a Series of type `object`. 
-                    # This differs from polars API and will prevent `.dt` chaining. Please switch to the `pyarrow` backend
-                    df_from_storage = df_from_storage.convert_dtypes(dtype_backend="pyarrow")
-                df_from_storage: Frame = nw.from_native(df_from_storage)
-                if missing_dates:
-                    # remove missing dates in df_from_storage to avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
-                    df_from_storage: Frame = df_from_storage.filter(~nw.col('date').dt.date().is_in(missing_dates))
+                if missing_dates := metadata_from_storage['missing_dates']:
+                    is_download_required = True
+                    # fill gaps between missing dates 
+                    start_missing_date = str(min(missing_dates))
+                    end_missing_date = str(max(missing_dates))
+                    missing_dates = pd.date_range(start_missing_date, end_missing_date).date.tolist()
+                else:
+                    is_download_required = False
+                
+                if df_from_storage is not None:
+                    if isinstance(df_from_storage, pd.DataFrame):
+                        # convert to pyarrow's dtypes to avoid narwhals error: Accessing `date` on the default pandas backend will return a Series of type `object`. 
+                        # This differs from polars API and will prevent `.dt` chaining. Please switch to the `pyarrow` backend
+                        df_from_storage = df_from_storage.convert_dtypes(dtype_backend="pyarrow")
+                    df_from_storage: Frame = nw.from_native(df_from_storage)
+                    if missing_dates:
+                        # remove missing dates in df_from_storage to avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
+                        df_from_storage: Frame = df_from_storage.filter(~nw.col('date').dt.date().is_in(missing_dates))
+                    dfs_from_storage.append(df_from_storage)
+
+                # no missing data, stop searching different data layers
+                if not missing_dates:
+                    break
+
+            df_from_storage: Frame | None = nw.concat([df for df in dfs_from_storage if not is_empty_dataframe(df)]) if dfs_from_storage else None
         else:
+            df_from_storage: Frame | None = None
             start_missing_date = start_date
             end_missing_date = end_date
         
         if is_download_required:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
             if self.data_source.access_type == DataAccessType.PAID_BY_USAGE:
-                if to_storage.lower() == 'cache':
-                    self.logger.warning('prevent downloading paid data to cache, set `to_storage` to "local"')
-                    to_storage = 'local'
+                assert to_storage is not None and to_storage.lower() != 'cache', f'for downloading PAID data, `to_storage` cannot be {to_storage}'
+                
             df_from_source = self.download(
                 product,
                 symbol=symbol,
@@ -289,17 +313,16 @@ class TimeBasedFeed(BaseFeed):
                 start_date=start_missing_date,
                 end_date=end_missing_date,
                 data_origin=data_origin,
-                data_layer='curated',
                 data_domain=data_domain,
-                to_storage=to_storage,
+                to_storage=None,  # to_storage=None means NOT write to storage
                 storage_options=storage_options,
                 **kwargs
             )
             if df_from_source is not None:
                 df_from_source: Frame = nw.from_native(df_from_source)
+        else:
+            df_from_source: Frame | None = None
             
-        df_from_storage: Frame | None
-        df_from_source: Frame | None
         if df_from_storage is not None and df_from_source is not None:
             df: Frame = nw.concat([df_from_storage, df_from_source])
         elif df_from_storage is not None:
@@ -308,13 +331,21 @@ class TimeBasedFeed(BaseFeed):
             df: Frame = df_from_source
         else:
             df = None
+
         if df is not None:
             df: Frame = df.sort(by='date', descending=False)
             df: GenericFrame = df.to_native()
+            
+            if isinstance(df, pd.DataFrame):
+                # convert pyarrow's "timestamp[ns]" back to pandas' "datetime64[ns]" for consistency
+                df['date'] = df['date'].astype('datetime64[ns]')
+            
         return df
   
     def _eager_run(self, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]]:
         '''Runs dataflows and handles the results.'''
+        import narwhals as nw
+        
         assert not self._pipeline_mode, 'eager_run() is not supported in pipeline mode'
         
         completed_dataflows, failed_dataflows = self.run()
@@ -340,7 +371,7 @@ class TimeBasedFeed(BaseFeed):
 
         dfs: list[Frame] = [nw.from_native(df) for df in dfs if df is not None]
         if dfs:
-            df: Frame = nw.concat(dfs)
+            df: Frame = nw.concat([df for df in dfs if not is_empty_dataframe(df)])
             df: GenericFrame = nw.to_native(df)
         else:
             df = None

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfeed.typing import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.data_models.market_data_model import MarketDataModel
+    from pfeed.storages.base_storage import BaseStorage
 
 import datetime
 from functools import partial
@@ -26,6 +27,11 @@ class MarketFeed(TimeBasedFeed):
     def create_resolution(resolution: str | Resolution) -> Resolution:
         from pfund.datas.resolution import Resolution
         return Resolution(resolution) if isinstance(resolution, str) else resolution
+    
+    def _create_unit_resolution(self, resolution: str | Resolution) -> Resolution:
+        if isinstance(resolution, str):
+            resolution: Resolution = self.create_resolution(resolution)
+        return self.create_resolution('1' + repr(resolution.timeframe))
     
     SUPPORTED_LOWEST_RESOLUTION = create_resolution('1d')
     
@@ -64,10 +70,10 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: Literal['raw', 'cleaned']='cleaned',
         data_domain: str='',
         data_origin: str='',
-        to_storage: tSTORAGE='local',
+        to_storage: tSTORAGE | None='local',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=True,
@@ -113,21 +119,18 @@ class MarketFeed(TimeBasedFeed):
             resolution: Resolution = self.create_resolution(resolution)
         assert self.data_source.highest_resolution >= resolution >= self.SUPPORTED_LOWEST_RESOLUTION, \
             f'resolution must be >= {self.SUPPORTED_LOWEST_RESOLUTION} and <= {self.data_source.highest_resolution}'
-        # download data must be of unit resolution
         unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
-        # allow specified resolution to be lower than the lowest resolution supported by the data source above
-        # because that can be handled by resampling, but for the resolution of the actual data to be downloaded, 
-        # it must be >= the lowest resolution supported by the data source
         data_resolution: Resolution = max(unit_resolution, self.data_source.lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         # if no default and no custom transformations, set data_layer to 'raw'
         if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
-            self.logger.debug(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
+            self.logger.info(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
             data_layer = 'raw'
         data_domain = data_domain or self.DATA_DOMAIN
-        self.logger.info(f'Downloading historical {unit_resolution} data from {self.name}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
+        self.logger.info(f'Downloading {self.name} historical {product} {data_resolution} data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
-            partial_data_model=partial(self.create_data_model, product, data_resolution, data_origin=data_origin),
+            partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin),
+            partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=data_resolution, data_origin=data_origin),
             start_date=start_date, 
             end_date=end_date,
             data_layer=data_layer,
@@ -236,12 +239,14 @@ class MarketFeed(TimeBasedFeed):
         product: BaseProduct = self.create_product(product, **product_specs)
         resolution: Resolution = self.create_resolution(resolution)
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
-        unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
+        unit_resolution: Resolution = self._create_unit_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_domain = data_domain or self.DATA_DOMAIN
-        self.logger.info(f'Retrieving {self.name} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
+        self.logger.info(f'Retrieving {product} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
-            partial_data_model=partial(self.create_data_model, product, unit_resolution, data_origin=data_origin),
+            # NOTE: dataflow's data model will always have the input resolution
+            partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin),
+            partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=unit_resolution, data_origin=data_origin),
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,
@@ -261,13 +266,14 @@ class MarketFeed(TimeBasedFeed):
         from_storage: tSTORAGE | None,
         storage_options: dict | None,
     ) -> tuple[GenericFrame | None, dict[str, Any]]:
-        '''Retrieve data from storage.
-        If data is not found, search for higher resolutions.
-        NOTE: This will change the resolution of the data model.
+        '''Retrieve data from storage. If data is not found, search for higher resolutions.
+        
+        Args:
+            data_model: data model passed in by dataflow
         '''
         # if can't find unit_resolution in storage, search for higher resolutions
         # e.g. search '1m' -> search '1t'
-        unit_resolution = data_model.resolution
+        unit_resolution: Resolution = data_model.resolution
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
         search_resolutions = [unit_resolution] + [
             resolution for resolution in unit_resolution.get_higher_resolutions(exclude_quote=True) 
@@ -277,7 +283,7 @@ class MarketFeed(TimeBasedFeed):
         df: GenericFrame | None = None
         metadata: dict[str, Any] = {}
         for search_resolution in search_resolutions:
-            data_model_copy: MarketDataModel = data_model.model_copy(deep=False)
+            data_model_copy = data_model.model_copy(deep=False)
             data_model_copy.update_resolution(search_resolution)
             df, metadata = super()._retrieve_impl(
                 data_model=data_model_copy,
@@ -288,6 +294,9 @@ class MarketFeed(TimeBasedFeed):
             )
             if df is not None:
                 break
+        # HACK: use metadata to record the resolution change so that the caller (Faucet) can update its data_model
+        if data_model.resolution != data_model_copy.resolution:
+            metadata['updated_resolution'] = data_model_copy.resolution
         return df, metadata
     
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
@@ -316,11 +325,11 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str | Literal['ytd', 'max']="1w",
         start_date: str='',
         end_date: str='',
-        data_layer: tDATA_LAYER='curated',
+        data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE='cache',
+        to_storage: tSTORAGE | None='cache',
         storage_options: dict | None=None,
         force_download: bool=False,
         **product_specs
@@ -331,7 +340,7 @@ class MarketFeed(TimeBasedFeed):
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
-
+        data_domain = data_domain or self.DATA_DOMAIN
         df: GenericFrame | None = self._get_historical_data_impl(
             product=product,
             symbol=symbol,
@@ -350,6 +359,28 @@ class MarketFeed(TimeBasedFeed):
             resolution=data_resolution,
         )
         
+        # write data to storage in data_layer='curated', especially useful for caching large resampled data
+        if to_storage is not None:
+            start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+            data_model = self.create_data_model(
+                product=product,
+                resolution=data_resolution,
+                start_date=start_date,
+                end_date=end_date,
+                data_origin=data_origin,
+                **product_specs,
+            )
+            data_layer = 'curated'
+            storage: BaseStorage = self.create_storage(
+                storage=to_storage,
+                data_model=data_model,
+                data_layer=data_layer,
+                data_domain=data_domain,
+                storage_options=storage_options,
+            )
+            storage.write_data(df)
+            self.logger.info(f'wrote {data_model} data to {storage.name} in data_layer="{data_layer}"')
+            
         # NOTE: df from storage/source should have been resampled, 
         # this is only called when resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         if df is not None:

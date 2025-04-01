@@ -9,6 +9,7 @@ from pfeed.cli.commands.download import download
 from pfeed.cli.commands.doc import doc
 from pfeed.cli.commands.deltalake import deltalake
 from pfeed.cli.commands.clear import clear
+from pfeed.cli.commands.data import data
 
 
 @tui(command='tui', help="Open terminal UI")
@@ -29,3 +30,4 @@ pfeed_group.add_command(doc)
 pfeed_group.add_command(clear)
 pfeed_group.add_command(deltalake)
 pfeed_group.add_command(deltalake, name='delta')  # alias for deltalake
+pfeed_group.add_command(data)

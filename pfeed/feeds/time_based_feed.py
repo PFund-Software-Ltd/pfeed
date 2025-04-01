@@ -313,7 +313,6 @@ class TimeBasedFeed(BaseFeed):
                 start_date=start_missing_date,
                 end_date=end_missing_date,
                 data_origin=data_origin,
-                data_domain=data_domain,
                 to_storage=None,  # to_storage=None means NOT write to storage
                 storage_options=storage_options,
                 **kwargs

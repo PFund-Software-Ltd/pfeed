@@ -57,7 +57,6 @@ class NewsFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         data_layer: Literal['raw', 'cleaned']='cleaned',
-        data_domain: str='',
         to_storage: tSTORAGE | None='local',
         storage_options: dict | None=None,
         auto_transform: bool=True,
@@ -79,7 +78,7 @@ class NewsFeed(TimeBasedFeed):
         if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
             self.logger.info(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
             data_layer = 'raw' 
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = self.DATA_DOMAIN
         self.logger.info(f'Downloading {self.name} historical news data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),

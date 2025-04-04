@@ -89,7 +89,7 @@ class NewsFeed(TimeBasedFeed):
             data_domain=data_domain,
             to_storage=to_storage,
             storage_options=storage_options,
-            add_default_transformations=lambda: self._add_default_transformations_to_download(product=product) if auto_transform else None,
+            add_default_transformations=(lambda: self._add_default_transformations_to_download(product=product)) if auto_transform else None,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
         )
@@ -139,7 +139,7 @@ class NewsFeed(TimeBasedFeed):
             data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
-            add_default_transformations=lambda: self._add_default_transformations_to_retrieve() if auto_transform else None,
+            add_default_transformations=(lambda: self._add_default_transformations_to_retrieve()) if auto_transform else None,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
         )

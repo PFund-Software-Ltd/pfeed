@@ -114,6 +114,7 @@ class TimeBasedFeed(BaseFeed):
                 data_domain=data_domain,
                 from_storage=from_storage,
                 storage_options=storage_options,
+                add_default_transformations=add_default_transformations,
             ),
             partial_dataflow_data_model,
             partial_faucet_data_model,
@@ -180,6 +181,7 @@ class TimeBasedFeed(BaseFeed):
         data_domain: str,
         from_storage: tSTORAGE | None,
         storage_options: dict | None,
+        add_default_transformations: Callable | None,
     ) -> tuple[GenericFrame | None, dict[str, Any]]:
         '''Retrieves data among all scanned data loaded from local storages.
         Returns the data from the storage with the least missing dates.

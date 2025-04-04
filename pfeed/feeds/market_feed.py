@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING, Any
+from typing import Literal, TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     import pandas as pd
     from pfund.products.product_base import BaseProduct
@@ -136,7 +136,7 @@ class MarketFeed(TimeBasedFeed):
             data_domain=data_domain,
             to_storage=to_storage,
             storage_options=storage_options,
-            add_default_transformations=lambda: self._add_default_transformations_to_download(data_resolution, resolution, product) if auto_transform else None,
+            add_default_transformations=(lambda: self._add_default_transformations_to_download(data_resolution, resolution, product)) if auto_transform else None,
             dataflow_per_date=dataflow_per_date, 
             include_metadata=include_metadata,
         )
@@ -251,7 +251,7 @@ class MarketFeed(TimeBasedFeed):
             data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
-            add_default_transformations=lambda: self._add_default_transformations_to_retrieve(resolution) if auto_transform else None,
+            add_default_transformations=(lambda: self._add_default_transformations_to_retrieve(resolution)) if auto_transform else None,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
         )
@@ -263,6 +263,7 @@ class MarketFeed(TimeBasedFeed):
         data_domain: str,
         from_storage: tSTORAGE | None,
         storage_options: dict | None,
+        add_default_transformations: Callable | None,
     ) -> tuple[GenericFrame | None, dict[str, Any]]:
         '''Retrieve data from storage. If data is not found, search for higher resolutions.
         
@@ -273,11 +274,14 @@ class MarketFeed(TimeBasedFeed):
         # e.g. search '1m' -> search '1t'
         unit_resolution: Resolution = data_model.resolution
         assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        search_resolutions = [unit_resolution] + [
-            resolution for resolution in unit_resolution.get_higher_resolutions(exclude_quote=True) 
-            # remove resolutions that are not supported by the data source
-            if resolution <= self.data_source.highest_resolution
-        ]
+        search_resolutions = [unit_resolution]
+        # if add_default_transformations is provided, it means auto-resampling is enabled, search for higher resolutions
+        if add_default_transformations:
+            search_resolutions += [
+                resolution for resolution in unit_resolution.get_higher_resolutions(exclude_quote=True) 
+                # remove resolutions that are not supported by the data source
+                if resolution <= self.data_source.highest_resolution
+            ]
         df: GenericFrame | None = None
         metadata: dict[str, Any] = {}
         for search_resolution in search_resolutions:
@@ -289,6 +293,7 @@ class MarketFeed(TimeBasedFeed):
                 data_layer=data_layer,
                 from_storage=from_storage,
                 storage_options=storage_options,
+                add_default_transformations=add_default_transformations,
             )
             if df is not None:
                 break

@@ -182,8 +182,9 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str="1w",
         start_date: str='',
         end_date: str='',
-        data_layer: tDATA_LAYER='cleaned',
         data_origin: str='',
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='',
         from_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         auto_transform: bool=True,
@@ -239,7 +240,7 @@ class MarketFeed(TimeBasedFeed):
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
         unit_resolution: Resolution = self._create_unit_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_domain = self.DATA_DOMAIN
+        data_domain = data_domain or self.DATA_DOMAIN
         self.logger.info(f'Retrieving {product} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
             # NOTE: dataflow's data model will always have the input resolution
@@ -328,8 +329,9 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str | Literal['ytd', 'max']="1w",
         start_date: str='',
         end_date: str='',
-        data_layer: tDATA_LAYER | None=None,
         data_origin: str='',
+        data_layer: tDATA_LAYER | None=None,
+        data_domain: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
@@ -343,14 +345,16 @@ class MarketFeed(TimeBasedFeed):
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
+        data_domain = data_domain or self.DATA_DOMAIN
         df: GenericFrame | None = self._get_historical_data_impl(
             product=product,
             symbol=symbol,
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            data_layer=data_layer,
             data_origin=data_origin,
+            data_layer=data_layer,
+            data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
             force_download=force_download,
@@ -376,7 +380,7 @@ class MarketFeed(TimeBasedFeed):
                 storage=to_storage,
                 data_model=data_model,
                 data_layer=data_layer,
-                data_domain=self.DATA_DOMAIN,
+                data_domain=data_domain,
                 storage_options=storage_options,
             )
             storage.write_data(df)

@@ -163,9 +163,10 @@ class NewsFeed(TimeBasedFeed):
         data_origin: str='',
         data_layer: tDATA_LAYER | None=None,
         from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE | None=None,
+        # to_storage: tSTORAGE | None=None,  # REVIEW: also write to curated data layer?
         storage_options: dict | None=None,
         force_download: bool=False,
+        retrieve_per_date: bool=False,
         **product_specs
     ) -> GenericFrame | None:
         '''
@@ -175,7 +176,6 @@ class NewsFeed(TimeBasedFeed):
             NOTE: this behavior is different from MarketFeed
             from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
-        data_domain = self.DATA_DOMAIN
         return self._get_historical_data_impl(
             product=product,
             symbol=symbol,
@@ -184,11 +184,10 @@ class NewsFeed(TimeBasedFeed):
             end_date=end_date,
             data_origin=data_origin,
             data_layer=data_layer,
-            data_domain=data_domain,
             from_storage=from_storage,
-            to_storage=to_storage,
             storage_options=storage_options,
             force_download=force_download,
+            retrieve_per_date=retrieve_per_date,
             product_specs=product_specs,
         )
 

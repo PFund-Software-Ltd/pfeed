@@ -102,6 +102,7 @@ class BybitMarketFeed(CryptoMarketFeed):
         to_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
+        retrieve_per_date: bool=False,
         **product_specs
     ) -> GenericFrame | None | BybitMarketFeed:
         return super().get_historical_data(
@@ -116,6 +117,7 @@ class BybitMarketFeed(CryptoMarketFeed):
             to_storage=to_storage,
             storage_options=storage_options,
             force_download=force_download,
+            retrieve_per_date=retrieve_per_date,
             **product_specs
         )
         

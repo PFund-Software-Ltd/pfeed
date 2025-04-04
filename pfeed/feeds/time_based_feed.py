@@ -220,9 +220,9 @@ class TimeBasedFeed(BaseFeed):
         data_origin: str,
         data_layer: tDATA_LAYER | None,
         from_storage: tSTORAGE | None,
-        to_storage: tSTORAGE | None,
         storage_options: dict | None,
         force_download: bool,
+        retrieve_per_date: bool,
         product_specs: dict | None,
         **feed_kwargs
     ) -> GenericFrame | None:
@@ -263,6 +263,7 @@ class TimeBasedFeed(BaseFeed):
                     end_date=end_missing_date,
                     data_origin=data_origin,
                     data_layer=search_data_layer.name,
+                    dataflow_per_date=retrieve_per_date if search_data_layer != DataLayer.CURATED else False,
                     from_storage=from_storage,
                     storage_options=storage_options,
                     include_metadata=True,

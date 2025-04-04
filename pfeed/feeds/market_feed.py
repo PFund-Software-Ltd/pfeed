@@ -329,6 +329,7 @@ class MarketFeed(TimeBasedFeed):
         to_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
+        retrieve_per_date: bool=False,
         **product_specs
     ) -> GenericFrame | None:
         from pfeed._etl import market as etl
@@ -346,9 +347,9 @@ class MarketFeed(TimeBasedFeed):
             data_layer=data_layer,
             data_origin=data_origin,
             from_storage=from_storage,
-            to_storage=to_storage,
             storage_options=storage_options,
             force_download=force_download,
+            retrieve_per_date=retrieve_per_date,
             product_specs=product_specs,
             # NOTE: feed specific kwargs
             resolution=data_resolution,

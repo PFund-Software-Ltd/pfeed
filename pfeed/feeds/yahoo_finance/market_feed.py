@@ -228,6 +228,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         to_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
+        retrieve_per_date: bool=False,
         yfinance_kwargs: dict | None=None,
         **product_specs,
     ) -> GenericFrame | None:
@@ -275,6 +276,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             to_storage=to_storage,
             storage_options=storage_options,
             force_download=force_download,
+            retrieve_per_date=retrieve_per_date,
             **product_specs,
         )
         self._yfinance_kwargs.clear()

@@ -30,19 +30,19 @@ dependencies = [
     "polars[polars_cloud] (>=1.26.0,<2.0.0)",
     "duckdb (>=1.2.1,<2.0.0)",
     "pandera (>=0.23.1,<0.24.0)",
-    "pydantic (>=2.10.6,<3.0.0)",
-    "narwhals (>=1.32.0,<2.0.0)",
+    "pydantic (>=2.11.2,<3.0.0)",
+    "narwhals (>=1.33.0,<2.0.0)",
     "yfinance (>=0.2.55,<0.3.0)",
     "zstandard (>=0.23.0,<0.24.0)",
-    "beautifulsoup4 (>=4.12.3,<5.0.0)",
+    "beautifulsoup4 (>=4.13.3,<5.0.0)",
 ]
 
 [project.optional-dependencies]
 core = [
     "minio (>=7.2.15,<8.0.0)",
     "deltalake (>=0.25.4,<0.26.0)",
-    "ray (>=2.44.0,<3.0.0)",
-    "prefect (>=3.2.2,<4.0.0)",
+    "ray (>=2.44.1,<3.0.0)",
+    "prefect (>=3.3.2,<4.0.0) ; python_version < '3.14.0'",
     "bytewax (>=0.21.1,<0.22.0)",
     "confluent-kafka (>=2.8.2,<3.0.0)",
 ]

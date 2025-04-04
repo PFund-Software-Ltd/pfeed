@@ -119,7 +119,6 @@ class NewsFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
         from_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         auto_transform: bool=True,
@@ -129,7 +128,7 @@ class NewsFeed(TimeBasedFeed):
     ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | NewsFeed:
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = self.DATA_DOMAIN
         self.logger.info(f'Retrieving {self.name} {product=} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
@@ -163,7 +162,6 @@ class NewsFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         data_layer: tDATA_LAYER | None=None,
-        data_domain: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE | None='cache',
         storage_options: dict | None=None,
@@ -177,7 +175,7 @@ class NewsFeed(TimeBasedFeed):
             NOTE: this behavior is different from MarketFeed
             from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = self.DATA_DOMAIN
         return self._get_historical_data_impl(
             product=product,
             symbol=symbol,

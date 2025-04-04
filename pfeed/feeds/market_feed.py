@@ -183,7 +183,6 @@ class MarketFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_layer: tDATA_LAYER='cleaned',
-        data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
@@ -240,7 +239,7 @@ class MarketFeed(TimeBasedFeed):
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
         unit_resolution: Resolution = self._create_unit_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = self.DATA_DOMAIN
         self.logger.info(f'Retrieving {product} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
             # NOTE: dataflow's data model will always have the input resolution
@@ -325,7 +324,6 @@ class MarketFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_layer: tDATA_LAYER | None=None,
-        data_domain: str='',
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
         to_storage: tSTORAGE | None='cache',
@@ -339,7 +337,7 @@ class MarketFeed(TimeBasedFeed):
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = self.DATA_DOMAIN
         df: GenericFrame | None = self._get_historical_data_impl(
             product=product,
             symbol=symbol,

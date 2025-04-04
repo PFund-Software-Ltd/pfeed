@@ -273,7 +273,7 @@ class BaseFeed(ABC):
     
     def _clear_subflows(self):
         '''Clear subflows
-        This is necessary to allow the following behaviour:
+        This is necessary to achieve the following behaviour:
         download(...).transform(...).load(...).stream(...).transform(...).load(...)
         1. subflows: download(...).transform(...).load(...)
         2. clear subflows so that the operations of the next batch of dataflows are independent of the previous batch

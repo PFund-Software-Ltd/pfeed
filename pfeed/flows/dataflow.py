@@ -156,7 +156,7 @@ class DataFlow:
     def _load(self, data: GenericData | BytewaxStream, flow_type: FlowType=FlowType.native):
         if self.sink is None:
             if self.extract_type != ExtractType.retrieve:
-                self.logger.warning(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
+                self.logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
             return
         if not self.is_streaming():
             load = task(self.sink.flush) if flow_type == FlowType.prefect else self.sink.flush

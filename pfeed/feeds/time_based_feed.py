@@ -219,7 +219,6 @@ class TimeBasedFeed(BaseFeed):
         end_date: str,
         data_origin: str,
         data_layer: tDATA_LAYER | None,
-        data_domain: str,
         from_storage: tSTORAGE | None,
         to_storage: tSTORAGE | None,
         storage_options: dict | None,
@@ -264,7 +263,6 @@ class TimeBasedFeed(BaseFeed):
                     end_date=end_missing_date,
                     data_origin=data_origin,
                     data_layer=search_data_layer.name,
-                    data_domain=data_domain,
                     from_storage=from_storage,
                     storage_options=storage_options,
                     include_metadata=True,
@@ -304,7 +302,7 @@ class TimeBasedFeed(BaseFeed):
         if is_download_required:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
             if self.data_source.access_type == DataAccessType.PAID_BY_USAGE:
-                assert to_storage is not None and to_storage.lower() != 'cache', f'for downloading PAID data, `to_storage` cannot be {to_storage}'
+                raise Exception('downloading PAID data is not allowed in get_historical_data(), use download() to prepare the data beforehand')
                 
             df_from_source = self.download(
                 product,

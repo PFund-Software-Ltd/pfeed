@@ -99,7 +99,7 @@ class BybitMarketFeed(CryptoMarketFeed):
         data_layer: tDATA_LAYER | None=None,
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE | None='cache',
+        to_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
         **product_specs

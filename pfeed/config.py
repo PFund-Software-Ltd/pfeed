@@ -44,6 +44,7 @@ class Configuration:
     env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
     
+    # NOTE: without type annotation, they will NOT be treated as dataclass fields but as class attributes
     _logging_config = {}
     _instance = None
     _verbose = False

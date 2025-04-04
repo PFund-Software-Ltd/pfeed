@@ -326,7 +326,7 @@ class MarketFeed(TimeBasedFeed):
         data_layer: tDATA_LAYER | None=None,
         data_origin: str='',
         from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE | None='cache',
+        to_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
         **product_specs
@@ -337,7 +337,6 @@ class MarketFeed(TimeBasedFeed):
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
-        data_domain = self.DATA_DOMAIN
         df: GenericFrame | None = self._get_historical_data_impl(
             product=product,
             symbol=symbol,
@@ -345,7 +344,6 @@ class MarketFeed(TimeBasedFeed):
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,
-            data_domain=data_domain,
             data_origin=data_origin,
             from_storage=from_storage,
             to_storage=to_storage,
@@ -372,7 +370,7 @@ class MarketFeed(TimeBasedFeed):
                 storage=to_storage,
                 data_model=data_model,
                 data_layer=data_layer,
-                data_domain=data_domain,
+                data_domain=self.DATA_DOMAIN,
                 storage_options=storage_options,
             )
             storage.write_data(df)

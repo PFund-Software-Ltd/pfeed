@@ -107,18 +107,17 @@ class TimeBasedDataHandler(BaseDataHandler):
             missing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
         # data is stored in a single file (no date in the filename)
         else:
-            if file_metadata := list(metadata['file_metadata'].values()):
-                file_metadata = file_metadata[0]
-                current_dates_in_storage = pd.date_range(file_metadata['start_date'], file_metadata['end_date']).date.tolist()
-            else:
-                current_dates_in_storage = []
-            missing_dates = [date for date in data_model.dates if date not in current_dates_in_storage]
             if df is not None:
+                file_metadata = list(metadata['file_metadata'].values())[0]
+                dates_in_df = pd.date_range(file_metadata['start_date'], file_metadata['end_date']).date.tolist()
+                missing_dates = [date for date in data_model.dates if date not in dates_in_df]
                 # select the range of data_model.dates in the df
                 # performance should not be an issue since storage.read_data() should be using polars already, call convert_to_user_df again to make sure
                 polars_lf: pl.LazyFrame = convert_to_user_df(df, data_tool='polars')
                 polars_lf = polars_lf.filter(pl.col('date').dt.date().is_in(data_model.dates))
                 df = convert_to_user_df(polars_lf, data_tool=data_tool)
+            else:
+                missing_dates = data_model.dates
 
         metadata['missing_dates'] = missing_dates
         return df, metadata

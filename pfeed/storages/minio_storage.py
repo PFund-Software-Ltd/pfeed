@@ -1,10 +1,13 @@
 from __future__ import annotations
+from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import urllib3
     try:
         from minio.api import ObjectWriteResult, Tags
     except ImportError:
         pass
+    from minio.credentials.providers import Provider
     from typing import Generator
     from pfeed.typing import tDATA_LAYER
 
@@ -19,6 +22,16 @@ from minio import S3Error, ServerError, Minio
 from pfeed.storages.base_storage import BaseStorage
 
 
+class MinioStorageOptions(TypedDict):
+    access_key: str
+    secret_key: str
+    session_token: str
+    region: str
+    http_client: urllib3.PoolManager
+    credentials: Provider
+    cert_check: bool
+
+
 class MinioStorage(BaseStorage):
     # DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
     BUCKET_NAME: str = 'pfeed'
@@ -28,55 +41,79 @@ class MinioStorage(BaseStorage):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='general_data',
         use_deltalake: bool=False, 
-        **kwargs
+        storage_options: MinioStorageOptions | None=None,
     ):
         '''
         Args:
-            kwargs: kwargs specific to minio client
+            storage_options: kwargs specific to minio client
         '''
-        super().__init__(name='minio', data_layer=data_layer, data_domain=data_domain, use_deltalake=use_deltalake, **kwargs)
-        self.endpoint: str = self.create_endpoint()
+        self.endpoint = self._create_endpoint()
+        super().__init__(
+            name='minio', 
+            data_layer=data_layer, 
+            data_domain=data_domain, 
+            use_deltalake=use_deltalake, 
+            storage_options=self._normalize_storage_options(storage_options),
+        )
         cache_time = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
         if not MinioStorage._check_if_server_running(cache_time, self.endpoint):
             raise ServerError(f"{self.name} is not running", 503)
-        self.minio: Minio = self._create_minio()
+        self.minio: Minio = self._create_minio(storage_options)
         if not self.minio.bucket_exists(self.BUCKET_NAME):
             self.minio.make_bucket(self.BUCKET_NAME)
     
-    def get_filesystem(self) -> pa_fs.S3FileSystem:
-        return pa_fs.S3FileSystem(
-            endpoint_override=self.endpoint,
-            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
-            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
-        )
-    
-    def get_storage_options(self) -> dict:
-        storage_options = {
-            "endpoint_url": self.endpoint,
-            "access_key_id": os.getenv('MINIO_ROOT_USER', 'pfunder'),
-            "secret_access_key": os.getenv('MINIO_ROOT_PASSWORD', 'password'),
-            "region": "us-east-1",
-        }
-        if self.use_deltalake:
-            storage_options['allow_http'] = 'true' if self.endpoint.startswith('http://') else 'false'
-            storage_options['conditional_put'] = 'etag'
-        return storage_options
-    
     @staticmethod
-    def create_endpoint() -> str:
+    def _create_endpoint() -> str:
         '''Creates endpoint, e.g. http://localhost:9000'''
         endpoint = os.getenv('MINIO_HOST', 'localhost')+':'+os.getenv('MINIO_PORT', '9000')
         if not endpoint.startswith('http'):
             endpoint = 'http://' + endpoint if 'localhost' in endpoint or '127.0.0.1' in endpoint else 'https://' + endpoint
         return endpoint
+
+    def _normalize_storage_options(self, minio_options: MinioStorageOptions | None) -> dict:
+        """
+        Normalize minio's storage options to S3 compatible options
+        """
+        default_access_key = os.getenv('MINIO_ROOT_USER', 'pfunder')
+        default_secret_key = os.getenv('MINIO_ROOT_PASSWORD', 'password')
+        if minio_options is None:
+            storage_options = {
+                "endpoint_url": self.endpoint,
+                "access_key_id": default_access_key,
+                "secret_access_key": default_secret_key,
+            }
+        else:
+            storage_options = {
+                "endpoint_url": self.endpoint,
+                "access_key_id": minio_options.pop("access_key", default_access_key),
+                "secret_access_key": minio_options.pop("secret_key", default_secret_key),
+            }
+
+        # REVIEW
+        if self.use_deltalake:
+            if 'allow_http' not in storage_options:
+                storage_options["allow_http"] = 'true' if self.endpoint.startswith("http://") else 'false'
+            if 'conditional_put' not in storage_options:
+                storage_options["conditional_put"] = 'etag'
+            if 'region' not in storage_options:
+                storage_options["region"] = 'us-east-1'  # REVIEW
+
+        return storage_options
     
-    def _create_minio(self) -> Minio:
+    def _create_minio(self, minio_options: MinioStorageOptions | None) -> Minio:
         return Minio(
             endpoint=self.endpoint.replace('http://', '').replace('https://', ''),
-            access_key=os.getenv('MINIO_ROOT_USER', 'pfunder'),
-            secret_key=os.getenv('MINIO_ROOT_PASSWORD', 'password'),
+            access_key=self._storage_options['access_key_id'],
+            secret_key=self._storage_options['secret_access_key'],
             secure=self.endpoint.startswith('https://'),  # turn off TLS, i.e. not using HTTPS
-            **self._kwargs,
+            **(minio_options or {}),
+        )
+    
+    def get_filesystem(self) -> pa_fs.S3FileSystem:
+        return pa_fs.S3FileSystem(
+            endpoint_override=self._storage_options['endpoint_url'],
+            access_key=self._storage_options['access_key_id'],
+            secret_key=self._storage_options['secret_access_key'],
         )
     
     @staticmethod

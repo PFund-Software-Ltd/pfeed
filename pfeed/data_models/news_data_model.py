@@ -30,33 +30,32 @@ class NewsDataModel(TimeBasedDataModel):
             assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
         return data
     
-    def create_filename(self, date: datetime.date) -> str:
-        if self.product is None:
-            filename = '_'.join(["GENERAL_MARKET_NEWS", str(date)])
+    def create_filename(self, date: datetime.date | None=None) -> str:
+        name = 'GENERAL_MARKET_NEWS' if self.product is None else self.product.name
+        if date is None:
+            filename = name
         else:
-            filename = '_'.join([self.product.name, str(date)])
+            filename = '_'.join([name, str(date)])
         return filename + self.file_extension
 
-    def create_storage_path(self, date: datetime.date) -> Path:
-        year, month, day = str(date).split('-')
-        if self.product is None:
+    def create_storage_path(self, date: datetime.date | None=None) -> Path:
+        product_type = 'NONE' if self.product is None else self.product.type.value
+        product_name = 'NONE' if self.product is None else self.product.name
+        if date is None:
             return (
                 Path(f'env={self.env.value}')
                 / f'data_source={self.data_source.name}'
                 / f'data_origin={self.data_origin}'
-                / 'product_type=NONE'
-                / 'product=NONE'
-                / f'year={year}'
-                / f'month={month}'
-                / f'day={day}'
-            )
+                / f'product_type={product_type}'
+            )            
         else:
+            year, month, day = str(date).split('-')
             return (
                 Path(f'env={self.env.value}')
                 / f'data_source={self.data_source.name}'
                 / f'data_origin={self.data_origin}'
-                / f'product_type={self.product.type.value}'
-                / f'product={self.product.name}'
+                / f'product_type={product_type}'
+                / f'product={product_name}'
                 / f'year={year}'
                 / f'month={month}'
                 / f'day={day}'
@@ -78,3 +77,10 @@ class NewsDataModel(TimeBasedDataModel):
             storage_options=storage_options, 
             use_deltalake=use_deltalake
         )
+
+    def to_metadata(self) -> dict:
+        return {
+            **super().to_metadata(),
+            'product': self.product.name if self.product else None,
+            'product_type': self.product.type.value if self.product else None,
+        }

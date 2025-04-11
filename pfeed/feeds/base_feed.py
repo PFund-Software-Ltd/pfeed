@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal
+from typing import TYPE_CHECKING, Callable, Any
 from types import ModuleType
 if TYPE_CHECKING:
     import polars as pl
@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from pfeed.flows.faucet import Faucet
     from pfeed.flows.sink import Sink
     from pfeed.flows.result import FlowResult
-    from pfeed.storages import DuckDBStorage, MinioStorage
     
 import os
 from abc import ABC, abstractmethod
@@ -106,44 +105,6 @@ class BaseFeed(ABC):
     @abstractmethod
     def _create_dataflows(self, *args, **kwargs) -> list[DataFlow]:
         pass
-
-    @overload
-    def create_storage(self,
-        storage: Literal['duckdb'],
-        data_model: BaseDataModel,
-        data_layer: tDATA_LAYER,
-        data_domain: str,
-        storage_options: dict | None=None,
-    ) -> DuckDBStorage:
-        ...
-        
-    @overload
-    def create_storage(self,
-        storage: Literal['minio'],
-        data_model: BaseDataModel,
-        data_layer: tDATA_LAYER,
-        data_domain: str,
-        storage_options: dict | None=None,
-    ) -> MinioStorage:
-        ...
-
-    def create_storage(
-        self,
-        storage: tSTORAGE,
-        data_model: BaseDataModel,
-        data_layer: tDATA_LAYER,
-        data_domain: str,
-        storage_options: dict | None=None,
-    ) -> BaseStorage:
-        storage_options = storage_options or self._storage_options.get(storage, {})
-        Storage = DataStorage[storage.upper()].storage_class
-        return Storage.from_data_model(
-            data_model,
-            data_layer,
-            data_domain,
-            use_deltalake=self._use_deltalake,
-            **storage_options,
-        )
     
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
         return self.data_source.create_product(product_basis, symbol=symbol, **product_specs)
@@ -282,6 +243,7 @@ class BaseFeed(ABC):
         self._subflows.clear()
     
     def transform(self, *funcs) -> BaseFeed:
+        assert self.is_pipeline(), 'transform() is only supported in pipeline mode'
         for dataflow in self._subflows:
             dataflow.add_transformations(*funcs)
         return self
@@ -299,11 +261,12 @@ class BaseFeed(ABC):
             data_domain: custom domain of the data, used in data_path/data_layer/data_domain
                 useful for grouping data
         '''
+        assert self.is_pipeline(), 'load() is only supported in pipeline mode'
         if self._use_ray:
             assert to_storage.lower() != 'duckdb', 'DuckDB is not thread-safe, cannot be used with Ray'
+
         storage_options = storage_options or self._storage_options.get(to_storage, {})
         Storage = DataStorage[to_storage.upper()].storage_class
-
         # NOTE: lazy creation of storage to avoid pickle errors when using ray
         # e.g. minio client is using socket, which is not picklable
         def _create_storage(data_model: BaseDataModel):
@@ -312,7 +275,7 @@ class BaseFeed(ABC):
                 data_layer=data_layer,
                 data_domain=data_domain,
                 use_deltalake=self._use_deltalake,
-                **storage_options,
+                storage_options=storage_options,
             )
 
         for dataflow in self._subflows:

@@ -26,12 +26,10 @@ class DataStorage(StrEnum):
 
     @property
     def storage_class(self) -> type[BaseStorage]:
-        from pfeed.storages import (
-            LocalStorage,
-            CacheStorage,
-            MinioStorage,
-            DuckDBStorage,
-        )
+        from pfeed.storages.local_storage import LocalStorage
+        from pfeed.storages.minio_storage import MinioStorage
+        from pfeed.storages.duckdb_storage import DuckDBStorage
+        from pfeed.storages.cache_storage import CacheStorage
         return {
             DataStorage.LOCAL: LocalStorage,
             DataStorage.CACHE: CacheStorage,

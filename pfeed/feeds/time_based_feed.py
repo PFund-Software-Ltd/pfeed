@@ -284,10 +284,12 @@ class TimeBasedFeed(BaseFeed):
                     is_download_required = False
                 
                 if df_from_storage is not None:
+                    # REVIEW
                     if isinstance(df_from_storage, pd.DataFrame):
                         # convert to pyarrow's dtypes to avoid narwhals error: Accessing `date` on the default pandas backend will return a Series of type `object`. 
                         # This differs from polars API and will prevent `.dt` chaining. Please switch to the `pyarrow` backend
                         df_from_storage = df_from_storage.convert_dtypes(dtype_backend="pyarrow")
+                        
                     df_from_storage: Frame = nw.from_native(df_from_storage)
                     if missing_dates:
                         # remove missing dates in df_from_storage to avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
@@ -338,6 +340,7 @@ class TimeBasedFeed(BaseFeed):
             df: Frame = df.sort(by='date', descending=False)
             df: GenericFrame = df.to_native()
             
+            # REVIEW
             if isinstance(df, pd.DataFrame):
                 # convert pyarrow's "timestamp[ns]" back to pandas' "datetime64[ns]" for consistency
                 df['date'] = df['date'].astype('datetime64[ns]')

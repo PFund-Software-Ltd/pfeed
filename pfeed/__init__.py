@@ -2,6 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund_plugins.base_plugin import BasePlugin
+    from pfeed.storages.duckdb_storage import DuckDBStorage
+    from pfeed.storages.minio_storage import MinioStorage
+    from pfeed.storages.local_storage import LocalStorage
     # need these imports to support IDE hints:
     aliases = ...
     from pfeed.feeds.yahoo_finance.yahoo_finance import (
@@ -15,16 +18,21 @@ if TYPE_CHECKING:
         FinancialModelingPrep,
         FinancialModelingPrep as FMP,
     )
+    from pfeed.feeds.pfund import (
+        PFund,
+    )
 
 from importlib.metadata import version
 from pfeed.config import configure, get_config
+from pfeed.storages import create_storage
+from pfeed.feeds import get_market_feed
 
 
 
+# FIXME
 plugins = {}
 def add_plugin(plugin: BasePlugin):
     plugins[plugin.name] = plugin
-    
 
 
 def __getattr__(name: str):
@@ -32,6 +40,15 @@ def __getattr__(name: str):
         from pfeed.const.aliases import ALIASES
         from pfund.const.aliases import ALIASES as PFUND_ALIASES
         return {**ALIASES, **PFUND_ALIASES}
+    elif name == 'DuckDBStorage':
+        from pfeed.storages.duckdb_storage import DuckDBStorage
+        return DuckDBStorage
+    elif name == 'MinioStorage':
+        from pfeed.storages.minio_storage import MinioStorage
+        return MinioStorage
+    elif name == 'LocalStorage':
+        from pfeed.storages.local_storage import LocalStorage
+        return LocalStorage
     elif name in ('YahooFinance', 'YF'):
         from pfeed.feeds.yahoo_finance.yahoo_finance import YahooFinance
         return YahooFinance
@@ -41,6 +58,9 @@ def __getattr__(name: str):
     elif name in ('FinancialModelingPrep', 'FMP'):
         from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import FinancialModelingPrep
         return FinancialModelingPrep
+    elif name == 'PFund':
+        from pfeed.feeds.pfund import PFund
+        return PFund
     elif name in plugins:
         return plugins[name]
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
@@ -64,7 +84,16 @@ __all__ = (
     "add_plugin",
     "aliases",
     "what_is",
+    # sugar functions
+    "create_storage",
+    "get_market_feed",
+    # storage classes
+    "DuckDBStorage",
+    "MinioStorage",
+    "LocalStorage",
+    # data sources
     "YahooFinance", "YF",
     "Bybit",
     "FinancialModelingPrep", "FMP",
+    "PFund",
 )

@@ -12,7 +12,7 @@ class DeltaLakeStorageMixin:
             raise ValueError(f'{self.use_deltalake=} for this storage')
         from pfeed.storages.minio_storage import MinioStorage
         delta_tables = []
-        storage_options = self.get_storage_options()
+        storage_options = self._storage_options
         if isinstance(self, MinioStorage):
             for obj in self.minio.list_objects(self.BUCKET_NAME, recursive=True):
                 file_path = obj._object_name

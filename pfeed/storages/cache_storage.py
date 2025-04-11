@@ -3,7 +3,7 @@ import datetime
 from pathlib import Path
 
 from pfeed.typing import tDATA_LAYER
-from pfeed.storages import LocalStorage
+from pfeed.storages.local_storage import LocalStorage
 
 
 class CacheStorage(LocalStorage):

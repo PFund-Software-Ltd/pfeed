@@ -5,8 +5,6 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame, tDATA_TOOL
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
-from abc import abstractmethod
-from pathlib import Path
 import datetime
 
 import pandas as pd
@@ -40,7 +38,6 @@ class TimeBasedDataHandler(BaseDataHandler):
             use_deltalake=use_deltalake,
         )
     
-    @abstractmethod
     def _validate_schema(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
@@ -52,18 +49,16 @@ class TimeBasedDataHandler(BaseDataHandler):
                 self._data_path + '/' + str(data_model.create_storage_path(date)) + '/' + data_model.create_filename(date)
                 for date in data_model.dates
             ]
-        # data_layer="curated" means that the data will be stored in a single file
+        # data_layer="curated" means that the data will be stored in a single file with multiple dates amount of data in it
         else:
-            # remove the date from the filename
-            filename = data_model.create_filename(data_model.date).replace("_"+str(data_model.date), '')
-            # only get the top 3 levels env/data_source/data_origin from the storage path
-            storage_path = Path(*data_model.create_storage_path(data_model.date).parts[:3])
-            return [self._data_path + '/' + str(storage_path) + '/' + filename]
+            return [self._data_path + '/' + str(data_model.create_storage_path()) + '/' + data_model.create_filename()]
         
     def write(self, df: GenericFrame, metadata: dict | None=None):
         from pfeed._etl.base import convert_to_pandas_df
-        df: pd.DataFrame = convert_to_pandas_df(df)
 
+        metadata = {**self._data_model.to_metadata(), **(metadata or {})}
+
+        df: pd.DataFrame = convert_to_pandas_df(df)
         # reset index to avoid pandera.errors.SchemaError: DataFrameSchema failed series or dataframe validator 0: <Check validate_index_reset>
         df = df.reset_index(drop=True)
         df = self._validate_schema(df)

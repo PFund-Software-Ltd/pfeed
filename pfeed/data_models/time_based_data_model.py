@@ -1,8 +1,17 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import pyarrow.fs as pa_fs
+    from pfeed.enums import DataLayer
+    from pathlib import Path
+
+from abc import abstractmethod
 import datetime
 
 from pydantic import field_validator, Field, ValidationInfo
 
 from pfeed.data_models.base_data_model import BaseDataModel
+from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
 
 class TimeBasedDataModel(BaseDataModel):
@@ -40,3 +49,35 @@ class TimeBasedDataModel(BaseDataModel):
             return ':'.join([super().__str__(), str(self.start_date)])
         else:
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
+    
+    @abstractmethod
+    def create_filename(self, date: datetime.date | None=None) -> str:
+        pass
+    
+    @abstractmethod
+    def create_storage_path(self, date: datetime.date | None=None) -> Path:
+        pass
+
+    def create_data_handler(
+        self, 
+        data_layer: DataLayer,
+        data_path: str,
+        filesystem: pa_fs.FileSystem,
+        storage_options: dict | None = None,
+        use_deltalake: bool = False,                        
+    ) -> TimeBasedDataHandler:
+        return TimeBasedDataHandler(
+            data_model=self, 
+            data_layer=data_layer,
+            data_path=data_path, 
+            filesystem=filesystem, 
+            storage_options=storage_options, 
+            use_deltalake=use_deltalake
+        )
+
+    def to_metadata(self) -> dict:
+        return {
+            **super().to_metadata(),
+            'start_date': self.start_date,
+            'end_date': self.end_date,
+        }

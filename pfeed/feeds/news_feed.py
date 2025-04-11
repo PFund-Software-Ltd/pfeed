@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfeed.typing import tDATA_LAYER, tSTORAGE, tENVIRONMENT
     from pfeed.data_models.news_data_model import NewsDataModel
+    from pfeed.storages.base_storage import BaseStorage
 
 import datetime
 from functools import partial
@@ -165,7 +166,6 @@ class NewsFeed(TimeBasedFeed):
         data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
-        # to_storage: tSTORAGE | None=None,  # REVIEW: also write to curated data layer?
         storage_options: dict | None=None,
         force_download: bool=False,
         retrieve_per_date: bool=False,
@@ -194,7 +194,7 @@ class NewsFeed(TimeBasedFeed):
             retrieve_per_date=retrieve_per_date,
             product_specs=product_specs,
         )
-
+            
     # TODO:
     def fetch(self) -> GenericFrame | None | NewsFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")

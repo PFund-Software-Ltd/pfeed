@@ -13,7 +13,14 @@ from pathlib import Path
 
 
 class BaseStorage(ABC):
-    def __new__(cls, *args, use_deltalake=False, **kwargs):
+    def __new__(
+        cls, 
+        name: tSTORAGE,
+        data_layer: tDATA_LAYER='cleaned',
+        data_domain: str='general_data',
+        use_deltalake: bool=False, 
+        storage_options: dict | None=None,
+    ):
         if use_deltalake:
             # Create a new class that inherits from both BaseStorage and DeltaLakeStorageMixin
             from pfeed.storages.delta_lake_storage_mixin import DeltaLakeStorageMixin
@@ -31,7 +38,7 @@ class BaseStorage(ABC):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='general_data',
         use_deltalake: bool=False,
-        **kwargs
+        storage_options: dict | None=None,
     ):
         from pfeed.enums import DataStorage, DataLayer
         self.name = DataStorage[name.upper()]
@@ -41,7 +48,7 @@ class BaseStorage(ABC):
         self._logger: logging.Logger | None = None
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
-        self._kwargs = kwargs
+        self._storage_options = storage_options or {}
 
     @classmethod
     def from_data_model(
@@ -50,13 +57,13 @@ class BaseStorage(ABC):
         data_layer: tDATA_LAYER,
         data_domain: str,
         use_deltalake: bool=False, 
-        **kwargs
+        storage_options: dict | None=None,
     ) -> BaseStorage:
         instance = cls(
             data_layer=data_layer,
             data_domain=data_domain,
             use_deltalake=use_deltalake, 
-            **kwargs
+            storage_options=storage_options,
         )
         instance.attach_data_model(data_model)
         instance.initialize_logger()
@@ -67,9 +74,6 @@ class BaseStorage(ABC):
     def get_filesystem(self) -> pa_fs.FileSystem:
         pass
     
-    def get_storage_options(self) -> dict:
-        return {}
-        
     def attach_data_model(self, data_model: BaseDataModel) -> None:
         '''
         Attach a data model to the storage and update related attributes.
@@ -86,7 +90,7 @@ class BaseStorage(ABC):
             'data_layer': self.data_layer,
             'data_path': str(self.data_path),
             'filesystem': self.get_filesystem(),
-            'storage_options': self.get_storage_options(),
+            'storage_options': self._storage_options,
         }
         if self.data_model.file_extension == '.parquet':
             data_handler_configs['use_deltalake'] = self.use_deltalake
@@ -124,9 +128,9 @@ class BaseStorage(ABC):
         else:
             return f'{self.name}'
     
-    def write_data(self, data: GenericData) -> bool:
+    def write_data(self, data: GenericData, metadata: dict | None=None) -> bool:
         try:
-            self.data_handler.write(data)
+            self.data_handler.write(data, metadata=metadata)
             return True
         except Exception:
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')

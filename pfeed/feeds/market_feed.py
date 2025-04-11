@@ -333,7 +333,6 @@ class MarketFeed(TimeBasedFeed):
         data_layer: tDATA_LAYER | None=None,
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
         retrieve_per_date: bool=False,
@@ -363,29 +362,7 @@ class MarketFeed(TimeBasedFeed):
             # NOTE: feed specific kwargs
             resolution=data_resolution,
         )
-        
-        # write data to storage in data_layer='curated', especially useful for caching large resampled data
-        if to_storage is not None:
-            start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-            data_model = self.create_data_model(
-                product=product,
-                resolution=data_resolution,
-                start_date=start_date,
-                end_date=end_date,
-                data_origin=data_origin,
-                **product_specs,
-            )
-            data_layer = 'curated'
-            storage: BaseStorage = self.create_storage(
-                storage=to_storage,
-                data_model=data_model,
-                data_layer=data_layer,
-                data_domain=data_domain,
-                storage_options=storage_options,
-            )
-            storage.write_data(df)
-            self.logger.info(f'wrote {data_model} data to {storage.name} in data_layer="{data_layer}"')
-            
+
         # NOTE: df from storage/source should have been resampled, 
         # this is only called when resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         if df is not None:

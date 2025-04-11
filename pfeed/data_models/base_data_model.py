@@ -27,10 +27,9 @@ class BaseDataModel(BaseModel, ABC):
 
     env: Environment
     data_source: BaseSource
+    data_origin: str = ''
     file_extension: str = ''
     compression: str = ''
-    data_origin: str = ''
-    # metadata: dict = Field(default_factory=dict)
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
@@ -42,13 +41,6 @@ class BaseDataModel(BaseModel, ABC):
         '''
         return self.data_origin != self.data_source.name.value
     
-    # def set_metadata(self, metadata: dict) -> None:
-    #     assert not self.metadata, 'metadata is already set, use update_metadata() instead'
-    #     self.metadata = metadata
-
-    # def add_metadata(self, key: str, value: Any) -> None:
-    #     self.metadata[key] = value
-
     def __str__(self):
         if self.is_data_origin_effective():
             return f'{self.data_source.name.value}:{self.data_origin}'
@@ -66,3 +58,10 @@ class BaseDataModel(BaseModel, ABC):
     @abstractmethod
     def create_data_handler(self, *args, **kwargs) -> BaseDataHandler:
         pass
+
+    def to_metadata(self) -> dict:
+        return {
+            'env': self.env.value,
+            'data_source': self.data_source.name.value,
+            'data_origin': self.data_origin,
+        }

@@ -41,6 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 core = [
+    "cloudpathlib[s3,gs,azure] (>=0.21.0,<0.22.0)",
     "minio (>=7.2.15,<8.0.0)",
     "deltalake (>=0.25.5,<0.26.0)",
     "ray (>=2.44.1,<3.0.0)",

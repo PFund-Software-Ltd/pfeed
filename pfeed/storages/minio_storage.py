@@ -16,6 +16,7 @@ import io
 import datetime
 from functools import lru_cache
 
+from cloudpathlib import CloudPath
 import pyarrow.fs as pa_fs
 from minio import S3Error, ServerError, Minio
 
@@ -136,15 +137,13 @@ class MinioStorage(BaseStorage):
         except (ReadTimeout, RequestException) as err:
             return False
     
-    # s3:// doesn't work with pathlib, so we need to return a string
     @property
-    def data_path(self) -> str:
-        data_path = "s3://" + self.BUCKET_NAME
-        return '/'.join([
-            data_path,
-            f'data_layer={self.data_layer.name.lower()}',
-            f'data_domain={self.data_domain}'
-        ])
+    def data_path(self) -> CloudPath:
+        return (
+            CloudPath("s3://" + self.BUCKET_NAME)
+            / f'data_layer={self.data_layer.name.lower()}'
+            / f'data_domain={self.data_domain}'
+        )
     
     def get_object(self, object_name: str) -> bytes | None:
         try:

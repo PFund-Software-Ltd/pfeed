@@ -161,7 +161,7 @@ class DuckDBStorage(BaseStorage):
         return name + '.duckdb'
     
     @property
-    def file_path(self) -> Path | str | None:
+    def file_path(self) -> Path | None:
         return self.data_path / self.storage_path / self.filename if not self._in_memory else None
     
     @property

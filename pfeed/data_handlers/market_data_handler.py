@@ -1,13 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
-    from pfeed.typing import GenericFrame, tDATA_TOOL
     from pfeed.data_models.market_data_model import MarketDataModel
 
 from pfund.datas.resolution import Resolution
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
-from pfeed.enums import DataLayer
 
 
 class MarketDataHandler(TimeBasedDataHandler):
@@ -24,17 +22,3 @@ class MarketDataHandler(TimeBasedDataHandler):
         else:
             schema = MarketDataSchema
         return schema.validate(df)
-
-    def read(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[GenericFrame | None, dict[str, Any]]:
-        df, metadata = super().read(data_tool=data_tool, delta_version=delta_version)
-        # check if df in curated data layer has the same resolution as the data model, if not, abandon df
-        if df is not None and self._data_layer == DataLayer.CURATED:
-            data_model: MarketDataModel = self._data_model
-            file_metadata = list(metadata['file_metadata'].values())[0]
-            df_resolution = Resolution(file_metadata['resolution'])
-            if df_resolution != data_model.resolution:
-                df = None
-                metadata['missing_dates'] = data_model.dates
-        return df, metadata
-            
-                

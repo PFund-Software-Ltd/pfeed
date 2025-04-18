@@ -51,11 +51,11 @@ class TimeBasedDataModel(BaseDataModel):
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
     
     @abstractmethod
-    def create_filename(self, date: datetime.date | None=None) -> str:
+    def create_filename(self, date: datetime.date) -> str:
         pass
     
     @abstractmethod
-    def create_storage_path(self, date: datetime.date | None=None) -> Path:
+    def create_storage_path(self, date: datetime.date) -> Path:
         pass
 
     def create_data_handler(

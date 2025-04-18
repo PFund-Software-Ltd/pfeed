@@ -60,35 +60,24 @@ class MarketDataModel(TimeBasedDataModel):
         self.resolution = resolution
         self._validate_resolution()
 
-    def create_filename(self, date: datetime.date | None=None) -> str:
-        if date is None:
-            filename = '_'.join([self.product.name, repr(self.resolution)])
-        else:
-            filename = '_'.join([self.product.name, str(date)])
+    def create_filename(self, date: datetime.date) -> str:
+        filename = '_'.join([self.product.name, str(date)])
         return filename + self.file_extension
 
-    def create_storage_path(self, date: datetime.date | None=None) -> Path:
-        if date is None:
-            return (
-                Path(f'env={self.env.value}')
-                / f'data_source={self.data_source.name}'
-                / f'data_origin={self.data_origin}'
-                / f'product_type={self.product.type.value}'
-            )
-        else:
-            year, month, day = str(date).split('-')
-            return (
-                Path(f'env={self.env.value}')
-                / f'data_source={self.data_source.name}'
-                / f'data_origin={self.data_origin}'
-                / f'product_type={self.product.type.value}'
-                / f'product={self.product.name}'
-                / f'resolution={repr(self.resolution)}'
-                / f'year={year}'
-                / f'month={month}'
-                / f'day={day}'
-            )
-    
+    def create_storage_path(self, date: datetime.date) -> Path:
+        year, month, day = str(date).split('-')
+        return (
+            Path(f'env={self.env.value}')
+            / f'data_source={self.data_source.name}'
+            / f'data_origin={self.data_origin}'
+            / f'product_type={self.product.type.value}'
+            / f'product={self.product.name}'
+            / f'resolution={repr(self.resolution)}'
+            / f'year={year}'
+            / f'month={month}'
+            / f'day={day}'
+        )
+
     def create_data_handler(
         self, 
         data_layer: DataLayer,

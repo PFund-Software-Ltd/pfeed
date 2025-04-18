@@ -12,11 +12,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 
-RESERVED_DATA_DOMAINS = [
-    'trading_data',
-]
-
-
 class BaseStorage(ABC):
     def __new__(cls, *args, use_deltalake: bool=False, **kwargs):
         if use_deltalake:
@@ -42,7 +37,6 @@ class BaseStorage(ABC):
         self.name = DataStorage[name.upper()]
         self.data_layer = DataLayer[data_layer.upper()]
         self.data_domain = data_domain.lower()
-        assert self.data_domain not in RESERVED_DATA_DOMAINS, f'{self.data_domain=} is reserved for internal use'
         self.use_deltalake = use_deltalake
         self._logger: logging.Logger | None = None
         self._data_model: BaseDataModel | None = None

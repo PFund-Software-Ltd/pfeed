@@ -43,15 +43,10 @@ class TimeBasedDataHandler(BaseDataHandler):
 
     def _create_file_paths(self, data_model: TimeBasedDataModel | None=None) -> list[str]:
         data_model = data_model or self._data_model
-        # data_layer!="curated" means that the data will be stored per date
-        if self._data_layer != DataLayer.CURATED:
-            return [
-                self._data_path + '/' + str(data_model.create_storage_path(date)) + '/' + data_model.create_filename(date)
-                for date in data_model.dates
-            ]
-        # data_layer="curated" means that the data will be stored in a single file with multiple dates amount of data in it
-        else:
-            return [self._data_path + '/' + str(data_model.create_storage_path()) + '/' + data_model.create_filename()]
+        return [
+            self._data_path + '/' + str(data_model.create_storage_path(date)) + '/' + data_model.create_filename(date)
+            for date in data_model.dates
+        ]
         
     def write(self, df: GenericFrame, metadata: dict | None=None):
         from pfeed._etl.base import convert_to_pandas_df
@@ -64,55 +59,31 @@ class TimeBasedDataHandler(BaseDataHandler):
         df = self._validate_schema(df)
 
         data_model: TimeBasedDataModel = self._data_model
-        if self._data_layer != DataLayer.CURATED:
-            # split data with a date range into chunks per date
-            data_chunks_per_date = {} if df.empty else {date: group for date, group in df.groupby(df['date'].dt.date)}
-            for date in data_model.dates:
-                data_model_copy = data_model.model_copy(deep=False)
-                # NOTE: create placeholder data if date is not in data_chunks_per_date, 
-                # used as an indicator for successful download, there is just no data on that date (e.g. weekends, holidays, etc.)
-                df_chunk = data_chunks_per_date.get(date, pd.DataFrame(columns=df.columns))
-                # make date range (start_date, end_date) to (date, date), since storage is per date
-                data_model_copy.update_start_date(date)
-                data_model_copy.update_end_date(date)
-                self._io.write(
-                    df_chunk, 
-                    file_path=self._create_file_paths(data_model=data_model_copy)[0],
-                    metadata=metadata,
-                )
-        else:
+        # split data with a date range into chunks per date
+        data_chunks_per_date = {} if df.empty else {date: group for date, group in df.groupby(df['date'].dt.date)}
+        for date in data_model.dates:
+            data_model_copy = data_model.model_copy(deep=False)
+            # NOTE: create placeholder data if date is not in data_chunks_per_date, 
+            # used as an indicator for successful download, there is just no data on that date (e.g. weekends, holidays, etc.)
+            df_chunk = data_chunks_per_date.get(date, pd.DataFrame(columns=df.columns))
+            # make date range (start_date, end_date) to (date, date), since storage is per date
+            data_model_copy.update_start_date(date)
+            data_model_copy.update_end_date(date)
             self._io.write(
-                df, 
-                file_path=self._create_file_paths(data_model=data_model)[0],
+                df_chunk, 
+                file_path=self._create_file_paths(data_model=data_model_copy)[0],
                 metadata=metadata,
             )
 
     def read(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[GenericFrame | None, dict[str, Any]]:
-        from pfeed._etl.base import convert_to_user_df
         df, metadata = self._io.read(
             file_paths=self._create_file_paths(),
             data_tool=data_tool, 
             delta_version=delta_version,
         )
         data_model: TimeBasedDataModel = self._data_model
-        # data is stored per date
-        if self._data_layer != DataLayer.CURATED:
-            missing_file_paths: list[str] = metadata['missing_file_paths']
-            missing_dates = [fp.split('/')[-1].rsplit('_', 1)[-1].removesuffix(data_model.file_extension) for fp in missing_file_paths]
-            missing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
-        # data is stored in a single file (no date in the filename)
-        else:
-            if df is not None:
-                file_metadata = list(metadata['file_metadata'].values())[0]
-                dates_in_df = pd.date_range(file_metadata['start_date'], file_metadata['end_date']).date.tolist()
-                missing_dates = [date for date in data_model.dates if date not in dates_in_df]
-                # select the range of data_model.dates in the df
-                # performance should not be an issue since storage.read_data() should be using polars already, call convert_to_user_df again to make sure
-                polars_lf: pl.LazyFrame = convert_to_user_df(df, data_tool='polars')
-                polars_lf = polars_lf.filter(pl.col('date').dt.date().is_in(data_model.dates))
-                df = convert_to_user_df(polars_lf, data_tool=data_tool)
-            else:
-                missing_dates = data_model.dates
-
+        missing_file_paths: list[str] = metadata['missing_file_paths']
+        missing_dates = [fp.split('/')[-1].rsplit('_', 1)[-1].removesuffix(data_model.file_extension) for fp in missing_file_paths]
+        missing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
         metadata['missing_dates'] = missing_dates
         return df, metadata

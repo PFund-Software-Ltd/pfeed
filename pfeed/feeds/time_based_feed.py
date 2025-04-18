@@ -104,9 +104,6 @@ class TimeBasedFeed(BaseFeed):
         dataflow_per_date: bool,
         include_metadata: bool,
     ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | TimeBasedFeed:
-        if dataflow_per_date and data_layer.upper() == DataLayer.CURATED:
-            self.logger.info(f'{dataflow_per_date=} is not supported when data_layer is "curated" (files are NOT per date), set dataflow_per_date to False')
-            dataflow_per_date = False
         self._create_dataflows(
             lambda _data_model: self._retrieve_impl(
                 data_model=_data_model,
@@ -267,7 +264,7 @@ class TimeBasedFeed(BaseFeed):
                     data_origin=data_origin,
                     data_layer=search_data_layer.name,
                     data_domain=data_domain,
-                    dataflow_per_date=retrieve_per_date if search_data_layer != DataLayer.CURATED else False,
+                    dataflow_per_date=retrieve_per_date,
                     from_storage=from_storage,
                     storage_options=storage_options,
                     include_metadata=True,

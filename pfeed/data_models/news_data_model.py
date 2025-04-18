@@ -30,36 +30,25 @@ class NewsDataModel(TimeBasedDataModel):
             assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
         return data
     
-    def create_filename(self, date: datetime.date | None=None) -> str:
+    def create_filename(self, date: datetime.date) -> str:
         name = 'GENERAL_MARKET_NEWS' if self.product is None else self.product.name
-        if date is None:
-            filename = name
-        else:
-            filename = '_'.join([name, str(date)])
+        filename = '_'.join([name, str(date)])
         return filename + self.file_extension
 
-    def create_storage_path(self, date: datetime.date | None=None) -> Path:
+    def create_storage_path(self, date: datetime.date) -> Path:
         product_type = 'NONE' if self.product is None else self.product.type.value
         product_name = 'NONE' if self.product is None else self.product.name
-        if date is None:
-            return (
-                Path(f'env={self.env.value}')
-                / f'data_source={self.data_source.name}'
-                / f'data_origin={self.data_origin}'
-                / f'product_type={product_type}'
-            )            
-        else:
-            year, month, day = str(date).split('-')
-            return (
-                Path(f'env={self.env.value}')
-                / f'data_source={self.data_source.name}'
-                / f'data_origin={self.data_origin}'
-                / f'product_type={product_type}'
-                / f'product={product_name}'
-                / f'year={year}'
-                / f'month={month}'
-                / f'day={day}'
-            )
+        year, month, day = str(date).split('-')
+        return (
+            Path(f'env={self.env.value}')
+            / f'data_source={self.data_source.name}'
+            / f'data_origin={self.data_origin}'
+            / f'product_type={product_type}'
+            / f'product={product_name}'
+            / f'year={year}'
+            / f'month={month}'
+            / f'day={day}'
+        )
 
     def create_data_handler(
         self, 

@@ -14,9 +14,15 @@ class CacheStorage(LocalStorage):
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='general_data',
         use_deltalake: bool=False, 
-        **kwargs
+        storage_options: dict | None=None,
     ):
-        super().__init__(name='cache', data_layer=data_layer, data_domain=data_domain, use_deltalake=use_deltalake, **kwargs)
+        super().__init__(
+            name='cache', 
+            data_layer=data_layer, 
+            data_domain=data_domain, 
+            use_deltalake=use_deltalake, 
+            storage_options=storage_options,
+        )
         self._clear_caches()
     
     @staticmethod

@@ -20,7 +20,10 @@ class TradFiSource(BaseSource):
         product_basis = product_basis.upper()
         validate_product(product_basis)
         base_asset, quote_asset, product_type = product_basis.split('_')
-        ptype = TradFiProductType[product_type.upper()]
+        product_type = product_type.upper()
+        if product_type not in TradFiProductType.__members__:
+            raise ValueError(f"Invalid product type: {product_type}")
+        ptype = TradFiProductType[product_type]
         if ptype == TradFiProductType.STK:
             Product = StockProduct
         elif ptype == TradFiProductType.OPT:

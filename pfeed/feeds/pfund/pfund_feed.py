@@ -12,7 +12,7 @@ from pfeed.feeds.base_feed import BaseFeed
 from pfeed.data_models.pfund_data_model import PFundDataModel
 
 
-class PFundDataFeed(BaseFeed):
+class PFundFeed(BaseFeed):
     @staticmethod
     def _create_data_source() -> PFundSource:
         return PFundSource()

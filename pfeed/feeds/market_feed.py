@@ -9,11 +9,11 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfeed.typing import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfeed.storages.base_storage import BaseStorage
 
 import datetime
 from functools import partial
 
+from pfeed.enums import DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 
 
@@ -21,7 +21,7 @@ tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'secon
 
 
 class MarketFeed(TimeBasedFeed):
-    DATA_DOMAIN = 'market_data'
+    DATA_DOMAIN = DataCategory.market_data
     
     @staticmethod
     def create_resolution(resolution: str | Resolution) -> Resolution:
@@ -240,7 +240,7 @@ class MarketFeed(TimeBasedFeed):
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
         unit_resolution: Resolution = self._create_unit_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = data_domain or self.DATA_DOMAIN.value
         self.logger.info(f'Retrieving {product} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
             # NOTE: dataflow's data model will always have the input resolution
@@ -344,7 +344,7 @@ class MarketFeed(TimeBasedFeed):
         resolution: Resolution = self.create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = data_domain or self.DATA_DOMAIN.value
         df: GenericFrame | None = self._get_historical_data_impl(
             product=product,
             symbol=symbol,

@@ -1,5 +1,5 @@
-from pfeed.feeds.pfund.pfund_feed import PFundDataFeed
+from pfeed.feeds.pfund.pfund_feed import PFundFeed
 
 
-class TradingFeed(PFundDataFeed):
+class TradingFeed(PFundFeed):
     pass

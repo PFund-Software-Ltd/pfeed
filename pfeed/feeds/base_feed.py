@@ -194,12 +194,13 @@ class BaseFeed(ABC):
             self.logger.debug(f'searching for data {data_model} in {search_storage} ({data_layer=})...')
             try:
                 storage: BaseStorage = Storage.from_data_model(
-                    data_model,
-                    data_layer, 
-                    data_domain,
+                    data_model=data_model,
+                    data_layer=data_layer, 
+                    data_domain=data_domain,
                     use_deltalake=self._use_deltalake,
                     **search_storage_options,
                 )
+                # NOTE: use polars to scan data as internal behavior
                 data, metadata = storage.read_data(data_tool='polars')
                 metadata['from_storage'] = search_storage
                 metadata['data_domain'] = data_domain
@@ -243,7 +244,6 @@ class BaseFeed(ABC):
         self._subflows.clear()
     
     def transform(self, *funcs) -> BaseFeed:
-        assert self.is_pipeline(), 'transform() is only supported in pipeline mode'
         for dataflow in self._subflows:
             dataflow.add_transformations(*funcs)
         return self
@@ -261,7 +261,6 @@ class BaseFeed(ABC):
             data_domain: custom domain of the data, used in data_path/data_layer/data_domain
                 useful for grouping data
         '''
-        assert self.is_pipeline(), 'load() is only supported in pipeline mode'
         if self._use_ray:
             assert to_storage.lower() != 'duckdb', 'DuckDB is not thread-safe, cannot be used with Ray'
 

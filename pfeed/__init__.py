@@ -1,12 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    # need these imports to support IDE hints:
+    import pfund_plot as plot
     from pfund_plugins.base_plugin import BasePlugin
     from pfeed.storages.duckdb_storage import DuckDBStorage
     from pfeed.storages.minio_storage import MinioStorage
     from pfeed.storages.local_storage import LocalStorage
-    # need these imports to support IDE hints:
-    aliases = ...
+    from pfeed.const.aliases import ALIASES as aliases
     from pfeed.feeds.yahoo_finance.yahoo_finance import (
         YahooFinance,
         YahooFinance as YF,
@@ -28,7 +29,6 @@ from pfeed.storages import create_storage
 from pfeed.feeds import get_market_feed
 
 
-
 # FIXME
 plugins = {}
 def add_plugin(plugin: BasePlugin):
@@ -40,6 +40,9 @@ def __getattr__(name: str):
         from pfeed.const.aliases import ALIASES
         from pfund.const.aliases import ALIASES as PFUND_ALIASES
         return {**ALIASES, **PFUND_ALIASES}
+    elif name == 'plot':
+        import pfund_plot as plot
+        return plot
     elif name == 'DuckDBStorage':
         from pfeed.storages.duckdb_storage import DuckDBStorage
         return DuckDBStorage
@@ -83,6 +86,7 @@ __all__ = (
     "get_config",
     "add_plugin",
     "aliases",
+    "plot",
     "what_is",
     # sugar functions
     "create_storage",
@@ -97,3 +101,5 @@ __all__ = (
     "FinancialModelingPrep", "FMP",
     "PFund",
 )
+def __dir__():
+    return sorted(__all__)

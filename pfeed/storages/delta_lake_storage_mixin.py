@@ -1,3 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.storages.base_storage import BaseStorage
+
+
 from pathlib import Path
 from pprint import pprint
 
@@ -7,7 +13,7 @@ from pfund import cprint
 
 
 class DeltaLakeStorageMixin:
-    def get_delta_tables(self) -> list[DeltaTable]:
+    def get_delta_tables(self: BaseStorage | DeltaLakeStorageMixin) -> list[DeltaTable]:
         if not self.use_deltalake:
             raise ValueError(f'{self.use_deltalake=} for this storage')
         from pfeed.storages.minio_storage import MinioStorage
@@ -43,7 +49,7 @@ class DeltaLakeStorageMixin:
                         delta_tables.append(dt)
         return delta_tables
     
-    def vacuum_delta_files(self, dry_run: bool=True):
+    def vacuum_delta_files(self: BaseStorage | DeltaLakeStorageMixin, dry_run: bool=True):
         print('Vacuuming Delta Lake...')
         delta_tables = self.get_delta_tables()
         for dt in delta_tables:
@@ -55,7 +61,7 @@ class DeltaLakeStorageMixin:
             else:
                 cprint(f'No files to delete from {dt.table_uri}', style='bold blue')
     
-    def optimize_delta_files(self):
+    def optimize_delta_files(self: BaseStorage | DeltaLakeStorageMixin):
         print('Optimizing Delta Lake...')
         delta_tables = self.get_delta_tables()
         for dt in delta_tables:

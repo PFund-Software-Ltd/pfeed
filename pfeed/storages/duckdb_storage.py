@@ -46,36 +46,39 @@ class DuckDBStorage(BaseStorage):
         self,
         data_layer: tDATA_LAYER='cleaned',
         data_domain: str='general_data',
+        use_deltalake: bool=False,   # for consistency with other storages only, not used
+        storage_options: dict | None=None,
         in_memory: bool=False, 
         memory_limit: str='4GB',
-        **kwargs
+        **duckdb_kwargs
     ):
         '''
         Args:
             in_memory: whether to use in-memory storage
+            duckdb_kwargs: kwargs for duckdb connection, duckdb.connect(..., **duckdb_kwargs)
         '''
-        if 'use_deltalake' in kwargs:
-            kwargs.pop('use_deltalake')
         self._in_memory = in_memory
         self._memory_limit = memory_limit
         super().__init__(
             name='duckdb', 
             data_layer=data_layer,
             data_domain=data_domain,
-            **kwargs
+            use_deltalake=use_deltalake,
+            storage_options=storage_options,
         )
         self._schema_name = ''
         self._table_name = ''
         self._metadata_table_name = 'metadata'
         self.conn: DuckDBPyConnection | None = None
+        self._duckdb_kwargs = duckdb_kwargs
     
     def _create_connection(self) -> DuckDBPyConnection:
         if self._in_memory:
-            conn: DuckDBPyConnection = duckdb.connect(':memory:', **self._kwargs)
+            conn: DuckDBPyConnection = duckdb.connect(':memory:', **self._duckdb_kwargs)
             conn.execute(f"SET memory_limit = '{self._memory_limit}'")
         else:
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
-            conn: DuckDBPyConnection = duckdb.connect(str(self.file_path), **self._kwargs)
+            conn: DuckDBPyConnection = duckdb.connect(str(self.file_path), **self._duckdb_kwargs)
         return conn
     
     @classmethod
@@ -84,18 +87,20 @@ class DuckDBStorage(BaseStorage):
         data_model: BaseDataModel, 
         data_layer: tDATA_LAYER,
         data_domain: str,
+        use_deltalake: bool,   # for consistency with other storages only, not used
+        storage_options: dict | None=None,
         in_memory: bool=False,
         memory_limit: str='4GB',
-        **kwargs
+        **duckdb_kwargs
     ) -> BaseStorage:
-        if 'use_deltalake' in kwargs:
-            kwargs.pop('use_deltalake')
         instance = cls(
             data_layer=data_layer,
             data_domain=data_domain,
+            use_deltalake=use_deltalake,
             in_memory=in_memory,
             memory_limit=memory_limit,
-            **kwargs
+            storage_options=storage_options,
+            **duckdb_kwargs
         )
         instance.attach_data_model(data_model)
         instance.initialize_logger()

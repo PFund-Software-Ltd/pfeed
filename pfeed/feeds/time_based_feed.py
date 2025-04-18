@@ -300,7 +300,8 @@ class TimeBasedFeed(BaseFeed):
                 if not missing_dates:
                     break
 
-            df_from_storage: Frame | None = nw.concat([df for df in dfs_from_storage if not is_empty_dataframe(df)]) if dfs_from_storage else None
+            dfs: list[Frame] = [df for df in dfs_from_storage if not is_empty_dataframe(df)] if dfs_from_storage else []
+            df_from_storage: Frame | None = nw.concat(dfs) if dfs else None
         else:
             df_from_storage: Frame | None = None
             start_missing_date = start_date
@@ -374,9 +375,9 @@ class TimeBasedFeed(BaseFeed):
             elif _df is None:
                 metadata['missing_dates'].extend(data_model.dates)
 
-        dfs: list[Frame] = [nw.from_native(df) for df in dfs if df is not None]
+        dfs: list[Frame] = [nw.from_native(df) for df in dfs if df is not None and not is_empty_dataframe(df)]
         if dfs:
-            df: Frame = nw.concat([df for df in dfs if not is_empty_dataframe(df)])
+            df: Frame = nw.concat(dfs)
             df: GenericFrame = nw.to_native(df)
         else:
             df = None

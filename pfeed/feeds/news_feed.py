@@ -5,11 +5,11 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfeed.typing import tDATA_LAYER, tSTORAGE, tENVIRONMENT
     from pfeed.data_models.news_data_model import NewsDataModel
-    from pfeed.storages.base_storage import BaseStorage
 
 import datetime
 from functools import partial
 
+from pfeed.enums import DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.utils.utils import lambda_with_name
 
@@ -22,7 +22,7 @@ e.g. if changing the params for the same API call, the data could be different.
 how to handle this? handled by metadata?
 '''
 class NewsFeed(TimeBasedFeed):
-    DATA_DOMAIN = 'news_data'
+    DATA_DOMAIN = DataCategory.news_data
 
     def create_data_model(
         self,
@@ -130,7 +130,7 @@ class NewsFeed(TimeBasedFeed):
     ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | NewsFeed:
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = data_domain or self.DATA_DOMAIN.value
         self.logger.info(f'Retrieving {self.name} {product=} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
@@ -178,7 +178,7 @@ class NewsFeed(TimeBasedFeed):
             NOTE: this behavior is different from MarketFeed
             from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
-        data_domain = data_domain or self.DATA_DOMAIN
+        data_domain = data_domain or self.DATA_DOMAIN.value
         return self._get_historical_data_impl(
             product=product,
             symbol=symbol,

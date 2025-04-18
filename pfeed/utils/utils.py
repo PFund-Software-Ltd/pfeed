@@ -12,7 +12,7 @@ def validate_product(product: str):
     if not re.match(pattern, product):
         raise ValueError(
             f'Invalid product format: {product}. '
-            'Product must be in format "XXX_YYY_ZZZ" where each part contains only letters '
+            'Product must be in format "XXX_YYY_ZZZ" (e.g. "TSLA_USD_STK", "BTC_USDT_SPOT", "ETH_USDT_PERP") where each part contains only letters '
             f'and maximum {max_len} characters long.'
         )
 

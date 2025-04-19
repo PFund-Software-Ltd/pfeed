@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 from rich.console import Console
 
@@ -48,6 +49,9 @@ class DuckDBCollector(BaseCollector):
                 layer_name = parts[0].upper() if len(parts) > 0 else "CLEANED"
                 domain_name = parts[1] if len(parts) > 1 else "general_data"
                 
+                # Check if db filename has environment info
+                cls._extract_env_from_filename(db_file.name, storage_info)
+                
                 # Create layer and domain
                 layer_info = storage_info.get_or_create_layer(layer_name)
                 domain_info = layer_info.get_or_create_domain(domain_name)
@@ -59,6 +63,9 @@ class DuckDBCollector(BaseCollector):
                     
                     for table in tables:
                         table_name = table[0]
+                        
+                        # Try to extract environment from table name
+                        cls._extract_env_from_table_name(table_name, storage_info)
                         
                         # Try to extract product and resolution from table name
                         # Convention: product_resolution
@@ -90,6 +97,17 @@ class DuckDBCollector(BaseCollector):
                             try:
                                 # Get table schema
                                 schema_info = conn.execute(f"DESCRIBE {table_name}").fetchall()
+                                
+                                # Look for env column in the schema
+                                for col_info in schema_info:
+                                    col_name = col_info[0]
+                                    if col_name.lower() == 'env':
+                                        try:
+                                            env_value = conn.execute(f"SELECT DISTINCT {col_name} FROM {table_name} LIMIT 1").fetchone()
+                                            if env_value and env_value[0]:
+                                                storage_info.env = str(env_value[0]).upper()
+                                        except:
+                                            pass
                                 
                                 # Check for date-like columns
                                 date_columns = []
@@ -131,4 +149,22 @@ class DuckDBCollector(BaseCollector):
         except Exception as e:
             console.print(f"[yellow]Warning: Error collecting DuckDB information: {e}[/yellow]")
         
-        return storage_info 
+        return storage_info
+    
+    @classmethod
+    def _extract_env_from_filename(cls, filename, storage_info):
+        """Extract environment information from the database filename."""
+        # Check for env pattern like backtest_data.db, live_data.db, etc.
+        env_patterns = ['backtest', 'live', 'paper', 'sandbox']
+        for pattern in env_patterns:
+            if pattern in filename.lower():
+                storage_info.env = pattern.upper()
+                return
+    
+    @classmethod
+    def _extract_env_from_table_name(cls, table_name, storage_info):
+        """Extract environment information from the table name."""
+        # Check for env pattern in table name
+        env_match = re.search(r'_?(backtest|live|paper|sandbox)_?', table_name.lower())
+        if env_match:
+            storage_info.env = env_match.group(1).upper() 

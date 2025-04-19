@@ -16,6 +16,7 @@ def display_summary(storage_infos, show_stats=True, limit=10):
             
         console.print(f"[bold cyan]{storage_info.name}[/bold cyan]")
         console.print(f"  📂 [dim]{storage_info.path}[/dim]")
+        console.print(f"  🔹 [bold magenta]env={storage_info.env}[/bold magenta]")
         
         for layer_name, layer_info in storage_info.layers.items():
             console.print(f"  ├── [bold green]{layer_name}[/bold green]")
@@ -45,8 +46,11 @@ def display_summary(storage_infos, show_stats=True, limit=10):
                         is_last = i == len(display_products) - 1 and more_count == 0
                         prefix = "  │   │   │   └──" if is_last else "  │   │   │   ├──"
                         
+                        # Add delta indicator if it's a delta table
+                        delta_indicator = "[bold blue]Δ[/bold blue] " if product.is_delta else ""
+                        
                         stats_str = f"({product.file_count} files, {format_size(product.size_bytes)})" if show_stats else ""
-                        console.print(f"{prefix} [bold]{product.name}[/bold] {stats_str}")
+                        console.print(f"{prefix} {delta_indicator}[bold]{product.name}[/bold] {stats_str}")
                         
                         # Show resolutions
                         resolutions = sorted(product.resolutions)
@@ -70,10 +74,12 @@ def display_table(storage_infos, show_stats=True, limit=10):
     # Create main table
     table = Table(title="Data Inventory")
     table.add_column("Storage", style="cyan")
+    table.add_column("Environment", style="magenta")
     table.add_column("Layer", style="green")
     table.add_column("Domain", style="blue")
     table.add_column("Source")
     table.add_column("Product")
+    table.add_column("Format")
     table.add_column("Resolutions")
     table.add_column("Files", justify="right")
     if show_stats:
@@ -104,13 +110,18 @@ def display_table(storage_infos, show_stats=True, limit=10):
                         
                         date_range = f"{product.start_date} to {product.end_date}" if product.start_date and product.end_date else "N/A"
                         
+                        # Format for display
+                        format_str = "Delta" if product.is_delta else "Parquet"
+                        
                         # Add row
                         row = [
                             storage_info.name,
+                            storage_info.env,
                             layer_name,
                             domain_name,
                             source_name,
                             product.name,
+                            format_str,
                             resolution_str,
                             str(product.file_count)
                         ]
@@ -124,10 +135,12 @@ def display_table(storage_infos, show_stats=True, limit=10):
                     if more_count > 0:
                         ellipsis_row = [
                             storage_info.name,
+                            storage_info.env,
                             layer_name,
                             domain_name,
                             source_name,
                             f"... {more_count} more products",
+                            "",
                             "",
                             "",
                             "",
@@ -165,6 +178,7 @@ def display_tree(storage_infos, show_stats=True, limit=10):
         stats_str = f"({total_files} files, {format_size(total_size)})" if show_stats else ""
         storage_node = tree.add(f"[bold cyan]{storage_info.name}[/bold cyan] {stats_str}")
         storage_node.add(f"[dim]{storage_info.path}[/dim]")
+        storage_node.add(f"[bold magenta]env={storage_info.env}[/bold magenta]")
         
         for layer_name, layer_info in storage_info.layers.items():
             layer_node = storage_node.add(f"[bold green]{layer_name}[/bold green]")
@@ -192,7 +206,10 @@ def display_tree(storage_infos, show_stats=True, limit=10):
                     
                     for product in display_products:
                         stats_str = f"({product.file_count} files, {format_size(product.size_bytes)})" if show_stats else ""
-                        product_node = source_node.add(f"[bold]{product.name}[/bold] {stats_str}")
+                        
+                        # Add delta indicator if it's a delta table
+                        delta_indicator = "[bold blue]Δ[/bold blue] " if product.is_delta else ""
+                        product_node = source_node.add(f"{delta_indicator}[bold]{product.name}[/bold] {stats_str}")
                         
                         # Show resolutions
                         resolutions = sorted(product.resolutions)
@@ -220,6 +237,7 @@ def display_json(storage_infos):
         storage_dict = {
             "name": storage_info.name,
             "path": storage_info.path,
+            "env": storage_info.env,
             "layers": []
         }
         
@@ -244,6 +262,7 @@ def display_json(storage_infos):
                     for product_name, product_info in source_info.products.items():
                         product_dict = {
                             "name": product_name,
+                            "is_delta": product_info.is_delta,
                             "resolutions": list(product_info.resolutions),
                             "file_count": product_info.file_count,
                             "size_bytes": product_info.size_bytes,
@@ -260,4 +279,5 @@ def display_json(storage_infos):
         
         json_data.append(storage_dict)
     
+    # Print JSON
     console.print(json.dumps(json_data, indent=2)) 

@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional
+import re
 
 from rich.console import Console
 
@@ -41,6 +42,31 @@ class MinioCollector(BaseCollector):
             # Update storage path with actual endpoint information
             storage_info.path = f"{endpoint}/{bucket_name}"
             
+            # First pass: detect delta tables by finding _delta_log directories
+            delta_dirs = set()
+            
+            try:
+                # Look for _delta_log directories or files
+                for obj in minio_client.list_objects(bucket_name, prefix="_delta_log", recursive=True):
+                    # Get the directory containing _delta_log
+                    path_parts = obj.object_name.split('/')
+                    if len(path_parts) > 1:
+                        # Remove the _delta_log part and join the rest
+                        parent_dir = '/'.join(path_parts[:-1])
+                        delta_dirs.add(parent_dir)
+                    else:
+                        # Special case: _delta_log at the root level
+                        delta_dirs.add('')
+                
+                # Also check for Delta table with format path/to/table/_delta_log
+                for obj in minio_client.list_objects(bucket_name, suffix="_delta_log", recursive=True):
+                    path_parts = obj.object_name.split('/')
+                    if path_parts[-1] == "_delta_log":
+                        parent_dir = '/'.join(path_parts[:-1])
+                        delta_dirs.add(parent_dir)
+            except Exception as e:
+                console.print(f"[yellow]Warning: Error detecting delta tables: {e}[/yellow]")
+            
             # List all objects
             try:
                 objects = list(minio_client.list_objects(bucket_name, recursive=True))
@@ -50,30 +76,33 @@ class MinioCollector(BaseCollector):
                     if not obj.object_name.endswith(('.parquet', '.csv', '.json', '.arrow', '.delta')):
                         continue
                         
+                    # Try to extract environment info from path
+                    cls._extract_env_from_path(obj.object_name, storage_info)
+                    
                     # Convert path string to Path object to use our existing parsers
                     path_parts = obj.object_name.split('/')
                     path_obj = Path('/'.join(path_parts))
                     
                     # Try parsing with different parsers in order of specificity
-                    parsed = False
+                    parsed_product = None
                     if MarketDataParser.can_parse(path_obj):
-                        parsed = MarketDataParser.parse(path_obj, storage_info)
+                        parsed_product = MarketDataParser.parse(path_obj, storage_info)
                     elif NewsDataParser.can_parse(path_obj):
-                        parsed = NewsDataParser.parse(path_obj, storage_info)
+                        parsed_product = NewsDataParser.parse(path_obj, storage_info)
                     elif GenericParser.can_parse(path_obj):
-                        parsed = GenericParser.parse(path_obj, storage_info)
+                        parsed_product = GenericParser.parse(path_obj, storage_info)
                         
                     # Update size if parsed successfully
-                    if parsed:
-                        # Find the last processed product and add size
-                        for layer in storage_info.layers.values():
-                            for domain in layer.domains.values():
-                                for source in domain.sources.values():
-                                    for product in source.products.values():
-                                        if product.file_count > 0:
-                                            # Add size information from the MinIO object
-                                            product.size_bytes += obj.size
-                                            break
+                    if parsed_product:
+                        # Add size information from the MinIO object
+                        parsed_product.size_bytes += obj.size
+                        
+                        # Check if this object is part of a delta table
+                        obj_dir = '/'.join(path_parts[:-1])
+                        for delta_dir in delta_dirs:
+                            if obj_dir.startswith(delta_dir):
+                                parsed_product.is_delta = True
+                                break
             except Exception as e:
                 console.print(f"[yellow]Warning: Error listing MinIO objects: {e}[/yellow]")
                 
@@ -81,6 +110,14 @@ class MinioCollector(BaseCollector):
             console.print(f"[yellow]Warning: Error collecting MinIO information: {e}[/yellow]")
             
         return storage_info
+    
+    @classmethod
+    def _extract_env_from_path(cls, object_name, storage_info):
+        """Extract environment information from the object path."""
+        # Check for env=X pattern in path
+        env_match = re.search(r'env=(\w+)', object_name)
+        if env_match:
+            storage_info.env = env_match.group(1).upper()
     
     @classmethod
     def _get_minio_client(cls):

@@ -33,6 +33,9 @@ class MarketDataParser(BaseParser):
         Expected path structures:
         - CLEANED/RAW: data_layer=cleaned/data_domain=market_data/env=BACKTEST/data_source=SOURCE/data_origin=ORIGIN/product_type=TYPE/product=NAME/resolution=RES/year=YYYY/month=MM/day=DD/*.parquet
         - CURATED: data_layer=curated/data_domain=market_data/env=BACKTEST/data_source=SOURCE/data_origin=ORIGIN/PRODUCT_NAME.parquet
+        
+        Returns:
+            product_info if parsing was successful, None otherwise
         """
         try:
             parts = path.parts
@@ -40,13 +43,13 @@ class MarketDataParser(BaseParser):
             # Extract key information
             layer_name = cls.extract_key_value_from_path(parts, "data_layer")
             if not layer_name:
-                return False
+                return None
                 
             layer_name = layer_name.upper()
             
             domain_name = cls.extract_key_value_from_path(parts, "data_domain")
             if not domain_name or domain_name != "market_data":
-                return False
+                return None
             
             # Create layer and domain info
             layer_info = storage_info.get_or_create_layer(layer_name)
@@ -55,7 +58,7 @@ class MarketDataParser(BaseParser):
             # Extract source (common to both path structures)
             source_name = cls.extract_key_value_from_path(parts, "data_source")
             if not source_name:
-                return False
+                return None
                 
             source_info = domain_info.get_or_create_source(source_name)
             
@@ -85,15 +88,15 @@ class MarketDataParser(BaseParser):
                     product_info.file_count += 1
                     product_info.size_bytes += path.stat().st_size
                         
-                    return True
-                return False
+                    return product_info
+                return None
             else:
                 # For CLEANED/RAW, use standard path structure
                 product_name = cls.extract_key_value_from_path(parts, "product")
                 resolution = cls.extract_key_value_from_path(parts, "resolution")
                 
                 if not product_name or not resolution:
-                    return False
+                    return None
                     
                 # Extract date information
                 year = cls.extract_key_value_from_path(parts, "year")
@@ -113,9 +116,9 @@ class MarketDataParser(BaseParser):
                 if date_str:
                     product_info.update_dates(date_str)
                     
-                return True
+                return product_info
         except Exception as e:
             # Uncomment for debugging
             # import logging
             # logging.getLogger('pfeed').debug(f"Error parsing market data path: {path}, error: {e}")
-            return False 
+            return None 

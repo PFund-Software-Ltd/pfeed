@@ -10,6 +10,7 @@ class ProductInfo:
     size_bytes: int = 0
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    is_delta: bool = False
     
     def add_resolution(self, resolution: str):
         self.resolutions.add(resolution)
@@ -58,6 +59,7 @@ class StorageInfo:
     """Information about a storage location."""
     name: str
     path: str
+    env: str = "BACKTEST"  # Default environment
     layers: Dict[str, DataLayerInfo] = field(default_factory=dict)
     
     def get_or_create_layer(self, layer_name: str) -> DataLayerInfo:

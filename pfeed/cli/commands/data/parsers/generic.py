@@ -1,129 +1,160 @@
 from pathlib import Path
+import re
 
 from pfeed.cli.commands.data.models import StorageInfo
 from pfeed.cli.commands.data.parsers.base import BaseParser
 
 class GenericParser(BaseParser):
-    """Parser for generic data paths that don't match specific formats."""
+    """Generic parser for data paths that don't match other specialized parsers."""
     
     @classmethod
     def can_parse(cls, path: Path) -> bool:
-        """
-        Generic parser can parse any path that has at least data_layer and data_domain.
-        This should be used as a last resort after specific parsers have failed.
-        """
-        parts = path.parts
-        
-        # Check for the presence of data_layer and data_domain
-        layer = cls.extract_key_value_from_path(parts, "data_layer")
-        domain = cls.extract_key_value_from_path(parts, "data_domain")
-        
-        return layer is not None and domain is not None
+        """This parser can handle any path, as it's a fallback."""
+        return True
     
     @classmethod
-    def parse(cls, path: Path, storage_info: StorageInfo) -> bool:
+    def parse(cls, path: Path, storage_info: StorageInfo):
         """
-        Parse a generic data path and extract as much information as possible.
+        Parse a generic data path using heuristics.
+        
+        This is a fallback parser that tries to extract information from a path
+        using common patterns and heuristics.
+        
+        Returns:
+            ProductInfo object if successful, None otherwise
         """
         try:
+            # Check if path is a file
+            if not path.is_file():
+                return None
+                
+            # Extract information from path parts
             parts = path.parts
             
-            # Extract key information
-            layer_name = cls.extract_key_value_from_path(parts, "data_layer")
-            if not layer_name:
-                return False
-                
-            layer_name = layer_name.upper()
+            # Try to find layer, domain, source and product information
+            # Start with explicit key=value pairs in path
+            layer_name = cls.extract_key_value_from_path(parts, "data_layer") or \
+                        cls.extract_key_value_from_path(parts, "layer")
+                        
+            domain_name = cls.extract_key_value_from_path(parts, "data_domain") or \
+                         cls.extract_key_value_from_path(parts, "domain")
+                         
+            source_name = cls.extract_key_value_from_path(parts, "data_source") or \
+                         cls.extract_key_value_from_path(parts, "source")
             
-            domain_name = cls.extract_key_value_from_path(parts, "data_domain")
-            if not domain_name:
-                return False
-                
-            # Try to find source name (data_source or env)
-            source_name = cls.extract_key_value_from_path(parts, "data_source")
-            if not source_name:
-                source_name = cls.extract_key_value_from_path(parts, "env")
-            if not source_name:
-                source_name = "unknown"
-            
-            # Try to find product name
             product_name = cls.extract_key_value_from_path(parts, "product")
-            if not product_name:
-                # Use filename as product name 
-                filename = path.stem if path.is_file() else ""
+            
+            # If key=value pairs are not found, try to infer from directory structure
+            if not layer_name:
+                # Try looking for common layer names in parts
+                for i, part in enumerate(parts):
+                    if part.lower() in ["raw", "cleaned", "curated"]:
+                        layer_name = part.upper()
+                        # If the next part exists, it might be the domain
+                        if not domain_name and i+1 < len(parts):
+                            domain_name = parts[i+1]
+                        break
+            
+            if not layer_name:
+                # Default to UNKNOWN if not found
+                layer_name = "UNKNOWN"
                 
-                # Try to parse product from filename
-                if filename:
-                    parts = filename.split('_')
-                    # Check if last part looks like a date (YYYY-MM-DD)
-                    if len(parts) >= 2 and parts[-1].count('-') == 2:
-                        # Assume format like BTC_USDT_PERP_2023-01-01
-                        product_name = '_'.join(parts[:-1])
+            if not domain_name:
+                # Try to infer domain from directories
+                for part in parts:
+                    if part.lower() in ["market_data", "news", "fundamentals", "alternative"]:
+                        domain_name = part.lower()
+                        break
+                        
+                # Default to generic if not found
+                if not domain_name:
+                    domain_name = "generic"
+            
+            # Infer source if not found
+            if not source_name:
+                # Look for known source patterns
+                for part in parts:
+                    if part.upper() in ["YAHOO_FINANCE", "BYBIT", "FINANCIAL_MODELING_PREP", "FMP"]:
+                        source_name = part.upper()
+                        break
+                
+                # Try to infer from filename patterns
+                if not source_name:
+                    filename = path.name.lower()
+                    if "yahoo" in filename:
+                        source_name = "YAHOO_FINANCE"
+                    elif "bybit" in filename:
+                        source_name = "BYBIT"
+                    elif "binance" in filename:
+                        source_name = "BINANCE"
+                    elif "fmp" in filename or "financial" in filename:
+                        source_name = "FINANCIAL_MODELING_PREP"
                     else:
-                        product_name = filename
+                        # Use a generic source name based on path
+                        source_name = "UNKNOWN"
+            
+            # Extract product information from filename if not explicitly in path
+            if not product_name:
+                # Remove extension and date patterns from filename
+                name_parts = path.stem.split('_')
+                
+                # Filter out parts that look like dates
+                date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+                name_parts = [p for p in name_parts if not date_pattern.match(p)]
+                
+                if name_parts:
+                    product_name = '_'.join(name_parts)
                 else:
-                    product_name = "unknown_product"
-                    
-            # Extract resolution if possible
-            resolution = cls.extract_key_value_from_path(parts, "resolution")
-            resolutions = set()
+                    # Default to filename if can't extract
+                    product_name = path.stem
             
-            if resolution:
-                resolutions.add(resolution)
-            else:
-                # Try to extract from filename
-                filename = path.stem if path.is_file() else ""
-                if filename:
-                    parts = filename.split('_')
-                    # Look for parts that match resolution formats (1m, 15m, 1h, 1d, etc.)
-                    for part in parts:
-                        if part.startswith(('1', '5', '15', '30', '60')) and len(part) <= 3:
-                            if part[-1] in ['m', 'h', 'd', 't', 's']:
-                                resolutions.add(part)
-                                break
-            
-            # Extract date information
-            year = cls.extract_key_value_from_path(parts, "year")
-            month = cls.extract_key_value_from_path(parts, "month")
-            day = cls.extract_key_value_from_path(parts, "day")
-            
-            date_str = None
-            if year and month and day:
-                date_str = f"{year}-{month}-{day}"
-            else:
-                # Try to find date in filename
-                filename = path.stem if path.is_file() else ""
-                if filename:
-                    parts = filename.split('_')
-                    for part in parts:
-                        if part.count('-') == 2:
-                            try:
-                                # Validate it's a date (YYYY-MM-DD)
-                                y, m, d = part.split('-')
-                                if len(y) == 4 and len(m) == 2 and len(d) == 2:
-                                    date_str = part
-                                    break
-                            except:
-                                pass
-            
-            # Update the storage information hierarchy
+            # Create layer and domain info
             layer_info = storage_info.get_or_create_layer(layer_name)
             domain_info = layer_info.get_or_create_domain(domain_name)
             source_info = domain_info.get_or_create_source(source_name)
             product_info = source_info.get_or_create_product(product_name)
             
-            # Add resolutions
-            for res in resolutions:
-                product_info.add_resolution(res)
+            # Try to extract resolution
+            resolution = cls.extract_key_value_from_path(parts, "resolution")
+            if resolution:
+                product_info.add_resolution(resolution)
+            else:
+                # Try to infer resolution from filename
+                res_pattern = re.compile(r'(\d+[smhd])')
+                res_match = res_pattern.search(path.stem)
+                if res_match:
+                    product_info.add_resolution(res_match.group(1))
+                else:
+                    # Default resolution
+                    product_info.add_resolution("1d")
             
             # Update stats
             product_info.file_count += 1
-            if path.is_file():
-                product_info.size_bytes += path.stat().st_size
+            product_info.size_bytes += path.stat().st_size
+            
+            # Try to extract date from path or filename
+            date_str = None
+            
+            # First check for year/month/day in path
+            year = cls.extract_key_value_from_path(parts, "year")
+            month = cls.extract_key_value_from_path(parts, "month")
+            day = cls.extract_key_value_from_path(parts, "day")
+            
+            if year and month and day:
+                date_str = f"{year}-{month}-{day}"
+            else:
+                # Try to extract date from filename
+                date_pattern = re.compile(r'(\d{4}-\d{2}-\d{2})')
+                date_match = date_pattern.search(path.stem)
+                if date_match:
+                    date_str = date_match.group(1)
             
             if date_str:
                 product_info.update_dates(date_str)
                 
-            return True
-        except Exception:
-            return False 
+            return product_info
+        except Exception as e:
+            # Uncomment for debugging
+            # import logging
+            # logging.getLogger('pfeed').debug(f"Error parsing generic path: {path}, error: {e}")
+            return None 

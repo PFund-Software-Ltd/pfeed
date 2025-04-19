@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
 
-from pfeed.cli.commands.data.models import StorageInfo
+from pfeed.cli.commands.data.models import StorageInfo, ProductInfo
 
 class BaseParser(ABC):
     """Base class for data path parsers."""
@@ -23,7 +23,7 @@ class BaseParser(ABC):
     
     @classmethod
     @abstractmethod
-    def parse(cls, path: Path, storage_info: StorageInfo) -> bool:
+    def parse(cls, path: Path, storage_info: StorageInfo) -> Optional[ProductInfo]:
         """
         Parse the given path and update storage_info accordingly.
         
@@ -32,7 +32,7 @@ class BaseParser(ABC):
             storage_info: StorageInfo object to update
             
         Returns:
-            True if parsing was successful, False otherwise
+            ProductInfo object if parsing was successful, None otherwise
         """
         pass
     

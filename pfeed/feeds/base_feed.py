@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Any
-from types import ModuleType
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -22,7 +21,6 @@ if TYPE_CHECKING:
     
 import os
 from abc import ABC, abstractmethod
-import importlib
 import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
@@ -291,8 +289,7 @@ class BaseFeed(ABC):
         bytewax_kwargs: dict | None=None,
     ) -> tuple[list[DataFlow], list[DataFlow]]:
         '''Run dataflows'''
-        from tqdm import tqdm
-        from pfeed.utils.utils import generate_color
+        from rich.progress import track
 
         ray_kwargs = ray_kwargs or {}
         prefect_kwargs = prefect_kwargs or {}
@@ -300,8 +297,7 @@ class BaseFeed(ABC):
         
         completed_dataflows: list[DataFlow] = []
         failed_dataflows: list[DataFlow] = []
-        color = generate_color(self.name.value)
-    
+
 
         def _run_dataflow(dataflow: DataFlow) -> FlowResult:
             if self._use_prefect:
@@ -351,7 +347,7 @@ class BaseFeed(ABC):
                 log_listener.start()
                 batch_size = ray_kwargs['num_cpus']
                 dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
-                for dataflow_batch in tqdm(dataflow_batches, desc=f'Running {self.name} dataflows', colour=color):
+                for dataflow_batch in track(dataflow_batches, description=f'Running {self.name} dataflows'):
                     futures = [ray_task.remote(dataflow) for dataflow in dataflow_batch]
                     returns = ray.get(futures)
                     for success, dataflow in returns:
@@ -369,7 +365,7 @@ class BaseFeed(ABC):
                 self._shutdown_ray()
         else:
             try:
-                for dataflow in tqdm(self._dataflows, desc=f'Running {self.name} dataflows', colour=color):
+                for dataflow in track(self._dataflows, description=f'Running {self.name} dataflows'):
                     success = _run_dataflow(dataflow)
                     if not success:
                         failed_dataflows.append(dataflow)

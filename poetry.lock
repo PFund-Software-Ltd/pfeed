@@ -4406,7 +4406,7 @@ files = [
 
 [[package]]
 name = "mtflow"
-version = "0.0.1.dev1"
+version = "0.0.1.dev2"
 description = "Machine Trading Lifecycle"
 optional = false
 python-versions = ">=3.10"
@@ -5346,7 +5346,7 @@ develop = true
 [package.dependencies]
 click = ">=8.1.8,<9.0.0"
 httpx = ">=0.28.1,<0.29.0"
-mtflow = ">=0.0.1.dev1,<0.1.0"
+mtflow = ">=0.0.1.dev2,<0.1.0"
 orjson = ">=3.10.16,<4.0.0"
 pfolio = ">=0.0.2,<0.1.0"
 platformdirs = ">=4.3.7,<5.0.0"
@@ -5360,7 +5360,7 @@ websocket-client = ">=1.8.0,<2.0.0"
 websockets = ">=15.0.1,<16.0.0"
 
 [package.extras]
-core = ["mtflow[core] (>=0.0.1.dev1,<0.1.0)", "pfolio[core] (>=0.0.2,<0.1.0)"]
+core = ["mtflow[core] (>=0.0.1.dev2,<0.1.0)", "pfolio[core] (>=0.0.2,<0.1.0)"]
 telegram = ["python-telegram-bot (>=21.11.1,<22.0.0)"]
 
 [package.source]
@@ -9050,4 +9050,4 @@ spark = ["pyspark"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10"
-content-hash = "4c3dbb778e8e0d9c2f05afd6c94efc607d5b88eb151f96bd251f2ef9745ef3cf"
+content-hash = "067cb9d578a791f19dfc86586893c4303d859c5473e6028d38645985accb34cf"

@@ -1,6 +1,6 @@
 [project]
 name = "pfeed"
-version = "0.0.4"
+version = "0.0.5"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 license = "Apache-2.0"
 authors = [

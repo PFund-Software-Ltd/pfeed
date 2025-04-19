@@ -309,4 +309,4 @@ class YahooFinanceMarketFeed(MarketFeed):
             df = option_chain.puts
         else:
             raise ValueError(f"Invalid option type: {option_type}")
-        return convert_to_user_df(df, self.data_tool.name)
+        return convert_to_user_df(df, self._data_tool)

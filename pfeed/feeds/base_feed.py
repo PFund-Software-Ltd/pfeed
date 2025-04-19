@@ -64,7 +64,7 @@ class BaseFeed(ABC):
         if not is_loggers_set_up:
             config = get_config()
             setup_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
-        self.data_tool: ModuleType = importlib.import_module(f'pfeed.data_tools.data_tool_{DataTool[data_tool.lower()]}')
+        self._data_tool = DataTool[data_tool.lower()]
         if data_source is None:
             assert hasattr(self, '_create_data_source'), '_create_data_source() is not implemented'
             self.data_source: BaseSource = self._create_data_source()
@@ -200,8 +200,7 @@ class BaseFeed(ABC):
                     use_deltalake=self._use_deltalake,
                     **search_storage_options,
                 )
-                # NOTE: use polars to scan data as internal behavior
-                data, metadata = storage.read_data(data_tool='polars')
+                data, metadata = storage.read_data()
                 metadata['from_storage'] = search_storage
                 metadata['data_domain'] = data_domain
                 metadata['data_layer'] = data_layer

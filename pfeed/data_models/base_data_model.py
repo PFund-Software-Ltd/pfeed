@@ -30,6 +30,7 @@ class BaseDataModel(BaseModel, ABC):
     data_origin: str = ''
     file_extension: str = ''
     compression: str = ''
+    use_deltalake: bool = False
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:

@@ -2,8 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfeed.typing import GenericFrame
-    from pfeed.typing import tDATA_LAYER, tSTORAGE, tENVIRONMENT
+    from pfeed.typing import tDATA_LAYER, tSTORAGE, tENVIRONMENT, GenericFrame, StorageMetadata
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
@@ -47,6 +46,7 @@ class NewsFeed(TimeBasedFeed):
             product=product,
             start_date=start_date,
             end_date=end_date or start_date,
+            use_deltalake=self._use_deltalake
         )
     
     def download(
@@ -64,7 +64,7 @@ class NewsFeed(TimeBasedFeed):
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | NewsFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
         '''
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
@@ -79,7 +79,7 @@ class NewsFeed(TimeBasedFeed):
         if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
             self.logger.info(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
             data_layer = 'raw' 
-        data_domain = self.DATA_DOMAIN
+        data_domain = self.DATA_DOMAIN.value
         self.logger.info(f'Downloading {self.name} historical news data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
@@ -108,7 +108,7 @@ class NewsFeed(TimeBasedFeed):
             etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_user_df(df, self.data_tool.name)
+                lambda df: convert_to_user_df(df, self._data_tool)
             )
         )
         
@@ -127,7 +127,7 @@ class NewsFeed(TimeBasedFeed):
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | NewsFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_domain = data_domain or self.DATA_DOMAIN.value
@@ -151,7 +151,7 @@ class NewsFeed(TimeBasedFeed):
         self.transform(
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_user_df(df, self.data_tool.name)
+                lambda df: convert_to_user_df(df, self._data_tool)
             )
         )
 

@@ -1,11 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tSTORAGE, tDATA_TOOL, tDATA_LAYER
-    from pfeed.typing import GenericData
+    from pfeed.typing import tSTORAGE, tDATA_LAYER, GenericData, StorageMetadata
 
 import logging
 from abc import ABC, abstractmethod
@@ -85,8 +84,6 @@ class BaseStorage(ABC):
             'filesystem': self.get_filesystem(),
             'storage_options': self._storage_options,
         }
-        if self.data_model.file_extension == '.parquet':
-            data_handler_configs['use_deltalake'] = self.use_deltalake
         self._data_handler = self.data_model.create_data_handler(**data_handler_configs)
     
     def initialize_logger(self):
@@ -129,14 +126,14 @@ class BaseStorage(ABC):
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
             return False
 
-    def read_data(self, data_tool: tDATA_TOOL='polars', delta_version: int | None=None) -> tuple[GenericData | None, dict[str, Any]]:
+    def read_data(self, delta_version: int | None=None) -> tuple[GenericData | None, StorageMetadata]:
         '''
         Args:
             delta_version: version of the deltalake table to read, if None, read the latest version.
         '''
         try:
-            data, metadata = self.data_handler.read(data_tool=data_tool, delta_version=delta_version)
+            data, metadata = self.data_handler.read(delta_version=delta_version)
             return data, metadata
         except Exception:
-            self._logger.exception(f'Failed to read data ({data_tool=}, {delta_version=}) from {self.name}')
+            self._logger.exception(f'Failed to read data ({delta_version=}) from {self.name}')
             return None, {}

@@ -10,11 +10,18 @@ from abc import ABC, abstractmethod
 
 
 class BaseDataHandler(ABC):
-    def __init__(self, data_model: BaseDataModel, data_layer: DataLayer, data_path: str):
+    def __init__(
+        self, 
+        data_model: BaseDataModel, 
+        data_layer: DataLayer, 
+        data_path: str, 
+        use_deltalake: bool,
+    ):
         self._data_model = data_model
         self._data_layer = data_layer
         self._data_path = data_path
-
+        self._use_deltalake = use_deltalake
+        
     @abstractmethod
     def write(self, data: GenericData, *args, **kwargs):
         pass

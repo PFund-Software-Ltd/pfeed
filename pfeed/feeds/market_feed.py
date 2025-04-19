@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from bytewax.inputs import Source as BytewaxSource
     from bytewax.dataflow import Stream as BytewaxStream
-    from pfeed.typing import GenericFrame
+    from pfeed.typing import GenericFrame, StorageMetadata
     from pfeed.typing import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.data_models.market_data_model import MarketDataModel
 
@@ -60,6 +60,7 @@ class MarketFeed(TimeBasedFeed):
             resolution=resolution,
             start_date=start_date,
             end_date=end_date or start_date,
+            use_deltalake=self._use_deltalake
         )
         
     def download(
@@ -78,7 +79,7 @@ class MarketFeed(TimeBasedFeed):
         dataflow_per_date: bool=True,
         include_metadata: bool=False,
         **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | MarketFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | MarketFeed:
         '''
         Download historical data from data source.
         
@@ -125,7 +126,7 @@ class MarketFeed(TimeBasedFeed):
         if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
             self.logger.info(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
             data_layer = 'raw'
-        data_domain = self.DATA_DOMAIN
+        data_domain = self.DATA_DOMAIN.value
         self.logger.info(f'Downloading {self.name} historical {product} {data_resolution} data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin),
@@ -171,7 +172,7 @@ class MarketFeed(TimeBasedFeed):
             etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_user_df(df, self.data_tool.name)
+                lambda df: convert_to_user_df(df, self._data_tool)
             )
         )
 
@@ -191,7 +192,7 @@ class MarketFeed(TimeBasedFeed):
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | MarketFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | MarketFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -317,7 +318,7 @@ class MarketFeed(TimeBasedFeed):
             etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_user_df(df, self.data_tool.name)
+                lambda df: convert_to_user_df(df, self._data_tool)
             )
         )
     
@@ -370,7 +371,7 @@ class MarketFeed(TimeBasedFeed):
             if is_resample_required:
                 df: pd.DataFrame = etl.resample_data(convert_to_pandas_df(df), resolution)
                 self.logger.debug(f'resampled {product.name} {data_resolution} data to {resolution}')
-            df: GenericFrame = convert_to_user_df(df, self.data_tool.name)
+            df: GenericFrame = convert_to_user_df(df, self._data_tool)
         return df
     
     # TODO

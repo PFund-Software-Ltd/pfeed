@@ -3,11 +3,10 @@ from typing import TYPE_CHECKING, Literal, Any, Callable
 if TYPE_CHECKING:
     import polars as pl
     from narwhals.typing import Frame
-    from pfeed.typing import GenericFrame
+    from pfeed.typing import tSTORAGE, tDATA_LAYER, GenericFrame, StorageMetadata
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
     from pfeed.flows.faucet import Faucet
-    from pfeed.typing import tSTORAGE, tDATA_LAYER
 
 import datetime
 from pprint import pformat
@@ -103,7 +102,7 @@ class TimeBasedFeed(BaseFeed):
         add_default_transformations: Callable | None,
         dataflow_per_date: bool,
         include_metadata: bool,
-    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | TimeBasedFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | TimeBasedFeed:
         self._create_dataflows(
             lambda _data_model: self._retrieve_impl(
                 data_model=_data_model,
@@ -140,7 +139,7 @@ class TimeBasedFeed(BaseFeed):
         dataflow_per_date: bool, 
         include_metadata: bool,
         add_default_transformations: Callable | None,
-    ) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]] | TimeBasedFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | TimeBasedFeed:
         assert data_layer.upper() != DataLayer.CURATED, 'writing to "curated" data layer is not supported in download()'
         self._create_dataflows(
             lambda _data_model: self._download_impl(_data_model),
@@ -202,7 +201,7 @@ class TimeBasedFeed(BaseFeed):
         polars_lf: pl.LazyFrame | None = df_in_storages[storage_with_the_least_missing_dates]
         metadata = metadata_in_storages[storage_with_the_least_missing_dates]
         if polars_lf is not None:
-            df: GenericFrame = convert_to_user_df(polars_lf, self.data_tool.name)
+            df: GenericFrame = convert_to_user_df(polars_lf, self._data_tool)
             self.logger.info(f'found data {data_model} in {storage_with_the_least_missing_dates} ({data_layer=})')
         else:
             df = None

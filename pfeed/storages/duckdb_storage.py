@@ -12,8 +12,7 @@ from typing import TYPE_CHECKING, Literal, Any
 from typing_extensions import TypedDict
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
-    from pfeed.typing import tDATA_TOOL, tDATA_LAYER
-    from pfeed.typing import GenericFrame
+    from pfeed.typing import tDATA_LAYER, GenericFrame, StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
 
 import datetime
@@ -21,13 +20,13 @@ from pathlib import Path
 
 import pandas as pd
 from pandas.api.types import is_datetime64_ns_dtype
+import polars as pl
 import duckdb
 
 from pfund import print_warning
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
-from pfeed.enums import DataTool
 from pfeed import get_config
 
 
@@ -232,7 +231,7 @@ class DuckDBStorage(BaseStorage):
         
         self.conn.execute(f"INSERT INTO {self._schema_table_name} SELECT * FROM df")
     
-    def _read_df(self) -> pd.DataFrame | None:
+    def _read_df(self) -> pl.LazyFrame | None:
         if not self.table_exists(table_name=self._table_name):
             return None
         start_date, end_date = self.data_model.start_date, self.data_model.end_date
@@ -242,8 +241,9 @@ class DuckDBStorage(BaseStorage):
             BETWEEN CAST('{start_date}' AS DATE) AND CAST('{end_date}' AS DATE) 
             ORDER BY date
         """)
-        df: pd.DataFrame = conn.df()
-        return df
+        df: pl.DataFrame = conn.pl()
+        lf: pl.LazyFrame = df.lazy()
+        return lf
 
     def _write_metadata(self, metadata: DuckDBMetadata) -> None:
         self.conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self._schema_name}")
@@ -281,15 +281,15 @@ class DuckDBStorage(BaseStorage):
             self._logger.exception(f'Failed to read metadata from {self.name} using table_name={self._table_name}')
             return {}
         
-    def _read_storage_metadata(self) -> dict[str, Any]:
+    def _read_storage_metadata(self) -> StorageMetadata:
         '''Reads metadata from duckdb metadata table and consolidates it to follow other storages metadata structure'''
-        storage_metadata: dict[str, Any] = {}
+        storage_metadata: StorageMetadata = {}
         duckdb_metadata: DuckDBMetadata | dict = self._read_metadata()
         storage_metadata['file_metadata'] = {self.filename: duckdb_metadata}
         if isinstance(self.data_model, TimeBasedDataModel):
             if 'dates' in duckdb_metadata:
-                existing_dates_in_duckdb = duckdb_metadata['dates']
-                storage_metadata['missing_dates'] = [date for date in self.data_model.dates if date not in existing_dates_in_duckdb]
+                existing_dates = duckdb_metadata['dates']
+                storage_metadata['missing_dates'] = [date for date in self.data_model.dates if date not in existing_dates]
             else:
                 storage_metadata['missing_dates'] = self.data_model.dates
         else:
@@ -305,9 +305,9 @@ class DuckDBStorage(BaseStorage):
                     self._logger.warning(f'Empty DataFrame for {self.name} {self.data_model}')
                     return False
                 self._write_df(df)
-                current_metadata: DuckDBMetadata = self._read_metadata()
-                current_dates_in_storage = current_metadata.get('dates', [])
-                total_dates = list(set(self.data_model.dates + current_dates_in_storage))
+                duckdb_metadata: DuckDBMetadata = self._read_metadata()
+                existing_dates = duckdb_metadata.get('dates', [])
+                total_dates = list(set(self.data_model.dates + existing_dates))
                 metadata: DuckDBMetadata = {'table_name': self._table_name, 'dates': total_dates}
                 self._write_metadata(metadata)
                 return True
@@ -315,18 +315,14 @@ class DuckDBStorage(BaseStorage):
             self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
             return False
     
-    def read_data(self, data_tool: DataTool | tDATA_TOOL='polars') -> tuple[GenericFrame | None, DuckDBMetadata]:
-        from pfeed._etl.base import convert_to_user_df
+    def read_data(self) -> tuple[pl.LazyFrame | None, StorageMetadata]:
         try:
             with self:
-                df: pd.DataFrame | None = self._read_df()
-                metadata: dict[str, Any] = self._read_storage_metadata()
-                data_tool = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
-                if df is not None:
-                    df: GenericFrame = convert_to_user_df(df, data_tool)
-                return df, metadata
+                lf: pl.LazyFrame | None = self._read_df()
+                metadata: StorageMetadata = self._read_storage_metadata()
+                return lf, metadata
         except Exception:
-            self._logger.exception(f'Failed to read data ({data_tool=}) (table_name={self._table_name}) from {self.name}')
+            self._logger.exception(f'Failed to read data (table_name={self._table_name}) from {self.name}')
             return None, {}
     
     def start_ui(self, port: int=4213, no_browser: bool=False):

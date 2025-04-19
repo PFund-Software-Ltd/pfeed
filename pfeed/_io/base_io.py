@@ -30,7 +30,7 @@ class BaseIO(ABC):
         return file_info.type == pa_fs.FileType.File
         
     @abstractmethod
-    def write(self, data: GenericData, file_path: str, **kwargs):
+    def write(self, file_path: str, data: GenericData, **kwargs):
         pass
 
     @abstractmethod

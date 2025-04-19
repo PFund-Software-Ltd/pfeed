@@ -1,6 +1,8 @@
+from typing_extensions import TypedDict
 from typing import Any, Literal, Protocol
 
 import os
+import datetime
 
 from narwhals.series import Series
 from narwhals.dataframe import DataFrame, LazyFrame
@@ -40,3 +42,9 @@ tPRODUCT_TYPE = Literal[
 tSTORAGE = Literal['cache', 'local', 'minio', 'duckdb']
 tDATA_TOOL = Literal['pandas', 'polars', 'dask']
 tENVIRONMENT = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']
+
+
+class StorageMetadata(TypedDict, total=False):
+    file_metadata: dict[str, Any]
+    missing_file_paths: list[str]
+    missing_dates: list[datetime.date]

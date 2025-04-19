@@ -1,17 +1,36 @@
 from __future__ import annotations
+from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from pathlib import Path
     import pyarrow.fs as pa_fs
     from pfeed.enums import DataLayer
-    from pathlib import Path
-
-from abc import abstractmethod
+    from pfeed.typing import tENVIRONMENT, tDATA_SOURCE
+    
 import datetime
+from abc import abstractmethod
 
 from pydantic import field_validator, Field, ValidationInfo
 
 from pfeed.data_models.base_data_model import BaseDataModel
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
+
+
+class TimeBasedMetadata(TypedDict, total=True):
+    env: tENVIRONMENT
+    data_source: tDATA_SOURCE
+    data_origin: str
+    start_date: datetime.date
+    end_date: datetime.date
+
+
+# metadata for delta table
+class TimeBasedDeltaMetadata(TypedDict, total=True):
+    env: tENVIRONMENT
+    data_source: tDATA_SOURCE
+    data_origin: str
+    dates: list[datetime.date]
+
 
 
 class TimeBasedDataModel(BaseDataModel):

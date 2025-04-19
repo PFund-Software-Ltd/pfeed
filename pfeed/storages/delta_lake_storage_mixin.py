@@ -13,6 +13,8 @@ from pfund import cprint
 
 
 class DeltaLakeStorageMixin:
+    metadata_filename = 'deltalake_metadata.parquet'
+    
     def get_delta_tables(self: BaseStorage | DeltaLakeStorageMixin) -> list[DeltaTable]:
         if not self.use_deltalake:
             raise ValueError(f'{self.use_deltalake=} for this storage')

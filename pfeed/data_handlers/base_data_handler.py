@@ -16,11 +16,13 @@ class BaseDataHandler(ABC):
         data_layer: DataLayer, 
         data_path: str, 
         use_deltalake: bool,
+        storage_options: dict | None=None,
     ):
         self._data_model = data_model
         self._data_layer = data_layer
         self._data_path = data_path
         self._use_deltalake = use_deltalake
+        self._storage_options = storage_options or {}
         
     @abstractmethod
     def write(self, data: GenericData, *args, **kwargs):

@@ -38,7 +38,8 @@ class TimeBasedDataHandler(BaseDataHandler):
         super().__init__(
             data_model=data_model, 
             data_layer=data_layer, 
-            data_path=data_path, 
+            data_path=data_path,
+            storage_options=storage_options,
             use_deltalake=use_deltalake,
         )
         self._io = TabularIO(
@@ -89,25 +90,31 @@ class TimeBasedDataHandler(BaseDataHandler):
                 file_path = self._create_file_paths(data_model=data_model_copy)[0]
                 self._io.write(file_path, df_chunk, metadata)
         else:
+            from deltalake import DeltaTable
+            
             # Preprocess table to add year, month, day columns for partitioning
-            delta_partition_by = ['year', 'month', 'day']
+            delta_partition_by = DeltaLakeStorageMixin.partition_by[TimeBasedDataHandler]
             df = df.assign(
                 year=df["date"].dt.year,
                 month=df["date"].dt.month,
                 day=df["date"].dt.day,
             )
+            
             file_path = self._create_file_paths(data_model=data_model)[0]
             metadata_file_path = file_path + '/' + DeltaLakeStorageMixin.metadata_filename
-            if self._io._exists(metadata_file_path):
+            is_deltatable = DeltaTable.is_deltatable(file_path, storage_options=self._storage_options)
+            existing_dates = []
+            if is_deltatable:
                 existing_metadata: dict[str, Any] = self._io._read_pyarrow_table_metadata([metadata_file_path])
                 file_metadata: DeltaTableMetadata = existing_metadata.get(metadata_file_path, {})
                 existing_dates = file_metadata.get('dates', [])
                 existing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in existing_dates]
-                # NOTE: remove existing dates from df to avoid duplicates
-                if data_model.env == Environment.BACKTEST and existing_dates:
-                    df = df[~df['date'].dt.date.isin(existing_dates)]
-            else:
-                existing_dates = []
+
+                # Delete any overlapping data within the date range before inserting
+                dt = DeltaTable(file_path, storage_options=self._storage_options)
+                start_ts, end_ts = df['date'].iloc[0], df['date'].iloc[-1]
+                dt.delete(predicate=f"date >= '{start_ts}' AND date <= '{end_ts}'")
+            
             dates_in_data = pd.date_range(metadata.pop('start_date'), metadata.pop('end_date')).date.tolist()
             total_dates = list(set(dates_in_data + existing_dates))
             metadata['dates'] = total_dates
@@ -122,8 +129,9 @@ class TimeBasedDataHandler(BaseDataHandler):
             missing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
             metadata['missing_dates'] = missing_dates
         else:
-            # drop year, month, day columns which are only used for partitioning
-            lf = lf.drop(['year', 'month', 'day'])
+            # drop e.g. year, month, day columns which are only used for partitioning
+            delta_partition_by = DeltaLakeStorageMixin.partition_by[TimeBasedDataHandler]
+            lf = lf.drop(delta_partition_by)
             file_metadata = metadata['file_metadata']
             deltalake_metadata = list(file_metadata.values())[0]
             existing_dates = deltalake_metadata.get('dates', [])

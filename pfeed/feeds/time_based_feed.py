@@ -376,9 +376,8 @@ class TimeBasedFeed(BaseFeed):
         dfs: list[Frame] = [nw.from_native(df) for df in dfs if df is not None and not is_empty_dataframe(df)]
         if dfs:
             df: Frame = nw.concat(dfs)
-            df: GenericFrame = nw.to_native(
-                df.sort(by='date', descending=False)
-            )
+            df: Frame = df.sort(by='date', descending=False)
+            df: GenericFrame = nw.to_native(df)
         else:
             df = None
 

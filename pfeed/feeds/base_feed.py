@@ -289,7 +289,8 @@ class BaseFeed(ABC):
         bytewax_kwargs: dict | None=None,
     ) -> tuple[list[DataFlow], list[DataFlow]]:
         '''Run dataflows'''
-        from rich.progress import track
+        from tqdm import tqdm
+        from pfeed.utils.utils import generate_color
 
         ray_kwargs = ray_kwargs or {}
         prefect_kwargs = prefect_kwargs or {}
@@ -297,7 +298,8 @@ class BaseFeed(ABC):
         
         completed_dataflows: list[DataFlow] = []
         failed_dataflows: list[DataFlow] = []
-
+        color = generate_color(self.name.value)
+    
 
         def _run_dataflow(dataflow: DataFlow) -> FlowResult:
             if self._use_prefect:
@@ -347,7 +349,7 @@ class BaseFeed(ABC):
                 log_listener.start()
                 batch_size = ray_kwargs['num_cpus']
                 dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
-                for dataflow_batch in track(dataflow_batches, description=f'Running {self.name} dataflows'):
+                for dataflow_batch in tqdm(dataflow_batches, desc=f'Running {self.name} dataflows', colour=color):
                     futures = [ray_task.remote(dataflow) for dataflow in dataflow_batch]
                     returns = ray.get(futures)
                     for success, dataflow in returns:
@@ -365,7 +367,7 @@ class BaseFeed(ABC):
                 self._shutdown_ray()
         else:
             try:
-                for dataflow in track(self._dataflows, description=f'Running {self.name} dataflows'):
+                for dataflow in tqdm(self._dataflows, desc=f'Running {self.name} dataflows', colour=color):
                     success = _run_dataflow(dataflow)
                     if not success:
                         failed_dataflows.append(dataflow)

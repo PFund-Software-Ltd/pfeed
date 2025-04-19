@@ -56,11 +56,13 @@ def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
     
 
-def resample_data(df: pd.DataFrame, resolution: str | Resolution) -> pd.DataFrame:
+def resample_data(df: pd.DataFrame, resolution: str | Resolution, offset: str = None) -> pd.DataFrame:
     '''Resamples the input dataframe based on the target resolution.
     Args:
         df: The input dataframe to be resampled.
         resolution: The target resolution to resample the data to.
+        offset: Optional time offset string (e.g., '30min') to shift the resampling window.
+               For example, with '1h' resolution and '30min' offset, timestamps will be XX:30:00.
     Returns:
         The resampled dataframe.
     '''
@@ -113,6 +115,7 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution) -> pd.DataFram
             eresolution,
             label='left',
             closed='left',  # closed is only default to be 'right' when resolution is week
+            offset=offset,
         )
         .agg(resample_logic)
         # drop an unnecessary level created by 'ohlc' in the resample_logic

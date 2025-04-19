@@ -10,15 +10,14 @@ if TYPE_CHECKING:
     )
 
 import datetime
-import json
 
 import pandas as pd
 import polars as pl
 
-from pfeed.enums import DataLayer
+from pfeed.enums import DataLayer, Environment
 from pfeed._io.tabular_io import TabularIO
 from pfeed.data_handlers.base_data_handler import BaseDataHandler
-from pfeed.storages.delta_lake_storage_mixin import DeltaLakeStorageMixin
+from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
 
 class TimeBasedDataHandler(BaseDataHandler):
@@ -103,6 +102,10 @@ class TimeBasedDataHandler(BaseDataHandler):
                 existing_metadata: dict[str, Any] = self._io._read_pyarrow_table_metadata([metadata_file_path])
                 file_metadata: DeltaTableMetadata = existing_metadata.get(metadata_file_path, {})
                 existing_dates = file_metadata.get('dates', [])
+                existing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in existing_dates]
+                # NOTE: remove existing dates from df to avoid duplicates
+                if data_model.env == Environment.BACKTEST and existing_dates:
+                    df = df[~df['date'].dt.date.isin(existing_dates)]
             else:
                 existing_dates = []
             dates_in_data = pd.date_range(metadata.pop('start_date'), metadata.pop('end_date')).date.tolist()
@@ -119,6 +122,8 @@ class TimeBasedDataHandler(BaseDataHandler):
             missing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
             metadata['missing_dates'] = missing_dates
         else:
+            # drop year, month, day columns which are only used for partitioning
+            lf = lf.drop(['year', 'month', 'day'])
             file_metadata = metadata['file_metadata']
             deltalake_metadata = list(file_metadata.values())[0]
             existing_dates = deltalake_metadata.get('dates', [])

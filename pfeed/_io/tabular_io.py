@@ -15,7 +15,7 @@ except ImportError:
     DeltaTable = None
 
 from pfeed._io.base_io import BaseIO
-from pfeed.storages.delta_lake_storage_mixin import DeltaLakeStorageMixin
+from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
 
 class TabularIO(BaseIO):

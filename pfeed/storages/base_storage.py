@@ -15,7 +15,7 @@ class BaseStorage(ABC):
     def __new__(cls, *args, use_deltalake: bool=False, **kwargs):
         if use_deltalake:
             # Create a new class that inherits from both BaseStorage and DeltaLakeStorageMixin
-            from pfeed.storages.delta_lake_storage_mixin import DeltaLakeStorageMixin
+            from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
             new_cls = type(
                 f'DeltaLake{cls.__name__}',
                 (cls, DeltaLakeStorageMixin),

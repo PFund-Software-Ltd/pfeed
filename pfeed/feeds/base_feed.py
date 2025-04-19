@@ -196,7 +196,7 @@ class BaseFeed(ABC):
                     data_layer=data_layer, 
                     data_domain=data_domain,
                     use_deltalake=self._use_deltalake,
-                    **search_storage_options,
+                    storage_options=search_storage_options,
                 )
                 data, metadata = storage.read_data()
                 metadata['from_storage'] = search_storage

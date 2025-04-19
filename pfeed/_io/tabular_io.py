@@ -15,7 +15,6 @@ except ImportError:
     DeltaTable = None
 
 from pfeed._io.base_io import BaseIO
-from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
 
 class TabularIO(BaseIO):
@@ -32,6 +31,7 @@ class TabularIO(BaseIO):
             assert DeltaTable is not None, 'deltalake is not installed'
     
     def _write_deltalake_metadata(self, file_path: str, metadata: dict):
+        from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
         # HACK: delta-rs doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
         empty_df_with_metadata = pd.DataFrame()
         table = pa.Table.from_pandas(empty_df_with_metadata, preserve_index=False)
@@ -66,7 +66,8 @@ class TabularIO(BaseIO):
             pq.write_table(table, f, compression=self._compression)
             
     def _is_empty_parquet_file(self, file_path: str) -> bool:
-        return self._exists(file_path) and pq.read_metadata(file_path).num_rows == 0
+        file_path = file_path.replace('s3://', '')
+        return self._exists(file_path) and pq.read_metadata(file_path, filesystem=self._filesystem).num_rows == 0
     
     def write(
         self, 
@@ -95,6 +96,7 @@ class TabularIO(BaseIO):
         lf: pl.LazyFrame | None = None
         metadata: dict[str, Any] = {}
         if self._use_deltalake:
+            from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
             exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path + '/' + DeltaLakeStorageMixin.metadata_filename)]
             non_empty_file_paths = [file_path for file_path in exists_file_paths if DeltaTable.is_deltatable(file_path, storage_options=self._storage_options)]
             if non_empty_file_paths:

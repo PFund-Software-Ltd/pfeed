@@ -14,10 +14,9 @@ import datetime
 import pandas as pd
 import polars as pl
 
-from pfeed.enums import DataLayer, Environment
+from pfeed.enums import DataLayer
 from pfeed._io.tabular_io import TabularIO
 from pfeed.data_handlers.base_data_handler import BaseDataHandler
-from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
 
 class TimeBasedDataHandler(BaseDataHandler):
@@ -91,6 +90,7 @@ class TimeBasedDataHandler(BaseDataHandler):
                 self._io.write(file_path, df_chunk, metadata)
         else:
             from deltalake import DeltaTable
+            from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
             
             # Preprocess table to add year, month, day columns for partitioning
             delta_partition_by = DeltaLakeStorageMixin.partition_by[TimeBasedDataHandler]
@@ -129,6 +129,7 @@ class TimeBasedDataHandler(BaseDataHandler):
             missing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
             metadata['missing_dates'] = missing_dates
         else:
+            from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
             # drop e.g. year, month, day columns which are only used for partitioning
             delta_partition_by = DeltaLakeStorageMixin.partition_by[TimeBasedDataHandler]
             lf = lf.drop(delta_partition_by)

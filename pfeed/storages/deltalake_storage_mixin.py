@@ -7,6 +7,8 @@ if TYPE_CHECKING:
 from datetime import timedelta
 from pathlib import Path
 
+from rich.pretty import Pretty
+from rich.panel import Panel
 from deltalake import DeltaTable
 
 from pfund import cprint
@@ -62,8 +64,6 @@ class DeltaLakeStorageMixin:
         enforce_retention_duration: bool=True,
         **deltalake_kwargs,
     ) -> list[str]:
-        from rich.pretty import Pretty
-        from rich.panel import Panel
         print('Vacuuming Delta Lake...')
         delta_tables = self.get_delta_tables()
         total_files_deleted = []
@@ -120,9 +120,6 @@ class DeltaLakeStorageMixin:
         Returns:
             List of optimization results for each table
         """
-        from rich.panel import Panel
-        from rich.pretty import Pretty
-        
         print('Optimizing Delta Lake...')
         delta_tables = self.get_delta_tables()
         results = []

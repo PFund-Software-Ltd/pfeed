@@ -19,6 +19,8 @@ from functools import lru_cache
 from cloudpathlib import CloudPath
 import pyarrow.fs as pa_fs
 from minio import S3Error, ServerError, Minio
+from minio.versioningconfig import VersioningConfig
+from minio.commonconfig import ENABLED
 
 from pfeed.storages.base_storage import BaseStorage
 
@@ -34,7 +36,6 @@ class MinioStorageOptions(TypedDict):
 
 
 class MinioStorage(BaseStorage):
-    # DATA_PART_SIZE = 5 * (1024 ** 2)  # part size for S3, 5 MB
     BUCKET_NAME: str = 'pfeed'
     
     def __init__(
@@ -43,6 +44,7 @@ class MinioStorage(BaseStorage):
         data_domain: str='general_data',
         use_deltalake: bool=False, 
         storage_options: MinioStorageOptions | None=None,
+        enable_bucket_versioning: bool=False,
     ):
         '''
         Args:
@@ -56,12 +58,16 @@ class MinioStorage(BaseStorage):
             use_deltalake=use_deltalake, 
             storage_options=self._normalize_storage_options(storage_options),
         )
+        if self.use_deltalake:
+            self._adjust_storage_options_for_deltalake()
         cache_time = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
         if not MinioStorage._check_if_server_running(cache_time, self.endpoint):
             raise ServerError(f"{self.name} is not running", 503)
         self.minio: Minio = self._create_minio(storage_options)
         if not self.minio.bucket_exists(self.BUCKET_NAME):
             self.minio.make_bucket(self.BUCKET_NAME)
+        if enable_bucket_versioning:
+            self.minio.set_bucket_versioning(self.BUCKET_NAME, VersioningConfig(ENABLED))
     
     @staticmethod
     def _create_endpoint() -> str:
@@ -90,16 +96,16 @@ class MinioStorage(BaseStorage):
                 "secret_access_key": minio_options.pop("secret_key", default_secret_key),
             }
 
-        # REVIEW
-        if self.use_deltalake:
-            if 'allow_http' not in storage_options:
-                storage_options["allow_http"] = 'true' if self.endpoint.startswith("http://") else 'false'
-            if 'conditional_put' not in storage_options:
-                storage_options["conditional_put"] = 'etag'
-            if 'region' not in storage_options:
-                storage_options["region"] = 'us-east-1'  # REVIEW
-
         return storage_options
+    
+    # REVIEW
+    def _adjust_storage_options_for_deltalake(self):
+        if 'allow_http' not in self._storage_options:
+            self._storage_options["allow_http"] = 'true' if self.endpoint.startswith("http://") else 'false'
+        if 'conditional_put' not in self._storage_options:
+            self._storage_options["conditional_put"] = 'etag'
+        if 'region' not in self._storage_options:
+            self._storage_options["region"] = 'us-east-1'
     
     def _create_minio(self, minio_options: MinioStorageOptions | None) -> Minio:
         return Minio(
@@ -148,6 +154,8 @@ class MinioStorage(BaseStorage):
     def get_object(self, object_name: str) -> bytes | None:
         try:
             res = self.minio.get_object(self.BUCKET_NAME, object_name)
+            # minio_object = self.minio.stat_object(self.BUCKET_NAME, object_name)
+            # minio_metadata = minio_object.metadata
             if res.status == 200:
                 return res.data
         except S3Error as err:
@@ -168,12 +176,23 @@ class MinioStorage(BaseStorage):
         objects: Generator = self.minio.list_objects(self.BUCKET_NAME, prefix=prefix)
         return list(objects)
     
-    def put_object(self, object_name: str, data: bytes) -> ObjectWriteResult:
+    def put_object(
+        self, 
+        object_name: str, 
+        data: bytes, 
+        metadata: dict | None=None,
+        tags: Tags | None=None,
+        part_size: int = 0,
+        num_parallel_uploads: int = 3,
+    ) -> ObjectWriteResult:
         return self.minio.put_object(
-            self.BUCKET_NAME,
-            object_name,
+            bucket_name=self.BUCKET_NAME,
+            object_name=object_name,
             data=io.BytesIO(data),
-            # part_size=self.DATA_PART_SIZE,
             length=len(data),
             content_type='application/parquet',
+            metadata=metadata,
+            part_size=part_size,
+            num_parallel_uploads=num_parallel_uploads,
+            tags=tags,
         )

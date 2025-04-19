@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Any, Callable
+from typing_extensions import TypedDict
+from typing import TYPE_CHECKING, Literal, Callable
 if TYPE_CHECKING:
     import polars as pl
     from narwhals.typing import Frame
@@ -17,6 +18,11 @@ from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 
 
 __all__ = ["TimeBasedFeed"]
+
+
+class TimeBasedFeedMetadata(TypedDict):
+    missing_dates: list[datetime.date]
+
 
 
 class TimeBasedFeed(BaseFeed):
@@ -102,7 +108,7 @@ class TimeBasedFeed(BaseFeed):
         add_default_transformations: Callable | None,
         dataflow_per_date: bool,
         include_metadata: bool,
-    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | TimeBasedFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata] | TimeBasedFeed:
         self._create_dataflows(
             lambda _data_model: self._retrieve_impl(
                 data_model=_data_model,
@@ -139,7 +145,7 @@ class TimeBasedFeed(BaseFeed):
         dataflow_per_date: bool, 
         include_metadata: bool,
         add_default_transformations: Callable | None,
-    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | TimeBasedFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata] | TimeBasedFeed:
         assert data_layer.upper() != DataLayer.CURATED, 'writing to "curated" data layer is not supported in download()'
         self._create_dataflows(
             lambda _data_model: self._download_impl(_data_model),
@@ -178,7 +184,7 @@ class TimeBasedFeed(BaseFeed):
         from_storage: tSTORAGE | None,
         storage_options: dict | None,
         add_default_transformations: Callable | None,
-    ) -> tuple[GenericFrame | None, dict[str, Any]]:
+    ) -> tuple[GenericFrame | None, TimeBasedFeedMetadata]:
         '''Retrieves data among all scanned data loaded from local storages.
         Returns the data from the storage with the least missing dates.
         '''
@@ -346,7 +352,7 @@ class TimeBasedFeed(BaseFeed):
             
         return df
   
-    def _eager_run(self, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, dict[str, Any]]:
+    def _eager_run(self, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata]:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
         
@@ -355,13 +361,13 @@ class TimeBasedFeed(BaseFeed):
         completed_dataflows, failed_dataflows = self.run()
 
         dfs: list[GenericFrame | None] = []
-        metadata = {'missing_dates': []}
+        metadata: TimeBasedFeedMetadata = {'missing_dates': []}
         
         for dataflow in completed_dataflows + failed_dataflows:
             data_model: TimeBasedDataModel = dataflow.data_model
             result: FlowResult = dataflow.result
             _df: GenericFrame | None = result.data
-            _metadata: dict[str, Any] = result.metadata
+            _metadata: StorageMetadata = result.metadata
             
             dfs.append(_df)
             

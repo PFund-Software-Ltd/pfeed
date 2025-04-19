@@ -12,7 +12,7 @@ import datetime
 from pprint import pformat
 
 from pfeed.utils.dataframe import is_empty_dataframe
-from pfeed.enums import ExtractType, DataLayer
+from pfeed.enums import ExtractType, DataLayer, DataStorage
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 
 
@@ -219,6 +219,7 @@ class TimeBasedFeed(BaseFeed):
         data_layer: tDATA_LAYER | None,
         data_domain: str,
         from_storage: tSTORAGE | None,
+        to_storage: tSTORAGE | None,
         storage_options: dict | None,
         force_download: bool,
         retrieve_per_date: bool,
@@ -305,8 +306,9 @@ class TimeBasedFeed(BaseFeed):
         
         if is_download_required:
             # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
-            if self.data_source.access_type == DataAccessType.PAID_BY_USAGE:
-                raise Exception('downloading PAID data is not allowed in get_historical_data(), use download() to prepare the data beforehand')
+            if self.data_source.access_type == DataAccessType.PAID_BY_USAGE and \
+                (to_storage is None or DataStorage[to_storage.upper()] == DataStorage.CACHE):
+                raise Exception(f'downloading PAID data to {to_storage=} is not allowed')
                 
             df_from_source = self.download(
                 product,
@@ -315,7 +317,7 @@ class TimeBasedFeed(BaseFeed):
                 start_date=start_missing_date,
                 end_date=end_missing_date,
                 data_origin=data_origin,
-                to_storage=None,  # to_storage=None means NOT write to storage
+                to_storage=to_storage,
                 storage_options=storage_options,
                 **kwargs
             )

@@ -31,6 +31,7 @@ class BaseStorage(ABC):
         data_domain: str='general_data',
         use_deltalake: bool=False,
         storage_options: dict | None=None,
+        **storage_kwargs,
     ):
         from pfeed.enums import DataStorage, DataLayer
         self.name = DataStorage[name.upper()]
@@ -41,6 +42,7 @@ class BaseStorage(ABC):
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
         self._storage_options = storage_options or {}
+        self._storage_kwargs = storage_kwargs
 
     @classmethod
     def from_data_model(
@@ -50,12 +52,14 @@ class BaseStorage(ABC):
         data_domain: str,
         use_deltalake: bool=False, 
         storage_options: dict | None=None,
+        **storage_kwargs,
     ) -> BaseStorage:
         instance = cls(
             data_layer=data_layer,
             data_domain=data_domain,
             use_deltalake=use_deltalake, 
             storage_options=storage_options,
+            **storage_kwargs,
         )
         instance.attach_data_model(data_model)
         instance.initialize_logger()

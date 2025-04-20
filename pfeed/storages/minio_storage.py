@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from minio.credentials.providers import Provider
     from typing import Generator
     from pfeed.typing import tDATA_LAYER
+    from pfeed.data_models.base_data_model import BaseDataModel
 
 import os
 import io
@@ -68,6 +69,25 @@ class MinioStorage(BaseStorage):
             self.minio.make_bucket(self.BUCKET_NAME)
         if enable_bucket_versioning:
             self.minio.set_bucket_versioning(self.BUCKET_NAME, VersioningConfig(ENABLED))
+    
+    @classmethod
+    def from_data_model(
+        cls,
+        data_model: BaseDataModel,
+        data_layer: tDATA_LAYER,
+        data_domain: str,
+        use_deltalake: bool=False,
+        storage_options: MinioStorageOptions | None=None,
+        enable_bucket_versioning: bool=False,
+    ) -> BaseStorage:
+        return super().from_data_model(
+            data_model=data_model,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            use_deltalake=use_deltalake,
+            storage_options=storage_options,
+            enable_bucket_versioning=enable_bucket_versioning,
+        )
     
     @staticmethod
     def _create_endpoint() -> str:

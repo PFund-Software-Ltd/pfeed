@@ -49,12 +49,12 @@ class DuckDBStorage(BaseStorage):
         storage_options: dict | None=None,
         in_memory: bool=False, 
         memory_limit: str='4GB',
-        **duckdb_kwargs
+        **storage_kwargs
     ):
         '''
         Args:
             in_memory: whether to use in-memory storage
-            duckdb_kwargs: kwargs for duckdb connection, duckdb.connect(..., **duckdb_kwargs)
+            storage_kwargs: kwargs for duckdb connection, duckdb.connect(..., **storage_kwargs)
         '''
         self._in_memory = in_memory
         self._memory_limit = memory_limit
@@ -64,20 +64,20 @@ class DuckDBStorage(BaseStorage):
             data_domain=data_domain,
             use_deltalake=use_deltalake,
             storage_options=storage_options,
+            **storage_kwargs,
         )
         self._schema_name = ''
         self._table_name = ''
         self._metadata_table_name = 'metadata'
         self.conn: DuckDBPyConnection | None = None
-        self._duckdb_kwargs = duckdb_kwargs
     
     def _create_connection(self) -> DuckDBPyConnection:
         if self._in_memory:
-            conn: DuckDBPyConnection = duckdb.connect(':memory:', **self._duckdb_kwargs)
+            conn: DuckDBPyConnection = duckdb.connect(':memory:', **self._storage_kwargs)
             conn.execute(f"SET memory_limit = '{self._memory_limit}'")
         else:
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
-            conn: DuckDBPyConnection = duckdb.connect(str(self.file_path), **self._duckdb_kwargs)
+            conn: DuckDBPyConnection = duckdb.connect(str(self.file_path), **self._storage_kwargs)
         return conn
     
     @classmethod
@@ -90,7 +90,7 @@ class DuckDBStorage(BaseStorage):
         storage_options: dict | None=None,
         in_memory: bool=False,
         memory_limit: str='4GB',
-        **duckdb_kwargs
+        **storage_kwargs
     ) -> BaseStorage:
         instance = cls(
             data_layer=data_layer,
@@ -99,7 +99,7 @@ class DuckDBStorage(BaseStorage):
             in_memory=in_memory,
             memory_limit=memory_limit,
             storage_options=storage_options,
-            **duckdb_kwargs
+            **storage_kwargs
         )
         instance.attach_data_model(data_model)
         instance.initialize_logger()

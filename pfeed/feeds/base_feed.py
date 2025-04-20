@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -9,8 +9,7 @@ if TYPE_CHECKING:
     from bytewax.dataflow import Stream as BytewaxStream
     from pfund.products.product_base import BaseProduct
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import GenericData
-    from pfeed.typing import tSTORAGE, tDATA_TOOL, tDATA_LAYER
+    from pfeed.typing import tSTORAGE, tDATA_TOOL, tDATA_LAYER, GenericData
     from pfeed.enums import DataSource
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
@@ -87,6 +86,7 @@ class BaseFeed(ABC):
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
         self._storage_options: dict[tSTORAGE, dict] = {}
+        self._storage_kwargs: dict[tSTORAGE, dict] = {}
     
     @property
     def api(self):
@@ -107,12 +107,33 @@ class BaseFeed(ABC):
     def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
         return self.data_source.create_product(product_basis, symbol=symbol, **product_specs)
 
-    def configure_storage(self, storage: tSTORAGE, storage_options: dict) -> BaseFeed:
+    @overload
+    def configure_storage(
+        self, 
+        storage: Literal['duckdb'],
+        storage_options: dict, 
+        in_memory: bool=False, 
+        memory_limit: str='4GB', 
+    ) -> BaseFeed:
+        ...
+    
+    @overload
+    def configure_storage(
+        self, 
+        storage: Literal['minio'],
+        storage_options: dict, 
+        enable_bucket_versioning: bool=False,
+    ) -> BaseFeed:
+        ...
+    
+    def configure_storage(self, storage: tSTORAGE, storage_options: dict, **storage_kwargs) -> BaseFeed:
         '''Configure storage kwargs for the given storage
         Args:
-            storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
+            storage_options: A dictionary containing configuration options that are universally applicable across different storage systems. These options typically include settings such as connection parameters, authentication credentials, and other general configurations that are not specific to a particular storage type.
+            storage_kwargs: Storage-specific kwargs, e.g., if storage is 'minio', kwargs are Minio-specific kwargs.
         '''
         self._storage_options[storage] = storage_options
+        self._storage_kwargs[storage] = storage_kwargs
         return self
 
     def is_pipeline(self) -> bool:
@@ -252,6 +273,7 @@ class BaseFeed(ABC):
         data_domain: str,
         storage_options: dict | None=None,
         bytewax_sink: BytewaxSink | str | None=None,
+        **storage_kwargs,
     ) -> BaseFeed:
         '''
         Args:
@@ -272,6 +294,7 @@ class BaseFeed(ABC):
                 data_domain=data_domain,
                 use_deltalake=self._use_deltalake,
                 storage_options=storage_options,
+                **storage_kwargs,
             )
 
         for dataflow in self._subflows:

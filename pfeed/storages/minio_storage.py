@@ -118,14 +118,13 @@ class MinioStorage(BaseStorage):
 
         return storage_options
     
-    # REVIEW
     def _adjust_storage_options_for_deltalake(self):
         if 'allow_http' not in self._storage_options:
             self._storage_options["allow_http"] = 'true' if self.endpoint.startswith("http://") else 'false'
-        if 'conditional_put' not in self._storage_options:
-            self._storage_options["conditional_put"] = 'etag'
-        if 'region' not in self._storage_options:
-            self._storage_options["region"] = 'us-east-1'
+        # if 'conditional_put' not in self._storage_options:
+        #     self._storage_options["conditional_put"] = 'etag'
+        # if 'region' not in self._storage_options:
+        #     self._storage_options["region"] = 'us-east-1'
     
     def _create_minio(self, minio_options: MinioStorageOptions | None) -> Minio:
         return Minio(

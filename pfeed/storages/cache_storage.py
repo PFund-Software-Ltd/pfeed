@@ -11,7 +11,7 @@ class CacheStorage(LocalStorage):
 
     def __init__(
         self,
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: tDATA_LAYER='CLEANED',
         data_domain: str='general_data',
         use_deltalake: bool=False, 
         storage_options: dict | None=None,

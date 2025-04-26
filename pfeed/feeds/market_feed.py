@@ -9,11 +9,11 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame, StorageMetadata
     from pfeed.typing import tSTORAGE, tENVIRONMENT, tDATA_LAYER
     from pfeed.data_models.market_data_model import MarketDataModel
-
+    
 import datetime
 from functools import partial
 
-from pfeed.enums import DataCategory
+from pfeed.enums import DataCategory, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 
 
@@ -71,9 +71,9 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: Literal['raw', 'cleaned']='cleaned',
+        data_layer: Literal['RAW', 'CLEANED']='CLEANED',
         data_origin: str='',
-        to_storage: tSTORAGE | None='local',
+        to_storage: tSTORAGE | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=True,
@@ -122,11 +122,12 @@ class MarketFeed(TimeBasedFeed):
         unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
         data_resolution: Resolution = max(unit_resolution, self.data_source.lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+        data_layer = DataLayer[data_layer.upper()]
         # if no default and no custom transformations, set data_layer to 'raw'
-        if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
-            self.logger.info(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
-            data_layer = 'raw'
-        data_domain = self.DATA_DOMAIN.value
+        if not auto_transform and not self._pipeline_mode and data_layer != DataLayer.RAW:
+            self.logger.info(f'change data_layer from {data_layer} to "RAW" because no default and no custom transformations')
+            data_layer = DataLayer.RAW
+        data_domain, data_layer = self.DATA_DOMAIN.value, data_layer.value
         self.logger.info(f'Downloading {self.name} historical {product} {data_resolution} data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin),
@@ -184,7 +185,7 @@ class MarketFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: tDATA_LAYER='CLEANED',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,
@@ -207,15 +208,6 @@ class MarketFeed(TimeBasedFeed):
                     Otherwise, use rollback_period to determine the start date.
             end_date: End date.
                 If not specified, use today's date as the end date.
-            data_layer:
-                'curated' (least raw): normalize data (refer to 'cleaned' below), also remove all non-standard columns
-                    e.g. standard columns in second data are ts, product, open, high, low, close, volume
-                'cleaned' (default): perform normalization following pfund's convention, preserve all columns
-                    Normalization example:
-                    - renaming: 'timestamp' -> 'date'
-                    - mapping: 'buy' -> 1, 'sell' -> -1
-                'raw' (most raw): keep the original data, no transformation will be performed.
-                It will be ignored if the data is loaded from storage but not downloaded.
             data_domain: The domain of the data. e.g. 'market_data'. Can be a custom domain.
             from_storage: try to load data from this storage.
                 If not specified, will search through all storages, e.g. local, minio, cache.

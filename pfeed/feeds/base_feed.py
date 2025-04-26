@@ -54,13 +54,7 @@ class BaseFeed(ABC):
         Args:
             storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
-        from pfund.plogging import setup_loggers
-        from pfeed.config import get_config
-
-        is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
-        if not is_loggers_set_up:
-            config = get_config()
-            setup_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
+        self._setup_logging()
         self._data_tool = DataTool[data_tool.lower()]
         if data_source is None:
             assert hasattr(self, '_create_data_source'), '_create_data_source() is not implemented'
@@ -87,6 +81,14 @@ class BaseFeed(ABC):
         self._completed_dataflows: list[DataFlow] = []
         self._storage_options: dict[tSTORAGE, dict] = {}
         self._storage_kwargs: dict[tSTORAGE, dict] = {}
+    
+    def _setup_logging(self):
+        from pfund.plogging import setup_loggers
+        from pfeed.config import get_config
+        is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
+        if not is_loggers_set_up:
+            config = get_config()
+            setup_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
     
     @property
     def api(self):

@@ -113,9 +113,9 @@ class YahooFinanceMarketFeed(MarketFeed):
         rollback_period: str | Literal["ytd", "max"]='max',
         start_date: str='',
         end_date: str='',
-        data_layer: Literal['raw', 'cleaned']='cleaned',
+        data_layer: Literal['RAW', 'CLEANED']='CLEANED',
         data_origin: str='',
-        to_storage: tSTORAGE | None='local',
+        to_storage: tSTORAGE | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         yfinance_kwargs: dict | None=None,
@@ -245,15 +245,6 @@ class YahooFinanceMarketFeed(MarketFeed):
             resolution: Data resolution
                 e.g. '1m' = 1 minute as the unit of each data bar/candle.
                 Default is '1d' = 1 day.
-            data_layer:
-                'cleaned' (least raw): normalize data (refer to 'normalized' below), also remove all non-standard columns
-                    e.g. standard columns in stock data are ts, product, open, high, low, close, volume, dividends, splits
-                'normalized' (default): perform normalization following pfund's convention, preserve all columns
-                    Normalization example:
-                    - renaming: 'timestamp' -> 'date'
-                    - mapping: 'buy' -> 1, 'sell' -> -1
-                'original' (most raw): keep the original data from yfinance, no transformation will be performed.
-                It will be ignored if the data is loaded from storage but not downloaded.
             force_download: Whether to skip retrieving data from storage.
             yfinance_kwargs: kwargs supported by `yfinance`
                 refer to kwargs in history() in yfinance/scrapers/history.py

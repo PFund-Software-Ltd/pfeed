@@ -71,8 +71,8 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDATA_TOOL) -> Ge
         return df
     elif isinstance(df, (pl.DataFrame, pl.LazyFrame)) and data_tool == DataTool.polars:
         return df.lazy() if isinstance(df, pl.DataFrame) else df
-    elif isinstance(df, dd.DataFrame) and data_tool == DataTool.dask:
-        return df
+    # elif isinstance(df, dd.DataFrame) and data_tool == DataTool.dask:
+    #     return df
 
     nw_df = nw.from_native(df)
     if isinstance(nw_df, nw.LazyFrame):
@@ -82,8 +82,8 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDATA_TOOL) -> Ge
         return nw_df.to_pandas()
     elif data_tool == DataTool.polars:
         return nw_df.to_polars().lazy()
-    elif data_tool == DataTool.dask:
-        return dd.from_pandas(nw_df.to_pandas(), npartitions=1)
+    # elif data_tool == DataTool.dask:
+    #     return dd.from_pandas(nw_df.to_pandas(), npartitions=1)
     # elif data_tool == DataTool.spark:
     #     spark = SparkSession.builder.getOrCreate()
     #     return spark.createDataFrame(df)

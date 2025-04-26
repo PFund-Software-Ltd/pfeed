@@ -46,16 +46,20 @@ class TimeBasedFeed(BaseFeed):
         Raises:
             ValueError: If rollback_period='max' but data source has no start_date attribute
         '''
-        from pfeed.utils.utils import rollback_date_range
-        if start_date or rollback_period == 'max':
-            if start_date:
-                if isinstance(start_date, str):
-                    start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+        if rollback_period == 'max' and not start_date:
+            if self.data_source.start_date:
+                start_date = self.data_source.start_date
             else:
-                if self.data_source.start_date:
-                    start_date = self.data_source.start_date
-                else:
-                    raise ValueError(f'{self.name} {rollback_period=} is not supported')
+                raise ValueError(f'{self.name} {rollback_period=} is not supported')        
+        start_date, end_date = self._parse_date_range(start_date, end_date, rollback_period)
+        return start_date, end_date
+        
+    @staticmethod
+    def _parse_date_range(start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd']) -> tuple[datetime.date, datetime.date]:
+        from pfeed.utils.utils import rollback_date_range
+        if start_date:
+            if isinstance(start_date, str):
+                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
             if end_date:
                 if isinstance(end_date, str):
                     end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
@@ -63,8 +67,10 @@ class TimeBasedFeed(BaseFeed):
                 yesterday = datetime.datetime.now(tz=datetime.timezone.utc).date() - datetime.timedelta(days=1)
                 end_date = yesterday
         else:
+            assert rollback_period != 'max', '"max" is not allowed for `rollback_period`'
             start_date, end_date = rollback_date_range(rollback_period)
-        return start_date, end_date
+        assert start_date <= end_date, f"start_date must be before end_date: {start_date} <= {end_date}"
+        return start_date, end_date    
   
     @clear_subflows
     def _create_dataflows(
@@ -138,7 +144,7 @@ class TimeBasedFeed(BaseFeed):
         partial_faucet_data_model: Callable,
         start_date: datetime.date, 
         end_date: datetime.date,
-        data_layer: Literal['raw', 'cleaned'],
+        data_layer: Literal['RAW', 'CLEANED'],
         data_domain: str,
         to_storage: tSTORAGE | None,
         storage_options: dict | None,
@@ -146,7 +152,7 @@ class TimeBasedFeed(BaseFeed):
         include_metadata: bool,
         add_default_transformations: Callable | None,
     ) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata] | TimeBasedFeed:
-        assert data_layer.upper() != DataLayer.CURATED, 'writing to "curated" data layer is not supported in download()'
+        assert data_layer.upper() != DataLayer.CURATED, 'writing to "CURATED" data layer is not supported in download()'
         self._create_dataflows(
             lambda _data_model: self._download_impl(_data_model),
             partial_dataflow_data_model,

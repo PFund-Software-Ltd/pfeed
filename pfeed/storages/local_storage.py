@@ -9,8 +9,8 @@ from pfeed.storages.base_storage import BaseStorage
 class LocalStorage(BaseStorage):
     def __init__(
         self,
-        name: Literal['local', 'cache']='local',
-        data_layer: tDATA_LAYER='cleaned',
+        name: Literal['LOCAL', 'CACHE']='LOCAL',
+        data_layer: tDATA_LAYER='CLEANED',
         data_domain: str='general_data',
         use_deltalake: bool=False, 
         storage_options: dict | None=None,

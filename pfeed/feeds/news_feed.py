@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed.typing import tDATA_LAYER, tSTORAGE, tENVIRONMENT, GenericFrame, StorageMetadata
@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 import datetime
 from functools import partial
 
-from pfeed.enums import DataCategory
+from pfeed.enums import DataCategory, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.utils.utils import lambda_with_name
 
@@ -56,9 +56,9 @@ class NewsFeed(TimeBasedFeed):
         rollback_period: str ='1w',
         start_date: str='',
         end_date: str='',
-        data_layer: Literal['raw', 'cleaned']='cleaned',
+        data_layer: Literal['RAW', 'CLEANED']='CLEANED',
         data_origin: str='',
-        to_storage: tSTORAGE | None='local',
+        to_storage: tSTORAGE | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
@@ -75,11 +75,12 @@ class NewsFeed(TimeBasedFeed):
         else:
             product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+        data_layer = DataLayer[data_layer.upper()]
         # if no default and no custom transformations, set data_layer to 'raw'
-        if not auto_transform and not self._pipeline_mode and data_layer != 'raw':
-            self.logger.info(f'change data_layer from {data_layer} to "raw" because no default and no custom transformations')
-            data_layer = 'raw' 
-        data_domain = self.DATA_DOMAIN.value
+        if not auto_transform and not self._pipeline_mode and data_layer != DataLayer.RAW:
+            self.logger.info(f'change data_layer from {data_layer} to "RAW" because no default and no custom transformations')
+            data_layer = DataLayer.RAW
+        data_domain, data_layer = self.DATA_DOMAIN.value, data_layer.value
         self.logger.info(f'Downloading {self.name} historical news data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
@@ -119,7 +120,7 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER='cleaned',
+        data_layer: tDATA_LAYER='CLEANED',
         data_domain: str='',
         from_storage: tSTORAGE | None=None,
         storage_options: dict | None=None,

@@ -51,8 +51,8 @@ class BybitMarketFeed(CryptoMarketFeed):
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: Literal['raw', 'cleaned']='cleaned',
-        to_storage: tSTORAGE | None='local',
+        data_layer: Literal['RAW', 'CLEANED']='CLEANED',
+        to_storage: tSTORAGE | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         **product_specs

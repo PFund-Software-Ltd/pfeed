@@ -4,5 +4,5 @@ from enum import StrEnum
 class DataTool(StrEnum):
     pandas = 'pandas'
     polars = 'polars'
-    dask = 'dask'
+    # dask = 'dask'
     # spark = 'spark'

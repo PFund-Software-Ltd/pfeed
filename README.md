@@ -5,6 +5,8 @@
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfeed?label=downloads)
 [![PyPI](https://img.shields.io/pypi/v/pfeed.svg)](https://pypi.org/project/pfeed)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfeed)
+![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PFund-Software-Ltd/pfeed)
 <!-- [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfeed/main/docs/images/jupyterbook.svg)](https://jupyterbook.org) -->
 <!-- [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/) -->
 

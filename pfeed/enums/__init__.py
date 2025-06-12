@@ -1,4 +1,4 @@
-from pfund.enums.product_type import ProductType, TradFiProductType, CeFiProductType, DeFiProductType
+from pfund.enums.asset_type import AllAssetType, TraditionalAssetType, CryptoAssetType, DappAssetType
 from pfeed.enums.env import Environment
 from pfeed.enums.data_source import DataSource
 from pfeed.enums.data_storage import DataStorage, LocalDataStorage

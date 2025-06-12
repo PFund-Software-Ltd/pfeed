@@ -19,9 +19,6 @@ if TYPE_CHECKING:
         FinancialModelingPrep,
         FinancialModelingPrep as FMP,
     )
-    from pfeed.feeds.pfund import (
-        PFund,
-    )
 
 from importlib.metadata import version
 from pfeed.config import configure, get_config
@@ -61,9 +58,6 @@ def __getattr__(name: str):
     elif name in ('FinancialModelingPrep', 'FMP'):
         from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import FinancialModelingPrep
         return FinancialModelingPrep
-    elif name == 'PFund':
-        from pfeed.feeds.pfund import PFund
-        return PFund
     elif name in plugins:
         return plugins[name]
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
@@ -99,7 +93,6 @@ __all__ = (
     "YahooFinance", "YF",
     "Bybit",
     "FinancialModelingPrep", "FMP",
-    "PFund",
 )
 def __dir__():
     return sorted(__all__)

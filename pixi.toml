@@ -1,0 +1,73 @@
+[workspace]
+authors = ["softwareentrepreneer <softwareentrepreneer+pfeed@gmail.com>"]
+channels = ["conda-forge"]
+name = "pfeed"
+platforms = ["osx-arm64", "linux-64"]
+version = "0.0.5"
+
+[tasks]
+
+[tasks.test-all]
+depends-on = [
+  { task = "test", environment = "test-py311" },
+  { task = "test", environment = "test-py312" },
+  { task = "test", environment = "test-py313" },
+]
+
+[dependencies]
+python = ">=3.11"
+uv = ">=0.7.11"
+
+[environments]
+core = ["core"]
+databento = ["databento"]
+fmp = ["fmp"]
+dask = ["dask"]
+spark = ["spark"]
+dev = ["dev"]
+test-py311 = ["py311", "test"]
+test-py312 = ["py312", "test"]
+test-py313 = ["py313", "test"]
+
+[feature.core.pypi-dependencies]
+cloudpathlib = { version = ">=0.21.1", extras = ["s3", "gs", "azure"] }
+minio = ">=7.2.15"
+deltalake = ">=1.0.2"
+ray = ">=2.46.0"
+prefect = ">=3.4.5"
+# bytewax = ">=0.21.1"  # FIXME: bytewax is not compatible with python 3.13, i.e. no build for python 3.13
+polars-cloud = ">=0.0.9"
+
+[feature.databento.pypi-dependencies]
+databento = ">=0.57.0"
+
+[feature.fmp.pypi-dependencies]
+fmp-api-client = ">=0.0.1"
+
+[feature.dask.pypi-dependencies]
+dask = { version = ">=2025.5.1", extras = ["complete", "dataframe"] }
+coiled = ">=1.101.1"
+
+[feature.spark.pypi-dependencies]
+pyspark = { version = ">=4.0.0", extras = ["connect", "pandas-on-spark", "sql"] }
+
+[feature.dev.pypi-dependencies]
+ruff = ">=0.11.12"
+
+[feature.test.dependencies]
+pytest = ">=8.4.0"
+pytest-cov = ">=6.1.1"
+pytest-mock = ">=3.14.1"
+pytest-xdist = ">=3.7.0"
+[feature.test.tasks]
+test = "pytest"
+
+[feature.py311.dependencies]
+python = "3.11.*"
+
+[feature.py312.dependencies]
+python = "3.12.*"
+
+[feature.py313.dependencies]
+python = "3.13.*"
+

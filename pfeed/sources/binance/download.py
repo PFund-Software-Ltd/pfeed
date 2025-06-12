@@ -17,7 +17,7 @@ from pfeed.sources.binance.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_
 from pfeed.sources.binance import api
 from pfund.products.product_base import BaseProduct
 from pfund.exchanges.binance.exchange import Exchange
-from pfund.plogging import setup_loggers
+from pfund._logging import setup_loggers
 
 
 logger = logging.getLogger(DATA_SOURCE.lower() + '_data')

@@ -8,7 +8,7 @@ import os
 from abc import ABC, abstractmethod
 
 from pfund.utils.utils import Singleton
-from pfeed.enums import DataSource, DataProviderType, DataAccessType, ProductType
+from pfeed.enums import DataSource, DataProviderType, DataAccessType, AssetType
 from pfeed.const.aliases import BIDIRECTIONAL_ALIASES 
 
 
@@ -54,9 +54,9 @@ class BaseSource(Singleton, ABC):
             specific_metadata = next(metadata_docs, {})
         return generic_metadata, specific_metadata
 
-    def _extract_product_types(self) -> list[ProductType]:
+    def _extract_product_types(self) -> list[AssetType]:
         return list(set(
-            ProductType[product_type.upper()]
+            AssetType[product_type.upper()]
             for data_type in self.generic_metadata['data_categories']['market_data']
             for product_type in self.generic_metadata['data_categories']['market_data'][data_type]
         ))

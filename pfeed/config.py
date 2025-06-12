@@ -65,13 +65,13 @@ class Configuration:
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         # Create default config from dataclass fields
         default_config = {}
-        for field in cls.__dataclass_fields__.values():
-            if field.name.startswith('_'):  # Skip private fields
+        for _field in cls.__dataclass_fields__.values():
+            if _field.name.startswith('_'):  # Skip private fields
                 continue
-            if field.default_factory is not MISSING:
-                default_config[field.name] = field.default_factory()
+            if _field.default_factory is not MISSING:
+                default_config[_field.name] = _field.default_factory()
             else:
-                default_config[field.name] = field.default
+                default_config[_field.name] = _field.default
         needs_update = False
         if CONFIG_FILE_PATH.is_file():
             with open(CONFIG_FILE_PATH, 'r') as f:

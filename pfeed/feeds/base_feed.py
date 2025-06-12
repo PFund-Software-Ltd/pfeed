@@ -83,12 +83,12 @@ class BaseFeed(ABC):
         self._storage_kwargs: dict[tSTORAGE, dict] = {}
     
     def _setup_logging(self):
-        from pfund.plogging import setup_loggers
+        from pfund._logging import setup_logging_config
         from pfeed.config import get_config
         is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
         if not is_loggers_set_up:
             config = get_config()
-            setup_loggers(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
+            setup_logging_config(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
     
     @property
     def api(self):

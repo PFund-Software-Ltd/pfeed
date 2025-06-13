@@ -20,10 +20,9 @@ uv = ">=0.7.11"
 
 [environments]
 core = ["core"]
-databento = ["databento"]
-fmp = ["fmp"]
 dask = ["dask"]
 spark = ["spark"]
+fmp = ["fmp"]
 dev = ["dev"]
 test-py311 = ["py311", "test"]
 test-py312 = ["py312", "test"]
@@ -35,14 +34,7 @@ minio = ">=7.2.15"
 deltalake = ">=1.0.2"
 ray = ">=2.46.0"
 prefect = ">=3.4.5"
-# bytewax = ">=0.21.1"  # FIXME: bytewax is not compatible with python 3.13, i.e. no build for python 3.13
 polars-cloud = ">=0.0.9"
-
-[feature.databento.pypi-dependencies]
-databento = ">=0.57.0"
-
-[feature.fmp.pypi-dependencies]
-fmp-api-client = ">=0.0.1"
 
 [feature.dask.pypi-dependencies]
 dask = { version = ">=2025.5.1", extras = ["complete", "dataframe"] }
@@ -50,6 +42,9 @@ coiled = ">=1.101.1"
 
 [feature.spark.pypi-dependencies]
 pyspark = { version = ">=4.0.0", extras = ["connect", "pandas-on-spark", "sql"] }
+
+[feature.fmp.pypi-dependencies]
+fmp-api-client = ">=0.0.1"
 
 [feature.dev.pypi-dependencies]
 ruff = ">=0.11.12"

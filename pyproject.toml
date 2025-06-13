@@ -45,15 +45,14 @@ core = [
     "deltalake>=1.0.2",
     "ray>=2.46.0",
     "prefect>=3.4.5",
-    "bytewax>=0.21.1; python_version < '3.13.0'",
     "polars-cloud>=0.0.9",
 ]
-# kafka = ["confluent-kafka>=2.8.2"]
-databento = ["databento>=0.57.0"]
-# polygon = ["polygon-api-client>=1.14.6"]  # TODO: create github issue to remove the websockets < 15.0.0 upperbound
-fmp = ["fmp-api-client>=0.0.1"]
 dask = ["dask[complete,dataframe]>=2025.5.1", "coiled>=1.101.1"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.0.0"]
+fmp = ["fmp-api-client>=0.0.1"]
+# kafka = ["confluent-kafka>=2.8.2"]
+# databento = ["databento>=0.57.0"]
+# polygon = ["polygon-api-client>=1.14.6"]  # TODO: create github issue to remove the websockets < 15.0.0 upperbound
 
 [project.scripts]
 pfeed = "pfeed.main:run_cli"

@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
-    from pfund_plugins.base_plugin import BasePlugin
     from pfeed.storages.duckdb_storage import DuckDBStorage
     from pfeed.storages.minio_storage import MinioStorage
     from pfeed.storages.local_storage import LocalStorage
@@ -24,12 +23,6 @@ from importlib.metadata import version
 from pfeed.config import configure, get_config
 from pfeed.storages import create_storage
 from pfeed.feeds import get_market_feed
-
-
-# FIXME
-plugins = {}
-def add_plugin(plugin: BasePlugin):
-    plugins[plugin.name] = plugin
 
 
 def __getattr__(name: str):
@@ -58,12 +51,9 @@ def __getattr__(name: str):
     elif name in ('FinancialModelingPrep', 'FMP'):
         from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import FinancialModelingPrep
         return FinancialModelingPrep
-    elif name in plugins:
-        return plugins[name]
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     
     
-# TODO: add llm plugin to explain "what is xxx?"
 def what_is(alias: str) -> str | None:
     from pfeed.const.aliases import ALIASES
     from pfund.const.aliases import ALIASES as PFUND_ALIASES
@@ -78,7 +68,6 @@ __all__ = (
     "__version__",
     "configure",
     "get_config",
-    "add_plugin",
     "aliases",
     "plot",
     "what_is",

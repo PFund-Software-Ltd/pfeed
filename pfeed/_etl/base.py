@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from types import ModuleType
 if TYPE_CHECKING:
-    from pfeed.typing import tDATA_TOOL
+    from pfeed.typing import tDataTool
     from pfeed.typing import GenericFrame, GenericData
     
 import importlib
@@ -16,7 +16,7 @@ from pfeed.enums import DataTool
 from pfeed.utils.dataframe import is_dataframe
 
 
-def get_data_tool(data_tool: DataTool | tDATA_TOOL) -> ModuleType:
+def get_data_tool(data_tool: DataTool | tDataTool) -> ModuleType:
     dtl = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
     return importlib.import_module(f'pfeed.data_tools.data_tool_{dtl}')
 
@@ -54,7 +54,7 @@ def convert_to_pandas_df(data: GenericData) -> pd.DataFrame:
         raise ValueError(f'{type(data)=}')
 
 
-def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDATA_TOOL) -> GenericFrame:
+def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> GenericFrame:
     '''Converts the input dataframe to the user's desired data tool.
     Args:
         df: The input dataframe to be converted.

@@ -3,11 +3,11 @@ data_origin: https://www.bybit.com
 data_categories:
   market_data:
     tick:
-      - PERP
-      - IPERP
-      - FUT
-      - IFUT
-      - SPOT
+      - PERPETUAL
+      - INVERSE-PERPETUAL
+      - FUTURE
+      - INVERSE-FUTURE
+      - CRYPTO
 provider_type: exchange
 api_key_required: false
 access_type: free  # refer to enum DataAccessType

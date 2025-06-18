@@ -19,7 +19,7 @@ from pfeed.cli.commands.data import data
 def pfeed_group(ctx):
     """PFeed's CLI"""
     ctx.ensure_object(dict)
-    ctx.obj['config'] = get_config(verbose=False)
+    ctx.obj['config'] = get_config()
 
 
 pfeed_group.add_command(docker_compose)

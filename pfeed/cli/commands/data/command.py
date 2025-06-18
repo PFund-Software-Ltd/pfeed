@@ -24,13 +24,12 @@ def data():
 @click.option('--stats/--no-stats', default=True, help='Show statistics (size, count)')
 @click.option('--limit', type=int, default=10, help='Limit number of items to display per category')
 @click.option('--data-path', type=click.Path(exists=False), help='Override data path')
-@click.option('--env-file', 'env_file_path', type=click.Path(exists=True), help='Path to the .env file')
 @click.option('--debug', is_flag=True, help='Enable debug mode')
-def list(storage, layer, domain, source, product, resolution, output_format, stats, limit, data_path, env_file_path, debug):
+def list(storage, layer, domain, source, product, resolution, output_format, stats, limit, data_path, debug):
     """List data across all storages."""
     # Configure pfeed if needed
-    if data_path or env_file_path or debug:
-        pe.configure(data_path=data_path, env_file_path=env_file_path, debug=debug)
+    if data_path or debug:
+        pe.configure(data_path=data_path, debug=debug)
     
     # Determine which storage types to check
     if storage:

@@ -29,11 +29,10 @@ SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [k for k, v i
 @click.option('--use-prefect', is_flag=True, help='if enabled, Prefect will be used')
 @click.option('--use-deltalake', is_flag=True, help='if enabled, Delta Lake will be used')
 @click.option('--data-path', type=click.Path(exists=False), help='Path to store downloaded data')
-@click.option('--env-file', 'env_file_path', type=click.Path(exists=True), help='Path to the .env file')
 @click.option('--debug', is_flag=True, help='if enabled, debug mode will be enabled where logs at DEBUG level will be printed')
-def download(ctx, data_source, product, resolution, rollback_period, start_date, end_date, data_layer, data_domain, to_storage, no_ray, use_prefect, use_deltalake, data_path, env_file_path, debug):
+def download(ctx, data_source, product, resolution, rollback_period, start_date, end_date, data_layer, data_domain, to_storage, no_ray, use_prefect, use_deltalake, data_path, debug):
     """Download historical data from a data source"""
-    pe.configure(data_path=data_path, env_file_path=env_file_path, debug=debug)
+    pe.configure(data_path=data_path, debug=debug)
     data_source = ALIASES.get(data_source, data_source)
     kwargs = {}
     if resolution:
@@ -48,6 +47,7 @@ def download(ctx, data_source, product, resolution, rollback_period, start_date,
     for k, v in product_specs.items():
         kwargs[k] = v
     
+    # FIXME: feed class is removed and should add sth like "feed_type" in params
     Feed = DataSource[data_source.upper()].feed_class
     feed = Feed(
         use_ray=not no_ray, 

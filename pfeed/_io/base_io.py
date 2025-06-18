@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.typing import GenericData
-    from pfeed.typing import tDATA_TOOL
+    from pfeed.typing import tDataTool
 
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -34,5 +34,5 @@ class BaseIO(ABC):
         pass
 
     @abstractmethod
-    def read(self, file_path: str, data_tool: tDATA_TOOL='polars', **kwargs) -> GenericData | None:
+    def read(self, file_path: str, data_tool: tDataTool='polars', **kwargs) -> GenericData | None:
         pass

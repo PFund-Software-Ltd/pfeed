@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tSTORAGE, tDATA_LAYER, GenericData, StorageMetadata
+    from pfeed.typing import tStorage, tDataLayer, GenericData, StorageMetadata
 
 import logging
 from abc import ABC, abstractmethod
@@ -26,8 +26,8 @@ class BaseStorage(ABC):
 
     def __init__(
         self,
-        name: tSTORAGE,
-        data_layer: tDATA_LAYER='CLEANED',
+        name: tStorage,
+        data_layer: tDataLayer='CLEANED',
         data_domain: str='general_data',
         use_deltalake: bool=False,
         storage_options: dict | None=None,
@@ -48,7 +48,7 @@ class BaseStorage(ABC):
     def from_data_model(
         cls,
         data_model: BaseDataModel, 
-        data_layer: tDATA_LAYER,
+        data_layer: tDataLayer,
         data_domain: str,
         use_deltalake: bool=False, 
         storage_options: dict | None=None,

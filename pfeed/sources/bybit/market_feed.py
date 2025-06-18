@@ -4,25 +4,18 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import datetime
     import pandas as pd
-    from bytewax.dataflow import Stream as BytewaxStream
-    from bytewax.inputs import Source as BytewaxSource
     from pfeed.typing import GenericFrame
     from pfund.datas.resolution import Resolution
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfeed.typing import tSTORAGE, tDATA_LAYER
+    from pfeed.typing import tStorage, tDataLayer
 
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
-from pfeed.sources.bybit.source import BybitSource
 
 
 __all__ = ['BybitMarketFeed']
 
 
 class BybitMarketFeed(CryptoMarketFeed):
-    @staticmethod
-    def _create_data_source() -> BybitSource:
-        return BybitSource()
-    
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.
@@ -52,7 +45,7 @@ class BybitMarketFeed(CryptoMarketFeed):
         start_date: str='',
         end_date: str='',
         data_layer: Literal['RAW', 'CLEANED']='CLEANED',
-        to_storage: tSTORAGE | None='LOCAL',
+        to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         **product_specs
@@ -97,10 +90,10 @@ class BybitMarketFeed(CryptoMarketFeed):
         start_date: str="",
         end_date: str="",
         data_origin: str='',
-        data_layer: tDATA_LAYER | None=None,
+        data_layer: tDataLayer | None=None,
         data_domain: str='',
-        from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE | None=None,
+        from_storage: tStorage | None=None,
+        to_storage: tStorage | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
         retrieve_per_date: bool=False,
@@ -132,13 +125,6 @@ class BybitMarketFeed(CryptoMarketFeed):
     def _stream_impl(
         self, 
         data_model: MarketDataModel, 
-        bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
     ):
-        if self._use_bytewax:
-            if bytewax_source is None:
-                # TODO: derive bytewax source based on the feed
-                pass
-            return bytewax_source
-        else:
-            # TODO: start streaming
-            pass
+        # TODO: start streaming
+        pass

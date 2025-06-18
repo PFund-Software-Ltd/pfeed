@@ -3,9 +3,9 @@ from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
-    from pfund.typing import ProductName, ResolutionRepr
+    from pfund.typing import tEnvironment, ResolutionRepr
     from pfeed.enums import DataLayer
-    from pfeed.typing import tENVIRONMENT, tDATA_SOURCE, tPRODUCT_TYPE
+    from pfeed.typing import tDataSource
 
 import datetime
 from pathlib import Path
@@ -19,32 +19,32 @@ from pfeed.data_handlers import MarketDataHandler
 
 
 class MarketMetadata(TypedDict, total=True):
-    env: tENVIRONMENT
-    data_source: tDATA_SOURCE
+    env: tEnvironment
+    data_source: tDataSource
     data_origin: str
     start_date: datetime.date
     end_date: datetime.date
-    product: ProductName
+    symbol: str
     resolution: ResolutionRepr
-    product_type: tPRODUCT_TYPE
+    asset_type: str
 
 
 # metadata for delta table
 class MarketDeltaMetadata(TypedDict, total=True):
-    env: tENVIRONMENT
-    data_source: tDATA_SOURCE
+    env: tEnvironment
+    data_source: tDataSource
     data_origin: str
     dates: list[datetime.date]
-    product: ProductName
+    symbol: str
     resolution: ResolutionRepr
-    product_type: tPRODUCT_TYPE
+    asset_type: str
 
 
 class MarketDataModel(TimeBasedDataModel):
     '''
     Args:
-        product:  e.g. BTC_USDT_PERP, AAPL_USD_STK.
-        product_type: The type of the product. e.g. 'PERP' | 'STK'.
+        symbol: unique identifier for the product.
+        asset_type: asset type of the product. e.g. 'PERPETUAL', 'STOCK'.
         resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
             Default is '1d' = 1 day.
     '''
@@ -86,7 +86,7 @@ class MarketDataModel(TimeBasedDataModel):
         self._validate_resolution()
 
     def create_filename(self, date: datetime.date) -> str:
-        filename = '_'.join([self.product.name, str(date)])
+        filename = '_'.join([self.product.key, str(date)])
         return filename + self.file_extension
 
     def create_storage_path(self, date: datetime.date) -> Path:
@@ -94,8 +94,8 @@ class MarketDataModel(TimeBasedDataModel):
             Path(f'env={self.env.value}')
             / f'data_source={self.data_source.name}'
             / f'data_origin={self.data_origin}'
-            / f'product_type={self.product.type.value}'
-            / f'product={self.product.name}'
+            / f'asset_type={self.product.asset_type}'
+            / f'symbol={self.product.symbol}'
             / f'resolution={repr(self.resolution)}'
         )
         if self.use_deltalake:
@@ -123,7 +123,7 @@ class MarketDataModel(TimeBasedDataModel):
     def to_metadata(self) -> MarketMetadata:
         return {
             **super().to_metadata(),
-            'product': self.product.name,
+            'symbol': self.product.symbol,
             'resolution': repr(self.resolution),
-            'product_type': self.product.type.value,
+            'asset_type': str(self.product.asset_type),
         }

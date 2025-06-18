@@ -2,7 +2,7 @@ from typing import Literal
 
 import pyarrow.fs as pa_fs
 
-from pfeed.typing import tDATA_LAYER
+from pfeed.typing import tDataLayer
 from pfeed.storages.base_storage import BaseStorage
 
 
@@ -10,7 +10,7 @@ class LocalStorage(BaseStorage):
     def __init__(
         self,
         name: Literal['LOCAL', 'CACHE']='LOCAL',
-        data_layer: tDATA_LAYER='CLEANED',
+        data_layer: tDataLayer='CLEANED',
         data_domain: str='general_data',
         use_deltalake: bool=False, 
         storage_options: dict | None=None,

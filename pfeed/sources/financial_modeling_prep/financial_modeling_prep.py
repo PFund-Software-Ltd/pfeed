@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from fmp_api_client import FMPClient
-    from pfeed.typing import tDATA_TOOL
+    from pfeed.typing import tDataTool
 
 from enum import StrEnum
 
@@ -38,11 +38,10 @@ class FinancialModelingPrep:
         self, 
         api_key: str | None=None,
         fmp_plan: Literal['basic', 'starter', 'premium', 'ultimate']='',
-        data_tool: tDATA_TOOL='polars', 
+        data_tool: tDataTool='polars', 
         pipeline_mode: bool=False,
         use_ray: bool=False,
         use_prefect: bool=False,
-        use_bytewax: bool=False,
         use_deltalake: bool=False,
     ):
         params = {k: v for k, v in locals().items() if k not in ['self', 'api_key', 'fmp_plan']}

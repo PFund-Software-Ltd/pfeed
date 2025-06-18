@@ -2,7 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfeed.typing import tDATA_LAYER, tSTORAGE, tENVIRONMENT, GenericFrame, StorageMetadata
+    from pfund.typing import tEnvironment
+    from pfeed.typing import tDataLayer, tStorage, GenericFrame, StorageMetadata
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
@@ -21,7 +22,7 @@ e.g. if changing the params for the same API call, the data could be different.
 how to handle this? handled by metadata?
 '''
 class NewsFeed(TimeBasedFeed):
-    DATA_DOMAIN = DataCategory.news_data
+    data_domain = DataCategory.NEWS_DATA
 
     def create_data_model(
         self,
@@ -29,7 +30,7 @@ class NewsFeed(TimeBasedFeed):
         end_date: str | datetime.date | None = None,
         product: str | BaseProduct | None = None,
         data_origin: str = '',
-        env: tENVIRONMENT = 'BACKTEST',
+        env: tEnvironment = 'BACKTEST',
         **product_specs
     ) -> NewsDataModel:
         from pfeed.data_models.news_data_model import NewsDataModel
@@ -58,7 +59,7 @@ class NewsFeed(TimeBasedFeed):
         end_date: str='',
         data_layer: Literal['RAW', 'CLEANED']='CLEANED',
         data_origin: str='',
-        to_storage: tSTORAGE | None='LOCAL',
+        to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
@@ -80,7 +81,7 @@ class NewsFeed(TimeBasedFeed):
         if not auto_transform and not self._pipeline_mode and data_layer != DataLayer.RAW:
             self.logger.info(f'change data_layer from {data_layer} to "RAW" because no default and no custom transformations')
             data_layer = DataLayer.RAW
-        data_domain, data_layer = self.DATA_DOMAIN.value, data_layer.value
+        data_domain, data_layer = self.data_domain.value, data_layer.value
         self.logger.info(f'Downloading {self.name} historical news data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
@@ -120,9 +121,9 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER='CLEANED',
+        data_layer: tDataLayer='CLEANED',
         data_domain: str='',
-        from_storage: tSTORAGE | None=None,
+        from_storage: tStorage | None=None,
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
@@ -131,7 +132,7 @@ class NewsFeed(TimeBasedFeed):
     ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_domain = data_domain or self.DATA_DOMAIN.value
+        data_domain = data_domain or self.data_domain.value
         self.logger.info(f'Retrieving {self.name} {product=} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin),
@@ -164,10 +165,10 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER | None=None,
+        data_layer: tDataLayer | None=None,
         data_domain: str='',
-        from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE | None=None,
+        from_storage: tStorage | None=None,
+        to_storage: tStorage | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
         retrieve_per_date: bool=False,
@@ -180,7 +181,7 @@ class NewsFeed(TimeBasedFeed):
             NOTE: this behavior is different from MarketFeed
             from_storage: if from_storage is not specified, data will be fetched again from data source.
         '''
-        data_domain = data_domain or self.DATA_DOMAIN.value
+        data_domain = data_domain or self.data_domain.value
         return self._get_historical_data_impl(
             product=product,
             symbol=symbol,

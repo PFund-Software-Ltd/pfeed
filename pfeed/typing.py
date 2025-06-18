@@ -33,15 +33,10 @@ GenericSeries = Series[Any]
 GenericData = GenericFrame | bytes
 
 
-tDATA_TOOL = Literal['pandas', 'polars']
-tDATA_SOURCE = Literal['YAHOO_FINANCE', 'DATABENTO', 'BYBIT', 'FINANCIAL_MODELING_PREP']
-tDATA_LAYER = Literal['RAW', 'CLEANED', 'CURATED']
-tPRODUCT_TYPE = Literal[
-    'STK', 'FUT', 'ETF', 'OPT', 'FX', 'CRYPTO', 'BOND', 'MTF', 'CMDTY', 'INDEX',
-    'PERP', 'IPERP', 'SPOT', 'IFUT'
-]
-tSTORAGE = Literal['CACHE', 'LOCAL', 'MINIO', 'DUCKDB']
-tENVIRONMENT = Literal['BACKTEST', 'SANDBOX', 'PAPER', 'LIVE']
+tDataTool = Literal['pandas', 'polars']
+tDataSource = Literal['YAHOO_FINANCE', 'DATABENTO', 'BYBIT', 'FINANCIAL_MODELING_PREP']
+tDataLayer = Literal['RAW', 'CLEANED', 'CURATED']
+tStorage = Literal['CACHE', 'LOCAL', 'MINIO', 'DUCKDB']
 
 
 class StorageMetadata(TypedDict, total=False):

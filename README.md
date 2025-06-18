@@ -25,9 +25,8 @@
 [Polygon]: https://polygon.io/
 [FirstRate Data]: https://firstratedata.com
 [Prefect]: https://www.prefect.io/
-[Bytewax]: https://www.bytewax.io
 
-> **This library is NOT stable yet. For a stable release, please wait for 0.1.0.** 
+> **This library is NOT ready for use, please wait for 0.1.0 release.**
 
 ## TL;DR: use pfeed to manage your trading data; other traders will help you clean it
 ![PFeed Architecture](./docs/images/pfeed.png)
@@ -47,7 +46,7 @@ PFeed (/piː fiːd/) is the data engine for trading, serving as a pipeline betwe
 - [x] Get historical data (**dataframe**) or live data in standardized formats by just calling a **single** function
 - [x] **Own your data** by storing them locally using [MinIO] + [Deltalake], or in the cloud
 - [x] Interact with different kinds of data (including TradFi, CeFi and DeFi) using a **unified interface**
-- [x] Scale using modern data tools (e.g. [Polars], [Dask]) and workflow orchestration frameworks ([Prefect] for batch processing, [Bytewax] for streaming)
+- [x] Scale using modern data tools (e.g. [Polars], [Dask]) and workflow orchestration frameworks (e.g. [Prefect] for batch processing)
 
 ---
 
@@ -71,7 +70,7 @@ PFeed (/piː fiːd/) is the data engine for trading, serving as a pipeline betwe
 > For more installation options, please refer to the [documentation](https://pfeed-docs.pfund.ai/installation).
 ```bash
 # [RECOMMENDED]: Core Features, including Minio, Deltalake, Ray, etc.
-pip install -U "pfeed[core,prefect,bytewax]"
+pip install -U "pfeed[core,prefect]"
 
 # add your desired data sources, e.g. databento, polygon, etc.
 pip install -U "pfeed[core,databento,polygon]"

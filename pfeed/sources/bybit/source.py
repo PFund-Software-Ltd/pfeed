@@ -1,44 +1,28 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.products.product_base import BaseProduct
+    from pfund.products.product_crypto import CryptoProduct
 
 from pfeed.sources.base_source import BaseSource
+from pfeed.enums import DataSource
 
 
 __all__ = ["BybitSource"]
 
 
 class BybitSource(BaseSource):
+    name = DataSource.BYBIT
+    
     def __init__(self):
-        from pfeed.sources.bybit.api import BybitAPI
-        super().__init__('BYBIT')
-        self._exchange: BaseExchange = self._create_exchange()
-        self._exchange.load_all_product_mappings()
-        self.adapter = self._exchange.adapter
-        self.api = BybitAPI(self._exchange)
+        from pfund.exchanges import Bybit
+        from pfeed.sources.bybit.batch_api import BatchAPI
+        from pfeed.sources.bybit.stream_api import StreamAPI
+        super().__init__()
+        self.exchange: Bybit = Bybit(env='LIVE')
+        self.batch_api = BatchAPI()
+        self.stream_api = StreamAPI(self.exchange)
     
-    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
+    def create_product(self, basis: str, symbol: str='', **specs) -> CryptoProduct:
         from pfeed.utils.utils import validate_product
-        validate_product(product_basis)
-        return self._exchange.create_product(product_basis, **product_specs)
-        
-    @staticmethod
-    def _create_exchange():
-        from pfund.exchanges.bybit.exchange import Exchange
-        return Exchange(env='LIVE')
-    
-    def get_products_by_type(self, product_type: str) -> list[str]:
-        '''Get products by product type
-        e.g. if ptype='PERP', return all perpetual products
-        '''
-        pdts = []
-        category: str = self._exchange._derive_product_category(product_type)
-        for epdt in self.api.get_epdts_by_ptype(product_type):
-            pdt = self.adapter(epdt, group=category)
-            is_mapping_exists = (pdt != epdt)
-            # NOTE: mapping may not exist if the product has been delisted
-            if is_mapping_exists:
-                pdts.append(pdt)
-        return pdts
+        validate_product(basis)
+        return self.exchange.create_product(basis, **specs)

@@ -7,14 +7,12 @@ if TYPE_CHECKING:
     from pfeed.storages.minio_storage import MinioStorage
     from pfeed.storages.local_storage import LocalStorage
     from pfeed.const.aliases import ALIASES as aliases
-    from pfeed.feeds.yahoo_finance.yahoo_finance import (
+    from pfeed.sources.yahoo_finance import (
         YahooFinance,
         YahooFinance as YF,
     )
-    from pfeed.feeds.bybit.bybit import (
-        BybitMarketFeed as Bybit,
-    )
-    from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import (
+    from pfeed.sources.bybit import Bybit
+    from pfeed.sources.financial_modeling_prep import (
         FinancialModelingPrep,
         FinancialModelingPrep as FMP,
     )
@@ -28,8 +26,7 @@ from pfeed.feeds import get_market_feed
 def __getattr__(name: str):
     if name == 'aliases':
         from pfeed.const.aliases import ALIASES
-        from pfund.const.aliases import ALIASES as PFUND_ALIASES
-        return {**ALIASES, **PFUND_ALIASES}
+        return ALIASES
     elif name == 'plot':
         import pfund_plot as plot
         return plot
@@ -43,26 +40,17 @@ def __getattr__(name: str):
         from pfeed.storages.local_storage import LocalStorage
         return LocalStorage
     elif name in ('YahooFinance', 'YF'):
-        from pfeed.feeds.yahoo_finance.yahoo_finance import YahooFinance
+        from pfeed.sources.yahoo_finance import YahooFinance
         return YahooFinance
     elif name in ('Bybit',):
-        from pfeed.feeds.bybit.bybit import BybitMarketFeed as Bybit
+        from pfeed.sources.bybit import Bybit
         return Bybit
     elif name in ('FinancialModelingPrep', 'FMP'):
-        from pfeed.feeds.financial_modeling_prep.financial_modeling_prep import FinancialModelingPrep
+        from pfeed.sources.financial_modeling_prep import FinancialModelingPrep
         return FinancialModelingPrep
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     
     
-def what_is(alias: str) -> str | None:
-    from pfeed.const.aliases import ALIASES
-    from pfund.const.aliases import ALIASES as PFUND_ALIASES
-    if alias in PFUND_ALIASES or alias.upper() in PFUND_ALIASES:
-        return PFUND_ALIASES.get(alias, PFUND_ALIASES.get(alias.upper(), None))
-    elif alias in ALIASES or alias.upper() in ALIASES:
-        return aliases.get(alias, aliases.get(alias.upper(), None))
-
-
 __version__ = version("pfeed")
 __all__ = (
     "__version__",
@@ -70,7 +58,6 @@ __all__ = (
     "get_config",
     "aliases",
     "plot",
-    "what_is",
     # sugar functions
     "create_storage",
     "get_market_feed",

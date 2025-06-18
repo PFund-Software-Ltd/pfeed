@@ -4,16 +4,15 @@ if TYPE_CHECKING:
     import pandas as pd
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
-    from bytewax.inputs import Source as BytewaxSource
-    from bytewax.dataflow import Stream as BytewaxStream
-    from pfeed.typing import GenericFrame, StorageMetadata
-    from pfeed.typing import tSTORAGE, tENVIRONMENT, tDATA_LAYER
+    from pfund.typing import tEnvironment
+    from pfeed.typing import tStorage, tDataLayer, GenericFrame, StorageMetadata
     from pfeed.data_models.market_data_model import MarketDataModel
     
 import datetime
 from functools import partial
 
-from pfeed.enums import DataCategory, DataLayer
+from pfund.datas.resolution import Resolution
+from pfeed.enums import DataCategory, DataLayer, MarketDataType
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 
 
@@ -21,20 +20,43 @@ tDATA_TYPE = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'secon
 
 
 class MarketFeed(TimeBasedFeed):
-    DATA_DOMAIN = DataCategory.market_data
+    data_domain = DataCategory.MARKET_DATA
+    
+    SUPPORTED_LOWEST_RESOLUTION = Resolution('1d')
+
+    @property
+    def highest_resolution(self) -> Resolution:
+        market_data_types = self.data_source.generic_metadata['data_categories']['market_data']
+        data_types = [MarketDataType[data_type.upper()] for data_type in market_data_types]
+        resolutions = sorted([Resolution(data_type) for data_type in data_types], reverse=True)
+        return resolutions[0]
+    
+    @property
+    def lowest_resolution(self) -> Resolution:
+        market_data_types = self.data_source.generic_metadata['data_categories']['market_data']
+        data_types = [MarketDataType[data_type.upper()] for data_type in market_data_types]
+        resolutions = sorted([Resolution(data_type) for data_type in data_types], reverse=False)
+        return resolutions[0]
+    
+    @property
+    def supported_asset_types(self) -> list[str]:
+        from pfund.products.product_basis import ProductAssetType
+        market_data_types = self.data_source.generic_metadata['data_categories']['market_data']
+        return list(set(
+            str(ProductAssetType(as_string=asset_type.upper()))
+            for data_type in market_data_types
+            for asset_type in market_data_types[data_type]
+        ))
     
     @staticmethod
-    def create_resolution(resolution: str | Resolution) -> Resolution:
-        from pfund.datas.resolution import Resolution
+    def _create_resolution(resolution: str | Resolution) -> Resolution:
         return Resolution(resolution) if isinstance(resolution, str) else resolution
     
     def _create_unit_resolution(self, resolution: str | Resolution) -> Resolution:
         if isinstance(resolution, str):
-            resolution: Resolution = self.create_resolution(resolution)
-        return self.create_resolution('1' + repr(resolution.timeframe))
-    
-    SUPPORTED_LOWEST_RESOLUTION = create_resolution('1d')
-    
+            resolution: Resolution = self._create_resolution(resolution)
+        return self._create_resolution('1' + repr(resolution.timeframe))
+        
     def create_data_model(
         self,
         product: str | BaseProduct,
@@ -42,16 +64,17 @@ class MarketFeed(TimeBasedFeed):
         start_date: str | datetime.date,
         end_date: str | datetime.date | None = None,
         data_origin: str = '',
-        env: tENVIRONMENT = 'BACKTEST',
+        env: tEnvironment = 'BACKTEST',
         **product_specs
     ) -> MarketDataModel:
         from pfeed.data_models.market_data_model import MarketDataModel
-        if isinstance(product, str) and product:
-            product = self.create_product(product, **product_specs)
-        if isinstance(start_date, str) and start_date:
-            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-        if isinstance(end_date, str) and end_date:
-            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+        # TODO: move the type conversions to MarketDataModel, but how to handle product_specs?
+        # if isinstance(product, str) and product:
+        #     product = self.create_product(product, **product_specs)
+        # if isinstance(start_date, str) and start_date:
+        #     start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+        # if isinstance(end_date, str) and end_date:
+        #     end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return MarketDataModel(
             env=env,
             data_source=self.data_source,
@@ -73,7 +96,7 @@ class MarketFeed(TimeBasedFeed):
         end_date: str='',
         data_layer: Literal['RAW', 'CLEANED']='CLEANED',
         data_origin: str='',
-        to_storage: tSTORAGE | None='LOCAL',
+        to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=True,
@@ -116,10 +139,10 @@ class MarketFeed(TimeBasedFeed):
         if resolution == 'max':
             resolution: Resolution = self.data_source.highest_resolution
         else:
-            resolution: Resolution = self.create_resolution(resolution)
+            resolution: Resolution = self._create_resolution(resolution)
         assert self.data_source.highest_resolution >= resolution >= self.SUPPORTED_LOWEST_RESOLUTION, \
             f'resolution must be >= {self.SUPPORTED_LOWEST_RESOLUTION} and <= {self.data_source.highest_resolution}'
-        unit_resolution: Resolution = self.create_resolution('1' + repr(resolution.timeframe))
+        unit_resolution: Resolution = self._create_resolution('1' + repr(resolution.timeframe))
         data_resolution: Resolution = max(unit_resolution, self.data_source.lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer = DataLayer[data_layer.upper()]
@@ -127,7 +150,7 @@ class MarketFeed(TimeBasedFeed):
         if not auto_transform and not self._pipeline_mode and data_layer != DataLayer.RAW:
             self.logger.info(f'change data_layer from {data_layer} to "RAW" because no default and no custom transformations')
             data_layer = DataLayer.RAW
-        data_domain, data_layer = self.DATA_DOMAIN.value, data_layer.value
+        data_domain, data_layer = self.data_domain.value, data_layer.value
         self.logger.info(f'Downloading {self.name} historical {product} {data_resolution} data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin),
@@ -185,9 +208,9 @@ class MarketFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER='CLEANED',
+        data_layer: tDataLayer='CLEANED',
         data_domain: str='',
-        from_storage: tSTORAGE | None=None,
+        from_storage: tStorage | None=None,
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
@@ -229,11 +252,11 @@ class MarketFeed(TimeBasedFeed):
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
         '''
         product: BaseProduct = self.create_product(product, **product_specs)
-        resolution: Resolution = self.create_resolution(resolution)
+        resolution: Resolution = self._create_resolution(resolution)
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
         unit_resolution: Resolution = self._create_unit_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_domain = data_domain or self.DATA_DOMAIN.value
+        data_domain = data_domain or self.data_domain.value
         self.logger.info(f'Retrieving {product} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
             # NOTE: dataflow's data model will always have the input resolution
@@ -253,9 +276,9 @@ class MarketFeed(TimeBasedFeed):
     def _retrieve_impl(
         self,
         data_model: MarketDataModel,
-        data_layer: tDATA_LAYER,
+        data_layer: tDataLayer,
         data_domain: str,
-        from_storage: tSTORAGE | None,
+        from_storage: tStorage | None,
         storage_options: dict | None,
         add_default_transformations: Callable | None,
     ) -> tuple[GenericFrame | None, dict[str, Any]]:
@@ -323,10 +346,10 @@ class MarketFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDATA_LAYER | None=None,
+        data_layer: tDataLayer | None=None,
         data_domain: str='',
-        from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE | None=None,
+        from_storage: tStorage | None=None,
+        to_storage: tStorage | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
         retrieve_per_date: bool=False,
@@ -335,10 +358,10 @@ class MarketFeed(TimeBasedFeed):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
 
-        resolution: Resolution = self.create_resolution(resolution)
+        resolution: Resolution = self._create_resolution(resolution)
         # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
         data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
-        data_domain = data_domain or self.DATA_DOMAIN.value
+        data_domain = data_domain or self.data_domain.value
         df: GenericFrame | None = self._get_historical_data_impl(
             product=product,
             symbol=symbol,
@@ -373,10 +396,9 @@ class MarketFeed(TimeBasedFeed):
         self,
         products: list[str],
         channel: str,
-        bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
         auto_transform: bool=True,
     ) -> MarketFeed:
-        # dataflow: DataFlow = self._create_stream_dataflow(bytewax_source=bytewax_source)
+        # dataflow: DataFlow = self._create_stream_dataflow()
         # if auto_transform:
         #     self._add_default_transformations_to_stream()
         raise NotImplementedError(f"{self.name} stream() is not implemented")

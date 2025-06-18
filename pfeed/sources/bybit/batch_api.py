@@ -1,35 +1,33 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.exchanges.exchange_base import BaseExchange
-    from pfund.products.product_base import BaseProduct
+    from pfund.exchanges import Bybit
+    from pfund.products.product_crypto import CryptoProduct
+
+
+from pfund.enums import CryptoAssetType, AssetTypeModifier
 
 
 # TODO: add orderbook data support, one snapshot has 500 levels...can pandas handle this?
 # url: e.g. https://quote-saver.bycsi.com/orderbook/linear/BTCUSDT/2025-01-01_BTCUSDT_ob500.data.zip
 # choices: https://api2.bybit.com/quote/public/support/download/list-options?bizType=contract&productId=orderbook
-class BybitAPI:
+class BatchAPI:
     '''Custom API for downloading data from Bybit'''
     URLS = {
-        'PERP': 'https://public.bybit.com/trading',
-        'IPERP': 'https://public.bybit.com/trading',
-        'FUT': 'https://public.bybit.com/trading',
-        'IFUT': 'https://public.bybit.com/trading',
-        'SPOT': 'https://public.bybit.com/spot',
+        CryptoAssetType.PERPETUAL: 'https://public.bybit.com/trading',
+        AssetTypeModifier.INVERSE + '-' + CryptoAssetType.PERPETUAL: 'https://public.bybit.com/trading',
+        CryptoAssetType.FUTURE: 'https://public.bybit.com/trading',
+        AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUTURE: 'https://public.bybit.com/trading',
+        CryptoAssetType.CRYPTO: 'https://public.bybit.com/spot',
     }
     DATA_NAMING_REGEX_PATTERNS = {
-        'PERP': r'(USDT\/|PERP\/)$',  # USDT perp or USDC perp;
-        'FUT': r'-\d{2}[A-Z]{3}\d{2}\/$',  # USDC futures e.g. BTC-10NOV23/
-        'IPERP': r'USD\/$',  # inverse perps;
-        'IFUT': r'USD[A-Z]\d{2}\/$',  # inverse futures e.g. BTCUSDH24/
-        'SPOT': '.*',  # match everything since everything from https://public.bybit.com/spot is spot
+        CryptoAssetType.PERPETUAL: r'(USDT\/|PERP\/)$',  # USDT perp or USDC perp;
+        CryptoAssetType.FUTURE: r'-\d{2}[A-Z]{3}\d{2}\/$',  # USDC futures e.g. BTC-10NOV23/
+        AssetTypeModifier.INVERSE + '-' + CryptoAssetType.PERPETUAL: r'USD\/$',  # inverse perps;
+        AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUTURE: r'USD[A-Z]\d{2}\/$',  # inverse futures e.g. BTCUSDH24/
+        CryptoAssetType.CRYPTO: '.*',  # match everything since everything from https://public.bybit.com/spot is spot
     }
 
-    def __init__(self, exchange: BaseExchange):
-        self._exchange = exchange
-        self.adapter = exchange.adapter
-        # self._efilenames = {}
-    
     @staticmethod
     def _get(url, frequency=1, num_retry=3):
         '''
@@ -88,7 +86,7 @@ class BybitAPI:
             epdts = [node.get('href').replace('/', '') for node in soup.find_all('a') if pattern.search(node.get('href'))]
             return epdts
     
-    def get_data(self, product: BaseProduct, date: str) -> bytes | None:
+    def get_data(self, product: CryptoProduct, date: str) -> bytes | None:
         # used to check if the efilename created by the date exists in the efilenames (files on the exchange's data server)
         if product.is_option():
             raise NotImplementedError('Bybit does not provide options data')

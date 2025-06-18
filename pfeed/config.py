@@ -9,8 +9,7 @@ import importlib.resources
 from types import TracebackType
 from dataclasses import dataclass, asdict, MISSING
 
-import yaml
-
+from pfund.utils.utils import load_yaml_file, dump_yaml_file
 from pfeed.const.paths import (
     PROJ_NAME, 
     LOG_PATH, 
@@ -35,13 +34,12 @@ def _custom_excepthook(exception_class: type[BaseException], exception: BaseExce
 
 @dataclass
 class Configuration:
-    data_path: str = str(DATA_PATH)
-    log_path: str = str(LOG_PATH)
-    cache_path: str = str(CACHE_PATH)
-    logging_config_file_path: str = f'{CONFIG_PATH}/logging.yml'
-    docker_compose_file_path: str = f'{CONFIG_PATH}/docker-compose.yml'
+    data_path: Path = DATA_PATH
+    log_path: Path = LOG_PATH
+    cache_path: Path = CACHE_PATH
+    logging_config_file_path: Path = CONFIG_PATH / 'logging.yml'
+    docker_compose_file_path: Path = CONFIG_PATH / 'docker-compose.yml'
     custom_excepthook: bool = False
-    env_file_path: str = f'{CONFIG_PATH}/.env'
     debug: bool = False
     
     # NOTE: without type annotation, they will NOT be treated as dataclass fields but as class attributes
@@ -49,15 +47,36 @@ class Configuration:
     _instance = None
     _verbose = False
 
+    # REVIEW: this won't be needed if we use pydantic.BaseModel instead of dataclass
+    def _enforce_types(self):
+        config_dict = asdict(self)
+        for k, v in config_dict.items():
+            _field = self.__dataclass_fields__[k]
+            if _field.type == 'Path' and isinstance(v, str):
+                setattr(self, k, Path(v))
+
     @classmethod
     def get_instance(cls):
         if cls._instance is None:
+            cls._load_env_file()
             cls._instance = cls.load()
         return cls._instance
 
     @classmethod
     def set_verbose(cls, verbose: bool):
         cls._verbose = verbose
+        
+    @classmethod   
+    def _load_env_file(cls):
+        from dotenv import find_dotenv, load_dotenv
+        env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
+        if env_file_path:
+            load_dotenv(env_file_path, override=True)
+            if cls._verbose:
+                print(f'{PROJ_NAME} .env file loaded from {env_file_path}')
+        else:
+            if cls._verbose:
+                print(f'{PROJ_NAME} .env file is not found')
     
     @classmethod
     def load(cls) -> Configuration:
@@ -74,37 +93,39 @@ class Configuration:
                 default_config[_field.name] = _field.default
         needs_update = False
         if CONFIG_FILE_PATH.is_file():
-            with open(CONFIG_FILE_PATH, 'r') as f:
-                saved_config = yaml.safe_load(f) or {}
-                if cls._verbose:
-                    print(f"{PROJ_NAME} config loaded from {CONFIG_FILE_PATH}.")
-                # Check for new or removed fields
-                new_fields = set(default_config.keys()) - set(saved_config.keys())
-                removed_fields = set(saved_config.keys()) - set(default_config.keys())
-                needs_update = bool(new_fields or removed_fields)
-                
-                if cls._verbose and needs_update:
-                    if new_fields:
-                        print(f"New config fields detected: {new_fields}")
-                    if removed_fields:
-                        print(f"Removed config fields detected: {removed_fields}")
-                        
-                # Filter out removed fields and merge with defaults
-                saved_config = {k: v for k, v in saved_config.items() if k in default_config}
-                config = {**default_config, **saved_config}
+            current_config = load_yaml_file(CONFIG_FILE_PATH) or {}
+            if cls._verbose:
+                print(f"Loaded {CONFIG_FILE_PATH}")
+            # Check for new or removed fields
+            new_fields = set(default_config.keys()) - set(current_config.keys())
+            removed_fields = set(current_config.keys()) - set(default_config.keys())
+            needs_update = bool(new_fields or removed_fields)
+            
+            if cls._verbose and needs_update:
+                if new_fields:
+                    print(f"New config fields detected: {new_fields}")
+                if removed_fields:
+                    print(f"Removed config fields detected: {removed_fields}")
+                    
+            # Filter out removed fields and merge with defaults
+            current_config = {k: v for k, v in current_config.items() if k in default_config}
+            config = {**default_config, **current_config}
         else:
             config = default_config
             needs_update = True
-        configuration = cls(**config)
+        config = cls(**config)
         if needs_update:
-            configuration.dump()
-        return configuration
+            config.dump()
+        return config
     
     def dump(self):
-        with open(CONFIG_FILE_PATH, 'w') as f:
-            yaml.dump(asdict(self), f, default_flow_style=False)
-            if self._verbose:
-                print(f"{PROJ_NAME} config saved to {CONFIG_FILE_PATH}.")
+        dump_yaml_file(CONFIG_FILE_PATH, asdict(self))
+        if self._verbose:
+            print(f"Created {CONFIG_FILE_PATH}")
+    
+    @property
+    def file_path(self):
+        return CONFIG_FILE_PATH
     
     @property
     def logging_config(self):
@@ -115,52 +136,38 @@ class Configuration:
         self._logging_config = value
         
     def __post_init__(self):
+        self._initialize()
+        
+    def _initialize(self):
+        self._enforce_types()
         self._initialize_files()
-        self._initialize_configs()
+        self._initialize_file_paths()
+        if self.custom_excepthook and sys.excepthook is sys.__excepthook__:
+            sys.excepthook = _custom_excepthook
+        if self.debug:
+            self.enable_debug_mode()
     
     def _initialize_files(self):
-        '''Creates .env and copy logging.yml and docker-compose.yml from package directory to the user config path'''
+        '''Copies logging.yml and docker-compose.yml from package directory to the user config path'''
         package_dir = Path(importlib.resources.files(PROJ_NAME)).resolve().parents[0]
-        for path in [self.env_file_path, self.logging_config_file_path, self.docker_compose_file_path]:
-            path = Path(path)
+        for path in [self.logging_config_file_path, self.docker_compose_file_path]:
+            if path.exists():
+                continue
             try:
-                if not path.exists():
-                    if path.name == '.env':
-                        path.touch(exist_ok=True)
-                    else:
-                        shutil.copy(package_dir / path.name, CONFIG_PATH)
+                filename = path.name
+                # copies the file from site-packages/pfeed to the user config path
+                shutil.copy(package_dir / filename, CONFIG_PATH)
+                print(f'Created {filename} in {CONFIG_PATH}')
             except Exception as e:
                 print(f'Error creating or copying {path.name}: {e}')
     
-    def _initialize_configs(self):
+    def _initialize_file_paths(self):
         for path in [self.data_path, self.cache_path, self.log_path]:
             if not os.path.exists(path):
                 os.makedirs(path)
                 if self._verbose:
                     print(f'{PROJ_NAME} created {path}')
                 
-        if self.custom_excepthook and sys.excepthook is sys.__excepthook__:
-            sys.excepthook = _custom_excepthook
-        
-        self.load_env_file(self.env_file_path)
-        
-        if self.debug:
-            self.enable_debug_mode()
-    
-    def load_env_file(self, env_file_path: str=''):
-        from dotenv import find_dotenv, load_dotenv
-        if not env_file_path:
-            env_file_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
-        
-        if env_file_path:
-            load_dotenv(env_file_path, override=True)
-            if self._verbose:
-                print(f'{PROJ_NAME} .env file loaded from {env_file_path}')
-        else:
-            if self._verbose:
-                print(f'{PROJ_NAME} .env file is not found')
-            return
-    
     def enable_debug_mode(self):
         '''Enables debug mode by setting the log level to DEBUG for all stream handlers'''
         is_loggers_set_up = bool(logging.getLogger(PROJ_NAME).handlers)
@@ -181,9 +188,8 @@ def configure(
     log_path: str | None = None,
     cache_path: str | None = None,
     logging_config_file_path: str | None = None,
-    logging_config: dict | None = None,
     docker_compose_file_path: str | None = None,
-    env_file_path: str | None = None,
+    logging_config: dict | None = None,
     custom_excepthook: bool | None = None,
     debug: bool | None = None,
     verbose: bool = False,
@@ -200,7 +206,8 @@ def configure(
         config_updates.pop(k)
     config_updates.pop('NON_CONFIG_KEYS')
 
-    config = get_config(verbose=verbose)
+    Configuration.set_verbose(verbose)
+    config = get_config()
 
     # Apply updates for non-None values
     for k, v in config_updates.items():
@@ -210,10 +217,9 @@ def configure(
     if write:
         config.dump()
         
-    config._initialize_configs()
+    config._initialize()
     return config
 
 
-def get_config(verbose: bool = False) -> Configuration:
-    Configuration.set_verbose(verbose)
+def get_config() -> Configuration:
     return Configuration.get_instance()

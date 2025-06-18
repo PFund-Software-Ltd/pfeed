@@ -3,6 +3,10 @@ import re
 import datetime
 
 
+def to_camel_case(s: str) -> str:
+    return ''.join(word.capitalize() for word in s.lower().split('_'))
+
+
 def validate_product(product: str):
     # use regex to validate product string format, it must be like "XXX_YYY_ZZZ"
     # where the maximum length of each part is 10
@@ -157,6 +161,7 @@ def rollback_date_range(rollback_period: str | Literal['ytd']) -> tuple[datetime
             return year, month+1
     
     utcnow = datetime.datetime.now(tz=datetime.timezone.utc)
+    end_date = utcnow - datetime.timedelta(days=1)  # Previous day
 
     if rollback_period.lower() == 'ytd':
         start_date = datetime.datetime(utcnow.year, 1, 1, tzinfo=datetime.timezone.utc)
@@ -187,6 +192,5 @@ def rollback_date_range(rollback_period: str | Literal['ytd']) -> tuple[datetime
             timedelta = datetime.timedelta(days=total_days_in_year)
         else:
             raise ValueError(f"Unsupported {rollback_period=}")
-        end_date = utcnow - datetime.timedelta(days=1)  # Previous day
         start_date = end_date - timedelta + datetime.timedelta(days=1)
     return start_date.date(), end_date.date()

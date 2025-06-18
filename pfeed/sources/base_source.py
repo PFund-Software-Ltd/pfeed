@@ -1,48 +1,42 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfeed.typing import tDATA_SOURCE
 
 import os
 from abc import ABC, abstractmethod
 
-from pfund.utils.utils import Singleton
-from pfeed.enums import DataSource, DataProviderType, DataAccessType, AssetType
-from pfeed.const.aliases import BIDIRECTIONAL_ALIASES 
+from pfeed.enums import DataSource, DataProviderType, DataAccessType, DataCategory
+from pfeed.const.aliases import ALIASES 
 
 
-class BaseSource(Singleton, ABC):
-    def __init__(self, name: tDATA_SOURCE, api_key: str | None=None):
-        self.name = DataSource[name.upper()]
-        api_key_name, api_key_alias = f'{self.name}_API_KEY', f'{BIDIRECTIONAL_ALIASES.get(self.name, self.name)}_API_KEY'
-        self._api_key = api_key or os.getenv(api_key_name) or os.getenv(api_key_alias)
+class BaseSource(ABC):
+    name: ClassVar[DataSource]
+    
+    def __init__(self, api_key: str | None=None):
         self.generic_metadata, self.specific_metadata = self._load_metadata()
-        self.start_date = self.specific_metadata.get('start_date', None)
-        self.api_key_required = self.generic_metadata['api_key_required']
-        if self.api_key_required and not self._api_key:
-            raise ValueError(f'{api_key_name} or {api_key_alias} is not set')
+        self._api_key: str | None = api_key or self._get_api_key()
+        self.start_date: str | None = self.specific_metadata.get('start_date', None)
         self.access_type = DataAccessType[self.generic_metadata['access_type'].upper()]
         self.provider_type = DataProviderType[self.generic_metadata['provider_type'].upper()]
         self.data_origin = self.generic_metadata['data_origin']
         self.rate_limits = self.generic_metadata['rate_limits']
         self.docs_url = self.generic_metadata['docs_url']
-        self.data_categories = list(self.generic_metadata['data_categories'].keys())
-        has_market_data = 'market_data' in self.data_categories
-        if has_market_data:
-            self.highest_resolution, self.lowest_resolution = self._get_highest_and_lowest_resolutions()
-            self.ptypes = self.product_types = self._extract_product_types()
-    
+        self.data_categories: list[DataCategory] = [DataCategory[category.upper()] for category in self.generic_metadata['data_categories'].keys()]
+        
     @abstractmethod
-    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
+    def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
         pass
     
-    def _get_highest_and_lowest_resolutions(self):
-        from pfund.datas.resolution import Resolution
-        from pfeed.enums import MarketDataType
-        data_types = [MarketDataType[data_type.upper()] for data_type in self.generic_metadata['data_categories']['market_data']]
-        resolutions = sorted([Resolution(data_type) for data_type in data_types], reverse=True)
-        return resolutions[0], resolutions[-1]
+    def _get_api_key(self) -> str | None:
+        alias = next((alias for alias, name in ALIASES.items() if name.upper() == self.name), self.name)
+        api_key_name, api_key_alias = f'{self.name}_API_KEY', f'{alias}_API_KEY'
+        api_key: str | None = os.getenv(api_key_name) or os.getenv(api_key_alias)
+        is_api_key_required = self.generic_metadata['api_key_required']
+        if is_api_key_required and not api_key:
+            api_key_name_choices = [api_key_name] if api_key_name == api_key_alias else [api_key_name, api_key_alias]
+            raise ValueError(f'{" or ".join(api_key_name_choices)} is not set')
+        return api_key
     
     def _load_metadata(self):
         import os
@@ -53,10 +47,3 @@ class BaseSource(Singleton, ABC):
             generic_metadata = next(metadata_docs)
             specific_metadata = next(metadata_docs, {})
         return generic_metadata, specific_metadata
-
-    def _extract_product_types(self) -> list[AssetType]:
-        return list(set(
-            AssetType[product_type.upper()]
-            for data_type in self.generic_metadata['data_categories']['market_data']
-            for product_type in self.generic_metadata['data_categories']['market_data'][data_type]
-        ))

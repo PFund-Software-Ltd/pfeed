@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
     from pfund.datas.resolution import Resolution
-    from pfeed.typing import tSTORAGE, tDATA_LAYER
+    from pfeed.typing import tStorage, tDataLayer
     from pfeed.typing import GenericFrame
     from pfeed.data_models.market_data_model import MarketDataModel
 
@@ -115,7 +115,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         end_date: str='',
         data_layer: Literal['RAW', 'CLEANED']='CLEANED',
         data_origin: str='',
-        to_storage: tSTORAGE | None='LOCAL',
+        to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         yfinance_kwargs: dict | None=None,
@@ -223,10 +223,10 @@ class YahooFinanceMarketFeed(MarketFeed):
         start_date: str = "",
         end_date: str = "",
         data_origin: str='',
-        data_layer: tDATA_LAYER | None=None,
+        data_layer: tDataLayer | None=None,
         data_domain: str='',
-        from_storage: tSTORAGE | None=None,
-        to_storage: tSTORAGE | None=None,
+        from_storage: tStorage | None=None,
+        to_storage: tStorage | None=None,
         storage_options: dict | None=None,
         force_download: bool=False,
         retrieve_per_date: bool=False,

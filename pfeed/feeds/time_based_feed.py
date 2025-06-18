@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Literal, Callable
 if TYPE_CHECKING:
     import polars as pl
     from narwhals.typing import Frame
-    from pfeed.typing import tSTORAGE, tDATA_LAYER, GenericFrame, StorageMetadata
+    from pfeed.typing import tStorage, tDataLayer, GenericFrame, StorageMetadata
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
     from pfeed.flows.faucet import Faucet
@@ -107,9 +107,9 @@ class TimeBasedFeed(BaseFeed):
         partial_faucet_data_model: Callable,
         start_date: datetime.date,
         end_date: datetime.date,
-        data_layer: tDATA_LAYER | None,
+        data_layer: tDataLayer | None,
         data_domain: str,
-        from_storage: tSTORAGE | None,
+        from_storage: tStorage | None,
         storage_options: dict | None,
         add_default_transformations: Callable | None,
         dataflow_per_date: bool,
@@ -146,7 +146,7 @@ class TimeBasedFeed(BaseFeed):
         end_date: datetime.date,
         data_layer: Literal['RAW', 'CLEANED'],
         data_domain: str,
-        to_storage: tSTORAGE | None,
+        to_storage: tStorage | None,
         storage_options: dict | None,
         dataflow_per_date: bool, 
         include_metadata: bool,
@@ -185,9 +185,9 @@ class TimeBasedFeed(BaseFeed):
     def _retrieve_impl(
         self,
         data_model: TimeBasedDataModel,
-        data_layer: tDATA_LAYER,
+        data_layer: tDataLayer,
         data_domain: str,
-        from_storage: tSTORAGE | None,
+        from_storage: tStorage | None,
         storage_options: dict | None,
         add_default_transformations: Callable | None,
     ) -> tuple[GenericFrame | None, TimeBasedFeedMetadata]:
@@ -204,7 +204,7 @@ class TimeBasedFeed(BaseFeed):
         )
 
         # choose the storage with the least missing dates
-        missing_dates_in_storages: dict[tSTORAGE, list[datetime.date]] = {
+        missing_dates_in_storages: dict[tStorage, list[datetime.date]] = {
             storage: metadata['missing_dates']
             for storage, metadata in metadata_in_storages.items()
         }
@@ -228,10 +228,10 @@ class TimeBasedFeed(BaseFeed):
         start_date: str,
         end_date: str,
         data_origin: str,
-        data_layer: tDATA_LAYER | None,
+        data_layer: tDataLayer | None,
         data_domain: str,
-        from_storage: tSTORAGE | None,
-        to_storage: tSTORAGE | None,
+        from_storage: tStorage | None,
+        to_storage: tStorage | None,
         storage_options: dict | None,
         force_download: bool,
         retrieve_per_date: bool,

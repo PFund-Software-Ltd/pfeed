@@ -1,10 +1,7 @@
 from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
-    from narwhals.typing import Frame
     from prefect import Flow as PrefectDataFlow
-    from bytewax.inputs import Source as BytewaxSource
-    from bytewax.outputs import Sink as BytewaxSink
     from pfeed.typing import GenericData
     from pfeed.flows.faucet import Faucet
     from pfeed.flows.sink import Sink
@@ -15,16 +12,6 @@ from enum import StrEnum
 
 from prefect import flow, task
 from prefect.utilities.annotations import quote
-try:
-    from bytewax.dataflow import Dataflow as BytewaxDataFlow
-    from bytewax.dataflow import Stream as BytewaxStream
-    import bytewax.operators as bytewax_op
-except ImportError:
-    class BytewaxDataFlow:
-        pass
-    class BytewaxStream:
-        pass
-    bytewax_op = None
 
 from pfeed.enums import ExtractType
 from pfeed.flows.result import FlowResult
@@ -33,7 +20,6 @@ from pfeed.flows.result import FlowResult
 class FlowType(StrEnum):
     native = 'native'
     prefect = 'prefect'
-    bytewax = 'bytewax'
 
 
 class DataFlow:
@@ -45,7 +31,6 @@ class DataFlow:
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
         self._transformations: list[Callable] = []
-        self._bytewax_sink: BytewaxSink | str | None = None
         self._result = FlowResult()
     
     @property
@@ -74,9 +59,6 @@ class DataFlow:
     def set_sink(self, sink: Sink):
         self._sink = sink
     
-    def set_bytewax_sink(self, bytewax_sink: BytewaxSink | str):
-        self._bytewax_sink = bytewax_sink
-
     def __str__(self):
         return f'{self.name}.{self.extract_type}'
     
@@ -85,33 +67,27 @@ class DataFlow:
     
     def run(
         self, 
-        flow_type: FlowType | Literal['native', 'prefect', 'bytewax']='native',
+        flow_type: FlowType | Literal['native', 'prefect']='native',
     ) -> FlowResult:
         flow_type = FlowType[flow_type.lower()]
         if flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow()
             data: GenericData | None = prefect_dataflow()
             self._result.set_data(data)
-        elif flow_type == FlowType.bytewax:
-            bytewax_dataflow = self.to_bytewax_dataflow()
-            # REVIEW, using run_main() to execute the dataflow in the current thread, NOT for production
-            from bytewax.testing import run_main
-            run_main(bytewax_dataflow)
-            self._result.set_data(bytewax_dataflow)
         else:
             data: GenericData | None = self._run()
             self._result.set_data(data)
         return self._result
     
-    def _run(self, flow_type: FlowType=FlowType.native) -> GenericData | None | BytewaxDataFlow:
+    def _run(self, flow_type: FlowType=FlowType.native) -> GenericData | None:
         from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
-        data: GenericData | None | BytewaxStream = self._extract(flow_type=flow_type)
+        data: GenericData | None = self._extract(flow_type=flow_type)
         if (data is not None) and not (is_dataframe(data) and is_empty_dataframe(data)):
-            data: GenericData | BytewaxStream = self._transform(data, flow_type=flow_type)
+            data: GenericData = self._transform(data, flow_type=flow_type)
             self._load(data, flow_type=flow_type)
         return data
     
-    def _extract(self, flow_type: FlowType=FlowType.native) -> GenericData | None | BytewaxStream:
+    def _extract(self, flow_type: FlowType=FlowType.native) -> GenericData | None:
         if not self.is_streaming():
             extract = task(self.faucet.open) if flow_type == FlowType.prefect else self.faucet.open
             data, metadata = extract()
@@ -119,23 +95,14 @@ class DataFlow:
                 self._result.set_metadata(metadata)
             return data
         else:
-            if flow_type == FlowType.bytewax:
-                assert self._bytewax_dataflow is not None, f'{self.name} has no bytewax dataflow'
-                source: BytewaxSource | BytewaxStream = self.faucet.open()
-                if isinstance(source, BytewaxSource):
-                    stream: BytewaxStream = bytewax_op.input(self.name, self._bytewax_dataflow, source)
-                else:
-                    stream: BytewaxStream = source
-                return stream
-            else:
-                # TODO: streaming without bytewax
-                pass
+            # TODO: streaming
+            pass
     
     def _transform(
         self, 
-        data: GenericData | BytewaxStream, 
+        data: GenericData, 
         flow_type: FlowType=FlowType.native,
-    ) -> GenericData | BytewaxStream:
+    ) -> GenericData:
         if self.is_streaming():
             stream = data
         for func in self._transformations:
@@ -145,15 +112,11 @@ class DataFlow:
                 data: GenericData = transform(quote(data)) if flow_type == FlowType.prefect else transform(data)
                 self.logger.debug(f"transformed {self.faucet.data_model} data by '{func.__name__}'")
             else:
-                if flow_type == FlowType.bytewax:
-                    # REVIEW: only supports passing in stream to the user's function
-                    stream: BytewaxStream = func(stream)
-                else:
-                    # TODO: streaming without bytewax
-                    pass
+                # TODO: streaming
+                pass
         return data
     
-    def _load(self, data: GenericData | BytewaxStream, flow_type: FlowType=FlowType.native):
+    def _load(self, data: GenericData, flow_type: FlowType=FlowType.native):
         if self.sink is None:
             if self.extract_type != ExtractType.retrieve:
                 self.logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
@@ -167,12 +130,8 @@ class DataFlow:
                 self.logger.info(f'loaded {self.data_model} data to {self.sink}')
         else:
             stream = data
-            if flow_type == FlowType.bytewax:
-                assert self._bytewax_sink is not None, f'{self.name} has no bytewax sink'
-                bytewax_op.output(self._bytewax_sink.__name__, stream, self._bytewax_sink)
-            else:
-                # TODO: streaming without bytewax
-                self.sink.flush(...)
+            # TODO: streaming
+            self.sink.flush(...)
 
     def to_prefect_dataflow(self, **kwargs) -> PrefectDataFlow:
         '''
@@ -188,13 +147,3 @@ class DataFlow:
             # prefect_logger = get_run_logger()  # this is a logger adapter
             return self._run(FlowType.prefect)
         return prefect_flow
-    
-    def to_bytewax_dataflow(self, **kwargs) -> BytewaxDataFlow:
-        '''
-        Args:
-            kwargs: kwargs specific to bytewax Dataflow()
-        '''
-        assert self.is_streaming(), f'{self.name} is not a streaming dataflow'
-        bytewax_dataflow = BytewaxDataFlow(self.name, **kwargs)
-        self._run(FlowType.bytewax)
-        return bytewax_dataflow

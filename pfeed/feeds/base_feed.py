@@ -1,15 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal, ClassVar
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
-    from bytewax.dataflow import Dataflow as BytewaxDataFlow
-    from bytewax.inputs import Source as BytewaxSource
-    from bytewax.outputs import Sink as BytewaxSink
-    from bytewax.dataflow import Stream as BytewaxStream
     from pfund.products.product_base import BaseProduct
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tSTORAGE, tDATA_TOOL, tDATA_LAYER, GenericData
+    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData
     from pfeed.enums import DataSource
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
@@ -38,16 +34,16 @@ def clear_subflows(func):
     
     
 class BaseFeed(ABC):
-    DATA_DOMAIN = 'general_data'
+    data_domain = 'general_data'
+    data_source: ClassVar[BaseSource]
     
     def __init__(
         self, 
-        data_source: BaseSource | None=None,
-        data_tool: tDATA_TOOL='polars', 
+        data_source: BaseSource,
+        data_tool: tDataTool='polars', 
         pipeline_mode: bool=False,
         use_ray: bool=True,
         use_prefect: bool=False,
-        use_bytewax: bool=False,
         use_deltalake: bool=False,
     ):
         '''
@@ -55,32 +51,21 @@ class BaseFeed(ABC):
             storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
         self._setup_logging()
+        self.data_source: BaseSource = data_source
         self._data_tool = DataTool[data_tool.lower()]
-        if data_source is None:
-            assert hasattr(self, '_create_data_source'), '_create_data_source() is not implemented'
-            self.data_source: BaseSource = self._create_data_source()
-        else:
-            self.data_source: BaseSource = data_source
         self.name: DataSource = self.data_source.name
         self.logger = logging.getLogger(self.name.lower() + '_data')
 
         self._pipeline_mode = pipeline_mode
         self._use_ray = use_ray
         self._use_prefect = use_prefect
-        self._use_bytewax = use_bytewax
-        
-        # FIXME:
-        assert not self._use_bytewax, 'Bytewax is not supported yet'
-        
-        if self._use_prefect and self._use_bytewax:
-            raise ValueError('Cannot use both prefect and bytewax at the same time')
         self._use_deltalake = use_deltalake
         self._dataflows: list[DataFlow] = []
         self._subflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
-        self._storage_options: dict[tSTORAGE, dict] = {}
-        self._storage_kwargs: dict[tSTORAGE, dict] = {}
+        self._storage_options: dict[tStorage, dict] = {}
+        self._storage_kwargs: dict[tStorage, dict] = {}
     
     def _setup_logging(self):
         from pfund._logging import setup_logging_config
@@ -106,8 +91,8 @@ class BaseFeed(ABC):
     def _create_dataflows(self, *args, **kwargs) -> list[DataFlow]:
         pass
     
-    def create_product(self, product_basis: str, symbol: str='', **product_specs) -> BaseProduct:
-        return self.data_source.create_product(product_basis, symbol=symbol, **product_specs)
+    def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
+        return self.data_source.create_product(basis, symbol=symbol, **specs)
 
     @overload
     def configure_storage(
@@ -128,7 +113,7 @@ class BaseFeed(ABC):
     ) -> BaseFeed:
         ...
     
-    def configure_storage(self, storage: tSTORAGE, storage_options: dict, **storage_kwargs) -> BaseFeed:
+    def configure_storage(self, storage: tStorage, storage_options: dict, **storage_kwargs) -> BaseFeed:
         '''Configure storage kwargs for the given storage
         Args:
             storage_options: A dictionary containing configuration options that are universally applicable across different storage systems. These options typically include settings such as connection parameters, authentication credentials, and other general configurations that are not specific to a particular storage type.
@@ -157,9 +142,6 @@ class BaseFeed(ABC):
     
     def stream(
         self, 
-        # NOTE: supportts BytewaxStream, useful for users passing in BytewaxStream objects, e.g.:
-        # merge_stream = op.merge('merge', op.input("input1", ...), op.input("input2", ...))
-        bytewax_source: BytewaxSource | BytewaxStream | str | None=None,
         *args, 
         **kwargs,
     ) -> BaseFeed:
@@ -183,21 +165,17 @@ class BaseFeed(ABC):
     def _download_impl(self, data_model: BaseDataModel) -> GenericData:
         pass
     
-    def _stream_impl(
-        self, 
-        data_model: BaseDataModel, 
-        bytewax_source: BytewaxSource | BytewaxStream | str | None,
-    ) -> GenericData | BytewaxSource | BytewaxStream:
+    def _stream_impl(self, data_model: BaseDataModel) -> GenericData:
         raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
 
     def _retrieve_impl(
         self,
         data_model: BaseDataModel, 
         data_domain: str, 
-        data_layer: tDATA_LAYER,
-        from_storage: tSTORAGE | None,
+        data_layer: tDataLayer,
+        from_storage: tStorage | None,
         storage_options: dict | None,
-    ) -> tuple[dict[tSTORAGE, pl.LazyFrame | None], dict[tSTORAGE, dict[str, Any]]]:
+    ) -> tuple[dict[tStorage, pl.LazyFrame | None], dict[tStorage, dict[str, Any]]]:
         '''Retrieves data by searching through all local storages, using polars for scanning data'''
         from minio import ServerError as MinioServerError
         
@@ -207,8 +185,8 @@ class BaseFeed(ABC):
         # NOTE: skip searching for DUCKDB, should require users to explicitly specify the storage
         search_storages = [_storage for _storage in LocalDataStorage.__members__ if _storage.upper() != 'DUCKDB'] if from_storage is None else [from_storage]
         
-        data_in_storages: dict[tSTORAGE, pl.LazyFrame | None] = {}
-        metadata_in_storages: dict[tSTORAGE, dict[str, Any]] = {}
+        data_in_storages: dict[tStorage, pl.LazyFrame | None] = {}
+        metadata_in_storages: dict[tStorage, dict[str, Any]] = {}
         for search_storage in search_storages:
             search_storage_options = storage_options or self._storage_options.get(search_storage, {})
             Storage = DataStorage[search_storage.upper()].storage_class
@@ -270,11 +248,10 @@ class BaseFeed(ABC):
     
     def load(
         self, 
-        to_storage: tSTORAGE,
-        data_layer: tDATA_LAYER,
+        to_storage: tStorage,
+        data_layer: tDataLayer,
         data_domain: str,
         storage_options: dict | None=None,
-        bytewax_sink: BytewaxSink | str | None=None,
         **storage_kwargs,
     ) -> BaseFeed:
         '''
@@ -302,24 +279,15 @@ class BaseFeed(ABC):
         for dataflow in self._subflows:
             sink: Sink = self._create_sink(dataflow.data_model, _create_storage)
             dataflow.set_sink(sink)
-            if self._use_bytewax:
-                from bytewax.connectors.stdio import StdOutSink
-                dataflow.set_bytewax_sink(bytewax_sink or StdOutSink())
         return self
     
-    def run(
-        self, 
-        ray_kwargs: dict | None=None,
-        prefect_kwargs: dict | None=None,
-        bytewax_kwargs: dict | None=None,
-    ) -> tuple[list[DataFlow], list[DataFlow]]:
+    def run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
         '''Run dataflows'''
         from tqdm import tqdm
         from pfeed.utils.utils import generate_color
 
         ray_kwargs = ray_kwargs or {}
         prefect_kwargs = prefect_kwargs or {}
-        bytewax_kwargs = bytewax_kwargs or {}
         
         completed_dataflows: list[DataFlow] = []
         failed_dataflows: list[DataFlow] = []
@@ -329,8 +297,6 @@ class BaseFeed(ABC):
         def _run_dataflow(dataflow: DataFlow) -> FlowResult:
             if self._use_prefect:
                 flow_type = 'prefect'
-            elif self._use_bytewax:
-                flow_type = 'bytewax'
             else:
                 flow_type = 'native'
             result: FlowResult = dataflow.run(flow_type=flow_type)
@@ -442,13 +408,4 @@ class BaseFeed(ABC):
             kwargs: kwargs specific to prefect @flow decorator
         '''
         return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self._dataflows]
-    
-    def to_bytewax_dataflow(self, **kwargs) -> BytewaxDataFlow:
-        '''
-        Args:
-            kwargs: kwargs specific to bytewax Dataflow()
-        '''
-        bytewax_flows = [dataflow.to_bytewax_dataflow(**kwargs) for dataflow in self._dataflows]
-        assert len(bytewax_flows) == 1, 'Multiple dataflows are not supported for bytewax'
-        return bytewax_flows[0]
     

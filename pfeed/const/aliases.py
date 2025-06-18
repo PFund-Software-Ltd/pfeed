@@ -4,4 +4,4 @@ ALIASES = {
     'DBT': 'DATABENTO',
     'FMP': 'FINANCIAL_MODELING_PREP',
 }
-BIDIRECTIONAL_ALIASES = {**ALIASES, **{v: k for k, v in ALIASES.items()}}
+REVERSE_ALIASES = {v: k for k, v in ALIASES.items()}

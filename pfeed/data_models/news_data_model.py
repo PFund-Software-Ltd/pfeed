@@ -3,9 +3,9 @@ from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
-    from pfund.typing import ProductName
+    from pfund.typing import tEnvironment
     from pfeed.enums import DataLayer
-    from pfeed.typing import tENVIRONMENT, tDATA_SOURCE, tPRODUCT_TYPE
+    from pfeed.typing import tDataSource
 
 import datetime
 from pathlib import Path
@@ -18,22 +18,22 @@ from pfeed.data_handlers import NewsDataHandler
 
 
 class NewsMetadata(TypedDict, total=True):
-    env: tENVIRONMENT
-    data_source: tDATA_SOURCE
+    env: tEnvironment
+    data_source: tDataSource
     data_origin: str
     start_date: datetime.date
     end_date: datetime.date
-    product: ProductName | None
-    product_type: tPRODUCT_TYPE | None
+    symbol: str | None
+    asset_type: str | None
     
 
 class NewsDeltaMetadata(TypedDict, total=True):
-    env: tENVIRONMENT
-    data_source: tDATA_SOURCE
+    env: tEnvironment
+    data_source: tDataSource
     data_origin: str
     dates: list[datetime.date]
-    product: ProductName | None
-    product_type: tPRODUCT_TYPE | None
+    symbol: str | None
+    asset_type: str | None
 
 
 class NewsDataModel(TimeBasedDataModel):
@@ -66,13 +66,13 @@ class NewsDataModel(TimeBasedDataModel):
         if self.use_deltalake:
             return path
         else:
-            product_type = 'NONE' if self.product is None else self.product.type.value
-            product_name = 'NONE' if self.product is None else self.product.name
+            asset_type = 'NONE' if self.product is None else str(self.product.asset_type)
+            symbol = 'NONE' if self.product is None else self.product.symbol
             year, month, day = str(date).split('-')
             return (
                 path 
-                / f'product_type={product_type}'
-                / f'product={product_name}'   
+                / f'asset_type={asset_type}'
+                / f'symbol={symbol}'   
                 / f'year={year}' 
                 / f'month={month}' 
                 / f'day={day}'
@@ -97,6 +97,6 @@ class NewsDataModel(TimeBasedDataModel):
     def to_metadata(self) -> NewsMetadata:
         return {
             **super().to_metadata(),
-            'product': self.product.name if self.product else None,
-            'product_type': self.product.type.value if self.product else None,
+            'symbol': self.product.symbol if self.product else None,
+            'asset_type': str(self.product.asset_type) if self.product else None,
         }

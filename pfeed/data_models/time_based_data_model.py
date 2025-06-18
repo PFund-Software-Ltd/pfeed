@@ -5,7 +5,8 @@ if TYPE_CHECKING:
     from pathlib import Path
     import pyarrow.fs as pa_fs
     from pfeed.enums import DataLayer
-    from pfeed.typing import tENVIRONMENT, tDATA_SOURCE
+    from pfund.typing import tEnvironment
+    from pfeed.typing import tDataSource
     
 import datetime
 from abc import abstractmethod
@@ -17,8 +18,8 @@ from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
 
 class TimeBasedMetadata(TypedDict, total=True):
-    env: tENVIRONMENT
-    data_source: tDATA_SOURCE
+    env: tEnvironment
+    data_source: tDataSource
     data_origin: str
     start_date: datetime.date
     end_date: datetime.date
@@ -26,8 +27,8 @@ class TimeBasedMetadata(TypedDict, total=True):
 
 # metadata for delta table
 class TimeBasedDeltaMetadata(TypedDict, total=True):
-    env: tENVIRONMENT
-    data_source: tDATA_SOURCE
+    env: tEnvironment
+    data_source: tDataSource
     data_origin: str
     dates: list[datetime.date]
 

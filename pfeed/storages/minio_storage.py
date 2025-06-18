@@ -9,7 +9,7 @@ if TYPE_CHECKING:
         pass
     from minio.credentials.providers import Provider
     from typing import Generator
-    from pfeed.typing import tDATA_LAYER
+    from pfeed.typing import tDataLayer
     from pfeed.data_models.base_data_model import BaseDataModel
 
 import os
@@ -41,7 +41,7 @@ class MinioStorage(BaseStorage):
     
     def __init__(
         self,
-        data_layer: tDATA_LAYER='CLEANED',
+        data_layer: tDataLayer='CLEANED',
         data_domain: str='general_data',
         use_deltalake: bool=False, 
         storage_options: MinioStorageOptions | None=None,
@@ -74,7 +74,7 @@ class MinioStorage(BaseStorage):
     def from_data_model(
         cls,
         data_model: BaseDataModel,
-        data_layer: tDATA_LAYER,
+        data_layer: tDataLayer,
         data_domain: str,
         use_deltalake: bool=False,
         storage_options: MinioStorageOptions | None=None,

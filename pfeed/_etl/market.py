@@ -4,7 +4,7 @@ ETL for market data.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tPRODUCT_TYPE
+    from pfeed.typing import tProductType
 
 import pandas as pd
 
@@ -30,7 +30,7 @@ def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Filter out unnecessary columns from raw data."""
     is_tick_data = 'price' in df.columns
     pdt = df['product'][0]
-    ptype: tPRODUCT_TYPE = pdt.split('_')[2]
+    ptype: tProductType = pdt.split('_')[2]
     if is_tick_data:
         standard_cols = ['date', 'product', 'resolution', 'side', 'volume', 'price']
     else:

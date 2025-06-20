@@ -18,7 +18,7 @@ class Bybit:
     def __init__(
         self,
         streaming_env: Literal['PAPER', 'LIVE']='LIVE',
-        data_tool: tDataTool='polars', 
+        data_tool: tDataTool='polars',
         pipeline_mode: bool=False,
         use_ray: bool=True,
         use_prefect: bool=False,

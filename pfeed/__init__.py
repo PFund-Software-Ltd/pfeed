@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         FinancialModelingPrep,
         FinancialModelingPrep as FMP,
     )
+    from pfeed.sources.pfund import PFund
 
 from importlib.metadata import version
 from pfeed.config import configure, get_config
@@ -48,6 +49,9 @@ def __getattr__(name: str):
     elif name in ('FinancialModelingPrep', 'FMP'):
         from pfeed.sources.financial_modeling_prep import FinancialModelingPrep
         return FinancialModelingPrep
+    elif name == 'PFund':
+        from pfeed.sources.pfund import PFund
+        return PFund
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     
     
@@ -68,6 +72,7 @@ __all__ = (
     # data sources
     "YahooFinance", "YF",
     "Bybit",
+    "PFund",
     "FinancialModelingPrep", "FMP",
 )
 def __dir__():

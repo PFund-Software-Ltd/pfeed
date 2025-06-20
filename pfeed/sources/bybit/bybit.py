@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfeed.typing import tDataTool
     from pfeed.enums import DataCategory
@@ -16,15 +16,20 @@ __all__ = ['Bybit']
 
 class Bybit:
     def __init__(
-        self, 
+        self,
+        streaming_env: Literal['PAPER', 'LIVE']='LIVE',
         data_tool: tDataTool='polars', 
         pipeline_mode: bool=False,
         use_ray: bool=True,
         use_prefect: bool=False,
         use_deltalake: bool=False,
     ):
-        params = {k: v for k, v in locals().items() if k not in ['self']}
-        self.data_source = BybitSource()
+        '''
+        Args:
+            streaming_env: The environment to use for streaming data. if set to 'PAPER', the data will be fetched from the testnet.
+        '''
+        params = {k: v for k, v in locals().items() if k not in ['self', 'streaming_env']}
+        self.data_source = BybitSource(streaming_env=streaming_env)
         self.name = self.data_source.name
         self.market_feed = BybitMarketFeed(data_source=self.data_source, **params)
     

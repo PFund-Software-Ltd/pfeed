@@ -116,10 +116,31 @@ class BybitMarketFeed(CryptoMarketFeed):
             **product_specs
         )
         
-    # TODO
-    def stream(self) -> BybitMarketFeed:
-        raise NotImplementedError(f'{self.name} stream() is not implemented')
+    def stream(
+        self,
+        product: str | list[str] | list[list[str]] | None=None,
+        channels: str | list[str] | None=None,
+        **product_specs
+    ) -> BybitMarketFeed:
+
         return self
+    
+    # TODO
+    def group_streaming_products(self, product_groups: list[list[str]]):
+        """
+        Args:
+            product_groups: A list of product groups. Format determines how data transformation is parallelized.
+                All product data is still received by a single WebSocket manager using asyncio, 
+                but each group will have its data dispatched to a separate Ray process 
+                for parallel transformation (CPU-bound processing).
+                
+        Note:
+            - WebSocket I/O is centralized and handled by a single asyncio event loop.
+            - Ray is only used to parallelize CPU-bound data transformation after receipt.
+        """
+        if len(product_groups) >= 1:
+            assert self._use_ray, '"use_ray" must be True when streaming multiple products in parallel'
+        # TODO: check if number of cpus is enough for streaming
     
     # TODO
     def _stream_impl(

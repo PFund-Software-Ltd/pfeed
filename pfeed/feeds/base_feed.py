@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal, ClassVar
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -35,7 +35,6 @@ def clear_subflows(func):
     
 class BaseFeed(ABC):
     data_domain = 'general_data'
-    data_source: ClassVar[BaseSource]
     
     def __init__(
         self, 
@@ -56,10 +55,10 @@ class BaseFeed(ABC):
         self.name: DataSource = self.data_source.name
         self.logger = logging.getLogger(self.name.lower() + '_data')
 
-        self._pipeline_mode = pipeline_mode
-        self._use_ray = use_ray
-        self._use_prefect = use_prefect
-        self._use_deltalake = use_deltalake
+        self._pipeline_mode: bool = pipeline_mode
+        self._use_ray: bool = use_ray
+        self._use_prefect: bool = use_prefect
+        self._use_deltalake: bool = use_deltalake
         self._dataflows: list[DataFlow] = []
         self._subflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
@@ -140,12 +139,9 @@ class BaseFeed(ABC):
     def download(self, *args, **kwargs) -> GenericData | None | BaseFeed:
         pass
     
-    def stream(
-        self, 
-        *args, 
-        **kwargs,
-    ) -> BaseFeed:
-        raise NotImplementedError(f"{self.name} stream() is not implemented")
+    @abstractmethod
+    def stream(self, *args, **kwargs) -> BaseFeed:
+        pass
 
     @abstractmethod
     def retrieve(self, *args, **kwargs) -> GenericData | None:

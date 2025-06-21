@@ -9,7 +9,7 @@ from enum import StrEnum
 from fmp_api_client.plan import FMPPlan
 
 from pfeed.sources.financial_modeling_prep.source import FinancialModelingPrepSource
-from pfeed.feeds.financial_modeling_prep import (
+from pfeed.sources.financial_modeling_prep import (
     FMPNewsFeed,
     FMPEconomicsFeed,
     FMPAnalystFeed,

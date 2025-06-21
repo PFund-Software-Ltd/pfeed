@@ -7,3 +7,9 @@ class DataSource(StrEnum):
     BYBIT = 'BYBIT'
     BINANCE = 'BINANCE'
     # DATABENTO = 'DATABENTO'
+
+    @property
+    def data_client(self):
+        import pfeed as pe
+        from pfeed.utils.utils import to_camel_case
+        return getattr(pe, to_camel_case(self))

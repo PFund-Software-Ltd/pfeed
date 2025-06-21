@@ -33,8 +33,9 @@ class PFund:
         self.engine_feed = PFundEngineFeed(env=env, data_source=self.data_source, **params)
 
     @property
-    def engine(self) -> PFundEngineFeed:
+    def engine_data(self) -> PFundEngineFeed:
         return self.engine_feed
+    engine = engine_data
     
     @property
     def batch_api(self) -> BatchAPI:

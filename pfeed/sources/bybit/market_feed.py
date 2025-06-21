@@ -118,8 +118,9 @@ class BybitMarketFeed(CryptoMarketFeed):
         
     def stream(
         self,
-        product: str | list[str] | list[list[str]] | None=None,
-        channels: str | list[str] | None=None,
+        product: str,
+        channels: str | list[str],
+        env: Literal['PAPER', 'LIVE']='LIVE',
         **product_specs
     ) -> BybitMarketFeed:
 

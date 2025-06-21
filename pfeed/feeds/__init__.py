@@ -13,11 +13,8 @@ def get_market_feed(
     use_prefect: bool=False,
     use_deltalake: bool=False,
 ) -> MarketFeed:
-    import pfeed as pe
     from pfeed.enums import DataSource
-    from pfeed.utils.utils import to_camel_case
-    data_source: str = to_camel_case(DataSource[data_source.upper()])
-    DataClient = getattr(pe, data_source)
+    DataClient = DataSource[data_source.upper()].data_client
     data_client = DataClient(
         data_tool=data_tool, 
         pipeline_mode=pipeline_mode, 

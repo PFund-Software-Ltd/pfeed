@@ -17,25 +17,21 @@ __all__ = ['Bybit']
 class Bybit:
     def __init__(
         self,
-        streaming_env: Literal['PAPER', 'LIVE']='LIVE',
         data_tool: tDataTool='polars',
         pipeline_mode: bool=False,
         use_ray: bool=True,
         use_prefect: bool=False,
         use_deltalake: bool=False,
     ):
-        '''
-        Args:
-            streaming_env: The environment to use for streaming data. if set to 'PAPER', the data will be fetched from the testnet.
-        '''
         params = {k: v for k, v in locals().items() if k not in ['self', 'streaming_env']}
-        self.data_source = BybitSource(streaming_env=streaming_env)
+        self.data_source = BybitSource()
         self.name = self.data_source.name
         self.market_feed = BybitMarketFeed(data_source=self.data_source, **params)
     
     @property
-    def market(self) -> BybitMarketFeed:
+    def market_data(self) -> BybitMarketFeed:
         return self.market_feed
+    market = market_data
     
     @property
     def batch_api(self) -> BatchAPI:

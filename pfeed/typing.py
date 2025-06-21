@@ -36,6 +36,7 @@ GenericData = GenericFrame | bytes
 tDataTool = Literal['pandas', 'polars']
 tDataSource = Literal['YAHOO_FINANCE', 'DATABENTO', 'BYBIT', 'FINANCIAL_MODELING_PREP']
 tDataLayer = Literal['RAW', 'CLEANED', 'CURATED']
+tDataCategory = Literal['MARKET_DATA', 'NEWS_DATA']
 tStorage = Literal['CACHE', 'LOCAL', 'MINIO', 'DUCKDB']
 
 

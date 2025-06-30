@@ -1,8 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tDataSource, tDataTool
+    from pfund.typing import tEnvironment
+    from pfeed.typing import tDataSource, tDataTool, tDataCategory
+    from pfeed.feeds.base_feed import BaseFeed
     from pfeed.feeds.market_feed import MarketFeed
+
+from pfeed.enums import DataCategory
 
 
 def get_market_feed(
@@ -12,16 +16,39 @@ def get_market_feed(
     use_ray: bool=True,
     use_prefect: bool=False,
     use_deltalake: bool=False,
+    env: tEnvironment='BACKTEST',
 ) -> MarketFeed:
-    from pfeed.enums import DataSource
-    DataClient = DataSource[data_source.upper()].data_client
-    data_client = DataClient(
+    params = {k: v for k, v in locals().items()}
+    return get_feed(**params, data_category=DataCategory.MARKET_DATA)
+
+
+def get_feed(
+    data_source: tDataSource,
+    data_category: tDataCategory,
+    data_tool: tDataTool='polars', 
+    pipeline_mode: bool=False,
+    use_ray: bool=True,
+    use_prefect: bool=False,
+    use_deltalake: bool=False,
+    env: tEnvironment='BACKTEST',
+) -> BaseFeed:
+    import importlib
+    from pfeed.utils.utils import to_camel_case
+    data_category = DataCategory[data_category.upper()]
+    try:
+        Feed: type[BaseFeed] = getattr(
+            importlib.import_module(f'pfeed.sources.{data_source.lower()}.{data_category.feed_name}'),
+            f'{to_camel_case(data_source)}{to_camel_case(data_category.feed_name)}'
+        )
+    except Exception:
+        raise ValueError(f"{data_source} has no feed for {data_category}")
+    feed: BaseFeed = Feed(
+        env=env,
+        data_source=data_source,
         data_tool=data_tool, 
         pipeline_mode=pipeline_mode, 
         use_ray=use_ray, 
         use_prefect=use_prefect, 
         use_deltalake=use_deltalake,
     )
-    if not hasattr(data_client, 'market_feed'):
-        raise ValueError(f"Data client {data_client} has no market feed")
-    return data_client.market_feed
+    return feed

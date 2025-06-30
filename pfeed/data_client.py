@@ -7,10 +7,8 @@ if TYPE_CHECKING:
     from pfeed.sources.base_source import BaseSource
     from pfeed.feeds.base_feed import BaseFeed
 
-import importlib
-
 from pfund.enums import Environment
-from pfeed.utils.utils import to_snake_case, to_camel_case
+from pfeed.enums import DataSource, DataTool
 
 
 class DataClient:
@@ -29,31 +27,31 @@ class DataClient:
         Args:
             kwargs: kwargs specific to the data client, e.g. api_key for Databento
         '''
-        params = {k: v for k, v in locals().items() if k not in ['self', 'env', 'kwargs']}
-        params.update(kwargs)
-        self._env = Environment[env.upper()]
-        class_name = self.__class__.__name__
-        script_name = to_snake_case(class_name)
-        
-        # initialize data source
-        DataSourceClass = getattr(importlib.import_module(f'pfeed.sources.{script_name}.source'), f'{class_name}Source')
-        self.data_source: BaseSource = DataSourceClass(env=env)
+        from pfeed.utils.utils import to_snake_case
+        from pfeed.feeds import get_feed
 
+        params = {k: v for k, v in locals().items() if k not in ['self', 'kwargs']}
+        params.update(kwargs)
+        
+        self._env = Environment[env.upper()]
+        self._data_tool = DataTool[data_tool.lower()]
+        self._pipeline_mode: bool = pipeline_mode
+        self._use_ray: bool = use_ray
+        self._use_prefect: bool = use_prefect
+        self._use_deltalake: bool = use_deltalake
+
+        data_source: BaseSource = DataSource[to_snake_case(self.__class__.__name__).upper()].create_data_source(env)
+        
         # initialize data feeds
         for data_category in self.data_categories:
-            feed_name = data_category.feed_name
-            DataFeed = self.get_Feed(data_category)
-            feed = DataFeed(data_source=self.data_source, **params)
-            setattr(self, feed_name, feed)  # e.g. self.market_feed = MarketFeed(data_source=self.data_source, **params)
+            feed: BaseFeed = get_feed(
+                data_source=data_source,
+                data_category=data_category,
+                **params,
+            )
+            # dynamically set attributes e.g. self.market_feed
+            setattr(self, data_category.feed_name, feed)  
     
-    @classmethod
-    def get_Feed(cls, data_category: DataCategory | tDataCategory) -> type[BaseFeed]:
-        class_name = cls.__name__
-        script_name = to_snake_case(class_name)
-        feed_name = data_category.feed_name
-        Feed = getattr(importlib.import_module(f'pfeed.sources.{script_name}.{feed_name}'), f'{class_name}{to_camel_case(feed_name)}')
-        return Feed
-        
     def get_feed(self, data_category: DataCategory | tDataCategory) -> BaseFeed | None:
         return getattr(self, DataCategory[data_category.upper()].feed_name, None)
 

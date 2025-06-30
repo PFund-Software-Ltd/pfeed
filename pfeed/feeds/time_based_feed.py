@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 import datetime
 from pprint import pformat
 
+from pfund.enums import Environment
 from pfeed.utils.dataframe import is_empty_dataframe
 from pfeed.enums import ExtractType, DataLayer, DataStorage
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
@@ -280,6 +281,7 @@ class TimeBasedFeed(BaseFeed):
                     from_storage=from_storage,
                     storage_options=storage_options,
                     include_metadata=True,
+                    env=Environment.BACKTEST,
                     **kwargs
                 )
 

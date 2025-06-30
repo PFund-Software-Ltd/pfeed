@@ -4,9 +4,9 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment
     from pfeed.typing import tDataTool, tDataSource, tDataCategory
     from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.data_client import DataClient
     from pfeed.flows.dataflow import DataFlow
 
+import pfeed as pe
 from pfeed.enums import DataSource, DataCategory
 
 
@@ -14,7 +14,7 @@ class DataEngine:
     def __init__(
         self,
         env: tEnvironment,
-        data_tool: tDataTool='polars', 
+        data_tool: tDataTool='polars',
         use_ray: bool=True,
         use_prefect: bool=False,
         use_deltalake: bool=False,
@@ -34,9 +34,7 @@ class DataEngine:
             kwargs: kwargs for the data client to override the default params in the engine
         '''
         assert 'pipeline_mode' not in kwargs, 'pipeline_mode cannot be overridden'
-        DataClientClass: type[DataClient] = DataSource[data_source.upper()].data_client
-        Feed: type[BaseFeed] = DataClientClass.get_Feed(data_category)
-        feed: BaseFeed = Feed(**self._params, **kwargs)
+        feed: BaseFeed = pe.get_feed(data_source=data_source, data_category=data_category, **self._params, **kwargs)
         self._feeds.append(feed)
         return feed
     

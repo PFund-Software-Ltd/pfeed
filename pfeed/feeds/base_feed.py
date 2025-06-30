@@ -4,10 +4,9 @@ if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
     from pfund.products.product_base import BaseProduct
+    from pfund.typing import tEnvironment
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData
-    from pfeed.enums import DataSource
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tDataSource
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
@@ -20,7 +19,9 @@ import logging
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
-from pfeed.enums import DataTool, DataStorage, LocalDataStorage, ExtractType
+from pfund.enums import Environment
+from pfeed.enums import DataSource, DataTool, DataStorage, LocalDataStorage, ExtractType
+from pfeed.sources.base_source import BaseSource
 
 
 __all__ = ["BaseFeed"]
@@ -38,19 +39,25 @@ class BaseFeed(ABC):
     
     def __init__(
         self, 
-        data_source: BaseSource,
+        data_source: BaseSource | tDataSource,
         data_tool: tDataTool='polars', 
         pipeline_mode: bool=False,
         use_ray: bool=True,
         use_prefect: bool=False,
         use_deltalake: bool=False,
+        env: tEnvironment='BACKTEST',
     ):
         '''
         Args:
             storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
+        
         self._setup_logging()
-        self.data_source: BaseSource = data_source
+        self._env = Environment[env.upper()]
+        if not isinstance(data_source, BaseSource):
+            self.data_source: BaseSource = DataSource[data_source.upper()].create_data_source(env)
+        else:
+            self.data_source: BaseSource = data_source
         self._data_tool = DataTool[data_tool.lower()]
         self.name: DataSource = self.data_source.name
         self.logger = logging.getLogger(self.name.lower() + '_data')

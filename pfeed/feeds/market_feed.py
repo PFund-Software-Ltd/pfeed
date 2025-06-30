@@ -12,6 +12,7 @@ import datetime
 from functools import partial
 
 from pfund.datas.resolution import Resolution
+from pfund.enums import Environment
 from pfeed.enums import DataCategory, DataLayer, MarketDataType
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 
@@ -64,7 +65,7 @@ class MarketFeed(TimeBasedFeed):
         start_date: str | datetime.date,
         end_date: str | datetime.date | None = None,
         data_origin: str = '',
-        env: tEnvironment = 'BACKTEST',
+        env: tEnvironment | None = None,
         **product_specs
     ) -> MarketDataModel:
         from pfeed.data_models.market_data_model import MarketDataModel
@@ -76,7 +77,7 @@ class MarketFeed(TimeBasedFeed):
         # if isinstance(end_date, str) and end_date:
         #     end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return MarketDataModel(
-            env=env,
+            env=env or self._env,
             data_source=self.data_source,
             data_origin=data_origin,
             product=product,
@@ -151,10 +152,11 @@ class MarketFeed(TimeBasedFeed):
             self.logger.info(f'change data_layer from {data_layer} to "RAW" because no default and no custom transformations')
             data_layer = DataLayer.RAW
         data_domain, data_layer = self.data_domain.value, data_layer.value
+        env = Environment.BACKTEST
         self.logger.info(f'Downloading {self.name} historical {product} {data_resolution} data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
-            partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin),
-            partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=data_resolution, data_origin=data_origin),
+            partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin, env=env),
+            partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=data_resolution, data_origin=data_origin, env=env),
             start_date=start_date, 
             end_date=end_date,
             data_layer=data_layer,
@@ -215,6 +217,7 @@ class MarketFeed(TimeBasedFeed):
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
+        env: tEnvironment | None = None,
         **product_specs
     ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | MarketFeed:
         '''Retrieve data from storage.
@@ -250,6 +253,8 @@ class MarketFeed(TimeBasedFeed):
                     option_type='CALL',
                 )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
+            env: Environment to retrieve data from.
+                If not specified, use the environment of the feed.
         '''
         product: BaseProduct = self.create_product(product, **product_specs)
         resolution: Resolution = self._create_resolution(resolution)
@@ -257,11 +262,13 @@ class MarketFeed(TimeBasedFeed):
         unit_resolution: Resolution = self._create_unit_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_domain = data_domain or self.data_domain.value
-        self.logger.info(f'Retrieving {product} {resolution} data {from_storage=}, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
+        if env:
+            env = Environment[env.upper()]
+        self.logger.info(f'Retrieving {product} {resolution} data {from_storage=} (env={env}), from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_retrieve(
             # NOTE: dataflow's data model will always have the input resolution
-            partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin),
-            partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=unit_resolution, data_origin=data_origin),
+            partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin, env=env),
+            partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=unit_resolution, data_origin=data_origin, env=env),
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,

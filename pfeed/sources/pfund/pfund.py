@@ -29,9 +29,12 @@ class PFund:
         params = {k: v for k, v in locals().items() if k not in ['self', 'env']}
         self.env = Environment[env.upper()]
         self.data_source = PFundSource(env=env)
-        self.name = self.data_source.name
         self.engine_feed = PFundEngineFeed(env=env, data_source=self.data_source, **params)
 
+    @property
+    def name(self) -> str:
+        return self.data_source.name
+    
     @property
     def engine_data(self) -> PFundEngineFeed:
         return self.engine_feed

@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 from pfund.enums import CryptoAssetType, AssetTypeModifier
 
 
+# TODO: how to add bybit's rest api here to get public data?
 # TODO: add orderbook data support, one snapshot has 500 levels...can pandas handle this?
 # url: e.g. https://quote-saver.bycsi.com/orderbook/linear/BTCUSDT/2025-01-01_BTCUSDT_ob500.data.zip
 # choices: https://api2.bybit.com/quote/public/support/download/list-options?bizType=contract&productId=orderbook

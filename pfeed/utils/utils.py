@@ -3,8 +3,21 @@ import re
 import datetime
 
 
-def to_camel_case(s: str) -> str:
-    return ''.join(word.capitalize() for word in s.lower().split('_'))
+def to_camel_case(snake_case_str: str) -> str:
+    return ''.join(word.capitalize() for word in snake_case_str.lower().split('_'))
+
+
+def to_snake_case(s: str) -> str:
+    """
+    Convert a CamelCase or PascalCase string to snake_case.
+    Example:
+        >>> to_snake_case("YahooFinance")
+        'yahoo_finance'
+    """
+    # Insert underscore before each uppercase letter (that’s not at the start),
+    # then lowercase the whole thing.
+    snake = re.sub(r'(?<!^)(?=[A-Z])', '_', s).lower()
+    return snake
 
 
 def validate_product(product: str):

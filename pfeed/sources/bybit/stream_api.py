@@ -1,24 +1,43 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
+    from pfund.products.product_bybit import BybitProduct
+    from pfund.exchanges.bybit.exchange import tProductCategory
+    from pfund.datas.resolution import Resolution
+    from pfund.typing import FullDataChannel
     from pfund.enums import Environment
     from pfund.adapter import Adapter
     from pfund.exchanges.bybit.ws_api import WebsocketApi
 
-import asyncio
+
+import logging
 
 
 class StreamAPI:
-    def __init__(self, env: Environment):
-        from pfund.exchanges import Bybit
-        exchange = Bybit(env=env)
-        self._adapter: Adapter = exchange.adapter
-        self._ws_api: WebsocketApi = exchange._ws_api
-        # TODO: Backpressure if Ray processes fall behind: Use bounded asyncio.Queue(maxsize=N) and await queue.put() to naturally throttle?
-        # TODO: should assert self._ws_api._accounts is empty before start
+    def __init__(self, ws_api: WebsocketApi):
+        self._ws_api: WebsocketApi = ws_api
+        # set the logger to be "bybit_stream", override the default logger 'bybit' in pfund
+        self._ws_api.set_logger(logging.getLogger(f'{self._ws_api.exch.lower()}_stream'))
     
-    def _get_url(self, ):
-        pass
+    # TODO: assert no account added to ws_api before connect
+    async def connect(self):
+        await self._ws_api.connect()
     
-    def connect(self):
-        pass
+    async def disconnect(self):
+        await self._ws_api.disconnect()
+
+    def _add_data_channel(self, product: BybitProduct, resolution: Resolution):
+        channel: FullDataChannel = self._ws_api._create_public_channel(product, resolution)
+        self.add_channel(channel, channel_type='public', category=product.category)
+    
+    def add_channel(
+        self, 
+        channel: FullDataChannel, 
+        *,
+        channel_type: Literal['public', 'private'], 
+        category: tProductCategory | None = None,
+    ):
+        self._ws_api.add_channel(channel, channel_type=channel_type, category=category)
+    
+    def set_callback(self, callback: Callable[[dict], Awaitable[None] | None]):
+        self._ws_api.set_callback(callback)

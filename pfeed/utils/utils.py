@@ -20,20 +20,6 @@ def to_snake_case(s: str) -> str:
     return snake
 
 
-def validate_product(product: str):
-    # use regex to validate product string format, it must be like "XXX_YYY_ZZZ"
-    # where the maximum length of each part is 10
-    import re
-    max_len = 10
-    pattern = r'^[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}_[A-Za-z]{1,' + str(max_len) + '}$'
-    if not re.match(pattern, product):
-        raise ValueError(
-            f'Invalid product format: {product}. '
-            'Product must be in format "XXX_YYY_ZZZ" (e.g. "TSLA_USD_STK", "BTC_USDT_SPOT", "ETH_USDT_PERP") where each part contains only letters '
-            f'and maximum {max_len} characters long.'
-        )
-
-
 def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):
     """
     Determines the nearest integer timestamp unit and scaling factor for a given timestamp value.

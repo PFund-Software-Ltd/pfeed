@@ -37,6 +37,7 @@ tDataTool = Literal['pandas', 'polars']
 tDataSource = Literal['YAHOO_FINANCE', 'DATABENTO', 'BYBIT', 'FINANCIAL_MODELING_PREP']
 tDataLayer = Literal['RAW', 'CLEANED', 'CURATED']
 tDataCategory = Literal['MARKET_DATA', 'NEWS_DATA']
+tDataType = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
 tStorage = Literal['CACHE', 'LOCAL', 'MINIO', 'DUCKDB']
 
 

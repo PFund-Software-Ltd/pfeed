@@ -40,12 +40,12 @@ class DataClient:
         self._use_prefect: bool = use_prefect
         self._use_deltalake: bool = use_deltalake
 
-        data_source: BaseSource = DataSource[to_snake_case(self.__class__.__name__).upper()].create_data_source(env)
+        self.data_source: BaseSource = DataSource[to_snake_case(self.__class__.__name__).upper()].create_data_source(env)
         
         # initialize data feeds
         for data_category in self.data_categories:
             feed: BaseFeed = get_feed(
-                data_source=data_source,
+                data_source=self.data_source,
                 data_category=data_category,
                 **params,
             )

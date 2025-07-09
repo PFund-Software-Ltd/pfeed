@@ -113,7 +113,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         rollback_period: str | Literal["ytd", "max"]='max',
         start_date: str='',
         end_date: str='',
-        data_layer: Literal['RAW', 'CLEANED']='CLEANED',
+        data_layer: tDataLayer='CLEANED',
         data_origin: str='',
         to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,

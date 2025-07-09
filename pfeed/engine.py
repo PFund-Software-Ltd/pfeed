@@ -10,6 +10,7 @@ import pfeed as pe
 from pfeed.enums import DataSource, DataCategory
 
 
+# NOTE: only data engine has the ability to run background tasks in pfeed
 class DataEngine:
     def __init__(
         self,
@@ -18,15 +19,27 @@ class DataEngine:
         use_ray: bool=True,
         use_prefect: bool=False,
         use_deltalake: bool=False,
+        backfill: bool=True,
     ):
-        self._params = {k: v for k, v in locals().items() if k not in ['self']}
+        '''
+        Args:
+            backfill: Whether to backfill the data during streaming.
+                only matters to streaming dataflows (i.e. feed.stream())
+        '''
+    
+        self._params = {k: v for k, v in locals().items() if k not in ['self', 'backfill']}
         # NOTE: pipeline_mode must be turned on for the engine to work so that users can add tasks to the feed
         self._params['pipeline_mode'] = True
         self._feeds: list[BaseFeed] = []
+        self._backfill: bool = backfill
     
     @property
     def feeds(self) -> dict[DataCategory, list[BaseFeed]]:
         return self._feeds
+    
+    # TODO: async background task
+    def backfill(self):
+        pass
     
     def add_feed(self, data_source: tDataSource, data_category: tDataCategory, **kwargs) -> BaseFeed:
         '''

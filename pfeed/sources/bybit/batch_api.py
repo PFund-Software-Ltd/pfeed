@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.exchanges import Bybit
     from pfund.products.product_crypto import CryptoProduct
+    from pfund.exchanges.bybit.rest_api import RestApi
 
 
 from pfund.enums import CryptoAssetType, AssetTypeModifier
@@ -28,6 +28,9 @@ class BatchAPI:
         AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUTURE: r'USD[A-Z]\d{2}\/$',  # inverse futures e.g. BTCUSDH24/
         CryptoAssetType.CRYPTO: '.*',  # match everything since everything from https://public.bybit.com/spot is spot
     }
+
+    def __init__(self, rest_api: RestApi):
+        self._rest_api = rest_api
 
     @staticmethod
     def _get(url, frequency=1, num_retry=3):

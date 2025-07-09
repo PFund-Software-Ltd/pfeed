@@ -1,10 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal, Awaitable, AsyncGenerator
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
-    from pfund.products.product_base import BaseProduct
     from pfund.typing import tEnvironment
+    from pfund.products.product_base import BaseProduct
+    from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tDataSource
     from pfeed.storages.base_storage import BaseStorage
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from pfeed.flows.result import FlowResult
     
 import os
+import asyncio
 from abc import ABC, abstractmethod
 import logging
 from logging.handlers import QueueHandler, QueueListener
@@ -21,7 +23,6 @@ from pprint import pformat
 
 from pfund.enums import Environment
 from pfeed.enums import DataSource, DataTool, DataStorage, LocalDataStorage, ExtractType
-from pfeed.sources.base_source import BaseSource
 
 
 __all__ = ["BaseFeed"]
@@ -45,15 +46,19 @@ class BaseFeed(ABC):
         use_ray: bool=True,
         use_prefect: bool=False,
         use_deltalake: bool=False,
-        env: tEnvironment='BACKTEST',
+        env: tEnvironment='LIVE',
     ):
         '''
         Args:
+            env: The trading environment, such as 'LIVE' or 'BACKTEST'.
+                Certain functions like `download()` and `get_historical_data()` will automatically use 'BACKTEST' as the environment.
+                Other functions, such as `stream()` and `retrieve()`, will utilize the environment specified here.
             storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
+        from pfeed.sources.base_source import BaseSource
         
-        self._setup_logging()
         self._env = Environment[env.upper()]
+        self._setup_logging()
         if not isinstance(data_source, BaseSource):
             self.data_source: BaseSource = DataSource[data_source.upper()].create_data_source(env)
         else:
@@ -75,15 +80,38 @@ class BaseFeed(ABC):
     
     def _setup_logging(self):
         from pfund._logging import setup_logging_config
+        from pfund._logging.config import LoggingDictConfigurator
         from pfeed.config import get_config
         is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
         if not is_loggers_set_up:
             config = get_config()
-            setup_logging_config(config.log_path, config.logging_config_file_path, user_logging_config=config.logging_config)
+            log_path = f'{config.log_path}/{self._env}'
+            user_logging_config = config.logging_config
+            logging_config_file_path = config.logging_config_file_path
+            logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
+            # ≈ logging.config.dictConfig(logging_config) with a custom configurator
+            logging_configurator = LoggingDictConfigurator(logging_config)
+            logging_configurator.configure()
     
+    def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
+        if not hasattr(self.data_source, 'create_product'):
+            raise NotImplementedError(f'{self.data_source.name} does not support creating products')
+        return self.data_source.create_product(basis, symbol=symbol, **specs)
+
     @property
-    def api(self):
-        return self.data_source.api if hasattr(self.data_source, 'api') else None
+    def streaming_dataflows(self) -> list[DataFlow]:
+        return [dataflow for dataflow in self._dataflows if dataflow.is_streaming()]
+    
+    def __aiter__(self) -> AsyncGenerator:
+        if not self.streaming_dataflows:
+            raise RuntimeError("No streaming dataflow to iterate over")
+        streaming_dataflow = self.streaming_dataflows[0]
+        queue: asyncio.Queue = streaming_dataflow.get_streaming_queue()
+        async def _iter():
+            while True:
+                msg = await queue.get()
+                yield msg
+        return _iter()
     
     @abstractmethod
     def _normalize_raw_data(self, data: Any) -> Any:
@@ -94,12 +122,9 @@ class BaseFeed(ABC):
         pass
 
     @abstractmethod
-    def _create_dataflows(self, *args, **kwargs) -> list[DataFlow]:
+    def _create_batch_dataflows(self, *args, **kwargs) -> list[DataFlow]:
         pass
     
-    def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
-        return self.data_source.create_product(basis, symbol=symbol, **specs)
-
     @overload
     def configure_storage(
         self, 
@@ -186,7 +211,7 @@ class BaseFeed(ABC):
         if storage_options:
             assert from_storage is not None, 'from_storage is required when storage_options is provided'
         # NOTE: skip searching for DUCKDB, should require users to explicitly specify the storage
-        search_storages = [_storage for _storage in LocalDataStorage.__members__ if _storage.upper() != 'DUCKDB'] if from_storage is None else [from_storage]
+        search_storages = [_storage for _storage in LocalDataStorage.__members__ if _storage.upper() != DataStorage.DUCKDB] if from_storage is None else [from_storage]
         
         data_in_storages: dict[tStorage, pl.LazyFrame | None] = {}
         metadata_in_storages: dict[tStorage, dict[str, Any]] = {}
@@ -217,17 +242,47 @@ class BaseFeed(ABC):
     def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> GenericData | None:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
-    def create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
+    @abstractmethod
+    def _eager_run_batch(self, include_metadata: bool=False, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
+        pass
+    
+    @abstractmethod
+    def _eager_run_stream(self, ray_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
+        pass
+    
+    def create_dataflow(
+        self, 
+        data_model: BaseDataModel, 
+        faucet: Faucet,
+        streaming_callback: Callable[[dict], Awaitable[None] | None] | None=None,
+    ) -> DataFlow:
+        '''
+        Args:
+            streaming_callback: user's custom streaming callback to be called when data is available
+        '''
         from pfeed.flows.dataflow import DataFlow
-        dataflow = DataFlow(data_model, faucet)
+        dataflow = DataFlow(data_model=data_model, faucet=faucet, streaming_callback=streaming_callback)
+        if self._dataflows:
+            existing_dataflow = self._dataflows[0]
+            assert existing_dataflow.is_streaming() == dataflow.is_streaming(), \
+                'Cannot mix streaming and non-streaming dataflows in the same feed'
         self._subflows.append(dataflow)
         self._dataflows.append(dataflow)
         return dataflow
     
-    @staticmethod
-    def _create_faucet(data_model: BaseDataModel, extract_func: Callable, extract_type: ExtractType) -> Faucet:
+    def _create_faucet(
+        self, 
+        extract_func: Callable, 
+        extract_type: ExtractType, 
+        data_model: BaseDataModel | None=None,
+    ) -> Faucet:
         from pfeed.flows.faucet import Faucet
-        return Faucet(data_model, extract_func, extract_type)
+        # reuse existing faucet for streaming dataflows since they share the same extract_func
+        if self.streaming_dataflows:
+            faucet: Faucet = self.streaming_dataflows[0].faucet
+            return faucet
+        else:
+            return Faucet(self.data_source, extract_func, extract_type, data_model=data_model)
     
     @staticmethod
     def _create_sink(data_model: BaseDataModel, create_storage_func: Callable) -> Sink:
@@ -246,7 +301,13 @@ class BaseFeed(ABC):
     
     def transform(self, *funcs) -> BaseFeed:
         for dataflow in self._subflows:
-            dataflow.add_transformations(*funcs)
+            # NOTE: if using ray, only add transformations to the first dataflow since transformations in ray workers are not per dataflow
+            if self._use_ray and dataflow.is_streaming():
+                is_first_dataflow = (dataflow is self._dataflows[0])
+                if is_first_dataflow:
+                    dataflow.add_transformations(*funcs)
+            else:
+                dataflow.add_transformations(*funcs)
         return self
     
     def load(
@@ -263,7 +324,7 @@ class BaseFeed(ABC):
                 useful for grouping data
         '''
         if self._use_ray:
-            assert to_storage.lower() != 'duckdb', 'DuckDB is not thread-safe, cannot be used with Ray'
+            assert to_storage.upper() != DataStorage.DUCKDB, 'DuckDB is not thread-safe, cannot be used with Ray'
 
         storage_options = storage_options or self._storage_options.get(to_storage, {})
         Storage = DataStorage[to_storage.upper()].storage_class
@@ -284,30 +345,37 @@ class BaseFeed(ABC):
             dataflow.set_sink(sink)
         return self
     
-    def run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
-        '''Run dataflows'''
+    def _clear_dataflows_before_run(self):
+        self._completed_dataflows.clear()
+        self._failed_dataflows.clear()
+    
+    def _clear_dataflows_after_run(self):
+        self._subflows.clear()
+        self._dataflows.clear()
+    
+    def _run_batch_dataflows(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
         from tqdm import tqdm
         from pfeed.utils.utils import generate_color
-
+        
         ray_kwargs = ray_kwargs or {}
         prefect_kwargs = prefect_kwargs or {}
+        if self._use_ray:
+            if 'num_cpus' not in ray_kwargs:
+                ray_kwargs['num_cpus'] = os.cpu_count()
         
-        completed_dataflows: list[DataFlow] = []
-        failed_dataflows: list[DataFlow] = []
         color = generate_color(self.name.value)
-    
-
+        
         def _run_dataflow(dataflow: DataFlow) -> FlowResult:
             if self._use_prefect:
                 flow_type = 'prefect'
             else:
                 flow_type = 'native'
-            result: FlowResult = dataflow.run(flow_type=flow_type)
+            result: FlowResult = dataflow.run_batch(flow_type=flow_type, prefect_kwargs=prefect_kwargs)
             # NOTE: EMPTY dataframe is considered as success
             success = result.data is not None
             return success
-
-
+        
+        self._clear_dataflows_before_run()
         if self._use_ray:
             import atexit
             import ray
@@ -335,8 +403,6 @@ class BaseFeed(ABC):
                 return success, dataflow
             
             try:
-                if 'num_cpus' not in ray_kwargs:
-                    ray_kwargs['num_cpus'] = os.cpu_count()
                 self._init_ray(**ray_kwargs)
                 log_queue = Queue()
                 log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
@@ -348,9 +414,9 @@ class BaseFeed(ABC):
                     returns = ray.get(futures)
                     for success, dataflow in returns:
                         if not success:
-                            failed_dataflows.append(dataflow)
+                            self._failed_dataflows.append(dataflow)
                         else:
-                            completed_dataflows.append(dataflow)
+                            self._completed_dataflows.append(dataflow)
             except KeyboardInterrupt:
                 print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
             except Exception:
@@ -364,9 +430,9 @@ class BaseFeed(ABC):
                 for dataflow in tqdm(self._dataflows, desc=f'Running {self.name} dataflows', colour=color):
                     success = _run_dataflow(dataflow)
                     if not success:
-                        failed_dataflows.append(dataflow)
+                        self._failed_dataflows.append(dataflow)
                     else:
-                        completed_dataflows.append(dataflow)
+                        self._completed_dataflows.append(dataflow)
             except RuntimeError as err:
                 if self._use_prefect:
                     self.logger.exception(f'Error in running prefect {dataflow}:')
@@ -375,21 +441,87 @@ class BaseFeed(ABC):
             except Exception:
                 self.logger.exception(f'Error in running {self.name} dataflows:')
 
-        if failed_dataflows:
+        if self._failed_dataflows:
             # retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.extract_type == 'retrieve']
-            non_retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.extract_type != ExtractType.retrieve]
+            non_retrieve_dataflows = [dataflow for dataflow in self._failed_dataflows if dataflow.extract_type != ExtractType.retrieve]
             if non_retrieve_dataflows:
                 self.logger.warning(
                     f'{self.name} failed dataflows:\n'
                     f'{pformat([str(dataflow) for dataflow in non_retrieve_dataflows])}\n'
                     f'check {self.logger.name}.log for details'
                 )
-
-        self._completed_dataflows = completed_dataflows
-        self._failed_dataflows = failed_dataflows
-        self._subflows.clear()
-        self._dataflows.clear()
+        self._clear_dataflows_after_run()
         return self._completed_dataflows, self._failed_dataflows
+    
+    async def _run_stream_dataflows(self, ray_kwargs: dict | None=None):
+        ray_kwargs = ray_kwargs or {}
+        if self._use_ray:
+            if 'num_cpus' not in ray_kwargs:
+                ray_kwargs['num_cpus'] = os.cpu_count()
+        
+        self._clear_dataflows_before_run()
+        if self._use_ray:
+            import atexit
+            import ray
+            from ray.util.queue import Queue
+            atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
+
+            @ray.remote
+            def ray_task(transformations: list[Callable]):
+                for func in transformations:
+                    func()
+                # TODO: zeromq while loop for receiving msgs
+                try:
+                    if not self.logger.handlers:
+                        self.logger.addHandler(QueueHandler(log_queue))
+                        self.logger.setLevel(logging.DEBUG)
+                        # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
+                        self.logger.propagate = False
+                except Exception:
+                    self.logger.exception(f'Error in running {dataflow}:')
+            
+            try:
+                self._init_ray(**ray_kwargs)
+                log_queue = Queue()
+                log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
+                log_listener.start()
+                num_workers = ray_kwargs['num_cpus']
+                first_dataflow_transformations = self._dataflows[0]._transformations
+                futures = [ray_task.remote(first_dataflow_transformations) for _ in range(num_workers)]
+                # returns = ray.get(futures)
+                
+                for dataflow in self._dataflows:
+                    is_first_dataflow = (dataflow is self._dataflows[0])
+                    if not is_first_dataflow:
+                        dataflow.add_transformations(*self._dataflows[0]._transformations)
+                    dataflow.run_stream(flow_type='native')
+                # for success, dataflow in returns:
+                #     if not success:
+                #         self._failed_dataflows.append(dataflow)
+                #     else:
+                #         self._completed_dataflows.append(dataflow)
+            except KeyboardInterrupt:
+                print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
+            except Exception:
+                self.logger.exception(f'Error in running {self.name} dataflows:')
+            finally:
+                if log_listener:
+                    log_listener.stop()
+                self._shutdown_ray()
+        else:
+            try:
+                async def _run_dataflow(dataflow: DataFlow):
+                    await dataflow.run_stream(flow_type='native')
+                await asyncio.gather(*[_run_dataflow(dataflow) for dataflow in self._dataflows])
+            except asyncio.CancelledError:
+                self.logger.warning(f'{self.name} dataflows were cancelled')
+        self._clear_dataflows_after_run()
+    
+    def run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None):
+        return self._eager_run_batch(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
+    
+    async def arun(self, ray_kwargs: dict | None=None):
+        await self._eager_run_stream(ray_kwargs=ray_kwargs)
     
     @property
     def dataflows(self) -> list[DataFlow]:

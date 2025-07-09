@@ -56,6 +56,7 @@ class MarketDataModel(TimeBasedDataModel):
     def __str__(self):
         return ':'.join([super().__str__(), repr(self.product), str(self.resolution)])
     
+    # FIXME: this is not needed anymore?
     @model_validator(mode='before')
     @classmethod
     def check_and_convert(cls, data: dict) -> dict:
@@ -68,22 +69,8 @@ class MarketDataModel(TimeBasedDataModel):
         data['resolution'] = resolution
         return data
     
-    @model_validator(mode='after')
-    def validate(self):
-        self._validate_resolution()
-        return self
-    
-    def _validate_resolution(self):
-        '''Validates the resolution of the data model.
-        Resolution must be >= '1d' and <= the highest resolution supported by the data source.
-        '''
-        from pfeed.feeds.market_feed import MarketFeed
-        assert MarketFeed.SUPPORTED_LOWEST_RESOLUTION <= self.resolution <= self.data_source.highest_resolution, f'{self.resolution=} is not supported for {self.data_source.name}'
-        return self.resolution
-
     def update_resolution(self, resolution: Resolution) -> None:
         self.resolution = resolution
-        self._validate_resolution()
 
     def create_filename(self, date: datetime.date) -> str:
         filename = '_'.join([self.product.key, str(date)])

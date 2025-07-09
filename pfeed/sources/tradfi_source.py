@@ -7,6 +7,7 @@ from pfeed.sources.base_source import BaseSource
 
 
 class TradFiSource(BaseSource):
+    # FIXME: update
     def create_product(self, product_basis: str, symbol='', **product_specs) -> BaseProduct:
         from pfund.products.product_base import BaseProduct
         from pfund.products.product_stock import StockProduct

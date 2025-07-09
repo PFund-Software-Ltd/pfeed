@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload, Literal
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
     from pfeed.typing import tDataSource, tDataTool, tDataCategory
@@ -22,6 +22,20 @@ def get_market_feed(
     return get_feed(**params, data_category=DataCategory.MARKET_DATA)
 
 
+# EXTEND: add more @overload for different data sources and categories
+@overload
+def get_feed(
+    data_source: tDataSource,
+    data_category: Literal['MARKET_DATA'],
+    data_tool: tDataTool = 'polars',
+    pipeline_mode: bool = False,
+    use_ray: bool = True,
+    use_prefect: bool = False,
+    use_deltalake: bool = False,
+    env: tEnvironment = 'LIVE',
+) -> MarketFeed: ...
+
+
 def get_feed(
     data_source: tDataSource,
     data_category: tDataCategory,
@@ -30,7 +44,7 @@ def get_feed(
     use_ray: bool=True,
     use_prefect: bool=False,
     use_deltalake: bool=False,
-    env: tEnvironment='BACKTEST',
+    env: tEnvironment='LIVE',
 ) -> BaseFeed:
     import importlib
     from pfeed.utils.utils import to_camel_case

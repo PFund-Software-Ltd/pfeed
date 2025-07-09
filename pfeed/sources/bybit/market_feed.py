@@ -1,11 +1,15 @@
 """High-level API for getting historical/streaming data from Bybit."""
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
     import datetime
     import pandas as pd
-    from pfeed.typing import GenericFrame
+    from pfund.exchanges.bybit.exchange import tProductCategory
+    from pfund.products.product_bybit import BybitProduct
     from pfund.datas.resolution import Resolution
+    from pfund.typing import FullDataChannel
+    from pfeed.typing import GenericFrame
+    from pfeed.sources.bybit.source import BybitSource
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing import tStorage, tDataLayer
 
@@ -16,6 +20,8 @@ __all__ = ['BybitMarketFeed']
 
 
 class BybitMarketFeed(CryptoMarketFeed):
+    data_source: BybitSource
+    
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.
@@ -36,7 +42,7 @@ class BybitMarketFeed(CryptoMarketFeed):
         df = df.rename(columns=RENAMING_COLS)
         df['side'] = df['side'].map(MAPPING_COLS)
         return df
-
+    
     def download(
         self,
         product: str, 
@@ -44,7 +50,7 @@ class BybitMarketFeed(CryptoMarketFeed):
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: Literal['RAW', 'CLEANED']='CLEANED',
+        data_layer: tDataLayer='CLEANED',
         to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
@@ -78,7 +84,7 @@ class BybitMarketFeed(CryptoMarketFeed):
 
     def _download_impl(self, data_model: MarketDataModel) -> bytes | None:
         self.logger.debug(f'downloading {data_model}')
-        data = self.api.get_data(data_model.product, data_model.date)
+        data = self.data_source.batch_api.get_data(data_model.product, data_model.date)
         self.logger.debug(f'downloaded {data_model}')
         return data
 
@@ -115,38 +121,32 @@ class BybitMarketFeed(CryptoMarketFeed):
             retrieve_per_date=retrieve_per_date,
             **product_specs
         )
+    
+    async def _stream_impl(self, callback: Callable[[dict], Awaitable[None] | None]):
+        self.data_source.stream_api.set_callback(callback)
+        await self.data_source.stream_api.connect()
         
-    def stream(
-        self,
-        product: str,
-        channels: str | list[str],
-        env: Literal['PAPER', 'LIVE']='LIVE',
-        **product_specs
-    ) -> BybitMarketFeed:
-
-        return self
-    
-    # TODO
-    def group_streaming_products(self, product_groups: list[list[str]]):
-        """
-        Args:
-            product_groups: A list of product groups. Format determines how data transformation is parallelized.
-                All product data is still received by a single WebSocket manager using asyncio, 
-                but each group will have its data dispatched to a separate Ray process 
-                for parallel transformation (CPU-bound processing).
-                
-        Note:
-            - WebSocket I/O is centralized and handled by a single asyncio event loop.
-            - Ray is only used to parallelize CPU-bound data transformation after receipt.
-        """
-        if len(product_groups) >= 1:
-            assert self._use_ray, '"use_ray" must be True when streaming multiple products in parallel'
-        # TODO: check if number of cpus is enough for streaming
-    
-    # TODO
-    def _stream_impl(
-        self, 
-        data_model: MarketDataModel, 
-    ):
-        # TODO: start streaming
+    # OPTIMIZE
+    def _add_default_transformations_to_stream(self):
+        # self.data_source.stream_api._adapter
+        # TODO: should transform the _process_message() in websocket
+        # self.transform()
         pass
+    
+    def _add_data_channel(self, product: BybitProduct, resolution: Resolution):
+        self.data_source.stream_api._add_data_channel(product, resolution)
+
+    def add_channel(
+        self, 
+        channel: FullDataChannel, 
+        *,
+        channel_type: Literal['public', 'private'],
+        category: tProductCategory | None = None,
+    ):
+        '''
+        Args:
+            channel: A channel to subscribe to.
+                The channel specified will be used directly for the external data source, no modification will be made.
+                Useful for subscribing channels not related to resolution.
+        '''
+        self.data_source.stream_api.add_channel(channel, channel_type=channel_type, category=category)

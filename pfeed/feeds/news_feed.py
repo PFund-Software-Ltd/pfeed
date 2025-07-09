@@ -58,7 +58,7 @@ class NewsFeed(TimeBasedFeed):
         rollback_period: str ='1w',
         start_date: str='',
         end_date: str='',
-        data_layer: Literal['RAW', 'CLEANED']='CLEANED',
+        data_layer: tDataLayer='CLEANED',
         data_origin: str='',
         to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
@@ -71,19 +71,14 @@ class NewsFeed(TimeBasedFeed):
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
         '''
+        env = Environment.BACKTEST
         if not product:
             assert not symbol, 'symbol should not be provided if product is not provided'
             product = None
         else:
             product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_layer = DataLayer[data_layer.upper()]
-        # if no default and no custom transformations, set data_layer to 'raw'
-        if not auto_transform and not self._pipeline_mode and data_layer != DataLayer.RAW:
-            self.logger.info(f'change data_layer from {data_layer} to "RAW" because no default and no custom transformations')
-            data_layer = DataLayer.RAW
-        data_domain, data_layer = self.data_domain.value, data_layer.value
-        env = Environment.BACKTEST
+        data_domain = self.data_domain.value
         self.logger.info(f'Downloading {self.name} historical news data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin, env=env),

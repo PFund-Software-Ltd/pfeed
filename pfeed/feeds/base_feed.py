@@ -16,8 +16,9 @@ if TYPE_CHECKING:
     
 import os
 import asyncio
-from abc import ABC, abstractmethod
 import logging
+import inspect
+from abc import ABC, abstractmethod
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
@@ -106,7 +107,7 @@ class BaseFeed(ABC):
         if not self.streaming_dataflows:
             raise RuntimeError("No streaming dataflow to iterate over")
         streaming_dataflow = self.streaming_dataflows[0]
-        queue: asyncio.Queue = streaming_dataflow.get_streaming_queue()
+        queue: asyncio.Queue = streaming_dataflow.faucet.get_streaming_queue()
         async def _iter():
             while True:
                 msg = await queue.get()
@@ -192,9 +193,20 @@ class BaseFeed(ABC):
     @abstractmethod
     def _download_impl(self, data_model: BaseDataModel) -> GenericData:
         pass
+
+    @abstractmethod
+    def _add_default_transformations_to_download(self, *args, **kwargs):
+        pass
     
     def _stream_impl(self, data_model: BaseDataModel) -> GenericData:
         raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
+    
+    def _add_default_transformations_to_stream(self, *args, **kwargs):
+        raise NotImplementedError(f'{self.name} _add_default_transformations_to_stream() is not implemented')
+    
+    @abstractmethod
+    def _add_default_transformations_to_retrieve(self, *args, **kwargs):
+        pass
 
     def _retrieve_impl(
         self,
@@ -250,18 +262,9 @@ class BaseFeed(ABC):
     def _eager_run_stream(self, ray_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
         pass
     
-    def create_dataflow(
-        self, 
-        data_model: BaseDataModel, 
-        faucet: Faucet,
-        streaming_callback: Callable[[dict], Awaitable[None] | None] | None=None,
-    ) -> DataFlow:
-        '''
-        Args:
-            streaming_callback: user's custom streaming callback to be called when data is available
-        '''
+    def create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
         from pfeed.flows.dataflow import DataFlow
-        dataflow = DataFlow(data_model=data_model, faucet=faucet, streaming_callback=streaming_callback)
+        dataflow = DataFlow(data_model=data_model, faucet=faucet)
         if self._dataflows:
             existing_dataflow = self._dataflows[0]
             assert existing_dataflow.is_streaming() == dataflow.is_streaming(), \
@@ -277,12 +280,7 @@ class BaseFeed(ABC):
         data_model: BaseDataModel | None=None,
     ) -> Faucet:
         from pfeed.flows.faucet import Faucet
-        # reuse existing faucet for streaming dataflows since they share the same extract_func
-        if self.streaming_dataflows:
-            faucet: Faucet = self.streaming_dataflows[0].faucet
-            return faucet
-        else:
-            return Faucet(self.data_source, extract_func, extract_type, data_model=data_model)
+        return Faucet(self.data_source, extract_func, extract_type, data_model=data_model)
     
     @staticmethod
     def _create_sink(data_model: BaseDataModel, create_storage_func: Callable) -> Sink:
@@ -301,13 +299,7 @@ class BaseFeed(ABC):
     
     def transform(self, *funcs) -> BaseFeed:
         for dataflow in self._subflows:
-            # NOTE: if using ray, only add transformations to the first dataflow since transformations in ray workers are not per dataflow
-            if self._use_ray and dataflow.is_streaming():
-                is_first_dataflow = (dataflow is self._dataflows[0])
-                if is_first_dataflow:
-                    dataflow.add_transformations(*funcs)
-            else:
-                dataflow.add_transformations(*funcs)
+            dataflow.add_transformations(*funcs)
         return self
     
     def load(
@@ -353,15 +345,9 @@ class BaseFeed(ABC):
         self._subflows.clear()
         self._dataflows.clear()
     
-    def _run_batch_dataflows(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
+    def _run_batch_dataflows(self, ray_kwargs: dict, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
         from tqdm import tqdm
         from pfeed.utils.utils import generate_color
-        
-        ray_kwargs = ray_kwargs or {}
-        prefect_kwargs = prefect_kwargs or {}
-        if self._use_ray:
-            if 'num_cpus' not in ray_kwargs:
-                ray_kwargs['num_cpus'] = os.cpu_count()
         
         color = generate_color(self.name.value)
         
@@ -453,12 +439,7 @@ class BaseFeed(ABC):
         self._clear_dataflows_after_run()
         return self._completed_dataflows, self._failed_dataflows
     
-    async def _run_stream_dataflows(self, ray_kwargs: dict | None=None):
-        ray_kwargs = ray_kwargs or {}
-        if self._use_ray:
-            if 'num_cpus' not in ray_kwargs:
-                ray_kwargs['num_cpus'] = os.cpu_count()
-        
+    async def _run_stream_dataflows(self, ray_kwargs: dict):
         self._clear_dataflows_before_run()
         if self._use_ray:
             import atexit
@@ -468,9 +449,10 @@ class BaseFeed(ABC):
 
             @ray.remote
             def ray_task(transformations: list[Callable]):
+                # TODO: pass in transformations per dataflow
                 for func in transformations:
                     func()
-                # TODO: zeromq while loop for receiving msgs
+                # TODO: streaming, zeromq while loop for receiving msgs
                 try:
                     if not self.logger.handlers:
                         self.logger.addHandler(QueueHandler(log_queue))
@@ -486,14 +468,12 @@ class BaseFeed(ABC):
                 log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
                 log_listener.start()
                 num_workers = ray_kwargs['num_cpus']
-                first_dataflow_transformations = self._dataflows[0]._transformations
-                futures = [ray_task.remote(first_dataflow_transformations) for _ in range(num_workers)]
+                # NOTE: transformations in all streaming dataflow are the same
+                transformations = self._dataflows[0]._transformations
+                futures = [ray_task.remote(transformations) for _ in range(num_workers)]
                 # returns = ray.get(futures)
                 
                 for dataflow in self._dataflows:
-                    is_first_dataflow = (dataflow is self._dataflows[0])
-                    if not is_first_dataflow:
-                        dataflow.add_transformations(*self._dataflows[0]._transformations)
                     dataflow.run_stream(flow_type='native')
                 # for success, dataflow in returns:
                 #     if not success:
@@ -516,12 +496,31 @@ class BaseFeed(ABC):
             except asyncio.CancelledError:
                 self.logger.warning(f'{self.name} dataflows were cancelled')
         self._clear_dataflows_after_run()
+        
+    def _eager_run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False) -> GenericData | asyncio.Future:
+        ray_kwargs = ray_kwargs or {}
+        prefect_kwargs = prefect_kwargs or {}
+        if self._use_ray:
+            if 'num_cpus' not in ray_kwargs:
+                ray_kwargs['num_cpus'] = os.cpu_count()
+        if not self.streaming_dataflows:
+            return self._eager_run_batch(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+        else:
+            return self._eager_run_stream(ray_kwargs=ray_kwargs)
     
-    def run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None):
-        return self._eager_run_batch(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
+    def run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False):
+        result = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+        if inspect.isawaitable(result):
+            return asyncio.run(result)
+        else:
+            return result
     
-    async def arun(self, ray_kwargs: dict | None=None):
-        await self._eager_run_stream(ray_kwargs=ray_kwargs)
+    async def run_async(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False):
+        result = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+        if inspect.isawaitable(result):
+            return await result
+        else:
+            return result
     
     @property
     def dataflows(self) -> list[DataFlow]:

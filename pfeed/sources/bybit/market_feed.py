@@ -128,13 +128,13 @@ class BybitMarketFeed(CryptoMarketFeed):
         
     # OPTIMIZE
     def _add_default_transformations_to_stream(self):
-        # self.data_source.stream_api._adapter
-        # TODO: should transform the _process_message() in websocket
-        # self.transform()
-        pass
+        from pfund.exchanges.bybit.ws_api_bybit import BybitWebsocketApi
+        self.transform(
+            BybitWebsocketApi._parse_kline,
+        )
     
-    def _add_data_channel(self, product: BybitProduct, resolution: Resolution):
-        self.data_source.stream_api._add_data_channel(product, resolution)
+    def _add_data_channel(self, product: BybitProduct, resolution: Resolution) -> str:
+        return self.data_source.stream_api._add_data_channel(product, resolution)
 
     def add_channel(
         self, 

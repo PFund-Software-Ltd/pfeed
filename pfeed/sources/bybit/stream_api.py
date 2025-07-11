@@ -14,13 +14,14 @@ import logging
 
 
 class StreamAPI:
+    '''Simple wrapper of exchange's websocket API to connect to public channels'''
     def __init__(self, ws_api: WebsocketApi):
         self._ws_api: WebsocketApi = ws_api
         # set the logger to be "bybit_stream", override the default logger 'bybit' in pfund
         self._ws_api.set_logger(logging.getLogger(f'{self._ws_api.exch.lower()}_stream'))
     
-    # TODO: assert no account added to ws_api before connect
     async def connect(self):
+        assert not self._ws_api._accounts, 'Accounts should be empty in streaming'
         await self._ws_api.connect()
     
     async def disconnect(self):
@@ -29,6 +30,7 @@ class StreamAPI:
     def _add_data_channel(self, product: BybitProduct, resolution: Resolution):
         channel: FullDataChannel = self._ws_api._create_public_channel(product, resolution)
         self.add_channel(channel, channel_type='public', category=product.category)
+        return channel
     
     def add_channel(
         self, 

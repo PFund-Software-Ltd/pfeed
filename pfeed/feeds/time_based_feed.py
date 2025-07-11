@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
     import polars as pl
     from narwhals.typing import Frame
+    from pfund.typing import FullDataChannel
     from pfeed.typing import tStorage, tDataLayer, GenericFrame, StorageMetadata
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
@@ -117,25 +118,25 @@ class TimeBasedFeed(BaseFeed):
         include_metadata: bool,
     ) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata] | TimeBasedFeed:
         self._create_batch_dataflows(
-            lambda _data_model: self._retrieve_impl(
-                data_model=_data_model,
+            extract_func=lambda data_model: self._retrieve_impl(
+                data_model=data_model,
                 data_layer=data_layer,
                 data_domain=data_domain,
                 from_storage=from_storage,
                 storage_options=storage_options,
                 add_default_transformations=add_default_transformations,
             ),
-            partial_dataflow_data_model,
-            partial_faucet_data_model,
-            dataflow_per_date,
-            start_date,
-            end_date,
+            partial_dataflow_data_model=partial_dataflow_data_model,
+            partial_faucet_data_model=partial_faucet_data_model,
+            dataflow_per_date=dataflow_per_date,
+            start_date=start_date,
+            end_date=end_date,
             extract_type=ExtractType.retrieve,
         )
         if add_default_transformations:
             add_default_transformations()
         if not self._pipeline_mode:
-            return self._eager_run_batch(include_metadata=include_metadata)
+            return self.run(include_metadata=include_metadata)
         else:
             return self
         
@@ -146,44 +147,31 @@ class TimeBasedFeed(BaseFeed):
         partial_faucet_data_model: Callable,
         start_date: datetime.date, 
         end_date: datetime.date,
-        data_layer: tDataLayer,
-        data_domain: str,
-        to_storage: tStorage | None,
-        storage_options: dict | None,
         dataflow_per_date: bool, 
         include_metadata: bool,
         add_default_transformations: Callable | None,
+        load_to_storage: Callable | None,
     ) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata] | TimeBasedFeed:
-        data_layer = DataLayer[data_layer.upper()]
-        # if no default and no custom transformations, set data_layer to 'raw'
-        if not add_default_transformations and not self._pipeline_mode and data_layer != DataLayer.RAW:
-            self.logger.info(f'changing data_layer from {data_layer} to "RAW" for download() due to absence of both default and custom transformations')
-            data_layer = DataLayer.RAW
         self._create_batch_dataflows(
-            lambda _data_model: self._download_impl(_data_model),
-            partial_dataflow_data_model,
-            partial_faucet_data_model,
-            dataflow_per_date, 
-            start_date, 
-            end_date,
+            extract_func=lambda data_model: self._download_impl(data_model),
+            partial_dataflow_data_model=partial_dataflow_data_model,
+            partial_faucet_data_model=partial_faucet_data_model,
+            dataflow_per_date=dataflow_per_date, 
+            start_date=start_date, 
+            end_date=end_date,
             extract_type=ExtractType.download,
         )
         if add_default_transformations:
             add_default_transformations()
+        if load_to_storage:
+            load_to_storage()
         if not self._pipeline_mode:
-            if to_storage is not None:
-                self.load(
-                    to_storage=to_storage, 
-                    data_layer=data_layer, 
-                    data_domain=data_domain, 
-                    storage_options=storage_options,
-                )
-            df, metadata = self._eager_run_batch(include_metadata=True)
+            df, metadata = self.run(include_metadata=True)
             if missing_dates := metadata.get('missing_dates', []):
                 self.logger.warning(
                     f'[INCOMPLETE] Download, missing dates:\n'
                     f'{pformat([str(date) for date in missing_dates])}'
-                ) 
+                )
             return df if not include_metadata else (df, metadata)
         else:
             return self
@@ -366,39 +354,33 @@ class TimeBasedFeed(BaseFeed):
         return df
     
     @clear_subflows
-    async def _run_stream(
+    def _run_stream(
         self,
-        dataflow_data_model: TimeBasedDataModel,
-        data_layer: DataLayer,
-        data_domain: str,
-        to_storage: tStorage | None,
-        storage_options: dict | None,
+        data_model: TimeBasedDataModel,
         add_default_transformations: Callable | None,
+        load_to_storage: Callable | None,
         callback: Callable[[dict], Awaitable[None] | None] | None,
     ) -> None | TimeBasedFeed:
-        # if no default and no custom transformations, set data_layer to 'raw'
-        if not add_default_transformations and not self._pipeline_mode and data_layer != DataLayer.RAW:
-            self.logger.info(f'changing data_layer from {data_layer} to "RAW" for stream() due to absence of both default and custom transformations')
-            data_layer = DataLayer.RAW
-        faucet: Faucet = self._create_faucet(extract_func=self._stream_impl, extract_type=ExtractType.stream)
-        dataflow: DataFlow = self.create_dataflow(data_model=dataflow_data_model, faucet=faucet, streaming_callback=callback)
-        is_first_dataflow = (dataflow is self._dataflows[0])
-        # NOTE: if using ray, only add transformations to the first dataflow since transformations in ray workers are not per dataflow
-        if add_default_transformations and ((self._use_ray and is_first_dataflow) or not self._use_ray):
+        # reuse existing faucet for streaming dataflows since they share the same extract_func
+        if self.streaming_dataflows:
+            faucet: Faucet = self.streaming_dataflows[0].faucet
+        else:
+            faucet: Faucet = self._create_faucet(extract_func=self._stream_impl, extract_type=ExtractType.stream)
+        if callback:
+            faucet.set_streaming_callback(callback)
+        dataflow: DataFlow = self.create_dataflow(data_model=data_model, faucet=faucet)
+        channel: FullDataChannel = self._add_data_channel(data_model.product, data_model.resolution)
+        faucet.bind_channel_to_dataflow(dataflow, channel)
+        if add_default_transformations:
             add_default_transformations()
+        if load_to_storage:
+            load_to_storage()
         if not self._pipeline_mode:
-            if to_storage is not None:
-                self.load(
-                    to_storage=to_storage, 
-                    data_layer=data_layer, 
-                    data_domain=data_domain, 
-                    storage_options=storage_options,
-                )
-            await self._eager_run_stream()
+            return self.run()
         else:
             return self
   
-    def _eager_run_batch(self, include_metadata: bool=False, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata]:
+    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata]:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
         
@@ -434,6 +416,6 @@ class TimeBasedFeed(BaseFeed):
         return df if not include_metadata else (df, metadata)
 
     # TODO: streaming
-    async def _eager_run_stream(self, ray_kwargs: dict | None=None):
+    async def _eager_run_stream(self, ray_kwargs: dict):
         await self._run_stream_dataflows(ray_kwargs=ray_kwargs)
         

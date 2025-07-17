@@ -71,9 +71,8 @@ class Faucet:
     #     if self._producer_task:
     #         await self._producer_task
     
-    async def _streaming_callback(self, data: dict):
-        # NOTE: 'echannel' is a custom key added to the data dictionary to provide a standardized way to access the channel name
-        channel: FullDataChannel = data.pop('echannel', None)
+    async def _streaming_callback(self, channel_key: str, data: dict):
+        channel: FullDataChannel = data[channel_key] if channel_key in data else None
         if self._user_streaming_callback:
             result = self._user_streaming_callback(data)
             if inspect.isawaitable(result):

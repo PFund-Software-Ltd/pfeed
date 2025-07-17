@@ -1,0 +1,1 @@
+from pfeed.messaging.bar_message import BarMessage

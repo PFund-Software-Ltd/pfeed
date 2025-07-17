@@ -15,10 +15,10 @@ class BybitSource(BaseSource):
     name = DataSource.BYBIT
     
     def __init__(self, env: Environment):
+        from pfund.exchanges import Bybit
         from pfeed.sources.bybit.batch_api import BatchAPI
         from pfeed.sources.bybit.stream_api import StreamAPI
         super().__init__()
-        from pfund.exchanges import Bybit
         self._exchange = Bybit(env=env)
         self.batch_api = BatchAPI(self._exchange._rest_api)
         self.stream_api = StreamAPI(self._exchange._ws_api)

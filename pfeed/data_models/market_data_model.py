@@ -54,7 +54,7 @@ class MarketDataModel(TimeBasedDataModel):
     compression: str = 'snappy'
     
     def __str__(self):
-        return ':'.join([super().__str__(), repr(self.product), str(self.resolution)])
+        return ':'.join([super().__str__(), self.product.name, repr(self.resolution)])
     
     # FIXME: this is not needed anymore?
     @model_validator(mode='before')

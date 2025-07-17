@@ -9,8 +9,12 @@ if TYPE_CHECKING:
 
 import logging
 
+from pfeed.messaging import BarMessage
 from pfeed.flows.result import FlowResult
 from pfeed.enums import ExtractType, FlowType
+
+
+StreamingMessage = BarMessage
 
 
 class DataFlow:
@@ -79,23 +83,12 @@ class DataFlow:
             self._result.set_data(data)
         return self._result
     
-    async def _run_stream_etl(self, data: dict):
-        # TEMP
-        print(f'***{self} {data=}')
-        
-        # data: dict = self._transform(data)
-
+    async def _run_stream_etl(self, msg: dict):
         # TODO: push the data to zeromq if in use
-        # FIXME: old zmq code
-        # zmq = self._get_zmq(ws_name)
-        # if zmq:
-        #     for bar in bars:
-        #         zmq_msg = (1, 3, (self._bkr, self.exch, pdt, bar))
-        #         zmq.send(*zmq_msg)
-        # else:
-        #     data = {'bkr': self._bkr, 'exch': self.exch, 'pdt': pdt, 'channel': f'kline.{resolution}', 'data': bars}
-        # TODO:
-        # self._load(data)
+        msg: StreamingMessage = self._transform(msg)
+        print('***MESSAGE***:', msg.to_dict())
+        # TODO: streaming
+        # self._load(msg)
     
     async def run_stream(self, flow_type: Literal['native']='native'):
         self._flow_type = FlowType[flow_type.lower()]
@@ -117,20 +110,16 @@ class DataFlow:
     
     def _transform(self, data: GenericData) -> GenericData:
         for func in self._transformations:
-            if not self.is_streaming():
-                if self._flow_type == FlowType.prefect:
-                    from prefect import task
-                    from prefect.utilities.annotations import quote
-                    transform = task(func)
-                    # NOTE: Removing prefect's task introspection with `quote(data)` to save time
-                    data: GenericData = transform(quote(data))
-                else:
-                    transform = func
-                    data: GenericData = transform(data)
-                self.logger.debug(f"transformed {self.faucet.data_model} data by '{func.__name__}'")
+            if self._flow_type == FlowType.prefect:
+                from prefect import task
+                from prefect.utilities.annotations import quote
+                transform = task(func)
+                # NOTE: Removing prefect's task introspection with `quote(data)` to save time
+                data: GenericData = transform(quote(data))
             else:
-                # TODO: streaming, send to zeromq if any
-                pass
+                transform = func
+                data: GenericData = transform(data)
+            self.logger.debug(f"transformed {self.data_model} data by '{func.__name__}'")
         return data
     
     def _load(self, data: GenericData):

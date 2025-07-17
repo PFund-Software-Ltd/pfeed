@@ -30,7 +30,7 @@ except ImportError:
 
 GenericFrame = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
 GenericSeries = Series[Any]
-GenericData = GenericFrame | bytes
+GenericData = GenericFrame | bytes | dict
 
 
 tDataTool = Literal['pandas', 'polars']

@@ -1,10 +1,12 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Coroutine
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
     from pfeed.typing import tDataTool, tDataSource, tDataCategory
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.flows.dataflow import DataFlow
+
+import asyncio
 
 import pfeed as pe
 from pfeed.enums import DataSource, DataCategory
@@ -61,9 +63,18 @@ class DataEngine:
         return filtered_feeds
     
     def run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
+        coroutines: list[Coroutine] = []
+        # FIXME: currently ws_api in bybit stream_api is different from the one in pfund.
         for feed in self._feeds:
             # TODO: assert a feed has a task
-            feed.run()
+            # TODO: use a thread?
+            # TODO: add callback to feed.stream()
+            if not feed.streaming_dataflows:
+                feed.run()
+            else:
+                coro: Coroutine = feed.run_async()
+                coroutines.append(coro)
+                
     
     # TODO
     def end(self):

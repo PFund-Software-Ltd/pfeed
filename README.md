@@ -56,8 +56,7 @@ PFeed (/piː fiːd/) is the data engine for trading, serving as a pipeline betwe
 - [Installation](#installation)
 - [Quick Start](#quick-start)
     - [Get Historical Data in Dataframe](#1-get-historical-data-in-dataframe)
-    - [Download Historical Data on Command Line](#2-download-historical-data-on-the-command-line-interface-cli)
-    - [Download Historical Data in Python](#3-download-historical-data-in-python)
+    - [Download Historical Data](#2-download-historical-data)
 - [Supported Data Sources](#supported-data-sources)
 - [Related Projects](#related-projects)
 - [Disclaimer](#disclaimer)
@@ -69,8 +68,8 @@ PFeed (/piː fiːd/) is the data engine for trading, serving as a pipeline betwe
 ## Installation
 > For more installation options, please refer to the [documentation](https://pfeed-docs.pfund.ai/installation).
 ```bash
-# [RECOMMENDED]: Core Features, including Minio, Deltalake, Ray, etc.
-pip install -U "pfeed[core,prefect]"
+# [RECOMMENDED]: Core Features, including MinIO, DeltaLake, Ray, Prefect, etc.
+pip install -U "pfeed[core]"
 
 # add your desired data sources, e.g. databento, polygon, etc.
 pip install -U "pfeed[core,databento,polygon]"
@@ -82,47 +81,43 @@ pip install -U "pfeed"
 
 
 ## Quick Start
-### 1. Get Historical Data in Dataframe
-Get [Bybit]'s data in dataframe, e.g. 1-minute data (data is downloaded on the fly if not found in storage)
-
+Create data feed object
 ```python
 import pfeed as pe
 
 bybit = pe.Bybit(data_tool='polars')
+feed = bybit.market_feed  # this could be xxx.news_feed if the data source supports it
+```
 
-df = bybit.get_historical_data(
-    'BTC_USDT_PERP',
-    resolution='1minute',  # 'raw' or '1tick'/'1t' or '2second'/'2s' etc.
+### 1. Get Historical Data in Dataframe
+Get [Bybit]'s data in dataframe, e.g. 1-minute data (data is downloaded on the fly if not found in storage)
+
+```python
+df = feed.get_historical_data(
+    product='BTC_USDT_PERP',  # or BTC_USDT_PERPETUAL in full
+    resolution='1minute',  # '1tick'/'1t' or '2second'/'2s' etc.
     start_date='2025-01-01',
     end_date='2025-01-01',
 )
 ```
 
-Printing the first few rows of `df`:
+<details>
+<summary>See the first few rows of df:</summary>
+
 | date                | resolution   | product       | symbol   |    open |    high |     low |   close |   volume |
 |:--------------------|:-------------|:--------------|:---------|--------:|--------:|--------:|--------:|---------:|
 | 2025-01-01 00:00:00 | 1m           | BTC_USDT_PERP | BTCUSDT  | 93530   | 93590.8 | 93501.3 | 93590.5 |   30.284 |
 | 2025-01-01 00:01:00 | 1m           | BTC_USDT_PERP | BTCUSDT  | 93590.5 | 93627.7 | 93571.8 | 93625   |   30.334 |
+</details>
 
 > By using pfeed, you are just **one function call** away from getting a standardized dataframe
 
-### 2. Download Historical Data on the Command Line Interface (CLI)
-> For more CLI commands, please refer to the [documentation](https://pfeed-docs.pfund.ai/cli-commands).
-```bash
-# download BTC tick data
-pfeed download -d BYBIT -p BTC_USDT_PERP -r tick --start-date 2025-01-01 --end-date 2025-02-01
 
-# download data and store it in MinIO
-pfeed download -d BYBIT -p BTC_USDT_PERP --storage minio
-```
-
-### 3. Download Historical Data in Python
+### 2. Download Historical Data
+Download historical data to the storage (e.g. local, MinIO, DuckDB etc.)
 ```python
-import pfeed as pe
-
-bybit = pe.Bybit()
-bybit.download(
-    product='BTC_USDT_PERP',
+feed.download(
+    product='ETH_USDT_SPOT',
     resolution='1s',  # 1-second data
     rollback_period='1w',  # rollback 1 week
     to_storage='local',

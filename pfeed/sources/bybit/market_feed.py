@@ -122,17 +122,16 @@ class BybitMarketFeed(CryptoMarketFeed):
             **product_specs
         )
     
-    async def _stream_impl(self, callback: Callable[[dict], Awaitable[None] | None]):
-        self.data_source.stream_api.set_callback(callback)
+    async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict], Awaitable[None] | None]):
+        async def _callback(msg: dict):
+            channel_key = 'topic'  # tell faucet which key to use to get the channel
+            await faucet_streaming_callback(channel_key, msg)
+        self.data_source.stream_api.set_callback(_callback)
         await self.data_source.stream_api.connect()
-        
-    # OPTIMIZE
-    def _add_default_transformations_to_stream(self):
-        from pfund.exchanges.bybit.ws_api_bybit import BybitWebsocketApi
-        self.transform(
-            BybitWebsocketApi._parse_kline,
-        )
     
+    def _parse_message(self, product: BybitProduct, msg: dict) -> dict:
+        return self.data_source.stream_api._parse_message(product, msg)
+        
     def _add_data_channel(self, product: BybitProduct, resolution: Resolution) -> str:
         return self.data_source.stream_api._add_data_channel(product, resolution)
 

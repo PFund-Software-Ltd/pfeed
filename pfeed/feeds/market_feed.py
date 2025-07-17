@@ -12,8 +12,9 @@ import datetime
 from abc import abstractmethod
 from functools import partial
 
-from pfund.datas.resolution import Resolution
 from pfund.enums import Environment
+from pfund.datas.resolution import Resolution
+from pfeed.messaging import BarMessage
 from pfeed.enums import DataCategory, MarketDataType, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 
@@ -172,9 +173,9 @@ class MarketFeed(TimeBasedFeed):
         )
     
     def _add_default_transformations_to_download(
-        self, 
+        self,
         data_resolution: Resolution,
-        target_resolution: Resolution, 
+        target_resolution: Resolution,
         product: BaseProduct
     ):
         '''
@@ -428,10 +429,42 @@ class MarketFeed(TimeBasedFeed):
                 data_origin=data_origin, 
                 start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
             ),
-            add_default_transformations=self._add_default_transformations_to_stream if auto_transform else None,
+            add_default_transformations=(lambda: self._add_default_transformations_to_stream(product, resolution)) if auto_transform else None,
             load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
             callback=callback,
         )
+    
+    def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
+        from pfeed.utils.utils import lambda_with_name
+        self.transform(
+            lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),
+            lambda_with_name('create_message', lambda msg: self._create_message(product, resolution, msg)),
+        )
+    
+    def _create_message(self, product: BaseProduct, resolution: Resolution, msg: dict) -> BarMessage:
+        if resolution.is_bar():
+            data: dict= msg['data']
+            message = BarMessage(
+                trading_venue=product.trading_venue.upper(),
+                exchange=product.exchange.upper(),
+                product=product.name,
+                symbol=product.symbol,
+                resolution=repr(resolution),
+                ts=msg['ts'],
+                open=data['open'],
+                high=data['high'],
+                low=data['low'],
+                close=data['close'],
+                volume=data['volume'],
+                extra_data=msg['extra_data'],
+            )
+        else:
+            raise NotImplementedError(f'{product.name} {resolution} is not supported')
+        return message
+    
+    @abstractmethod
+    def _parse_message(self, product: BaseProduct, msg: dict) -> dict:
+        pass
     
     @abstractmethod
     def _add_data_channel(self, product: BaseProduct, resolution: Resolution):

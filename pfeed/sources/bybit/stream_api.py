@@ -5,8 +5,6 @@ if TYPE_CHECKING:
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
     from pfund.typing import FullDataChannel
-    from pfund.enums import Environment
-    from pfund.adapter import Adapter
     from pfund.exchanges.bybit.ws_api import WebsocketApi
 
 
@@ -42,4 +40,8 @@ class StreamAPI:
         self._ws_api.add_channel(channel, channel_type=channel_type, category=category)
     
     def set_callback(self, callback: Callable[[dict], Awaitable[None] | None]):
-        self._ws_api.set_callback(callback)
+        self._ws_api.set_callback(callback, raw_msg=True)
+    
+    def _parse_message(self, product: BybitProduct, msg: dict) -> dict:
+        api = self._ws_api.get_api(product.category)
+        return api._parse_message(msg)

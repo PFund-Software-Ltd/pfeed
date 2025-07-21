@@ -128,6 +128,9 @@ class BybitMarketFeed(CryptoMarketFeed):
             await faucet_streaming_callback(channel_key, msg)
         self.data_source.stream_api.set_callback(_callback)
         await self.data_source.stream_api.connect()
+        
+    async def _close_stream(self):
+        await self.data_source.stream_api.disconnect()
     
     def _add_default_transformations_to_stream(self, product: BybitProduct, resolution: Resolution):
         from pfeed.utils.utils import lambda_with_name

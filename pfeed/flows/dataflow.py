@@ -65,7 +65,14 @@ class DataFlow:
     
     def _run_batch_etl(self) -> GenericData | None:
         from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
-        data: GenericData | None = self._extract_batch()
+        if self._flow_type == FlowType.prefect:
+            from prefect import task
+            extract = task(self.faucet.open_batch)
+        else:
+            extract = self.faucet.open_batch
+        data, metadata = extract()
+        if metadata:
+            self._result.set_metadata(metadata)
         if (data is not None) and not (is_dataframe(data) and is_empty_dataframe(data)):
             data: GenericData = self._transform(data)
             self._load(data)
@@ -82,15 +89,6 @@ class DataFlow:
             self._result.set_data(data)
         return self._result
     
-    async def _run_stream_etl(self, msg: dict):
-        # if zeromq is in use (when use_ray=True), send msg to Ray's worker and let it perform ETL
-        if self._msg_queue:
-            self._msg_queue.send(channel=self.name, topic=str(self.data_model), data=msg)
-        else:
-            msg: dict | StreamingMessage = self._transform(msg)
-            # TODO: streaming
-            # self._load(msg)
-    
     def _setup_messaging(self, worker_name: str):
         '''
         Args:
@@ -102,24 +100,22 @@ class DataFlow:
         self._msg_queue.bind(self._msg_queue.sender)
         self._msg_queue.set_target_identity(worker_name)  # store zmq.DEALER's identity to send to
     
+    async def _run_stream_etl(self, msg: dict):
+        # if zeromq is in use (when use_ray=True), send msg to Ray's worker and let it perform ETL
+        if self._msg_queue:
+            self._msg_queue.send(channel=self.name, topic=str(self.data_model), data=msg)
+        else:
+            msg: dict | StreamingMessage = self._transform(msg)
+            # TODO: streaming
+            # self._load(msg)
+    
     async def run_stream(self, flow_type: Literal['native']='native'):
         self._flow_type = FlowType[flow_type.lower()]
-        await self._extract_stream()
-        
-    def _extract_batch(self) -> GenericData | None:
-        if self._flow_type == FlowType.prefect:
-            from prefect import task
-            extract = task(self.faucet.open_batch)
-        else:
-            extract = self.faucet.open_batch
-        data, metadata = extract()
-        if metadata:
-            self._result.set_metadata(metadata)
-        return data
-    
-    async def _extract_stream(self) -> GenericData | None:
         await self.faucet.open_stream()
-    
+        
+    async def end_stream(self):
+        await self.faucet.close_stream()
+        
     def _transform(self, data: GenericData) -> GenericData:
         for transform in self._transformations:
             if self.is_streaming():

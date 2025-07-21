@@ -113,6 +113,8 @@ class BaseFeed(ABC):
         async def _iter():
             while True:
                 msg = await queue.get()
+                if msg is None:  # Streaming ended, None sent by faucet.close_stream()
+                    break
                 yield msg
         return _iter()
     
@@ -203,6 +205,9 @@ class BaseFeed(ABC):
     def _stream_impl(self, data_model: BaseDataModel) -> GenericData:
         raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
     
+    def _close_stream(self):
+        raise NotImplementedError(f'{self.name} _close_stream() is not implemented')
+    
     def _add_default_transformations_to_stream(self, *args, **kwargs):
         raise NotImplementedError(f'{self.name} _add_default_transformations_to_stream() is not implemented')
     
@@ -279,10 +284,21 @@ class BaseFeed(ABC):
         self, 
         extract_func: Callable, 
         extract_type: ExtractType, 
+        close_stream: Callable | None=None,
         data_model: BaseDataModel | None=None,
     ) -> Faucet:
+        '''
+        Args:
+            close_stream: a function that closes the streaming dataflow after running the extract_func
+        '''
         from pfeed.flows.faucet import Faucet
-        return Faucet(self.data_source, extract_func, extract_type, data_model=data_model)
+        return Faucet(
+            data_source=self.data_source, 
+            extract_func=extract_func, 
+            extract_type=extract_type,
+            close_stream=close_stream,
+            data_model=data_model,
+        )
     
     @staticmethod
     def _create_sink(data_model: BaseDataModel, create_storage_func: Callable) -> Sink:
@@ -540,6 +556,7 @@ class BaseFeed(ABC):
             await asyncio.gather(*[_run_dataflow(dataflow) for dataflow in self._dataflows])
         except asyncio.CancelledError:
             self.logger.warning(f'{self.name} dataflows were cancelled')
+            await asyncio.gather(*[dataflow.end_stream() for dataflow in self._dataflows])
         self._clear_dataflows_after_run()
         
     def _eager_run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False) -> GenericData | asyncio.Future:

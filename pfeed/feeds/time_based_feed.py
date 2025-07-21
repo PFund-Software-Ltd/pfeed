@@ -366,7 +366,11 @@ class TimeBasedFeed(BaseFeed):
         if self.streaming_dataflows:
             faucet: Faucet = self.streaming_dataflows[0].faucet
         else:
-            faucet: Faucet = self._create_faucet(extract_func=self._stream_impl, extract_type=ExtractType.stream)
+            faucet: Faucet = self._create_faucet(
+                extract_func=self._stream_impl, 
+                extract_type=ExtractType.stream,
+                close_stream=self._close_stream,
+            )
         if callback:
             faucet.set_streaming_callback(callback)
         dataflow: DataFlow = self.create_dataflow(data_model=data_model, faucet=faucet)

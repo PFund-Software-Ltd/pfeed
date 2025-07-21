@@ -17,19 +17,29 @@ class Faucet:
     '''Faucet is the starting point of a dataflow
     It contains a data model and a flow function to perform the extraction.
     '''
+    STREAMING_QUEUE_MAXSIZE = 1000
     def __init__(
         self, 
         data_source: BaseSource,
         extract_func: Callable,  # e.g. _download_impl(), _stream_impl(), _retrieve_impl(), _fetch_impl()
         extract_type: ExtractType,
+        close_stream: Callable | None=None,
         data_model: BaseDataModel | None=None, 
     ):
+        '''
+        Args:
+            close_stream:
+                A function to disconnect the streaming after running the extract_func.
+        '''
         self._extract_func = extract_func
         self._extract_type = ExtractType[extract_type.lower()] if isinstance(extract_type, str) else extract_type
         self._data_source: BaseSource = data_source
         self._data_model: BaseDataModel | None = data_model
         if self._extract_type != ExtractType.stream:
             assert data_model is not None, 'data_model is required'
+        else:
+            assert close_stream is not None, 'close_stream is required'
+        self._close_stream = close_stream
         self._is_stream_opened = False
         self._streaming_queue: asyncio.Queue | None = None
         self._user_streaming_callback: Callable[[dict], Awaitable[None] | None] | None = None
@@ -64,12 +74,14 @@ class Faucet:
             self._is_stream_opened = True
             await self._extract_func(self._streaming_callback)
     
-    # TODO: streaming, disconnect the stream?
-    # def close(self):
-    #     # async def stop(self):
-    #     self._closed.set()
-    #     if self._producer_task:
-    #         await self._producer_task
+    async def close_stream(self):
+        if self._is_stream_opened:
+            # Signal that streaming is ending
+            if self._streaming_queue:
+                await self._streaming_queue.put(None)
+            await self._close_stream()
+            self._is_stream_opened = False
+            self._streaming_queue = None
     
     async def _streaming_callback(self, channel_key: str, data: dict):
         channel: FullDataChannel = data[channel_key] if channel_key in data else None
@@ -77,8 +89,10 @@ class Faucet:
             result = self._user_streaming_callback(data)
             if inspect.isawaitable(result):
                 await result
-        # TODO: streaming, Backpressure if Ray processes fall behind: Use bounded asyncio.Queue(maxsize=N) and await queue.put() to naturally throttle?
         if self._streaming_queue:
+            if self._streaming_queue.full():
+                self.logger.warning(f"Streaming queue full, dropping oldest message - consider increasing maxsize (current: {self.STREAMING_QUEUE_MAXSIZE}) or improving consumer speed")
+                self._streaming_queue.get_nowait()  # Remove oldest
             await self._streaming_queue.put(data)
         if channel:
             dataflow: DataFlow = self._streaming_bindings[channel]
@@ -94,5 +108,5 @@ class Faucet:
 
     def get_streaming_queue(self) -> asyncio.Queue:
         if self._streaming_queue is None:
-            self._streaming_queue = asyncio.Queue()
+            self._streaming_queue = asyncio.Queue(maxsize=self.STREAMING_QUEUE_MAXSIZE)
         return self._streaming_queue

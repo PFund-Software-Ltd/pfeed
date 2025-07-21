@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from pfund.typing import tEnvironment, FullDataChannel
+    from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.typing import tStorage, tDataLayer, GenericFrame, StorageMetadata, tDataType
     from pfeed.data_models.market_data_model import MarketDataModel
 
@@ -421,49 +422,59 @@ class MarketFeed(TimeBasedFeed):
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution: Resolution = self._create_resolution(resolution)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
+        data_model: MarketDataModel = self.create_data_model(
+            product=product, 
+            resolution=resolution, 
+            data_origin=data_origin, 
+            start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
+        )
+        channel: FullDataChannel = self._add_data_channel(data_model.product, data_model.resolution)
         self.logger.info(f'Streaming(env={self._env}) {product.name}(symbol={product.symbol}) {resolution} data, data_layer={data_layer.name}/{data_domain=}')
         return self._run_stream(
-            data_model=self.create_data_model(
-                product=product, 
-                resolution=resolution, 
-                data_origin=data_origin, 
-                start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
-            ),
+            data_model=data_model,
+            channel=channel,
             add_default_transformations=(lambda: self._add_default_transformations_to_stream(product, resolution)) if auto_transform else None,
             load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
             callback=callback,
         )
     
+    # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
         from pfeed.utils.utils import lambda_with_name
         self.transform(
-            lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),
-            lambda_with_name('create_message', lambda msg: self._create_message(product, resolution, msg)),
+            lambda_with_name('standardize_message', lambda msg: MarketFeed._standardize_message(product, resolution, msg)),
         )
     
-    def _create_message(self, product: BaseProduct, resolution: Resolution, msg: dict) -> BarMessage:
+    @staticmethod
+    def _standardize_message(product: BaseProduct, resolution: Resolution, msg: dict) -> StreamingMessage:
         if resolution.is_bar():
             data: dict= msg['data']
-            message = BarMessage(
-                trading_venue=product.trading_venue.upper(),
-                exchange=product.exchange.upper(),
-                product=product.name,
-                symbol=product.symbol,
-                resolution=repr(resolution),
-                ts=msg['ts'],
-                open=data['open'],
-                high=data['high'],
-                low=data['low'],
-                close=data['close'],
-                volume=data['volume'],
-                extra_data=msg['extra_data'],
-            )
+            try:
+                message = BarMessage(
+                    trading_venue=product.trading_venue.upper(),
+                    exchange=product.exchange.upper(),
+                    product=product.name,
+                    symbol=product.symbol,
+                    resolution=repr(resolution),
+                    msg_ts=msg['ts'],
+                    ts=data['ts'],
+                    open=data['open'],
+                    high=data['high'],
+                    low=data['low'],
+                    close=data['close'],
+                    volume=data['volume'],
+                    extra_data=msg['extra_data'],
+                )
+            except Exception as e:
+                print(f'***_standardize_message: {e}')
+                raise e
         else:
             raise NotImplementedError(f'{product.name} {resolution} is not supported')
         return message
     
+    @staticmethod
     @abstractmethod
-    def _parse_message(self, product: BaseProduct, msg: dict) -> dict:
+    def _parse_message(product: BaseProduct, msg: dict) -> dict:
         pass
     
     @abstractmethod

@@ -8,7 +8,7 @@ from enum import StrEnum
 from collections import defaultdict
 
 import zmq
-import orjson
+from msgspec import msgpack
 
 from pfund.enums import PublicDataChannel, PrivateDataChannel, PFundDataChannel, PFundDataTopic
 
@@ -50,6 +50,7 @@ class ZeroMQ:
         self._socket_methods: dict[zmq.Socket, SocketMethod] = {}
         self._socket_ports: defaultdict[zmq.Socket, list[int]] = defaultdict(list)
         self._sender: zmq.Socket | None = None
+        self._target_identity: bytes | None = None  # identity of the sender socket to send to, currently only used for ROUTER socket
         self._receiver: zmq.Socket | None = None
         self._poller: zmq.Poller | None = None
         
@@ -68,6 +69,23 @@ class ZeroMQ:
     def name(self) -> str:
         return self._name
     
+    @property
+    def sender(self) -> zmq.Socket:
+        assert self._sender, 'sender is not initialized'
+        return self._sender
+    
+    @property
+    def receiver(self) -> zmq.Socket:
+        assert self._receiver, 'receiver is not initialized'
+        return self._receiver
+    
+    def set_target_identity(self, identity: str):
+        assert self._sender, 'sender is not initialized'
+        self._target_identity = identity.encode()
+    
+    def get_ports_in_use(self, socket: zmq.Socket) -> list[int]:
+        return self._socket_ports[socket]
+    
     def bind(self, socket: zmq.Socket, port: int | None=None):
         '''Binds a socket which uses bind method to a port.'''
         assert socket in self._socket_methods, f'{socket=} has not been initialized'
@@ -81,19 +99,11 @@ class ZeroMQ:
         else:
             raise ValueError(f'{port=} is already bound')
     
-    def subscribe(self, socket: zmq.Socket, port: int, channel: str=''):
-        '''Subscribes to a port which uses connect method.'''
+    def connect(self, socket: zmq.Socket, port: int, channel: str=''):
+        '''Connects to a port which uses connect method.'''
         assert socket in self._socket_methods, f'{socket=} has not been initialized'
         assert self._socket_methods[socket] == SocketMethod.connect, f'{socket=} is not a socket used for connecting'
         socket.connect(f"{self._url}:{port}")
-        if socket.socket_type in [zmq.SUB, zmq.XSUB]:
-            option: SocketOption = zmq.SUBSCRIBE
-            value: int | bytes | str = channel.encode()
-            socket.setsockopt(option, value)
-        elif socket.socket_type == zmq.PULL:
-            assert not channel, 'channel is only supported for SUB socket'
-        else:
-            raise ValueError(f'{socket.socket_type=} is not supported for subscription')
         if port not in self._socket_ports[socket]:
             self._socket_ports[socket].append(port)
         else:
@@ -119,15 +129,17 @@ class ZeroMQ:
         # terminate context
         self._ctx.term()
 
-    def send(self, channel: DataChannel, topic: PFundDataTopic | str, data: JSONValue) -> None:
+    def send(self, channel: DataChannel | str, topic: PFundDataTopic | str, data: JSONValue) -> None:
         '''
         Sends message to receivers
         Args:
             data: A JSON serializable object.
             topic: A message key used to group messages within a channel.
         '''
-        send_ts = time.time()
-        msg = [channel.encode(), topic.encode(), orjson.dumps(data), f"{send_ts}".encode()]
+        msg_ts = time.time()
+        msg = [channel.encode(), topic.encode(), msgpack.encode(data), msgpack.encode(msg_ts)]
+        if self._sender.socket_type == zmq.ROUTER:
+            msg = [self._target_identity] + msg
         # TODO handle zmq.error.Again
         self._sender.send_multipart(msg, zmq.NOBLOCK)
         # TODO: handle exception:
@@ -138,18 +150,17 @@ class ZeroMQ:
         # else:
         #     raise
 
-    def recv(self) -> tuple[DataChannel, PFundDataTopic | str, JSONValue, float]:
+    def recv(self) -> tuple[DataChannel | str, PFundDataTopic | str, JSONValue, float]:
         events = self._poller.poll(0)  # 0 sec timeout, non-blocking
         if events:
             msg = self._receiver.recv_multipart(zmq.DONTWAIT)
-            channel, topic, data, pub_ts = msg
-            channel, topic, pub_ts = channel.decode(), topic.decode(), float(pub_ts.decode())
-            data = orjson.loads(data)
-            return channel, topic, data, pub_ts
+            channel, topic, data, msg_ts = msg
+            return channel.decode(), topic.decode(), msgpack.decode(data), msgpack.decode(msg_ts)
         else:
             # avoids busy-waiting
             # REVIEW: not sure if this is enough, monitor CPU usage; if not enough, sleep 1ms
             time.sleep(0)
+
         # TODO: handle exception:
         # try:
         # except zmq.error.Again:  # no message available, will be raised when using zmq.DONTWAIT

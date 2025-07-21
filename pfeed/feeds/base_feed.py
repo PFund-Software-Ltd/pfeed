@@ -1,10 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal, Awaitable, AsyncGenerator
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, AsyncGenerator
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
     from pfund.typing import tEnvironment
     from pfund.products.product_base import BaseProduct
+    from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tDataSource
@@ -18,6 +19,7 @@ import os
 import asyncio
 import logging
 import inspect
+from collections import defaultdict
 from abc import ABC, abstractmethod
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
@@ -27,7 +29,7 @@ from pfeed.enums import DataSource, DataTool, DataStorage, LocalDataStorage, Ext
 
 
 __all__ = ["BaseFeed"]
-        
+
 
 def clear_subflows(func):
     def wrapper(feed: BaseFeed, *args, **kwargs):
@@ -440,6 +442,12 @@ class BaseFeed(ABC):
         return self._completed_dataflows, self._failed_dataflows
     
     async def _run_stream_dataflows(self, ray_kwargs: dict):
+        async def _run_dataflow(dataflow: DataFlow):
+            await dataflow.run_stream(flow_type='native')
+                    
+        WorkerNumber: TypeAlias = int
+        DataFlowName: TypeAlias = str
+
         self._clear_dataflows_before_run()
         if self._use_ray:
             import atexit
@@ -448,38 +456,77 @@ class BaseFeed(ABC):
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
 
             @ray.remote
-            def ray_task(transformations: list[Callable]):
-                # TODO: pass in transformations per dataflow
-                for func in transformations:
-                    func()
-                # TODO: streaming, zeromq while loop for receiving msgs
+            def ray_task(
+                feed_name: str, 
+                worker_name: str, 
+                transformations_per_dataflow: dict[DataFlowName, list[Callable]], 
+                ports_to_connect: list[int],
+            ):
+                # TODO: also need storages_per_dataflow
+                import zmq
+                from pfeed.messaging.zeromq import ZeroMQ
+                
+                logger = logging.getLogger(feed_name.lower() + '_data')
+                if not logger.handlers:
+                    logger.addHandler(QueueHandler(log_queue))
+                    logger.setLevel(logging.DEBUG)
+                    # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
+                    logger.propagate = False
+                
                 try:
-                    if not self.logger.handlers:
-                        self.logger.addHandler(QueueHandler(log_queue))
-                        self.logger.setLevel(logging.DEBUG)
-                        # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
-                        self.logger.propagate = False
+                    msg_queue = ZeroMQ(
+                        name=f'{feed_name}.stream.{worker_name}',
+                        sender_type=zmq.PUSH,  # TODO: push to Data Engine if in use
+                        receiver_type=zmq.DEALER,
+                    )
+                    msg_queue.receiver.setsockopt(zmq.IDENTITY, worker_name.encode())
+                    for port in ports_to_connect:
+                        msg_queue.connect(msg_queue.receiver, port)
+                    
+                    # TODO: receive break signal to exit gracefully
+                    while True:
+                        msg = msg_queue.recv()
+                        if msg is None:
+                            continue
+                        channel, topic, data, msg_ts = msg
+                        dataflow_name = channel
+                        # data_model_in_str = topic
+                        transformations = transformations_per_dataflow[dataflow_name]
+                        for transform in transformations:
+                            data: dict | StreamingMessage = transform(data)
+                        # TODO: streaming, load data
+                        # load()
                 except Exception:
-                    self.logger.exception(f'Error in running {dataflow}:')
+                    logger.exception(f'Error in streaming Ray {worker_name}:')
             
             try:
                 self._init_ray(**ray_kwargs)
                 log_queue = Queue()
                 log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
                 log_listener.start()
-                num_workers = ray_kwargs['num_cpus']
-                # NOTE: transformations in all streaming dataflow are the same
-                transformations = self._dataflows[0]._transformations
-                futures = [ray_task.remote(transformations) for _ in range(num_workers)]
-                # returns = ray.get(futures)
+                num_workers = min(ray_kwargs['num_cpus'], len(self._dataflows))
                 
-                for dataflow in self._dataflows:
-                    dataflow.run_stream(flow_type='native')
-                # for success, dataflow in returns:
-                #     if not success:
-                #         self._failed_dataflows.append(dataflow)
-                #     else:
-                #         self._completed_dataflows.append(dataflow)
+                # Distribute dataflows' transformations across workers
+                def _create_worker_name(worker_num: int) -> str:
+                    return f'worker-{worker_num}'
+                transformations_per_worker: dict[WorkerNumber, dict[DataFlowName, list[Callable]]] = defaultdict(dict)
+                ports_to_connect: dict[WorkerNumber, list[int]] = defaultdict(list)
+                for i, dataflow in enumerate(self._dataflows):
+                    worker_num: int = i % num_workers
+                    worker_num += 1  # convert to 1-indexed, i.e. starting from 1
+                    worker_name = _create_worker_name(worker_num)
+                    dataflow._setup_messaging(worker_name)
+                    transformations_per_worker[worker_num][dataflow.name] = dataflow._transformations
+                    ports_in_use = dataflow._msg_queue.get_ports_in_use(dataflow._msg_queue.sender)
+                    ports_to_connect[worker_num].extend(ports_in_use)
+                
+                for worker_num in range(1, num_workers+1):
+                    ray_task.remote(
+                        feed_name=self.name.value,
+                        worker_name=_create_worker_name(worker_num), 
+                        transformations_per_dataflow=transformations_per_worker[worker_num], 
+                        ports_to_connect=ports_to_connect[worker_num]
+                    )
             except KeyboardInterrupt:
                 print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
             except Exception:
@@ -488,13 +535,11 @@ class BaseFeed(ABC):
                 if log_listener:
                     log_listener.stop()
                 self._shutdown_ray()
-        else:
-            try:
-                async def _run_dataflow(dataflow: DataFlow):
-                    await dataflow.run_stream(flow_type='native')
-                await asyncio.gather(*[_run_dataflow(dataflow) for dataflow in self._dataflows])
-            except asyncio.CancelledError:
-                self.logger.warning(f'{self.name} dataflows were cancelled')
+        
+        try:
+            await asyncio.gather(*[_run_dataflow(dataflow) for dataflow in self._dataflows])
+        except asyncio.CancelledError:
+            self.logger.warning(f'{self.name} dataflows were cancelled')
         self._clear_dataflows_after_run()
         
     def _eager_run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False) -> GenericData | asyncio.Future:

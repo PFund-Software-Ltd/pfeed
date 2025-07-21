@@ -42,6 +42,3 @@ class StreamAPI:
     def set_callback(self, callback: Callable[[dict], Awaitable[None] | None]):
         self._ws_api.set_callback(callback, raw_msg=True)
     
-    def _parse_message(self, product: BybitProduct, msg: dict) -> dict:
-        api = self._ws_api.get_api(product.category)
-        return api._parse_message(msg)

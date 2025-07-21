@@ -77,7 +77,7 @@ class Faucet:
             result = self._user_streaming_callback(data)
             if inspect.isawaitable(result):
                 await result
-        # TODO: Backpressure if Ray processes fall behind: Use bounded asyncio.Queue(maxsize=N) and await queue.put() to naturally throttle?
+        # TODO: streaming, Backpressure if Ray processes fall behind: Use bounded asyncio.Queue(maxsize=N) and await queue.put() to naturally throttle?
         if self._streaming_queue:
             await self._streaming_queue.put(data)
         if channel:

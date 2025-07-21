@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     import datetime
     import pandas as pd
     from pfund.exchanges.bybit.exchange import tProductCategory
-    from pfund.products.product_bybit import BybitProduct
     from pfund.datas.resolution import Resolution
     from pfund.typing import FullDataChannel
     from pfeed.typing import GenericFrame
@@ -13,6 +12,7 @@ if TYPE_CHECKING:
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing import tStorage, tDataLayer
 
+from pfund.products.product_bybit import BybitProduct
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
 
 
@@ -129,9 +129,20 @@ class BybitMarketFeed(CryptoMarketFeed):
         self.data_source.stream_api.set_callback(_callback)
         await self.data_source.stream_api.connect()
     
-    def _parse_message(self, product: BybitProduct, msg: dict) -> dict:
-        return self.data_source.stream_api._parse_message(product, msg)
+    def _add_default_transformations_to_stream(self, product: BybitProduct, resolution: Resolution):
+        from pfeed.utils.utils import lambda_with_name
+        self.transform(
+            lambda_with_name('parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
+        )
+        super()._add_default_transformations_to_stream(product, resolution)
         
+    @staticmethod
+    def _parse_message(product: BybitProduct, msg: dict) -> dict:
+        from pfund.exchanges.bybit.ws_api import WebsocketApi
+        from pfund.exchanges.bybit.ws_api_bybit import BybitWebsocketApi
+        BybitWebsocketApiClass: type[BybitWebsocketApi] = WebsocketApi._get_api_class(product.category)
+        return BybitWebsocketApiClass._parse_message(msg)
+    
     def _add_data_channel(self, product: BybitProduct, resolution: Resolution) -> str:
         return self.data_source.stream_api._add_data_channel(product, resolution)
 

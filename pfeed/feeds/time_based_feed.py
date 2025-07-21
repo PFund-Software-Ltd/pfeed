@@ -357,6 +357,7 @@ class TimeBasedFeed(BaseFeed):
     def _run_stream(
         self,
         data_model: TimeBasedDataModel,
+        channel: FullDataChannel,
         add_default_transformations: Callable | None,
         load_to_storage: Callable | None,
         callback: Callable[[dict], Awaitable[None] | None] | None,
@@ -369,7 +370,6 @@ class TimeBasedFeed(BaseFeed):
         if callback:
             faucet.set_streaming_callback(callback)
         dataflow: DataFlow = self.create_dataflow(data_model=data_model, faucet=faucet)
-        channel: FullDataChannel = self._add_data_channel(data_model.product, data_model.resolution)
         faucet.bind_channel_to_dataflow(dataflow, channel)
         if add_default_transformations:
             add_default_transformations()

@@ -419,7 +419,6 @@ class TimeBasedFeed(BaseFeed):
 
         return df if not include_metadata else (df, metadata)
 
-    # TODO: streaming
     async def _eager_run_stream(self, ray_kwargs: dict):
         await self._run_stream_dataflows(ray_kwargs=ray_kwargs)
         

@@ -13,11 +13,20 @@ from msgspec import msgpack
 from pfund.enums import PublicDataChannel, PrivateDataChannel, PFundDataChannel, PFundDataTopic
 
 
-JSONValue = Union[dict, list, str, int, float, bool, None]
-DataChannel = Union[PFundDataChannel, PublicDataChannel, PrivateDataChannel]
 class SocketMethod(StrEnum):
     bind = "bind"
     connect = "connect"
+
+
+class ZeroMQDataChannel(StrEnum):
+    signal = 'signal'
+DataChannel = Union[ZeroMQDataChannel, PFundDataChannel, PublicDataChannel, PrivateDataChannel]
+JSONValue = Union[dict, list, str, int, float, bool, None]
+
+
+class ZeroMQSignal(StrEnum):
+    START = 'START'
+    STOP = 'STOP'
 
 
 # TODO: need to tunnel zeromq connections with SSH when communicating with remote ray actors
@@ -99,7 +108,7 @@ class ZeroMQ:
         else:
             raise ValueError(f'{port=} is already bound')
     
-    def connect(self, socket: zmq.Socket, port: int, channel: str=''):
+    def connect(self, socket: zmq.Socket, port: int):
         '''Connects to a port which uses connect method.'''
         assert socket in self._socket_methods, f'{socket=} has not been initialized'
         assert self._socket_methods[socket] == SocketMethod.connect, f'{socket=} is not a socket used for connecting'
@@ -124,7 +133,6 @@ class ZeroMQ:
                     socket.disconnect(f"{self._url}:{port}")
             socket.setsockopt(zmq.LINGER, 5000)  # wait up to 5 seconds, then close anyway
             socket.close()
-        time.sleep(0.5)  # give zmq some time to clean up
 
         # terminate context
         self._ctx.term()
@@ -160,7 +168,6 @@ class ZeroMQ:
             # avoids busy-waiting
             # REVIEW: not sure if this is enough, monitor CPU usage; if not enough, sleep 1ms
             time.sleep(0)
-
         # TODO: handle exception:
         # try:
         # except zmq.error.Again:  # no message available, will be raised when using zmq.DONTWAIT

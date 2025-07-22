@@ -449,25 +449,21 @@ class MarketFeed(TimeBasedFeed):
     def _standardize_message(product: BaseProduct, resolution: Resolution, msg: dict) -> StreamingMessage:
         if resolution.is_bar():
             data: dict= msg['data']
-            try:
-                message = BarMessage(
-                    trading_venue=product.trading_venue.upper(),
-                    exchange=product.exchange.upper(),
-                    product=product.name,
-                    symbol=product.symbol,
-                    resolution=repr(resolution),
-                    msg_ts=msg['ts'],
-                    ts=data['ts'],
-                    open=data['open'],
-                    high=data['high'],
-                    low=data['low'],
-                    close=data['close'],
-                    volume=data['volume'],
-                    extra_data=msg['extra_data'],
-                )
-            except Exception as e:
-                print(f'***_standardize_message: {e}')
-                raise e
+            message = BarMessage(
+                trading_venue=product.trading_venue.upper(),
+                exchange=product.exchange.upper(),
+                product=product.name,
+                symbol=product.symbol,
+                resolution=repr(resolution),
+                msg_ts=msg['ts'],
+                ts=data['ts'],
+                open=data['open'],
+                high=data['high'],
+                low=data['low'],
+                close=data['close'],
+                volume=data['volume'],
+                extra_data=msg['extra_data'],
+            )
         else:
             raise NotImplementedError(f'{product.name} {resolution} is not supported')
         return message

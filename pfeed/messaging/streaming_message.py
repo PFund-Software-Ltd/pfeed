@@ -5,10 +5,10 @@ from msgspec import Meta, Struct, field, ValidationError
 
 class StreamingMessage(
     Struct, 
-    kw_only=True, 
-    frozen=True, 
+    kw_only=True,
+    frozen=True,
     omit_defaults=True,
-    forbid_unknown_fields=True, 
+    forbid_unknown_fields=True,
     array_like=True,  # NOTE: setting array_like=True for 1.5-2x speedup
     gc=True,  # OPTIMIZE: consider setting gc=False for performance boost (but then you can't use lists, dicts etc.)
 ):

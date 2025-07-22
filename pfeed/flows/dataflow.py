@@ -54,6 +54,10 @@ class DataFlow:
     def set_sink(self, sink: Sink):
         self._sink = sink
     
+    def is_sealed(self):
+        '''Check if the dataflow is sealed, i.e. cannot add transformations'''
+        return self._sink is not None
+    
     def __str__(self):
         if not self.is_streaming():
             return f'{self.name}.{self.extract_type}'

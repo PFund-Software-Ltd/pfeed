@@ -108,14 +108,18 @@ class BaseFeed(ABC):
     def __aiter__(self) -> AsyncGenerator:
         if not self.streaming_dataflows:
             raise RuntimeError("No streaming dataflow to iterate over")
+        # get the first dataflow, doesn't matter, they share the same faucet
         streaming_dataflow = self.streaming_dataflows[0]
         queue: asyncio.Queue = streaming_dataflow.faucet.get_streaming_queue()
         async def _iter():
-            while True:
-                msg = await queue.get()
-                if msg is None:  # Streaming ended, None sent by faucet.close_stream()
-                    break
-                yield msg
+            async with asyncio.TaskGroup() as task_group:
+                producer = task_group.create_task(self.run_async())
+                while True:
+                    msg = await queue.get()
+                    if msg is None:          # sentinel from faucet.close_stream()
+                        break
+                    yield msg
+                await producer
         return _iter()
     
     @abstractmethod
@@ -604,7 +608,19 @@ class BaseFeed(ABC):
     def run(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs):
         result = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         if inspect.isawaitable(result):
-            return asyncio.run(result)
+            try:
+                asyncio.get_running_loop()
+                # We're in a running event loop, can't use asyncio.run()
+                from pfund import print_warning
+                print_warning(
+                    "Cannot call .run() from within a running event loop.\n"
+                    "Did you mean to call .run_async() or forget to set 'pipeline_mode=True'?"
+                )
+                # Close the coroutine to prevent RuntimeWarning about unawaited coroutine
+                result.close()
+            except RuntimeError:  # if no running loop, asyncio.get_running_loop() will raise RuntimeError
+                # No running event loop, safe to use asyncio.run()
+                return asyncio.run(result)
         else:
             return result
     

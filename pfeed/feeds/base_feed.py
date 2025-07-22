@@ -498,6 +498,7 @@ class BaseFeed(ABC):
                 worker_name: str, 
                 transformations_per_dataflow: dict[DataFlowName, list[Callable]], 
                 ports_to_connect: list[int],
+                ready_queue: Queue,
             ):
                 # TODO: also need storages_per_dataflow
                 logger = logging.getLogger(feed_name.lower() + '_data')
@@ -511,12 +512,14 @@ class BaseFeed(ABC):
                 try:
                     msg_queue = ZeroMQ(
                         name=f'{feed_name}.stream.{worker_name}',
+                        logger=logger,
                         sender_type=zmq.PUSH,  # TODO: push to Data Engine if in use
                         receiver_type=zmq.DEALER,
                     )
                     msg_queue.receiver.setsockopt(zmq.IDENTITY, worker_name.encode())
                     for port in ports_to_connect:
                         msg_queue.connect(msg_queue.receiver, port)
+                    ready_queue.put(worker_name)
                     
                     while True:
                         msg = msg_queue.recv()
@@ -563,14 +566,33 @@ class BaseFeed(ABC):
                     ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)
                     ports_to_connect[worker_name].extend(ports_in_use)
 
+                worker_names = [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
+                ready_queue = Queue()  # let ray worker notify the main thread that it's ready to receive messages
+
+                # start ray workers
                 futures = [
                     ray_task.remote(
                         feed_name=self.name.value,
-                        worker_name=worker_name, 
-                        transformations_per_dataflow=transformations_per_worker[worker_name], 
+                        worker_name=worker_name,
+                        transformations_per_dataflow=transformations_per_worker[worker_name],
                         ports_to_connect=ports_to_connect[worker_name],
-                    ) for worker_name in [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
+                        ready_queue=ready_queue,
+                    ) for worker_name in worker_names
                 ]
+
+                # wait for ray workers to be ready
+                timeout = 10
+                while timeout:
+                    timeout -= 1
+                    worker_name = ready_queue.get(timeout=5)
+                    worker_names.remove(worker_name)
+                    is_workers_ready = not worker_names
+                    if is_workers_ready:
+                        break
+                else:
+                    raise RuntimeError("Timeout: Not all workers reported ready")
+                
+                # start streaming
                 await _run_dataflows()
             except KeyboardInterrupt:
                 print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")

@@ -100,7 +100,11 @@ class DataFlow:
         '''
         import zmq
         from pfeed.messaging.zeromq import ZeroMQ
-        self._msg_queue = ZeroMQ(f'{self.name}', sender_type=zmq.ROUTER)
+        self._msg_queue = ZeroMQ(
+            name=f'{self.name}', 
+            logger=self.logger,
+            sender_type=zmq.ROUTER
+        )
         self._msg_queue.bind(self._msg_queue.sender)
         self._msg_queue.set_target_identity(worker_name)  # store zmq.DEALER's identity to send to
     

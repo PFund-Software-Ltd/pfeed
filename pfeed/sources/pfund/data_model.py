@@ -15,11 +15,9 @@ class PFundDataModel(TimeBasedDataModel):
     data_source: PFundSource = Field(default_factory=PFundSource)
     component_name: str
     component_type: ComponentType
-    file_extension: str = '.parquet'
-    compression: str = 'snappy'
 
-    def create_filename(self, date: datetime.date | None=None) -> str:
-        return self.component_name + self.file_extension
+    def create_filename(self, date: datetime.date | None=None, file_extension='.parquet') -> str:
+        return self.component_name + file_extension
     
     def create_storage_path(self, date: datetime.date | None=None) -> Path:
         return (

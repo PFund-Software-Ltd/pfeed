@@ -76,6 +76,8 @@ class ZeroMQ:
         self._target_identity: bytes | None = None  # identity of the sender socket to send to, currently only used for ROUTER socket
         self._receiver: zmq.Socket | None = None
         self._poller: zmq.Poller | None = None
+        self._encoder = msgpack.Encoder()
+        self._decoder = msgpack.Decoder()
 
         if sender_type:
             self._sender = self._ctx.socket(sender_type)
@@ -175,7 +177,7 @@ class ZeroMQ:
         '''
         try:
             msg_ts = time.time()
-            msg = [channel.encode(), topic.encode(), msgpack.encode(data), msgpack.encode(msg_ts)]
+            msg = [channel.encode(), topic.encode(), self._encoder.encode(data), self._encoder.encode(msg_ts)]
             if self._sender.socket_type == zmq.ROUTER:
                 msg.insert(0, self._target_identity)
             self._sender.send_multipart(msg, zmq.NOBLOCK)
@@ -196,7 +198,7 @@ class ZeroMQ:
             if events:
                 msg = self._receiver.recv_multipart(zmq.NOBLOCK)
                 channel, topic, data, msg_ts = msg
-                return channel.decode(), topic.decode(), msgpack.decode(data), msgpack.decode(msg_ts)
+                return channel.decode(), topic.decode(), self._decoder.decode(data), self._decoder.decode(msg_ts)
         except zmq.error.Again:  # no message available, will be raised when using zmq.NOBLOCK
             self._logger.warning(f'{self.receiver_name} zmq.error.Again, no message available')
         except zmq.error.ContextTerminated:

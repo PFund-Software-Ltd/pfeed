@@ -3,12 +3,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
 
-import json
-
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pandas as pd
 import polars as pl
+from msgspec import json
 try:
     from deltalake import DeltaTable
 except ImportError:
@@ -48,8 +47,8 @@ class TabularIO(BaseIO):
         is_empty_table = (table.num_rows == 0)
         if not is_empty_table:
             write_deltalake(
-                file_path, 
-                table, 
+                file_path,
+                table,
                 mode='append',
                 storage_options=self._storage_options,
                 partition_by=delta_partition_by,
@@ -59,7 +58,7 @@ class TabularIO(BaseIO):
     def _write_pyarrow_table(self, table: pa.Table, file_path: str, metadata: dict | None=None):
         file_path = file_path.replace('s3://', '')
         metadata = metadata or {}
-        metadata_json = json.dumps(metadata, default=str).encode()
+        metadata_json = json.encode(metadata)
         schema = table.schema.with_metadata({b'metadata_json': metadata_json})
         table = table.replace_schema_metadata(schema.metadata)
         with self._filesystem.open_output_stream(file_path) as f:
@@ -70,14 +69,14 @@ class TabularIO(BaseIO):
         return self._exists(file_path) and pq.read_metadata(file_path, filesystem=self._filesystem).num_rows == 0
     
     def write(
-        self, 
-        file_path: str, 
-        df: pd.DataFrame, 
-        metadata: dict,
+        self,
+        table: pa.Table,
+        file_path: str,
+        metadata: dict | None=None,
         delta_partition_by: list[str] | None=None,
     ):
+        metadata = metadata or {}
         self._mkdir(file_path)
-        table = pa.Table.from_pandas(df, preserve_index=False)
         if self._use_deltalake:
             self._write_deltalake(
                 table, 
@@ -131,5 +130,5 @@ class TabularIO(BaseIO):
                 parquet_file_metadata = parquet_file.schema.to_arrow_schema().metadata
                 if b'metadata_json' in parquet_file_metadata:
                     metadata_json = parquet_file_metadata[b'metadata_json']
-                    metadata[file_path] = json.loads(metadata_json.decode())
+                    metadata[file_path] = json.decode(metadata_json)
         return metadata

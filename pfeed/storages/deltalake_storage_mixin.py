@@ -12,14 +12,10 @@ from rich.panel import Panel
 from deltalake import DeltaTable
 
 from pfund import cprint
-from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
 
 class DeltaLakeStorageMixin:
     metadata_filename = 'deltalake_metadata.parquet'
-    partition_by = {
-        TimeBasedDataHandler: ['year', 'month', 'day'],
-    }
     
     def get_delta_tables(self: BaseStorage | DeltaLakeStorageMixin) -> list[DeltaTable]:
         if not self.use_deltalake:

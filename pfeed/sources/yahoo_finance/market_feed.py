@@ -190,7 +190,7 @@ class YahooFinanceMarketFeed(MarketFeed):
             )
             no_df = (df is None or df.empty)
             if no_df:
-                self.logger.info(f'failed to download {product.name} {resolution} data, retrying...')
+                self.logger.info(f'failed to download {product.symbol} {resolution} data, retrying...')
                 time.sleep(1)
             else:
                 self.logger.debug(f'downloaded {data_model}')
@@ -200,14 +200,14 @@ class YahooFinanceMarketFeed(MarketFeed):
                     self.logger.debug(f'set start_date={actual_start_date} for {data_model}')
                 break
         else:
-            self.logger.warning(f'failed to download {product.name} {resolution} data, '
+            self.logger.warning(f'failed to download {product.symbol} {resolution} data, '
                                 f'please check if start_date={data_model.start_date} and end_date={data_model.end_date} is within a valid range')
         # REVIEW: for some unknown reason, yfinance sometimes returns None or empty DataFrame even start_date and end_date are within a valid range
         # i.e. same function call, different results, need to remind users to manually retry again
         if df is None or df.empty:
             df_msg = 'df=None' if df is None else 'empty df'
             self.logger.warning(
-                f'downloaded {df_msg} {product.name} {resolution} data from {self.name}. '
+                f'downloaded {df_msg} {product.symbol} {resolution} data from {self.name}. '
                 'If it happens on trading days, it is possibly due to rate limit, network issue, or bugs in `pfeed` or `yfinance`, '
                 'you may try to modify (extend the time range) `start_date` and `end_date` and avoid using `rollback_period` to try again.'
             )

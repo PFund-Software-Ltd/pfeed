@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import tStorage, tDataLayer, GenericData, StorageMetadata
 
-import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -38,7 +37,6 @@ class BaseStorage(ABC):
         self.data_layer = DataLayer[data_layer.upper()]
         self.data_domain = data_domain.lower()
         self.use_deltalake = use_deltalake
-        self._logger: logging.Logger | None = None
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
         self._storage_options = storage_options or {}
@@ -62,7 +60,6 @@ class BaseStorage(ABC):
             **storage_kwargs,
         )
         instance.attach_data_model(data_model)
-        instance.initialize_logger()
         instance.initialize_data_handler()
         return instance
     
@@ -87,12 +84,9 @@ class BaseStorage(ABC):
             'data_path': str(self.data_path),
             'filesystem': self.get_filesystem(),
             'storage_options': self._storage_options,
+            'use_deltalake': self.use_deltalake,
         }
         self._data_handler = self.data_model.create_data_handler(**data_handler_configs)
-    
-    def initialize_logger(self):
-        name = self._data_model.data_source.name.lower()
-        self._logger = logging.getLogger(f"{name}_data")
     
     @property
     def data_model(self) -> BaseDataModel:
@@ -122,22 +116,13 @@ class BaseStorage(ABC):
         else:
             return f'{self.name}'
     
-    def write_data(self, data: GenericData, metadata: dict | None=None) -> bool:
-        try:
-            self.data_handler.write(data, metadata=metadata)
-            return True
-        except Exception:
-            self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
-            return False
-
+    def write_data(self, data: GenericData, streaming: bool=False):
+        self.data_handler.write(data, streaming=streaming)
+            
     def read_data(self, delta_version: int | None=None) -> tuple[GenericData | None, StorageMetadata]:
         '''
         Args:
             delta_version: version of the deltalake table to read, if None, read the latest version.
         '''
-        try:
-            data, metadata = self.data_handler.read(delta_version=delta_version)
-            return data, metadata
-        except Exception:
-            self._logger.exception(f'Failed to read data ({delta_version=}) from {self.name}')
-            return None, {}
+        data, metadata = self.data_handler.read(delta_version=delta_version)
+        return data, metadata

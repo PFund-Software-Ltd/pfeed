@@ -24,6 +24,7 @@ from abc import ABC, abstractmethod
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
+from pfund import print_warning
 from pfund.enums import Environment
 from pfeed.enums import DataSource, DataTool, DataStorage, LocalDataStorage, ExtractType
 
@@ -305,9 +306,9 @@ class BaseFeed(ABC):
         )
     
     @staticmethod
-    def _create_sink(data_model: BaseDataModel, create_storage_func: Callable) -> Sink:
+    def _create_sink(data_model: BaseDataModel, create_storage: Callable, flush_interval: int=10) -> Sink:
         from pfeed.flows.sink import Sink
-        return Sink(data_model, create_storage_func)
+        return Sink(data_model, create_storage, flush_interval=flush_interval)
     
     def _clear_subflows(self):
         '''Clear subflows
@@ -340,32 +341,40 @@ class BaseFeed(ABC):
         data_layer: tDataLayer='CLEANED',
         data_domain: str='',
         storage_options: dict | None=None,
+        flush_interval: int=10,
         **storage_kwargs,
     ) -> BaseFeed:
         '''
         Args:
             data_domain: custom domain of the data, used in data_path/data_layer/data_domain
                 useful for grouping data
+            flush_interval (in seconds): Maximum time between flushes of buffered streaming data.
         '''
+        is_storage_duckdb = to_storage.upper() == DataStorage.DUCKDB.value
         if self._use_ray:
-            assert to_storage.upper() != DataStorage.DUCKDB, 'DuckDB is not thread-safe, cannot be used with Ray'
+            assert not is_storage_duckdb, 'DuckDB is not thread-safe, cannot be used with Ray'
 
         storage_options = storage_options or self._storage_options.get(to_storage, {})
         Storage = DataStorage[to_storage.upper()].storage_class
         # NOTE: lazy creation of storage to avoid pickle errors when using ray
         # e.g. minio client is using socket, which is not picklable
         def _create_storage(data_model: BaseDataModel):
+            if self._subflows and self._subflows[0].is_streaming() and not is_storage_duckdb and not self._use_deltalake:
+                use_deltalake = True
+                print_warning("Automatically setting use_deltalake=True for streaming dataflows")
+            else:
+                use_deltalake = self._use_deltalake
             return Storage.from_data_model(
                 data_model=data_model,
                 data_layer=data_layer,
                 data_domain=data_domain or self.data_domain,
-                use_deltalake=self._use_deltalake,
+                use_deltalake=use_deltalake,
                 storage_options=storage_options,
                 **storage_kwargs,
             )
 
         for dataflow in self._subflows:
-            sink: Sink = self._create_sink(dataflow.data_model, _create_storage)
+            sink: Sink = self._create_sink(dataflow.data_model, _create_storage, flush_interval=flush_interval)
             dataflow.set_sink(sink)
         return self
     
@@ -383,11 +392,12 @@ class BaseFeed(ABC):
         
         color = generate_color(self.name.value)
         
-        def _run_dataflow(dataflow: DataFlow) -> FlowResult:
+        def _run_dataflow(dataflow: DataFlow, logger: logging.Logger | None=None) -> FlowResult:
             if self._use_prefect:
                 flow_type = 'prefect'
             else:
                 flow_type = 'native'
+            dataflow.set_logger(logger or self.logger)
             result: FlowResult = dataflow.run_batch(flow_type=flow_type, prefect_kwargs=prefect_kwargs)
             # NOTE: EMPTY dataframe is considered as success
             success = result.data is not None
@@ -401,23 +411,23 @@ class BaseFeed(ABC):
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             @ray.remote
-            def ray_task(dataflow: DataFlow) -> bool:
+            def ray_task(feed_name: str, use_prefect: bool, dataflow: DataFlow) -> tuple[bool, DataFlow]:
                 success = False
                 try:
-                    if not self.logger.handlers:
-                        self.logger.addHandler(QueueHandler(log_queue))
-                        self.logger.setLevel(logging.DEBUG)
+                    logger = logging.getLogger(feed_name.lower() + '_data')
+                    if not logger.handlers:
+                        logger.addHandler(QueueHandler(log_queue))
+                        logger.setLevel(logging.DEBUG)
                         # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
-                        self.logger.propagate = False
-                    success = _run_dataflow(dataflow)
+                        logger.propagate = False
+                    success = _run_dataflow(dataflow, logger=logger)
                 except RuntimeError as err:
-                    if self._use_prefect:
-                        self.logger.exception(f'Error in running prefect {dataflow}:')
+                    if use_prefect:
+                        logger.exception(f'Error in running prefect {dataflow}:')
                     else:
                         raise err
                 except Exception:
-                    self.logger.exception(f'Error in running {dataflow}:')
-
+                    logger.exception(f'Error in running {dataflow}:')
                 return success, dataflow
             
             try:
@@ -428,7 +438,13 @@ class BaseFeed(ABC):
                 batch_size = ray_kwargs['num_cpus']
                 dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
                 for dataflow_batch in tqdm(dataflow_batches, desc=f'Running {self.name} dataflows', colour=color):
-                    futures = [ray_task.remote(dataflow) for dataflow in dataflow_batch]
+                    futures = [
+                        ray_task.remote(
+                            feed_name=self.name.value, 
+                            use_prefect=self._use_prefect, 
+                            dataflow=dataflow,
+                        ) for dataflow in dataflow_batch
+                    ]
                     returns = ray.get(futures)
                     for success, dataflow in returns:
                         if not success:
@@ -474,6 +490,8 @@ class BaseFeed(ABC):
     async def _run_stream_dataflows(self, ray_kwargs: dict):
         async def _run_dataflows():
             try:
+                for dataflow in self._dataflows:
+                    dataflow.set_logger(self.logger)
                 await asyncio.gather(*[dataflow.run_stream(flow_type='native') for dataflow in self._dataflows])
             except asyncio.CancelledError:
                 self.logger.warning(f'{self.name} dataflows were cancelled')
@@ -632,17 +650,19 @@ class BaseFeed(ABC):
         if inspect.isawaitable(result):
             try:
                 asyncio.get_running_loop()
-                # We're in a running event loop, can't use asyncio.run()
-                from pfund import print_warning
+            except RuntimeError:  # if no running loop, asyncio.get_running_loop() will raise RuntimeError
+                # No running event loop, safe to use asyncio.run()
+                pass
+            else:
                 print_warning(
                     "Cannot call .run() from within a running event loop.\n"
                     "Did you mean to call .run_async() or forget to set 'pipeline_mode=True'?"
                 )
+                # We're in a running event loop, can't use asyncio.run()
                 # Close the coroutine to prevent RuntimeWarning about unawaited coroutine
                 result.close()
-            except RuntimeError:  # if no running loop, asyncio.get_running_loop() will raise RuntimeError
-                # No running event loop, safe to use asyncio.run()
-                return asyncio.run(result)
+                return
+            return asyncio.run(result)
         else:
             return result
     

@@ -6,7 +6,8 @@ if TYPE_CHECKING:
     from pfeed.sources.base_source import BaseSource
     from pfeed.flows.dataflow import DataFlow
     from pfeed.typing import GenericData
-    
+
+import logging    
 import asyncio
 import inspect
 
@@ -31,6 +32,7 @@ class Faucet:
             close_stream:
                 A function to disconnect the streaming after running the extract_func.
         '''
+        self._logger: logging.Logger | None = None
         self._extract_func = extract_func
         self._extract_type = ExtractType[extract_type.lower()] if isinstance(extract_type, str) else extract_type
         self._data_source: BaseSource = data_source
@@ -44,6 +46,9 @@ class Faucet:
         self._streaming_queue: asyncio.Queue | None = None
         self._user_streaming_callback: Callable[[dict], Awaitable[None] | None] | None = None
         self._streaming_bindings: dict[FullDataChannel, DataFlow] = {}
+    
+    def set_logger(self, logger: logging.Logger):
+        self._logger = logger
 
     def __str__(self):
         return f'{self._data_source.name}.{self._extract_type}'
@@ -91,7 +96,7 @@ class Faucet:
                 await result
         if self._streaming_queue:
             if self._streaming_queue.full():
-                self.logger.warning(f"Streaming queue full, dropping oldest message - consider increasing maxsize (current: {self.STREAMING_QUEUE_MAXSIZE}) or improving consumer speed")
+                self._logger.warning(f"Streaming queue full, dropping oldest message - consider increasing maxsize (current: {self.STREAMING_QUEUE_MAXSIZE}) or improving consumer speed")
                 self._streaming_queue.get_nowait()  # Remove oldest
             await self._streaming_queue.put(data)
         if channel:

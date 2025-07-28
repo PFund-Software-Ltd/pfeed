@@ -12,7 +12,7 @@ class MarketDataSchema(pa.DataFrameModel):
         '1s', '1m', '1h', '1d',
         '1w', '1M', '1y',
     ])
-    product: Series[str]
+    product: Series[str]  # product basis, e.g. 'BTC_USD_PERP'
     symbol: Series[str] | None
     
     @pa.check('date', error='date is not monotonic increasing')

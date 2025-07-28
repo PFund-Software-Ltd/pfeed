@@ -50,11 +50,9 @@ class MarketDataModel(TimeBasedDataModel):
     '''
     product: BaseProduct
     resolution: Resolution
-    file_extension: str = '.parquet'
-    compression: str = 'snappy'
     
     def __str__(self):
-        return ':'.join([super().__str__(), self.product.name, repr(self.resolution)])
+        return ':'.join([super().__str__(), str(self.product.asset_type), self.product.symbol, repr(self.resolution)])
     
     # FIXME: this is not needed anymore?
     @model_validator(mode='before')
@@ -72,20 +70,20 @@ class MarketDataModel(TimeBasedDataModel):
     def update_resolution(self, resolution: Resolution) -> None:
         self.resolution = resolution
 
-    def create_filename(self, date: datetime.date) -> str:
-        filename = '_'.join([self.product.key, str(date)])
-        return filename + self.file_extension
+    def create_filename(self, date: datetime.date, file_extension='.parquet') -> str:
+        filename = '_'.join([self.product.symbol, str(date)])
+        return filename + file_extension
 
-    def create_storage_path(self, date: datetime.date) -> Path:
+    def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
         path = (
             Path(f'env={self.env.value}')
             / f'data_source={self.data_source.name}'
             / f'data_origin={self.data_origin}'
-            / f'asset_type={self.product.asset_type}'
+            / f'asset_type={str(self.product.asset_type)}'
             / f'symbol={self.product.symbol}'
             / f'resolution={repr(self.resolution)}'
         )
-        if self.use_deltalake:
+        if use_deltalake:
             return path
         else:
             year, month, day = str(date).split('-')
@@ -97,6 +95,7 @@ class MarketDataModel(TimeBasedDataModel):
         data_path: str,
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
+        use_deltalake: bool = False,
     ) -> MarketDataHandler:
         return MarketDataHandler(
             data_model=self, 
@@ -104,12 +103,15 @@ class MarketDataModel(TimeBasedDataModel):
             data_path=data_path, 
             filesystem=filesystem, 
             storage_options=storage_options, 
-            use_deltalake=self.use_deltalake
+            use_deltalake=use_deltalake
         )
 
     def to_metadata(self) -> MarketMetadata:
         return {
             **super().to_metadata(),
+            'trading_venue': self.product.trading_venue,
+            'exchange': self.product.exchange,
+            'product': str(self.product.basis),
             'symbol': self.product.symbol,
             'resolution': repr(self.resolution),
             'asset_type': str(self.product.asset_type),

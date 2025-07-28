@@ -18,15 +18,21 @@ from pfeed.enums import ExtractType, FlowType
 class DataFlow:
     def __init__(self, data_model: BaseDataModel, faucet: Faucet):
         data_source = data_model.data_source
-        self.logger = logging.getLogger(f'{data_source.name.lower()}_data')
+        self._logger: logging.Logger | None = None
         self.name = f'{data_source.name}_DataFlow'
         self._data_model: BaseDataModel = data_model
+        self._is_streaming = faucet._extract_type == ExtractType.stream
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
         self._transformations: list[Callable] = []
         self._result = FlowResult()
         self._flow_type: FlowType = FlowType.native
         self._msg_queue: ZeroMQ | None = None
+    
+    def set_logger(self, logger: logging.Logger):
+        self._logger = logger
+        self._faucet.set_logger(logger)
+        self._sink.set_logger(logger)
         
     @property
     def data_model(self) -> BaseDataModel:
@@ -62,10 +68,10 @@ class DataFlow:
         if not self.is_streaming():
             return f'{self.name}.{self.extract_type}'
         else:
-            return f'{self.name}.{self.extract_type}.{self.data_model.product.name}.{self.data_model.resolution!r}'
+            return f'{self.name}.{self.extract_type}.{self.data_model.product.symbol}.{self.data_model.resolution!r}'
     
     def is_streaming(self) -> bool:
-        return self.faucet._extract_type == ExtractType.stream
+        return self._is_streaming
     
     def _run_batch_etl(self) -> GenericData | None:
         from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
@@ -83,6 +89,7 @@ class DataFlow:
         return data
     
     def run_batch(self, flow_type: Literal['native', 'prefect']='native', prefect_kwargs: dict | None=None) -> FlowResult:
+        assert self._logger is not None, 'logger is not set'
         self._flow_type = FlowType[flow_type.lower()]
         if self._flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
@@ -102,7 +109,7 @@ class DataFlow:
         from pfeed.messaging.zeromq import ZeroMQ
         self._msg_queue = ZeroMQ(
             name=f'{self.name}', 
-            logger=self.logger,
+            logger=self._logger,
             sender_type=zmq.ROUTER
         )
         self._msg_queue.bind(self._msg_queue.sender)
@@ -113,18 +120,21 @@ class DataFlow:
         if self._msg_queue:
             self._msg_queue.send(channel=self.name, topic=str(self.data_model), data=msg)
         else:
-            msg: dict | StreamingMessage = self._transform(msg)
-            # TODO: streaming
-            # self._load(msg)
+            msg: StreamingMessage = self._transform(msg)
+            self._load(msg)
     
     async def run_stream(self, flow_type: Literal['native']='native'):
+        assert self._logger is not None, 'logger is not set'
+        if self.sink:
+            assert self.sink.storage.use_deltalake, \
+                'writing streaming data is only supported when using deltalake, please set use_deltalake=True'
         self._flow_type = FlowType[flow_type.lower()]
-        await self.faucet.open_stream()
+        await self.faucet.open_stream()  # this will trigger _run_stream_etl()
         
     async def end_stream(self):
         await self.faucet.close_stream()
         
-    def _transform(self, data: GenericData) -> GenericData:
+    def _transform(self, data: GenericData) -> GenericData | StreamingMessage:
         for transform in self._transformations:
             if self.is_streaming():
                 data: dict | StreamingMessage = transform(data)
@@ -137,29 +147,23 @@ class DataFlow:
                     data: GenericData = transform(quote(data))
                 else:
                     data: GenericData = transform(data)
-            self.logger.debug(f"transformed {self.data_model} data by '{transform.__name__}'")
+            self._logger.debug(f"transformed {self.data_model} data by '{transform.__name__}'")
         return data
     
     def _load(self, data: GenericData | StreamingMessage):
         if self.sink is None:
             if self.extract_type != ExtractType.retrieve:
-                self.logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
+                self._logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
             return
-        if not self.is_streaming():
+        if self.is_streaming():
+            self.sink.flush(data, streaming=True)
+        else:
             if self._flow_type == FlowType.prefect:
                 from prefect import task
                 load = task(self.sink.flush)
             else:
                 load = self.sink.flush
-            success = load(data)
-            if not success:
-                self.logger.warning(f'failed to load {self.data_model} data to {self.sink}')
-            else:
-                self.logger.info(f'loaded {self.data_model} data to {self.sink}')
-        else:
-            # TODO: streaming
-            pass
-            # self.sink.flush(...)
+            load(data)
 
     def to_prefect_dataflow(self, **kwargs) -> PrefectDataFlow:
         '''

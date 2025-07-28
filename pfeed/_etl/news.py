@@ -11,8 +11,8 @@ import pandas as pd
 
 def standardize_columns(df: pd.DataFrame, product: BaseProduct | None=None) -> pd.DataFrame:
     from pfeed._etl.base import standardize_date_column
-    df['product'] = product.name if product else None
-    if 'symbol' not in df.columns and product.symbol:
+    df['product'] = str(product.basis) if product else None
+    if 'symbol' not in df.columns and product:
         df['symbol'] = product.symbol
     df = standardize_date_column(df)
     return df

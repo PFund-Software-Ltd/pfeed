@@ -38,8 +38,6 @@ class NewsDeltaMetadata(TypedDict, total=True):
 
 class NewsDataModel(TimeBasedDataModel):
     product: BaseProduct | None = None  # when product is None, it means general news (e.g. market news)
-    file_extension: str = '.parquet'
-    compression: str = 'snappy'
 
     def __str__(self):
         return ':'.join([super().__str__(), repr(self.product) if self.product else 'GENERAL', 'NEWS'])
@@ -52,18 +50,18 @@ class NewsDataModel(TimeBasedDataModel):
             assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
         return data
     
-    def create_filename(self, date: datetime.date) -> str:
-        name = 'GENERAL_MARKET_NEWS' if self.product is None else self.product.name
+    def create_filename(self, date: datetime.date, file_extension='.parquet') -> str:
+        name = 'GENERAL_MARKET_NEWS' if self.product is None else self.product.symbol
         filename = '_'.join([name, str(date)])
-        return filename + self.file_extension
+        return filename + file_extension
 
-    def create_storage_path(self, date: datetime.date) -> Path:
+    def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
         path = (
             Path(f'env={self.env.value}')
             / f'data_source={self.data_source.name}'
             / f'data_origin={self.data_origin}'
         )
-        if self.use_deltalake:
+        if use_deltalake:
             return path
         else:
             asset_type = 'NONE' if self.product is None else str(self.product.asset_type)
@@ -84,6 +82,7 @@ class NewsDataModel(TimeBasedDataModel):
         data_path: str,
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
+        use_deltalake: bool = False
     ) -> NewsDataHandler:
         return NewsDataHandler(
             data_model=self, 
@@ -91,7 +90,7 @@ class NewsDataModel(TimeBasedDataModel):
             data_path=data_path, 
             filesystem=filesystem, 
             storage_options=storage_options, 
-            use_deltalake=self.use_deltalake
+            use_deltalake=use_deltalake
         )
 
     def to_metadata(self) -> NewsMetadata:

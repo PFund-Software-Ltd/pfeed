@@ -94,7 +94,7 @@ class BatchAPI:
         # used to check if the efilename created by the date exists in the efilenames (files on the exchange's data server)
         if product.is_option():
             raise NotImplementedError('Bybit does not provide options data')
-        epdt, ptype = product.symbol, product.type.value
+        epdt, ptype = product.symbol, str(product.asset_type)
         efilename = self._create_efilename(epdt, date, product.is_spot())
         url = f"{self.URLS[ptype]}/{epdt}/{efilename}"
         if res := self._get(url, frequency=1, num_retry=3):

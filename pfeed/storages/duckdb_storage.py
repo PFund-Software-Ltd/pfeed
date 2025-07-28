@@ -102,7 +102,6 @@ class DuckDBStorage(BaseStorage):
             **storage_kwargs
         )
         instance.attach_data_model(data_model)
-        instance.initialize_logger()
         instance._schema_name = instance._create_schema_name()
         instance._table_name = instance._create_table_name()
         instance.conn = instance._create_connection()
@@ -120,7 +119,7 @@ class DuckDBStorage(BaseStorage):
     
     def _create_schema_name(self) -> str:
         if isinstance(self.data_model, MarketDataModel):
-            return self.data_model.product.type.value.lower()
+            return str(self.data_model.product.asset_type).lower()
         else:
             raise NotImplementedError(f'{type(self.data_model)=}')
     
@@ -128,7 +127,7 @@ class DuckDBStorage(BaseStorage):
         if isinstance(self.data_model, MarketDataModel):
             return (
                 # '_' is SQL-safe, and is used as a separator in the table name
-                '_'.join([self.data_model.product.name.lower(), str(self.data_model.resolution).lower()])
+                '_'.join([self.data_model.product.symbol.lower(), str(self.data_model.resolution).lower()])
                 .replace('-', '_')
                 .replace(':', '_')
                 .replace('.', 'p')  # 123456.123 -> 123456p123, e.g. for strike price
@@ -265,21 +264,17 @@ class DuckDBStorage(BaseStorage):
         '''Reads metadata from duckdb metadata table'''
         if not self.table_exists(table_name=self._metadata_table_name):
             return {}
-        try:
-            conn = self.conn.execute(f"""
-                SELECT * FROM {self._metadata_schema_table_name}
-                WHERE table_name = '{self._table_name}'
-            """)
-            metadata: DuckDBMetadata = conn.df().to_dict(orient='records')
-            if not metadata:
-                return {}
-            else:
-                metadata = metadata[0]
-                metadata['dates'] = [date.item().date() for date in metadata['dates']]
-                return metadata
-        except Exception:
-            self._logger.exception(f'Failed to read metadata from {self.name} using table_name={self._table_name}')
+        conn = self.conn.execute(f"""
+            SELECT * FROM {self._metadata_schema_table_name}
+            WHERE table_name = '{self._table_name}'
+        """)
+        metadata: DuckDBMetadata = conn.df().to_dict(orient='records')
+        if not metadata:
             return {}
+        else:
+            metadata = metadata[0]
+            metadata['dates'] = [date.item().date() for date in metadata['dates']]
+            return metadata
         
     def _read_storage_metadata(self) -> StorageMetadata:
         '''Reads metadata from duckdb metadata table and consolidates it to follow other storages metadata structure'''
@@ -302,7 +297,7 @@ class DuckDBStorage(BaseStorage):
             with self:
                 df: pd.DataFrame = convert_to_pandas_df(data)
                 if df.empty:
-                    self._logger.warning(f'Empty DataFrame for {self.name} {self.data_model}')
+                    print_warning(f'Empty DataFrame for {self.name} {self.data_model}')
                     return False
                 self._write_df(df)
                 duckdb_metadata: DuckDBMetadata = self._read_metadata()
@@ -311,9 +306,10 @@ class DuckDBStorage(BaseStorage):
                 metadata: DuckDBMetadata = {'table_name': self._table_name, 'dates': total_dates}
                 self._write_metadata(metadata)
                 return True
-        except Exception:
-            self._logger.exception(f'Failed to write data (type={type(data)}) to {self.name}')
-            return False
+        except Exception as exc:
+            raise Exception(
+                f'Failed to write data (type={type(data)}) to {self.name} (table_name={self._table_name}): {exc}'
+            ) from exc
     
     def read_data(self) -> tuple[pl.LazyFrame | None, StorageMetadata]:
         try:
@@ -321,9 +317,10 @@ class DuckDBStorage(BaseStorage):
                 lf: pl.LazyFrame | None = self._read_df()
                 metadata: StorageMetadata = self._read_storage_metadata()
                 return lf, metadata
-        except Exception:
-            self._logger.exception(f'Failed to read data (table_name={self._table_name}) from {self.name}')
-            return None, {}
+        except Exception as exc:
+            raise Exception(
+                f'Failed to read data (table_name={self._table_name}) from {self.name}: {exc}'
+            ) from exc
     
     def start_ui(self, port: int=4213, no_browser: bool=False):
         self.conn.execute(f"SET ui_local_port={port}")

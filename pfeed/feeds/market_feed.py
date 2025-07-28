@@ -161,7 +161,7 @@ class MarketFeed(TimeBasedFeed):
         data_resolution: Resolution = max(unit_resolution, lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
-        self.logger.info(f'Downloading historical {product.name}(symbol={product.symbol}) {data_resolution} data, from {str(start_date)} to {str(end_date)} (UTC), data_layer={data_layer.name}/{data_domain=}')
+        self.logger.info(f'Downloading historical {product.symbol} {data_resolution} data, from {str(start_date)} to {str(end_date)} (UTC), data_layer={data_layer.name}/{data_domain=}')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin, env=env),
             partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=data_resolution, data_origin=data_origin, env=env),
@@ -193,7 +193,7 @@ class MarketFeed(TimeBasedFeed):
             self._normalize_raw_data,
             lambda_with_name(
                 'standardize_columns',
-                lambda df: etl.standardize_columns(df, data_resolution, product.name, symbol=product.symbol),
+                lambda df: etl.standardize_columns(df, data_resolution, str(product.basis), symbol=product.symbol),
             ),
             etl.filter_columns,
             lambda_with_name(
@@ -401,7 +401,7 @@ class MarketFeed(TimeBasedFeed):
             is_resample_required = resolution < data_resolution
             if is_resample_required:
                 df: pd.DataFrame = etl.resample_data(convert_to_pandas_df(df), resolution)
-                self.logger.debug(f'resampled {product.name} {data_resolution} data to {resolution}')
+                self.logger.debug(f'resampled {product} {data_resolution} data to {resolution}')
             df: GenericFrame = convert_to_user_df(df, self._data_tool)
         return df
     
@@ -429,7 +429,7 @@ class MarketFeed(TimeBasedFeed):
             start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
         )
         channel: FullDataChannel = self._add_data_channel(data_model.product, data_model.resolution)
-        self.logger.info(f'Streaming(env={self._env}) {product.name}(symbol={product.symbol}) {resolution} data, data_layer={data_layer.name}/{data_domain=}')
+        self.logger.info(f'Streaming(env={self._env}) {product.symbol} {resolution} data, data_layer={data_layer.name}/{data_domain=}')
         return self._run_stream(
             data_model=data_model,
             channel=channel,
@@ -450,10 +450,9 @@ class MarketFeed(TimeBasedFeed):
         if resolution.is_bar():
             data: dict= msg['data']
             message = BarMessage(
-                trading_venue=product.trading_venue.upper(),
-                exchange=product.exchange.upper(),
-                product=product.name,
+                product=str(product.basis),
                 symbol=product.symbol,
+                specs=product.specs,
                 resolution=repr(resolution),
                 msg_ts=msg['ts'],
                 ts=data['ts'],
@@ -465,7 +464,7 @@ class MarketFeed(TimeBasedFeed):
                 extra_data=msg['extra_data'],
             )
         else:
-            raise NotImplementedError(f'{product.name} {resolution} is not supported')
+            raise NotImplementedError(f'{product.symbol} {resolution} is not supported')
         return message
     
     @staticmethod

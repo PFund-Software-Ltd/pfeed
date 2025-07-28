@@ -50,7 +50,7 @@ def display_summary(storage_infos, show_stats=True, limit=10):
                         delta_indicator = "[bold blue]Δ[/bold blue] " if product.is_delta else ""
                         
                         stats_str = f"({product.file_count} files, {format_size(product.size_bytes)})" if show_stats else ""
-                        console.print(f"{prefix} {delta_indicator}[bold]{product.name}[/bold] {stats_str}")
+                        console.print(f"{prefix} {delta_indicator}[bold]{product.symbol}[/bold] {stats_str}")
                         
                         # Show resolutions
                         resolutions = sorted(product.resolutions)
@@ -120,7 +120,7 @@ def display_table(storage_infos, show_stats=True, limit=10):
                             layer_name,
                             domain_name,
                             source_name,
-                            product.name,
+                            product.symbol,
                             format_str,
                             resolution_str,
                             str(product.file_count)
@@ -209,7 +209,7 @@ def display_tree(storage_infos, show_stats=True, limit=10):
                         
                         # Add delta indicator if it's a delta table
                         delta_indicator = "[bold blue]Δ[/bold blue] " if product.is_delta else ""
-                        product_node = source_node.add(f"{delta_indicator}[bold]{product.name}[/bold] {stats_str}")
+                        product_node = source_node.add(f"{delta_indicator}[bold]{product.symbol}[/bold] {stats_str}")
                         
                         # Show resolutions
                         resolutions = sorted(product.resolutions)

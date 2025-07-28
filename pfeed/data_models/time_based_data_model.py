@@ -21,6 +21,7 @@ class TimeBasedMetadata(TypedDict, total=True):
     env: tEnvironment
     data_source: tDataSource
     data_origin: str
+    # REVIEW: is "date" already enough?
     start_date: datetime.date
     end_date: datetime.date
 
@@ -30,6 +31,7 @@ class TimeBasedDeltaMetadata(TypedDict, total=True):
     env: tEnvironment
     data_source: tDataSource
     data_origin: str
+    # FIXME: for consistency, turn it into "start_date" and "end_date"?
     dates: list[datetime.date]
 
 
@@ -71,11 +73,11 @@ class TimeBasedDataModel(BaseDataModel):
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
     
     @abstractmethod
-    def create_filename(self, date: datetime.date) -> str:
+    def create_filename(self, date: datetime.date, file_extension='.parquet') -> str:
         pass
     
     @abstractmethod
-    def create_storage_path(self, date: datetime.date) -> Path:
+    def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
         pass
 
     def create_data_handler(

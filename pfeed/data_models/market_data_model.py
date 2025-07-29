@@ -111,7 +111,6 @@ class MarketDataModel(TimeBasedDataModel):
             **super().to_metadata(),
             'trading_venue': self.product.trading_venue,
             'exchange': self.product.exchange,
-            'product': str(self.product.basis),
             'symbol': self.product.symbol,
             'resolution': repr(self.resolution),
             'asset_type': str(self.product.asset_type),

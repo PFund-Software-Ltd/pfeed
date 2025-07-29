@@ -39,6 +39,9 @@ class TimeBasedDataHandler(BaseDataHandler):
             data_path: data path that already consists of data layer and data domain
                 but still has no information about the data model
         '''
+        from pfeed.adapter import Adapter
+        from pfeed.messaging import BarMessage
+        
         super().__init__(
             data_model=data_model, 
             data_layer=data_layer, 
@@ -51,6 +54,9 @@ class TimeBasedDataHandler(BaseDataHandler):
             storage_options=storage_options,
             use_deltalake=use_deltalake,
         )
+        self._adapter = Adapter()
+        # to be filled in _create_streaming_buffer()
+        self._message_schemas = {}  # key = (msg.trading_venue, msg.exchange, msg.symbol, msg.asset_type, msg.resolution), value = pa.Schema
     
     # FIXME: being used as a better type hint, fix this
     def _validate_schema(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -83,29 +89,46 @@ class TimeBasedDataHandler(BaseDataHandler):
         Convert StreamingMessage to dict and standardize it, e.g. convert timestamp to datetime (UTC)
         '''
         streaming_buffer = msg.to_dict()
+        
         # drop empty dicts
-        for k in ['extra_data', 'custom_data']:
-            if not streaming_buffer[k]:
-                streaming_buffer.pop(k)
-        # make each spec a column, e.g. strike_price is now a column
+        dict_fields = ['extra_data', 'custom_data']
+        for field in dict_fields:
+            if not streaming_buffer[field]:
+                streaming_buffer.pop(field)
+        
+        # flatten specs, make each spec a column, e.g. strike_price is now a column
         for k, v in streaming_buffer['specs'].items():
             streaming_buffer[k] = v
         streaming_buffer.pop('specs')
+
         # convert timestamp to datetime (UTC)
         date = datetime.datetime.fromtimestamp(
             streaming_buffer['ts'],
             tz=datetime.timezone.utc
         ).replace(tzinfo=None)
         streaming_buffer['date'] = date
+
         # add year, month, day columns for delta table partitioning
         streaming_buffer['year'] = date.year
         streaming_buffer['month'] = date.month
         streaming_buffer['day'] = date.day
         return streaming_buffer
+
+    def _infer_message_schema(self, msg: StreamingMessage, streaming_buffer: dict) -> pa.Schema:
+        schema_key = (msg.trading_venue, msg.exchange, msg.symbol, msg.asset_type, msg.resolution)
+        if schema_key in self._message_schemas:
+            return self._message_schemas[schema_key]
+        else:
+            schema = self._adapter.dict_to_schema(streaming_buffer)
+            self._message_schemas[schema_key] = schema
+            return schema
         
     def _write_stream(self, buffer: list[StreamingMessage]):
+        streaming_buffer = [self._create_streaming_buffer(msg) for msg in buffer]
+        schema = self._infer_message_schema(buffer[0], streaming_buffer[0])
+        table = pa.Table.from_pylist(streaming_buffer, schema=schema)
         self._io.write(
-            table=pa.Table.from_pylist([self._create_streaming_buffer(msg) for msg in buffer]),
+            table=table,
             file_path=self._create_file_paths()[0],
             metadata=self._data_model.to_metadata(),
             delta_partition_by=self.DELTA_PARTITION_BY,

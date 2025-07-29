@@ -109,6 +109,8 @@ class Faucet:
         self._user_streaming_callback = callback
         
     def bind_channel_to_dataflow(self, dataflow: DataFlow, channel: FullDataChannel):
+        if channel in self._streaming_bindings:
+            raise ValueError(f'channel {channel} is already bound to a dataflow')
         self._streaming_bindings[channel] = dataflow
 
     def get_streaming_queue(self) -> asyncio.Queue:

@@ -26,15 +26,33 @@ class BufferIO(BaseIO):
         stream_mode: StreamMode=StreamMode.FAST,
     ):
         '''
-        Writes streaming data to buffer.arrow, which will be flushed to deltalake when the target file size is reached.
-        This is a better alternative to writing to deltalake directly, because it can reduce the number of writes to deltalake,
-        which is a time-consuming operation.
+        Manages a 3-layer buffering system for high-speed streaming data:
+        
+        Layer 1: In-memory buffer (Python list)
+            - Fastest writes possible
+            - Data stored in RAM as simple Python dictionaries
+            - Risk: Data lost if program crashes
+            
+        Layer 2: Arrow buffer file (buffer.arrow) 
+            - Fast staging area on disk
+            - Data moves here when in-memory buffer fills up
+            - 6x faster than Delta Lake writes
+            - Benefit: Data survives crashes, still very fast
+            
+        Layer 3: Delta Lake (final storage)
+            - Data moves here periodically (every ~100 seconds)
+            - Optimized for analytics, queries, and long-term storage
+            - Slowest writes but provides features like time travel and ACID transactions
+        
+        This design keeps streaming writes fast while ensuring data durability and 
+        analytics capabilities.
+        
         Args:
             stream_mode: SAFE or FAST
-                if "FAST" is chosen, streaming data will be cached to memory to a certain amount before writing to disk,
-                faster write speed, but data loss risk will increase.
-                if "SAFE" is chosen, streaming data will be written to disk immediately,
-                slower write speed, but data loss risk will be minimized.
+                FAST: Data accumulates in memory before writing to Arrow buffer
+                      (faster writes, slightly higher risk of data loss)
+                SAFE: Data writes to Arrow buffer immediately  
+                      (slower writes, minimal risk of data loss)
         '''
         super().__init__(filesystem=filesystem, storage_options=storage_options)
         self._stream_mode: StreamMode = StreamMode[stream_mode.upper()]

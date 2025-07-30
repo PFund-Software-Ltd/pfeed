@@ -80,32 +80,9 @@ class TimeBasedDataHandler(BaseDataHandler):
         self._adapter = Adapter()
         self._message_schemas: dict[Path, pa.Schema] = {}
         self._recover_from_crash()
-        atexit.register(self._cleanup_at_exit)
+        atexit.register(self._recover_from_crash)
     
-    # FIXME: this function is supposed to just call _write_buffer_to_deltalake()
-    # but somehow it could cause error when reading buffer.arrow: Memory pointer from external source (e.g, FFI) is not aligned with the specified scalar type.
     def _recover_from_crash(self):
-        '''
-        Recover from crash by reading buffer.arrow and writing it to deltalake
-        This is only needed when the _cleanup_at_exit is not called, e.g. program crashes
-        '''
-        # Error description: Memory pointer from external source (e.g, FFI) is not aligned with the specified scalar type.
-        # The Arrow array’s memory starts at an address that isn’t a proper multiple (e.g., 8 bytes) for its data type.
-        # Rust Arrow requires that alignment for safe, fast reads; when it’s wrong, it panics to avoid undefined behavior.
-        # see https://arrow.apache.org/rust/src/arrow_buffer/buffer/scalar.rs.html
-        # see https://github.com/delta-io/delta-rs/issues/3407
-        # HACK: current workaround is to convert the table to pandas and back to table
-        table = self._buffer_io.read(self._buffer_path)
-        table = pa.Table.from_pandas(table.to_pandas(), preserve_index=False, schema=table.schema)
-        self._io.write(
-            table=table,
-            file_path=self._buffer_path.parent,
-            metadata=self._data_model.to_metadata(),
-            delta_partition_by=self.DELTA_PARTITION_BY,
-        )
-        self._buffer_io.clear_disk(self._buffer_path)
-        
-    def _cleanup_at_exit(self):
         self._write_buffer_to_deltalake()
         
     # FIXME: being used as a better type hint, fix this

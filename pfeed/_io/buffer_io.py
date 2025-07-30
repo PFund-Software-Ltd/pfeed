@@ -95,9 +95,10 @@ class BufferIO(BaseIO):
         buffer_file.flush()  # flush python buffer to OS buffer
         os.fsync(buffer_file.fileno())  # flush OS buffer to disk
         # write_size = os.fstat(buffer_file.fileno()).st_size
-        self._buffer.clear()    
+        self._buffer.clear()
             
     def read(self, file_path: Path) -> pa.Table:
+        self._close_writers(file_path)
         with open(file_path, "rb") as f:
             with pa.ipc.open_stream(f) as reader:
                 table = reader.read_all()
@@ -106,6 +107,5 @@ class BufferIO(BaseIO):
 
     def clear_disk(self, file_path: Path):
         '''Clear the buffer.arrow file'''
-        self._close_writers(file_path)
         if file_path.exists():
             file_path.unlink()

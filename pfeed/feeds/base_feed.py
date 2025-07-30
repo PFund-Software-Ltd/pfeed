@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tDataSource
+    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tDataSource, tStreamMode
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
@@ -26,7 +26,7 @@ from pprint import pformat
 
 from pfund import print_warning
 from pfund.enums import Environment
-from pfeed.enums import DataSource, DataTool, DataStorage, LocalDataStorage, ExtractType
+from pfeed.enums import DataSource, DataTool, DataStorage, LocalDataStorage, ExtractType, StreamMode
 
 
 __all__ = ["BaseFeed"]
@@ -306,9 +306,9 @@ class BaseFeed(ABC):
         )
     
     @staticmethod
-    def _create_sink(data_model: BaseDataModel, create_storage: Callable, flush_interval: int=10) -> Sink:
+    def _create_sink(data_model: BaseDataModel, create_storage: Callable) -> Sink:
         from pfeed.flows.sink import Sink
-        return Sink(data_model, create_storage, flush_interval=flush_interval)
+        return Sink(data_model, create_storage)
     
     def _clear_subflows(self):
         '''Clear subflows
@@ -341,14 +341,18 @@ class BaseFeed(ABC):
         data_layer: tDataLayer='CLEANED',
         data_domain: str='',
         storage_options: dict | None=None,
-        flush_interval: int=10,
+        stream_mode: tStreamMode='FAST', 
         **storage_kwargs,
     ) -> BaseFeed:
         '''
         Args:
             data_domain: custom domain of the data, used in data_path/data_layer/data_domain
                 useful for grouping data
-            flush_interval (in seconds): Maximum time between flushes of buffered streaming data.
+            stream_mode: SAFE or FAST
+                if "FAST" is chosen, streaming data will be cached to memory to a certain amount before writing to disk,
+                faster write speed, but data loss risk will increase.
+                if "SAFE" is chosen, streaming data will be written to disk immediately,
+                slower write speed, but data loss risk will be minimized.
         '''
         is_storage_duckdb = to_storage.upper() == DataStorage.DUCKDB.value
         if self._use_ray:
@@ -370,11 +374,12 @@ class BaseFeed(ABC):
                 data_domain=data_domain or self.data_domain,
                 use_deltalake=use_deltalake,
                 storage_options=storage_options,
+                stream_mode=StreamMode[stream_mode.upper()],
                 **storage_kwargs,
             )
 
         for dataflow in self._subflows:
-            sink: Sink = self._create_sink(dataflow.data_model, _create_storage, flush_interval=flush_interval)
+            sink: Sink = self._create_sink(dataflow.data_model, _create_storage)
             dataflow.set_sink(sink)
         return self
     

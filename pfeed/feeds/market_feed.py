@@ -450,9 +450,6 @@ class MarketFeed(TimeBasedFeed):
         if resolution.is_bar():
             data: dict= msg['data']
             message = BarMessage(
-                trading_venue=str(product.trading_venue),
-                exchange=str(product.exchange),
-                asset_type=str(product.asset_type),
                 symbol=product.symbol,
                 specs=product.specs,
                 resolution=repr(resolution),

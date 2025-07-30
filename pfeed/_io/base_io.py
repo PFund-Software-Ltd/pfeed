@@ -20,19 +20,18 @@ class BaseIO(ABC):
     def is_local_fs(self) -> bool:
         return isinstance(self._filesystem, pa_fs.LocalFileSystem)
     
-    def _mkdir(self, file_path: str):
+    def _mkdir(self, file_path: Path):
         if self.is_local_fs:
-            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+            file_path.parent.mkdir(parents=True, exist_ok=True)
         
-    def _exists(self, file_path: str) -> bool:
-        file_path = file_path.replace('s3://', '')
-        file_info = self._filesystem.get_file_info(file_path)
+    def _exists(self, file_path: Path) -> bool:
+        file_info = self._filesystem.get_file_info(str(file_path).replace('s3://', ''))
         return file_info.type == pa_fs.FileType.File
         
     @abstractmethod
-    def write(self, file_path: str, data: GenericData, **kwargs):
+    def write(self, file_path: Path, data: GenericData, **kwargs):
         pass
 
     @abstractmethod
-    def read(self, file_path: str, data_tool: tDataTool='polars', **kwargs) -> GenericData | None:
+    def read(self, file_path: Path, data_tool: tDataTool='polars', **kwargs) -> GenericData | None:
         pass

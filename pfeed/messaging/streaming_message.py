@@ -14,10 +14,7 @@ class StreamingMessage(
     array_like=True,  # NOTE: setting array_like=True for 1.5-2x speedup
     gc=True,  # OPTIMIZE: consider setting gc=False for performance boost (but then you can't use lists, dicts etc.)
 ):
-    trading_venue: str
-    exchange: str
     symbol: str
-    asset_type: str
     resolution: str
     specs: dict  # product specifications, e.g. for options, specs are strike_price, expiration, etc.
     # if timestamp's unit is second, it should have only 10 digits in the next 200 years

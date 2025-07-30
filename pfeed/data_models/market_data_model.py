@@ -89,23 +89,9 @@ class MarketDataModel(TimeBasedDataModel):
             year, month, day = str(date).split('-')
             return path / f'year={year}' / f'month={month}' / f'day={day}'
 
-    def create_data_handler(
-        self, 
-        data_layer: DataLayer,
-        data_path: str,
-        filesystem: pa_fs.FileSystem,
-        storage_options: dict | None = None,
-        use_deltalake: bool = False,
-    ) -> MarketDataHandler:
-        return MarketDataHandler(
-            data_model=self, 
-            data_layer=data_layer,
-            data_path=data_path, 
-            filesystem=filesystem, 
-            storage_options=storage_options, 
-            use_deltalake=use_deltalake
-        )
-
+    def data_handler_class(self) -> type[MarketDataHandler]:
+        return MarketDataHandler
+    
     def to_metadata(self) -> MarketMetadata:
         return {
             **super().to_metadata(),

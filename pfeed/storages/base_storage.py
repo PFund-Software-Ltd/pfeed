@@ -5,9 +5,12 @@ if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import tStorage, tDataLayer, GenericData, StorageMetadata
+    from pfeed.messaging.streaming_message import StreamingMessage
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+
+from pfeed.enums import StreamMode
 
 
 class BaseStorage(ABC):
@@ -50,6 +53,7 @@ class BaseStorage(ABC):
         data_domain: str,
         use_deltalake: bool=False, 
         storage_options: dict | None=None,
+        stream_mode: StreamMode=StreamMode.FAST,
         **storage_kwargs,
     ) -> BaseStorage:
         instance = cls(
@@ -60,7 +64,7 @@ class BaseStorage(ABC):
             **storage_kwargs,
         )
         instance.attach_data_model(data_model)
-        instance.initialize_data_handler()
+        instance.initialize_data_handler(stream_mode=stream_mode)
         return instance
     
     @abstractmethod
@@ -78,13 +82,14 @@ class BaseStorage(ABC):
         '''
         self._data_model = data_model
     
-    def initialize_data_handler(self):
+    def initialize_data_handler(self, stream_mode: StreamMode):
         data_handler_configs = {
             'data_layer': self.data_layer,
             'data_path': str(self.data_path),
             'filesystem': self.get_filesystem(),
             'storage_options': self._storage_options,
             'use_deltalake': self.use_deltalake,
+            'stream_mode': stream_mode,
         }
         self._data_handler = self.data_model.create_data_handler(**data_handler_configs)
     
@@ -116,7 +121,7 @@ class BaseStorage(ABC):
         else:
             return f'{self.name}'
     
-    def write_data(self, data: GenericData, streaming: bool=False):
+    def write_data(self, data: GenericData | StreamingMessage, streaming: bool=False):
         self.data_handler.write(data, streaming=streaming)
             
     def read_data(self, delta_version: int | None=None) -> tuple[GenericData | None, StorageMetadata]:

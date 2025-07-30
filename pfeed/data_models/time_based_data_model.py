@@ -15,6 +15,7 @@ from pydantic import field_validator, Field, ValidationInfo
 
 from pfeed.data_models.base_data_model import BaseDataModel
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
+from pfeed.enums import StreamMode
 
 
 class TimeBasedMetadata(TypedDict, total=True):
@@ -80,21 +81,28 @@ class TimeBasedDataModel(BaseDataModel):
     def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
         pass
 
+    @abstractmethod
+    def data_handler_class(self) -> type[TimeBasedDataHandler]:
+        return TimeBasedDataHandler
+
     def create_data_handler(
         self, 
         data_layer: DataLayer,
         data_path: str,
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
-        use_deltalake: bool = False,                        
+        use_deltalake: bool = False,
+        stream_mode: StreamMode=StreamMode.FAST,
     ) -> TimeBasedDataHandler:
-        return TimeBasedDataHandler(
+        DataHandler: type[TimeBasedDataHandler] = self.data_handler_class()
+        return DataHandler(
             data_model=self, 
             data_layer=data_layer,
             data_path=data_path, 
             filesystem=filesystem, 
             storage_options=storage_options, 
-            use_deltalake=use_deltalake
+            use_deltalake=use_deltalake,
+            stream_mode=stream_mode,
         )
 
     def to_metadata(self) -> dict:

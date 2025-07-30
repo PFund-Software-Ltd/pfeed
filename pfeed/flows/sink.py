@@ -7,8 +7,6 @@ if TYPE_CHECKING:
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.typing import GenericData
 
-import time
-import datetime
 import logging
 
 
@@ -17,20 +15,12 @@ class Sink:
         self, 
         data_model: BaseDataModel,
         create_storage: Callable,
-        flush_interval: int=10,
     ):
-        '''
-        Args:
-            flush_interval (in seconds): Maximum time between flushes of buffered streaming data.
-        '''
         self._logger: logging.Logger | None = None
         self._data_model = data_model
         self._data_source: BaseSource = data_model.data_source
         self._storage: BaseStorage | None = None
         self._create_storage = create_storage
-        self._streaming_buffer: list[StreamingMessage] = []
-        self._flush_interval = flush_interval
-        self._last_flush_ts = time.time()
     
     def set_logger(self, logger: logging.Logger):
         self._logger = logger
@@ -57,17 +47,8 @@ class Sink:
 
     def flush(self, data: GenericData | StreamingMessage, streaming: bool=False):
         try:
-            if streaming:
-                log_level = logging.DEBUG
-                self._streaming_buffer.append(data)
-                now = time.time()
-                if now - self._last_flush_ts >= self._flush_interval:
-                    self.storage.write_data(self._streaming_buffer, streaming=streaming)
-                    self._streaming_buffer.clear()
-                    self._last_flush_ts = now
-            else:
-                log_level = logging.INFO
-                self.storage.write_data(data, streaming=streaming)
+            log_level = logging.DEBUG if streaming else logging.INFO
+            self.storage.write_data(data, streaming=streaming)
             self._logger.log(log_level, f'loaded {self.data_model} data to {self}')
         except Exception:
             self._logger.exception(f'failed to load {self.data_model} data (type={type(data)}) to {self}:')

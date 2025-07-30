@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
+    from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -29,17 +30,17 @@ class TabularIO(BaseIO):
         if use_deltalake:
             assert DeltaTable is not None, 'deltalake is not installed'
     
-    def _write_deltalake_metadata(self, file_path: str, metadata: dict):
+    def _write_deltalake_metadata(self, file_path: Path, metadata: dict):
         from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
         # HACK: delta-rs doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
         empty_df_with_metadata = pd.DataFrame()
         table = pa.Table.from_pandas(empty_df_with_metadata, preserve_index=False)
-        self._write_pyarrow_table(table, file_path + '/' + DeltaLakeStorageMixin.metadata_filename, metadata=metadata)
+        self._write_pyarrow_table(table, file_path / DeltaLakeStorageMixin.metadata_filename, metadata=metadata)
     
     def _write_deltalake(
-        self, 
-        table: pa.Table, 
-        file_path: str, 
+        self,
+        table: pa.Table,
+        file_path: Path,
         metadata: dict,
         delta_partition_by: list[str] | None=None,
     ):
@@ -47,7 +48,7 @@ class TabularIO(BaseIO):
         is_empty_table = (table.num_rows == 0)
         if not is_empty_table:
             write_deltalake(
-                file_path,
+                str(file_path),
                 table,
                 mode='append',
                 storage_options=self._storage_options,
@@ -55,13 +56,12 @@ class TabularIO(BaseIO):
             )
         self._write_deltalake_metadata(file_path, metadata)
 
-    def _write_pyarrow_table(self, table: pa.Table, file_path: str, metadata: dict | None=None):
-        file_path = file_path.replace('s3://', '')
+    def _write_pyarrow_table(self, table: pa.Table, file_path: Path, metadata: dict | None=None):
         metadata = metadata or {}
         metadata_json = json.encode(metadata)
         schema = table.schema.with_metadata({b'metadata_json': metadata_json})
         table = table.replace_schema_metadata(schema.metadata)
-        with self._filesystem.open_output_stream(file_path) as f:
+        with self._filesystem.open_output_stream(str(file_path).replace('s3://', '')) as f:
             pq.write_table(table, f, compression=self._compression)
             
     def _is_empty_parquet_file(self, file_path: str) -> bool:
@@ -71,7 +71,7 @@ class TabularIO(BaseIO):
     def write(
         self,
         table: pa.Table,
-        file_path: str,
+        file_path: Path,
         metadata: dict | None=None,
         delta_partition_by: list[str] | None=None,
     ):

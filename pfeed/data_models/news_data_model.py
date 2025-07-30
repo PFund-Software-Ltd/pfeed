@@ -75,23 +75,9 @@ class NewsDataModel(TimeBasedDataModel):
                 / f'month={month}' 
                 / f'day={day}'
             )
-
-    def create_data_handler(
-        self, 
-        data_layer: DataLayer,
-        data_path: str,
-        filesystem: pa_fs.FileSystem,
-        storage_options: dict | None = None,
-        use_deltalake: bool = False
-    ) -> NewsDataHandler:
-        return NewsDataHandler(
-            data_model=self, 
-            data_layer=data_layer,
-            data_path=data_path, 
-            filesystem=filesystem, 
-            storage_options=storage_options, 
-            use_deltalake=use_deltalake
-        )
+    
+    def data_handler_class(self) -> type[NewsDataHandler]:
+        return NewsDataHandler
 
     def to_metadata(self) -> NewsMetadata:
         return {

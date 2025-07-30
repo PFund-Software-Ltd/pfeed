@@ -39,6 +39,7 @@ tDataLayer = Literal['RAW', 'CLEANED', 'CURATED']
 tDataCategory = Literal['MARKET_DATA', 'NEWS_DATA']
 tDataType = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
 tStorage = Literal['CACHE', 'LOCAL', 'MINIO', 'DUCKDB']
+tStreamMode = Literal["SAFE", "FAST"]
 
 
 class StorageMetadata(TypedDict, total=False):

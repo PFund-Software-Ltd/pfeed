@@ -10,20 +10,28 @@ if TYPE_CHECKING:
         TimeBasedDeltaMetadata
     )
 
+import time
+import atexit
 import datetime
+from pathlib import Path
 
 import pandas as pd
 import polars as pl
 import pyarrow as pa
+try:
+    from deltalake import DeltaTable
+except ImportError:
+    DeltaTable = None
 
-from pfeed.enums import DataLayer
-from pfeed._io.tabular_io import TabularIO
+from pfeed.enums import DataLayer, StreamMode
 from pfeed.data_handlers.base_data_handler import BaseDataHandler
 from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
 
 class TimeBasedDataHandler(BaseDataHandler):
     DELTA_PARTITION_BY = ['year', 'month', 'day']  # delta table partition by
+    # REVIEW: make it a param?
+    DELTA_FLUSH_INTERVAL = 100  # in seconds, flush streaming data to deltalake every x seconds
     
     def __init__(
         self, 
@@ -33,14 +41,21 @@ class TimeBasedDataHandler(BaseDataHandler):
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
         use_deltalake: bool = False,
+        stream_mode: StreamMode=StreamMode.FAST,
     ):
         '''
         Args:
             data_path: data path that already consists of data layer and data domain
                 but still has no information about the data model
+            stream_mode: SAFE or FAST
+                if "FAST" is chosen, streaming data will be cached to memory to a certain amount before writing to disk,
+                faster write speed, but data loss risk will increase.
+                if "SAFE" is chosen, streaming data will be written to disk immediately,
+                slower write speed, but data loss risk will be minimized.
         '''
         from pfeed.adapter import Adapter
-        from pfeed.messaging import BarMessage
+        from pfeed._io.buffer_io import BufferIO
+        from pfeed._io.tabular_io import TabularIO
         
         super().__init__(
             data_model=data_model, 
@@ -54,10 +69,22 @@ class TimeBasedDataHandler(BaseDataHandler):
             storage_options=storage_options,
             use_deltalake=use_deltalake,
         )
+        self._buffer_io = BufferIO(
+            filesystem=filesystem,
+            storage_options=storage_options,
+            stream_mode=stream_mode,
+        )
+        self._buffer_path: Path = Path(self._create_file_paths()[0]) / self._buffer_io.BUFFER_FILENAME
+        self._buffer_io._mkdir(self._buffer_path)
+        self._last_delta_flush = time.time()
         self._adapter = Adapter()
-        # to be filled in _create_streaming_buffer()
-        self._message_schemas = {}  # key = (msg.trading_venue, msg.exchange, msg.symbol, msg.asset_type, msg.resolution), value = pa.Schema
-    
+        self._message_schemas: dict[Path, pa.Schema] = {}
+        atexit.register(self._cleanup)
+        
+    def _cleanup(self):
+        # write buffer to deltalake on exit
+        self._write_buffer_to_deltalake()
+        
     # FIXME: being used as a better type hint, fix this
     def _validate_schema(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
@@ -77,14 +104,14 @@ class TimeBasedDataHandler(BaseDataHandler):
             file_paths = ['/'.join([self._data_path, str(data_model.create_storage_path(data_model.dates[0], use_deltalake=self._use_deltalake))])]
         return file_paths
     
-    def write(self, data: GenericFrame | list[StreamingMessage], streaming: bool=False):
+    def write(self, data: GenericFrame | StreamingMessage, streaming: bool=False):
         if streaming:
             self._write_stream(data)
         else:
             self._write_batch(data)
             
     # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same columns in write_batch (env=BACKTEST)
-    def _create_streaming_buffer(self, msg: StreamingMessage) -> dict:
+    def _create_streaming_data(self, msg: StreamingMessage) -> dict:
         '''
         Convert StreamingMessage to dict and standardize it, e.g. convert timestamp to datetime (UTC)
         '''
@@ -114,25 +141,29 @@ class TimeBasedDataHandler(BaseDataHandler):
         streaming_buffer['day'] = date.day
         return streaming_buffer
 
-    def _infer_message_schema(self, msg: StreamingMessage, streaming_buffer: dict) -> pa.Schema:
-        schema_key = (msg.trading_venue, msg.exchange, msg.symbol, msg.asset_type, msg.resolution)
-        if schema_key in self._message_schemas:
-            return self._message_schemas[schema_key]
-        else:
-            schema = self._adapter.dict_to_schema(streaming_buffer)
-            self._message_schemas[schema_key] = schema
-            return schema
-        
-    def _write_stream(self, buffer: list[StreamingMessage]):
-        streaming_buffer = [self._create_streaming_buffer(msg) for msg in buffer]
-        schema = self._infer_message_schema(buffer[0], streaming_buffer[0])
-        table = pa.Table.from_pylist(streaming_buffer, schema=schema)
+    def _infer_message_schema(self, streaming_data: dict) -> pa.Schema:
+        if self._buffer_path not in self._message_schemas:
+            self._message_schemas[self._buffer_path] = self._adapter.dict_to_schema(streaming_data)
+        return self._message_schemas[self._buffer_path]
+    
+    def _write_buffer_to_deltalake(self):
+        self._buffer_io.spill_to_disk(self._buffer_path, self._message_schemas[self._buffer_path])
         self._io.write(
-            table=table,
-            file_path=self._create_file_paths()[0],
+            table=self._buffer_io.read(self._buffer_path),
+            file_path=self._buffer_path.parent,
             metadata=self._data_model.to_metadata(),
             delta_partition_by=self.DELTA_PARTITION_BY,
         )
+        self._buffer_io.clear_disk(self._buffer_path)
+        
+    def _write_stream(self, msg: StreamingMessage):
+        streaming_data = self._create_streaming_data(msg)
+        schema = self._infer_message_schema(streaming_data)
+        self._buffer_io.write(self._buffer_path, streaming_data, schema)
+        now = time.time()
+        if now - self._last_delta_flush > self.DELTA_FLUSH_INTERVAL:
+            self._write_buffer_to_deltalake()
+            self._last_delta_flush = now
         
     def _write_batch(self, df: GenericFrame):
         from pfeed._etl.base import convert_to_pandas_df
@@ -159,9 +190,7 @@ class TimeBasedDataHandler(BaseDataHandler):
                 file_path = self._create_file_paths(data_model=data_model_copy)[0]
                 table = pa.Table.from_pandas(df_chunk, preserve_index=False)
                 self._io.write(table, file_path, metadata=data_model_copy.to_metadata())
-        else:
-            from deltalake import DeltaTable
-            
+        else:            
             # Preprocess table to add year, month, day columns for partitioning
             df = df.assign(
                 year=df["date"].dt.year,

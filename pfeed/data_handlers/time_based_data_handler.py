@@ -83,6 +83,9 @@ class TimeBasedDataHandler(BaseDataHandler):
         atexit.register(self._recover_from_crash)
     
     def _recover_from_crash(self):
+        '''
+        Recover from crash by reading buffer.arrow and writing it to deltalake
+        '''
         self._write_buffer_to_deltalake()
         
     # FIXME: being used as a better type hint, fix this
@@ -147,7 +150,10 @@ class TimeBasedDataHandler(BaseDataHandler):
         return self._message_schemas[self._buffer_path]
     
     def _write_buffer_to_deltalake(self):
-        self._buffer_io.spill_to_disk(self._buffer_path, self._message_schemas[self._buffer_path])
+        if not self._buffer_path.exists() or self._buffer_path.stat().st_size == 0:
+            return
+        if self._buffer_io._buffer:
+            self._buffer_io.spill_to_disk(self._buffer_path, self._message_schemas[self._buffer_path])
         self._io.write(
             table=self._buffer_io.read(self._buffer_path),
             file_path=self._buffer_path.parent,

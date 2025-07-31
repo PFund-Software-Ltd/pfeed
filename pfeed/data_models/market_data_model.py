@@ -89,6 +89,7 @@ class MarketDataModel(TimeBasedDataModel):
             year, month, day = str(date).split('-')
             return path / f'year={year}' / f'month={month}' / f'day={day}'
 
+    @property
     def data_handler_class(self) -> type[MarketDataHandler]:
         return MarketDataHandler
     

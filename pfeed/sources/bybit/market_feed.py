@@ -8,20 +8,18 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.typing import FullDataChannel
     from pfeed.typing import GenericFrame
-    from pfeed.sources.bybit.source import BybitSource
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing import tStorage, tDataLayer
 
 from pfund.products.product_bybit import BybitProduct
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
+from pfeed.sources.bybit.mixin import BybitMixin
 
 
 __all__ = ['BybitMarketFeed']
 
 
-class BybitMarketFeed(CryptoMarketFeed):
-    data_source: BybitSource
-    
+class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.

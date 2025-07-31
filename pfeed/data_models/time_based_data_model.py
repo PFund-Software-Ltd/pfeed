@@ -81,6 +81,7 @@ class TimeBasedDataModel(BaseDataModel):
     def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
         pass
 
+    @property
     @abstractmethod
     def data_handler_class(self) -> type[TimeBasedDataHandler]:
         return TimeBasedDataHandler
@@ -94,7 +95,7 @@ class TimeBasedDataModel(BaseDataModel):
         use_deltalake: bool = False,
         stream_mode: StreamMode=StreamMode.FAST,
     ) -> TimeBasedDataHandler:
-        DataHandler: type[TimeBasedDataHandler] = self.data_handler_class()
+        DataHandler: type[TimeBasedDataHandler] = self.data_handler_class
         return DataHandler(
             data_model=self, 
             data_layer=data_layer,

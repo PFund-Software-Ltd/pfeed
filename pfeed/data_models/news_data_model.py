@@ -76,6 +76,7 @@ class NewsDataModel(TimeBasedDataModel):
                 / f'day={day}'
             )
     
+    @property
     def data_handler_class(self) -> type[NewsDataHandler]:
         return NewsDataHandler
 

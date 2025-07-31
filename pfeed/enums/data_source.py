@@ -26,12 +26,3 @@ class DataSource(StrEnum):
         import importlib
         return getattr(importlib.import_module(f'pfeed.sources.{self.lower()}.source'), f'{to_camel_case(self)}Source')
     
-    def create_data_source(self, env: tEnvironment='BACKTEST') -> BaseSource:
-        from pfund.utils.utils import get_function_signature
-        
-        DataSourceClass: type[BaseSource] = self.data_source_class
-        if 'env' in get_function_signature(DataSourceClass).parameters:
-            data_source_params = {'env': env}
-        else:
-            data_source_params = {}
-        return DataSourceClass(**data_source_params)

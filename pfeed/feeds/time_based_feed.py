@@ -89,7 +89,7 @@ class TimeBasedFeed(BaseFeed):
         def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
             dataflow_data_model = partial_dataflow_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
             faucet_data_model = partial_faucet_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
-            faucet: Faucet = self._create_faucet(extract_func, extract_type, data_model=faucet_data_model)
+            faucet: Faucet = self._create_faucet(data_model=faucet_data_model, extract_func=extract_func, extract_type=extract_type)
             dataflow: DataFlow = self.create_dataflow(dataflow_data_model, faucet)
             dataflows.append(dataflow)
         
@@ -367,6 +367,7 @@ class TimeBasedFeed(BaseFeed):
             faucet: Faucet = self.streaming_dataflows[0].faucet
         else:
             faucet: Faucet = self._create_faucet(
+                data_model=data_model,
                 extract_func=self._stream_impl, 
                 extract_type=ExtractType.stream,
                 close_stream=self._close_stream,

@@ -21,54 +21,60 @@ class Faucet:
     STREAMING_QUEUE_MAXSIZE = 1000
     def __init__(
         self, 
-        data_source: BaseSource,
+        data_model: BaseDataModel, 
         extract_func: Callable,  # e.g. _download_impl(), _stream_impl(), _retrieve_impl(), _fetch_impl()
         extract_type: ExtractType,
         close_stream: Callable | None=None,
-        data_model: BaseDataModel | None=None, 
     ):
         '''
         Args:
             close_stream:
                 A function to disconnect the streaming after running the extract_func.
         '''
-        self._logger: logging.Logger | None = None
-        self._extract_func = extract_func
         self._extract_type = ExtractType[extract_type.lower()] if isinstance(extract_type, str) else extract_type
-        self._data_source: BaseSource = data_source
-        self._data_model: BaseDataModel | None = data_model
-        if self._extract_type != ExtractType.stream:
-            assert data_model is not None, 'data_model is required'
-        else:
-            assert close_stream is not None, 'close_stream is required'
+        if self._extract_type == ExtractType.stream:
+            assert close_stream is not None, 'close_stream is required for streaming'
+        self._data_model: BaseDataModel = data_model
+        self._extract_func = extract_func
         self._close_stream = close_stream
         self._is_stream_opened = False
         self._streaming_queue: asyncio.Queue | None = None
         self._user_streaming_callback: Callable[[dict], Awaitable[None] | None] | None = None
         self._streaming_bindings: dict[FullDataChannel, DataFlow] = {}
+        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
     
-    def set_logger(self, logger: logging.Logger):
-        self._logger = logger
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['_logger'] = None  # remove logger to avoid pickling error
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
 
     def __str__(self):
-        return f'{self._data_source.name}.{self._extract_type}'
+        return f'{self.data_source.name}.{self._extract_type}'
     
     @property
     def data_source(self) -> BaseSource:
-        return self._data_source
+        return self._data_model.data_source
     
     @property
     def data_model(self) -> BaseDataModel | None:
+        # NOTE: multiple data models are sharing the same faucet during streaming, 
+        # return None to prevent from using the wrong data model
+        if self._extract_type == ExtractType.stream:
+            return None
         return self._data_model
     
     def open_batch(self):
         if self._extract_type == ExtractType.retrieve:
-            data, metadata = self._extract_func(self._data_model)
+            data, metadata = self._extract_func(self.data_model)
             if 'updated_resolution' in metadata:
-                self._data_model.update_resolution(metadata['updated_resolution'])
+                self.data_model.update_resolution(metadata['updated_resolution'])
                 del metadata['updated_resolution']
         else:
-            data: GenericData | None = self._extract_func(self._data_model)
+            data: GenericData | None = self._extract_func(self.data_model)
             # NOTE: currently no metadata for other extract_types
             metadata = {}
         return data, metadata

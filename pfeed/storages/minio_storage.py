@@ -70,6 +70,17 @@ class MinioStorage(BaseStorage):
         if enable_bucket_versioning:
             self.minio.set_bucket_versioning(self.BUCKET_NAME, VersioningConfig(ENABLED))
     
+    def __getstate__(self) -> object:
+        state = self.__dict__.copy()
+        # NOTE: remove self.minio to avoid pickling error
+        state['minio'] = None
+        return state
+    
+    def __setstate__(self, state: object):
+        self.__dict__.update(state)
+        # NOTE: re-create self.minio
+        self.minio = self._create_minio(self._storage_options)
+    
     @classmethod
     def from_data_model(
         cls,

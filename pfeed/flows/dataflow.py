@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericData
     from pfeed.flows.faucet import Faucet
     from pfeed.flows.sink import Sink
+    from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.messaging.zeromq import ZeroMQ
@@ -17,9 +18,6 @@ from pfeed.enums import ExtractType, FlowType
 
 class DataFlow:
     def __init__(self, data_model: BaseDataModel, faucet: Faucet):
-        data_source = data_model.data_source
-        self._logger: logging.Logger | None = None
-        self.name = f'{data_source.name}_DataFlow'
         self._data_model: BaseDataModel = data_model
         self._is_streaming = faucet._extract_type == ExtractType.stream
         self._faucet: Faucet = faucet
@@ -28,12 +26,25 @@ class DataFlow:
         self._result = FlowResult()
         self._flow_type: FlowType = FlowType.native
         self._msg_queue: ZeroMQ | None = None
+        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
     
-    def set_logger(self, logger: logging.Logger):
-        self._logger = logger
-        self._faucet.set_logger(logger)
-        self._sink.set_logger(logger)
-        
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['_logger'] = None  # remove logger to avoid pickling error
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
+    
+    @property
+    def name(self):
+        return f'{self.data_source.name}_DataFlow'
+    
+    @property
+    def data_source(self) -> BaseSource:
+        return self._data_model.data_source
+    
     @property
     def data_model(self) -> BaseDataModel:
         return self._data_model
@@ -89,7 +100,6 @@ class DataFlow:
         return data
     
     def run_batch(self, flow_type: Literal['native', 'prefect']='native', prefect_kwargs: dict | None=None) -> FlowResult:
-        assert self._logger is not None, 'logger is not set'
         self._flow_type = FlowType[flow_type.lower()]
         if self._flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
@@ -124,7 +134,6 @@ class DataFlow:
             self._load(msg)
     
     async def run_stream(self, flow_type: Literal['native']='native'):
-        assert self._logger is not None, 'logger is not set'
         if self.sink:
             assert self.sink.storage.use_deltalake, \
                 'writing streaming data is only supported when using deltalake, please set use_deltalake=True'

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.data_models.base_data_model import BaseDataModel
@@ -14,20 +14,24 @@ class Sink:
     def __init__(
         self, 
         data_model: BaseDataModel,
-        create_storage: Callable,
+        storage: BaseStorage,
     ):
-        self._logger: logging.Logger | None = None
         self._data_model = data_model
-        self._data_source: BaseSource = data_model.data_source
-        self._storage: BaseStorage | None = None
-        self._create_storage = create_storage
+        self._storage: BaseStorage = storage
+        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
     
-    def set_logger(self, logger: logging.Logger):
-        self._logger = logger
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['_logger'] = None  # remove logger to avoid pickling error
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
     
     @property
     def data_source(self) -> BaseSource:
-        return self._data_source
+        return self._data_model.data_source
     
     @property
     def data_model(self) -> BaseDataModel | None:
@@ -35,8 +39,6 @@ class Sink:
     
     @property
     def storage(self) -> BaseStorage:
-        if self._storage is None:
-            self._storage = self._create_storage(self._data_model)
         return self._storage
     
     def __str__(self):

@@ -7,11 +7,13 @@ if TYPE_CHECKING:
     from pfeed.sources.base_source import BaseSource
     from pfeed.feeds.base_feed import BaseFeed
 
+from abc import ABC, abstractmethod
+
 from pfund.enums import Environment
-from pfeed.enums import DataSource, DataTool
+from pfeed.enums import DataTool
 
 
-class DataClient:
+class DataClient(ABC):
     def __init__(
         self,
         env: tEnvironment,
@@ -27,8 +29,7 @@ class DataClient:
         Args:
             kwargs: kwargs specific to the data client, e.g. api_key for Databento
         '''
-        from pfeed.utils.utils import to_snake_case
-        from pfeed.feeds import get_feed
+        from pfeed.feeds import create_feed
 
         params = {k: v for k, v in locals().items() if k not in ['self', 'kwargs']}
         params.update(kwargs)
@@ -40,20 +41,25 @@ class DataClient:
         self._use_prefect: bool = use_prefect
         self._use_deltalake: bool = use_deltalake
 
-        self.data_source: BaseSource = DataSource[to_snake_case(self.__class__.__name__).upper()].create_data_source(env)
-        
+        self.data_source = self._create_data_source(env=self._env)
+
         # initialize data feeds
         for data_category in self.data_categories:
-            feed: BaseFeed = get_feed(
-                data_source=self.data_source,
+            feed: BaseFeed = create_feed(
+                data_source=self.name,
                 data_category=data_category,
                 **params,
             )
             # dynamically set attributes e.g. self.market_feed
-            setattr(self, data_category.feed_name, feed)  
+            setattr(self, data_category.feed_name, feed)
     
     def get_feed(self, data_category: DataCategory | tDataCategory) -> BaseFeed | None:
         return getattr(self, DataCategory[data_category.upper()].feed_name, None)
+    
+    @staticmethod
+    @abstractmethod
+    def _create_data_source(env: Environment, *args, **kwargs) -> BaseSource:
+        pass
 
     @property
     def name(self) -> str:

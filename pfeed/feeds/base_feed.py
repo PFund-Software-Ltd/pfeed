@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, AsyncGenerator
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, AsyncGenerator, ClassVar
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tDataSource, tStreamMode
+    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tStreamMode
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
@@ -26,7 +26,7 @@ from pprint import pformat
 
 from pfund import print_warning
 from pfund.enums import Environment
-from pfeed.enums import DataSource, DataTool, DataStorage, LocalDataStorage, ExtractType, StreamMode
+from pfeed.enums import DataTool, DataStorage, LocalDataStorage, ExtractType, StreamMode
 
 
 __all__ = ["BaseFeed"]
@@ -44,7 +44,6 @@ class BaseFeed(ABC):
     
     def __init__(
         self, 
-        data_source: BaseSource | tDataSource,
         data_tool: tDataTool='polars', 
         pipeline_mode: bool=False,
         use_ray: bool=True,
@@ -59,18 +58,11 @@ class BaseFeed(ABC):
                 Other functions, such as `stream()` and `retrieve()`, will utilize the environment specified here.
             storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
-        from pfeed.sources.base_source import BaseSource
-        
         self._env = Environment[env.upper()]
         self._setup_logging()
-        if not isinstance(data_source, BaseSource):
-            self.data_source: BaseSource = DataSource[data_source.upper()].create_data_source(env)
-        else:
-            self.data_source: BaseSource = data_source
         self._data_tool = DataTool[data_tool.lower()]
-        self.name: DataSource = self.data_source.name
+        self.data_source: BaseSource = self._create_data_source(env=self._env)
         self.logger = logging.getLogger(self.name.lower() + '_data')
-
         self._pipeline_mode: bool = pipeline_mode
         self._use_ray: bool = use_ray
         self._use_prefect: bool = use_prefect
@@ -81,6 +73,10 @@ class BaseFeed(ABC):
         self._completed_dataflows: list[DataFlow] = []
         self._storage_options: dict[tStorage, dict] = {}
         self._storage_kwargs: dict[tStorage, dict] = {}
+    
+    @property
+    def name(self):
+        return self.data_source.name
     
     def _setup_logging(self):
         from pfund._logging import setup_logging_config
@@ -127,6 +123,11 @@ class BaseFeed(ABC):
     def _normalize_raw_data(self, data: Any) -> Any:
         pass
     
+    @staticmethod
+    @abstractmethod
+    def _create_data_source(env: Environment, *args, **kwargs) -> BaseSource:
+        pass
+
     @abstractmethod
     def create_data_model(self, *args, **kwargs) -> BaseDataModel:
         pass
@@ -287,10 +288,10 @@ class BaseFeed(ABC):
     
     def _create_faucet(
         self, 
+        data_model: BaseDataModel,
         extract_func: Callable, 
         extract_type: ExtractType, 
         close_stream: Callable | None=None,
-        data_model: BaseDataModel | None=None,
     ) -> Faucet:
         '''
         Args:
@@ -298,17 +299,16 @@ class BaseFeed(ABC):
         '''
         from pfeed.flows.faucet import Faucet
         return Faucet(
-            data_source=self.data_source, 
+            data_model=data_model,
             extract_func=extract_func, 
             extract_type=extract_type,
             close_stream=close_stream,
-            data_model=data_model,
         )
     
     @staticmethod
-    def _create_sink(data_model: BaseDataModel, create_storage: Callable) -> Sink:
+    def _create_sink(data_model: BaseDataModel, storage: BaseStorage) -> Sink:
         from pfeed.flows.sink import Sink
-        return Sink(data_model, create_storage)
+        return Sink(data_model, storage)
     
     def _clear_subflows(self):
         '''Clear subflows
@@ -358,28 +358,27 @@ class BaseFeed(ABC):
         if self._use_ray:
             assert not is_storage_duckdb, 'DuckDB is not thread-safe, cannot be used with Ray'
 
-        storage_options = storage_options or self._storage_options.get(to_storage, {})
         Storage = DataStorage[to_storage.upper()].storage_class
-        # NOTE: lazy creation of storage to avoid pickle errors when using ray
-        # e.g. minio client is using socket, which is not picklable
-        def _create_storage(data_model: BaseDataModel):
-            if self._subflows and self._subflows[0].is_streaming() and not is_storage_duckdb and not self._use_deltalake:
-                use_deltalake = True
-                print_warning("Automatically setting use_deltalake=True for streaming dataflows")
-            else:
-                use_deltalake = self._use_deltalake
-            return Storage.from_data_model(
+        data_domain = data_domain or self.data_domain
+        storage_options = storage_options or self._storage_options.get(to_storage, {})
+        if self._subflows and self._subflows[0].is_streaming() and not is_storage_duckdb and not self._use_deltalake:
+            use_deltalake = True
+            print_warning("Automatically setting use_deltalake=True for streaming dataflows")
+        else:
+            use_deltalake = self._use_deltalake
+
+        for dataflow in self._subflows:
+            data_model = dataflow.data_model
+            storage = Storage.from_data_model(
                 data_model=data_model,
                 data_layer=data_layer,
-                data_domain=data_domain or self.data_domain,
+                data_domain=data_domain,
                 use_deltalake=use_deltalake,
                 storage_options=storage_options,
                 stream_mode=StreamMode[stream_mode.upper()],
                 **storage_kwargs,
             )
-
-        for dataflow in self._subflows:
-            sink: Sink = self._create_sink(dataflow.data_model, _create_storage)
+            sink: Sink = self._create_sink(data_model, storage)
             dataflow.set_sink(sink)
         return self
     
@@ -402,7 +401,6 @@ class BaseFeed(ABC):
                 flow_type = 'prefect'
             else:
                 flow_type = 'native'
-            dataflow.set_logger(logger or self.logger)
             result: FlowResult = dataflow.run_batch(flow_type=flow_type, prefect_kwargs=prefect_kwargs)
             # NOTE: EMPTY dataframe is considered as success
             success = result.data is not None
@@ -495,8 +493,6 @@ class BaseFeed(ABC):
     async def _run_stream_dataflows(self, ray_kwargs: dict):
         async def _run_dataflows():
             try:
-                for dataflow in self._dataflows:
-                    dataflow.set_logger(self.logger)
                 await asyncio.gather(*[dataflow.run_stream(flow_type='native') for dataflow in self._dataflows])
             except asyncio.CancelledError:
                 self.logger.warning(f'{self.name} dataflows were cancelled')
@@ -520,10 +516,11 @@ class BaseFeed(ABC):
                 feed_name: str, 
                 worker_name: str, 
                 transformations_per_dataflow: dict[DataFlowName, list[Callable]], 
+                # TODO:
+                # sinks_per_dataflow: dict[DataFlowName, Sink],
                 ports_to_connect: list[int],
                 ready_queue: Queue,
             ):
-                # TODO: also need storages_per_dataflow
                 logger = logging.getLogger(feed_name.lower() + '_data')
                 if not logger.handlers:
                     logger.addHandler(QueueHandler(log_queue))
@@ -531,7 +528,7 @@ class BaseFeed(ABC):
                     # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
                     logger.propagate = False
                 logger.debug(f"Ray {worker_name} started")
-
+                
                 try:
                     msg_queue = ZeroMQ(
                         name=f'{feed_name}.stream.{worker_name}',
@@ -576,6 +573,7 @@ class BaseFeed(ABC):
                 def _create_worker_name(worker_num: int) -> str:
                     return f'worker-{worker_num}'
                 transformations_per_worker: dict[WorkerName, dict[DataFlowName, list[Callable]]] = defaultdict(dict)
+                sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
                 ports_to_connect: dict[WorkerName, list[int]] = defaultdict(list)
                 dataflow_zmqs: list[ZeroMQ] = [] 
                 for i, dataflow in enumerate(self._dataflows):
@@ -584,6 +582,7 @@ class BaseFeed(ABC):
                     worker_name = _create_worker_name(worker_num)
                     dataflow._setup_messaging(worker_name)
                     transformations_per_worker[worker_name][dataflow.name] = dataflow._transformations
+                    sinks_per_worker[worker_name][dataflow.name] = dataflow._sink
                     dataflow_zmq: ZeroMQ = dataflow._msg_queue
                     dataflow_zmqs.append(dataflow_zmq)
                     ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)
@@ -598,6 +597,8 @@ class BaseFeed(ABC):
                         feed_name=self.name.value,
                         worker_name=worker_name,
                         transformations_per_dataflow=transformations_per_worker[worker_name],
+                        # TODO
+                        # sinks_per_dataflow=sinks_per_worker[worker_name],
                         ports_to_connect=ports_to_connect[worker_name],
                         ready_queue=ready_queue,
                     ) for worker_name in worker_names

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 from pfeed.enums import DataCategory
 
 
-def get_market_feed(
+def create_market_feed(
     data_source: tDataSource, 
     data_tool: tDataTool='polars', 
     pipeline_mode: bool=False,
@@ -19,12 +19,12 @@ def get_market_feed(
     env: tEnvironment='BACKTEST',
 ) -> MarketFeed:
     params = {k: v for k, v in locals().items()}
-    return get_feed(**params, data_category=DataCategory.MARKET_DATA)
+    return create_feed(**params, data_category=DataCategory.MARKET_DATA)
 
 
 # EXTEND: add more @overload for different data sources and categories
 @overload
-def get_feed(
+def create_feed(
     data_source: tDataSource,
     data_category: Literal['MARKET_DATA'],
     data_tool: tDataTool = 'polars',
@@ -36,7 +36,7 @@ def get_feed(
 ) -> MarketFeed: ...
 
 
-def get_feed(
+def create_feed(
     data_source: tDataSource,
     data_category: tDataCategory,
     data_tool: tDataTool='polars', 
@@ -58,7 +58,6 @@ def get_feed(
         raise ValueError(f"{data_source} has no feed for {data_category}")
     feed: BaseFeed = Feed(
         env=env,
-        data_source=data_source,
         data_tool=data_tool, 
         pipeline_mode=pipeline_mode, 
         use_ray=use_ray, 

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from importlib.metadata import version
 from pfeed.config import configure, get_config
 from pfeed.storages import create_storage
-from pfeed.feeds import get_feed, get_market_feed
+from pfeed.feeds import create_feed, create_market_feed
 
 
 def __getattr__(name: str):
@@ -64,8 +64,8 @@ __all__ = (
     "plot",
     # sugar functions
     "create_storage",
-    "get_feed",
-    "get_market_feed",
+    "create_feed",
+    "create_market_feed",
     # storage classes
     "DuckDBStorage",
     "MinioStorage",

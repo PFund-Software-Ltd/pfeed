@@ -26,16 +26,7 @@ class DataFlow:
         self._result = FlowResult()
         self._flow_type: FlowType = FlowType.native
         self._msg_queue: ZeroMQ | None = None
-        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
-    
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state['_logger'] = None  # remove logger to avoid pickling error
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self._logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
+        self._logger: logging.Logger = logging.getLogger(f"{self.name.lower()}_data")
     
     @property
     def name(self):

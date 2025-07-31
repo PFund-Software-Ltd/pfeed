@@ -30,8 +30,6 @@ from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
 class TimeBasedDataHandler(BaseDataHandler):
     DELTA_PARTITION_BY = ['year', 'month', 'day']  # delta table partition by
-    # REVIEW: make it a param?
-    DELTA_FLUSH_INTERVAL = 100  # in seconds, flush streaming data to deltalake every x seconds
     
     def __init__(
         self, 
@@ -42,6 +40,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         storage_options: dict | None = None,
         use_deltalake: bool = False,
         stream_mode: StreamMode=StreamMode.FAST,
+        delta_flush_interval: int=100,
     ):
         '''
         Args:
@@ -52,6 +51,11 @@ class TimeBasedDataHandler(BaseDataHandler):
                 faster write speed, but data loss risk will increase.
                 if "SAFE" is chosen, streaming data will be written to disk immediately,
                 slower write speed, but data loss risk will be minimized.
+            delta_flush_interval: Interval in seconds for flushing streaming data to DeltaLake. Default is 100 seconds.
+                Frequent flushes will reduce write performance and generate many small files 
+                (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
+                Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
+                This is expected to be fine-tuned based on the actual use case.
         '''
         from pfeed.adapter import Adapter
         from pfeed._io.buffer_io import BufferIO
@@ -74,6 +78,8 @@ class TimeBasedDataHandler(BaseDataHandler):
             storage_options=storage_options,
             stream_mode=stream_mode,
         )
+        self._stream_mode = stream_mode
+        self._delta_flush_interval = delta_flush_interval
         self._buffer_path: Path = Path(self._create_file_paths()[0]) / self._buffer_io.BUFFER_FILENAME
         self._buffer_io._mkdir(self._buffer_path)
         self._last_delta_flush = time.time()
@@ -86,7 +92,8 @@ class TimeBasedDataHandler(BaseDataHandler):
         '''
         Recover from crash by reading buffer.arrow and writing it to deltalake
         '''
-        self._write_buffer_to_deltalake()
+        if self._stream_mode == StreamMode.SAFE and self._buffer_path.exists() and self._buffer_path.stat().st_size != 0:
+            self._write_buffer_to_deltalake()
         
     # FIXME: being used as a better type hint, fix this
     def _validate_schema(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -149,25 +156,24 @@ class TimeBasedDataHandler(BaseDataHandler):
             self._message_schemas[self._buffer_path] = self._adapter.dict_to_schema(streaming_data)
         return self._message_schemas[self._buffer_path]
     
+    # OPTIMIZE
     def _write_buffer_to_deltalake(self):
-        if not self._buffer_path.exists() or self._buffer_path.stat().st_size == 0:
-            return
-        if self._buffer_io._buffer:
-            self._buffer_io.spill_to_disk(self._buffer_path, self._message_schemas[self._buffer_path])
+        schema = self._message_schemas.get(self._buffer_path, None)
+        table = self._buffer_io.read(self._buffer_path, schema=schema)
         self._io.write(
-            table=self._buffer_io.read(self._buffer_path),
+            table=table,
             file_path=self._buffer_path.parent,
             metadata=self._data_model.to_metadata(),
             delta_partition_by=self.DELTA_PARTITION_BY,
         )
-        self._buffer_io.clear_disk(self._buffer_path)
+        self._buffer_io.clear(self._buffer_path)
         
     def _write_stream(self, msg: StreamingMessage):
         streaming_data = self._create_streaming_data(msg)
         schema = self._infer_message_schema(streaming_data)
         self._buffer_io.write(self._buffer_path, streaming_data, schema)
         now = time.time()
-        if now - self._last_delta_flush > self.DELTA_FLUSH_INTERVAL:
+        if now - self._last_delta_flush > self._delta_flush_interval:
             self._write_buffer_to_deltalake()
             self._last_delta_flush = now
         

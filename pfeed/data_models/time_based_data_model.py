@@ -94,6 +94,7 @@ class TimeBasedDataModel(BaseDataModel):
         storage_options: dict | None = None,
         use_deltalake: bool = False,
         stream_mode: StreamMode=StreamMode.FAST,
+        delta_flush_interval: int=100,
     ) -> TimeBasedDataHandler:
         DataHandler: type[TimeBasedDataHandler] = self.data_handler_class
         return DataHandler(
@@ -104,6 +105,7 @@ class TimeBasedDataModel(BaseDataModel):
             storage_options=storage_options, 
             use_deltalake=use_deltalake,
             stream_mode=stream_mode,
+            delta_flush_interval=delta_flush_interval,
         )
 
     def to_metadata(self) -> dict:

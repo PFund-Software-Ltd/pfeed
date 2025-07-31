@@ -342,6 +342,7 @@ class BaseFeed(ABC):
         data_domain: str='',
         storage_options: dict | None=None,
         stream_mode: tStreamMode='FAST', 
+        delta_flush_interval: int=100,
         **storage_kwargs,
     ) -> BaseFeed:
         '''
@@ -353,6 +354,11 @@ class BaseFeed(ABC):
                 faster write speed, but data loss risk will increase.
                 if "SAFE" is chosen, streaming data will be written to disk immediately,
                 slower write speed, but data loss risk will be minimized.
+            delta_flush_interval: Interval in seconds for flushing streaming data to DeltaLake. Default is 100 seconds.
+                Frequent flushes will reduce write performance and generate many small files 
+                (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
+                Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
+                This is expected to be fine-tuned based on the actual use case.
         '''
         is_storage_duckdb = to_storage.upper() == DataStorage.DUCKDB.value
         if self._use_ray:
@@ -376,6 +382,7 @@ class BaseFeed(ABC):
                 use_deltalake=use_deltalake,
                 storage_options=storage_options,
                 stream_mode=StreamMode[stream_mode.upper()],
+                delta_flush_interval=delta_flush_interval,
                 **storage_kwargs,
             )
             sink: Sink = self._create_sink(data_model, storage)
@@ -516,8 +523,7 @@ class BaseFeed(ABC):
                 feed_name: str, 
                 worker_name: str, 
                 transformations_per_dataflow: dict[DataFlowName, list[Callable]], 
-                # TODO:
-                # sinks_per_dataflow: dict[DataFlowName, Sink],
+                sinks_per_dataflow: dict[DataFlowName, Sink],
                 ports_to_connect: list[int],
                 ready_queue: Queue,
             ):
@@ -528,7 +534,7 @@ class BaseFeed(ABC):
                     # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
                     logger.propagate = False
                 logger.debug(f"Ray {worker_name} started")
-                
+
                 try:
                     msg_queue = ZeroMQ(
                         name=f'{feed_name}.stream.{worker_name}',
@@ -556,8 +562,8 @@ class BaseFeed(ABC):
                             transformations = transformations_per_dataflow[dataflow_name]
                             for transform in transformations:
                                 data: dict | StreamingMessage = transform(data)
-                            # TODO: streaming, load data
-                            # load()
+                            sink = sinks_per_dataflow[dataflow_name]
+                            sink.flush(data, streaming=True)
                     msg_queue.terminate()
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
@@ -597,8 +603,7 @@ class BaseFeed(ABC):
                         feed_name=self.name.value,
                         worker_name=worker_name,
                         transformations_per_dataflow=transformations_per_worker[worker_name],
-                        # TODO
-                        # sinks_per_dataflow=sinks_per_worker[worker_name],
+                        sinks_per_dataflow=sinks_per_worker[worker_name],
                         ports_to_connect=ports_to_connect[worker_name],
                         ready_queue=ready_queue,
                     ) for worker_name in worker_names

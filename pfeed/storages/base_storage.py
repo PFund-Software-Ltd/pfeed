@@ -54,6 +54,7 @@ class BaseStorage(ABC):
         use_deltalake: bool=False, 
         storage_options: dict | None=None,
         stream_mode: StreamMode=StreamMode.FAST,
+        delta_flush_interval: int=100,
         **storage_kwargs,
     ) -> BaseStorage:
         instance = cls(
@@ -64,7 +65,7 @@ class BaseStorage(ABC):
             **storage_kwargs,
         )
         instance.attach_data_model(data_model)
-        instance.initialize_data_handler(stream_mode=stream_mode)
+        instance.initialize_data_handler(stream_mode=stream_mode, delta_flush_interval=delta_flush_interval)
         return instance
     
     @abstractmethod
@@ -82,7 +83,7 @@ class BaseStorage(ABC):
         '''
         self._data_model = data_model
     
-    def initialize_data_handler(self, stream_mode: StreamMode):
+    def initialize_data_handler(self, stream_mode: StreamMode, delta_flush_interval: int):
         data_handler_configs = {
             'data_layer': self.data_layer,
             'data_path': str(self.data_path),
@@ -90,6 +91,7 @@ class BaseStorage(ABC):
             'storage_options': self._storage_options,
             'use_deltalake': self.use_deltalake,
             'stream_mode': stream_mode,
+            'delta_flush_interval': delta_flush_interval,
         }
         self._data_handler = self.data_model.create_data_handler(**data_handler_configs)
     

@@ -20,15 +20,6 @@ class Sink:
         self._storage: BaseStorage = storage
         self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
     
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state['_logger'] = None  # remove logger to avoid pickling error
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self._logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
-    
     @property
     def data_source(self) -> BaseSource:
         return self._data_model.data_source

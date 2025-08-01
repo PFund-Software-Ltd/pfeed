@@ -5,13 +5,13 @@ if TYPE_CHECKING:
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
     from pfund._typing import FullDataChannel
-    from pfund.exchanges.bybit.ws_api import WebsocketApi
+    from pfund.exchanges.bybit.ws_api import WebSocketAPI
 
 
 class StreamAPI:
     '''Simple wrapper of exchange's websocket API to connect to public channels'''
-    def __init__(self, ws_api: WebsocketApi):
-        self._ws_api: WebsocketApi = ws_api
+    def __init__(self, ws_api: WebSocketAPI):
+        self._ws_api: WebSocketAPI = ws_api
         # set the logger to be "bybit_stream", override the default logger 'bybit' in pfund
         self._ws_api.set_logger(f'{self._ws_api.exch.lower()}_data')
     

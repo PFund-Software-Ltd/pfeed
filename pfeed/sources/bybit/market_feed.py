@@ -139,10 +139,10 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         
     @staticmethod
     def _parse_message(product: BybitProduct, msg: dict) -> dict:
-        from pfund.exchanges.bybit.ws_api import WebsocketApi
-        from pfund.exchanges.bybit.ws_api_bybit import BybitWebsocketApi
-        BybitWebsocketApiClass: type[BybitWebsocketApi] = WebsocketApi._get_api_class(product.category)
-        return BybitWebsocketApiClass._parse_message(msg)
+        from pfund.exchanges.bybit.ws_api import WebSocketAPI
+        from pfund.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
+        BybitWebSocketAPIClass: type[BybitWebSocketAPI] = WebSocketAPI._get_api_class(product.category)
+        return BybitWebSocketAPIClass._parse_message(msg)
     
     def _add_data_channel(self, product: BybitProduct, resolution: Resolution) -> str:
         return self.data_source.stream_api._add_data_channel(product, resolution)

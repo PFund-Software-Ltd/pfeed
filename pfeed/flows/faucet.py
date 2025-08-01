@@ -1,11 +1,11 @@
 from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Awaitable
 if TYPE_CHECKING:
-    from pfund.typing import FullDataChannel
+    from pfund._typing import FullDataChannel
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.sources.base_source import BaseSource
     from pfeed.flows.dataflow import DataFlow
-    from pfeed.typing import GenericData
+    from pfeed._typing import GenericData
 
 import logging    
 import asyncio

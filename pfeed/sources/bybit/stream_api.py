@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pfund.products.product_bybit import BybitProduct
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
-    from pfund.typing import FullDataChannel
+    from pfund._typing import FullDataChannel
     from pfund.exchanges.bybit.ws_api import WebsocketApi
 
 

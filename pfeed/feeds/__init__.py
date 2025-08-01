@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, overload, Literal
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment
-    from pfeed.typing import tDataSource, tDataTool, tDataCategory
+    from pfund._typing import tEnvironment
+    from pfeed._typing import tDataSource, tDataTool, tDataCategory
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.feeds.market_feed import MarketFeed
 

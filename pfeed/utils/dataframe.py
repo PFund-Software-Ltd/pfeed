@@ -1,5 +1,5 @@
 from narwhals.typing import IntoFrame, Frame
-from pfeed.typing import dd, ps, SparkDataFrame
+from pfeed._typing import dd, ps, SparkDataFrame
 
 import pandas as pd
 import polars as pl

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, overload, Literal
 if TYPE_CHECKING:
-    from pfeed.typing import tDataLayer, tStorage
+    from pfeed._typing import tDataLayer, tStorage
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.storages.duckdb_storage import DuckDBStorage

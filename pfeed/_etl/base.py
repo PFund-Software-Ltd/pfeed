@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from types import ModuleType
 if TYPE_CHECKING:
-    from pfeed.typing import tDataTool
-    from pfeed.typing import GenericFrame, GenericData
+    from pfeed._typing import tDataTool
+    from pfeed._typing import GenericFrame, GenericData
     
 import importlib
 
@@ -11,7 +11,7 @@ import pandas as pd
 import polars as pl
 import narwhals as nw
 
-from pfeed.typing import dd
+from pfeed._typing import dd
 from pfeed.enums import DataTool
 from pfeed.utils.dataframe import is_dataframe
 

@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     from pathlib import Path
     import pyarrow.fs as pa_fs
     from pfeed.enums import DataLayer
-    from pfund.typing import tEnvironment
-    from pfeed.typing import tDataSource
+    from pfund._typing import tEnvironment
+    from pfeed._typing import tDataSource
     
 import datetime
 from abc import abstractmethod

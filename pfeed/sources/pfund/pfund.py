@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment
-    from pfeed.typing import tDataTool
+    from pfund._typing import tEnvironment
+    from pfeed._typing import tDataTool
     from pfeed.sources.pfund.batch_api import BatchAPI
     from pfeed.sources.pfund.stream_api import StreamAPI
 

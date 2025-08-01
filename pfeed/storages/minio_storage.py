@@ -9,7 +9,7 @@ if TYPE_CHECKING:
         pass
     from minio.credentials.providers import Provider
     from typing import Generator
-    from pfeed.typing import tDataLayer
+    from pfeed._typing import tDataLayer
     from pfeed.data_models.base_data_model import BaseDataModel
 
 import os

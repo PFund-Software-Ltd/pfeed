@@ -4,8 +4,8 @@ if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
     from pfund.datas.resolution import Resolution
-    from pfeed.typing import tStorage, tDataLayer
-    from pfeed.typing import GenericFrame
+    from pfeed._typing import tStorage, tDataLayer
+    from pfeed._typing import GenericFrame
     from pfeed.data_models.market_data_model import MarketDataModel
 
 import time

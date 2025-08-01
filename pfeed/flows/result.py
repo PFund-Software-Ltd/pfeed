@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from pfeed.typing import GenericData
+    from pfeed._typing import GenericData
 
 
 class FlowResult:

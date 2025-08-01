@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed.typing import GenericFrame, StorageMetadata
+    from pfeed._typing import GenericFrame, StorageMetadata
     from pfeed.data_models.time_based_data_model import (
         TimeBasedDataModel, 
         TimeBasedMetadata, 

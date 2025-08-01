@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tDataTool
+    from pfeed._typing import tDataTool
 
 from pfeed.sources.yahoo_finance.source import YahooFinanceSource
 from pfeed.sources.yahoo_finance.market_feed import YahooFinanceMarketFeed

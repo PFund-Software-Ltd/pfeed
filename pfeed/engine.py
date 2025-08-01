@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Coroutine
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment
-    from pfeed.typing import tDataTool, tDataSource, tDataCategory
+    from pfund._typing import tEnvironment
+    from pfeed._typing import tDataTool, tDataSource, tDataCategory
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.flows.dataflow import DataFlow
 

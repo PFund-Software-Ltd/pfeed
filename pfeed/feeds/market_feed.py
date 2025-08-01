@@ -4,9 +4,9 @@ if TYPE_CHECKING:
     import pandas as pd
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
-    from pfund.typing import tEnvironment, FullDataChannel
+    from pfund._typing import tEnvironment, FullDataChannel
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed.typing import tStorage, tDataLayer, GenericFrame, StorageMetadata, tDataType
+    from pfeed._typing import tStorage, tDataLayer, GenericFrame, StorageMetadata, tDataType
     from pfeed.data_models.market_data_model import MarketDataModel
 
 import datetime

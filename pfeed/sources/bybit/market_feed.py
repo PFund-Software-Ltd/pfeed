@@ -6,10 +6,10 @@ if TYPE_CHECKING:
     import pandas as pd
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
-    from pfund.typing import FullDataChannel
-    from pfeed.typing import GenericFrame
+    from pfund._typing import FullDataChannel
+    from pfeed._typing import GenericFrame
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfeed.typing import tStorage, tDataLayer
+    from pfeed._typing import tStorage, tDataLayer
 
 from pfund.products.product_bybit import BybitProduct
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed

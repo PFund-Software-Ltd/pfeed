@@ -3,9 +3,9 @@ from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
-    from pfund.typing import tEnvironment, ResolutionRepr
+    from pfund._typing import tEnvironment, ResolutionRepr
     from pfeed.enums import DataLayer
-    from pfeed.typing import tDataSource
+    from pfeed._typing import tDataSource
 
 import datetime
 from pathlib import Path

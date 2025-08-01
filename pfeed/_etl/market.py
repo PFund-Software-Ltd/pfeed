@@ -4,7 +4,7 @@ ETL for market data.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tProductType
+    from pfeed._typing import tProductType
 
 import pandas as pd
 

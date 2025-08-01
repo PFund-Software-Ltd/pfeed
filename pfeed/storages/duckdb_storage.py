@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Literal, Any
 from typing_extensions import TypedDict
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
-    from pfeed.typing import tDataLayer, GenericFrame, StorageMetadata
+    from pfeed._typing import tDataLayer, GenericFrame, StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
 
 import datetime

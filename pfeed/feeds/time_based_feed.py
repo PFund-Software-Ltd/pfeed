@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
     import polars as pl
     from narwhals.typing import Frame
-    from pfund.typing import FullDataChannel
-    from pfeed.typing import tStorage, tDataLayer, GenericFrame, StorageMetadata
+    from pfund._typing import FullDataChannel
+    from pfeed._typing import tStorage, tDataLayer, GenericFrame, StorageMetadata
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
     from pfeed.flows.faucet import Faucet

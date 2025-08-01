@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfund.typing import tEnvironment
-    from pfeed.typing import tDataLayer, tStorage, GenericFrame, StorageMetadata
+    from pfund._typing import tEnvironment
+    from pfeed._typing import tDataLayer, tStorage, GenericFrame, StorageMetadata
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime

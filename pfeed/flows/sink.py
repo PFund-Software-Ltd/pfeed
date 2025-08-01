@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
-    from pfeed.typing import GenericData
+    from pfeed._typing import GenericData
 
 import logging
 

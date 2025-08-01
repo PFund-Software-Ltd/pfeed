@@ -257,6 +257,7 @@ class TimeBasedFeed(BaseFeed):
         is_download_required = force_download
 
         if not force_download:
+            # FIXME: should only search from data layer CLEANED?
             search_data_layers = [DataLayer.CURATED, DataLayer.CLEANED] if data_layer is None else [DataLayer[data_layer.upper()]]
             dfs_from_storage: list[Frame] = []
             start_missing_date = start_date
@@ -419,7 +420,6 @@ class TimeBasedFeed(BaseFeed):
             df = None
 
         return df if not include_metadata else (df, metadata)
-
+    
     async def _eager_run_stream(self, ray_kwargs: dict):
         await self._run_stream_dataflows(ray_kwargs=ray_kwargs)
-        

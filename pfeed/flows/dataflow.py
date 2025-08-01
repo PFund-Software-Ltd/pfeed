@@ -2,12 +2,11 @@ from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from prefect import Flow as PrefectDataFlow
-    from pfeed._typing import GenericData
+    from pfeed._typing import GenericData, StreamingData
     from pfeed.flows.faucet import Faucet
     from pfeed.flows.sink import Sink
     from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.messaging.zeromq import ZeroMQ
 
 import logging
@@ -26,7 +25,7 @@ class DataFlow:
         self._result = FlowResult()
         self._flow_type: FlowType = FlowType.native
         self._msg_queue: ZeroMQ | None = None
-        self._logger: logging.Logger = logging.getLogger(f"{self.name.lower()}_data")
+        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
     
     @property
     def name(self):
@@ -91,6 +90,7 @@ class DataFlow:
         return data
     
     def run_batch(self, flow_type: Literal['native', 'prefect']='native', prefect_kwargs: dict | None=None) -> FlowResult:
+        self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
         self._flow_type = FlowType[flow_type.lower()]
         if self._flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
@@ -116,15 +116,17 @@ class DataFlow:
         self._msg_queue.bind(self._msg_queue.sender)
         self._msg_queue.set_target_identity(worker_name)  # store zmq.DEALER's identity to send to
     
-    async def _run_stream_etl(self, msg: dict):
+    def _run_stream_etl(self, msg: dict) -> None | StreamingData:
         # if zeromq is in use (when use_ray=True), send msg to Ray's worker and let it perform ETL
         if self._msg_queue:
             self._msg_queue.send(channel=self.name, topic=str(self.data_model), data=msg)
         else:
-            msg: StreamingMessage = self._transform(msg)
-            self._load(msg)
+            data: StreamingData = self._transform(msg)
+            self._load(data)
+            return data
     
     async def run_stream(self, flow_type: Literal['native']='native'):
+        self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
         if self.sink:
             assert self.sink.storage.use_deltalake, \
                 'writing streaming data is only supported when using deltalake, please set use_deltalake=True'
@@ -134,10 +136,10 @@ class DataFlow:
     async def end_stream(self):
         await self.faucet.close_stream()
         
-    def _transform(self, data: GenericData) -> GenericData | StreamingMessage:
+    def _transform(self, data: GenericData) -> GenericData | StreamingData:
         for transform in self._transformations:
             if self.is_streaming():
-                data: dict | StreamingMessage = transform(data)
+                data: StreamingData = transform(data)
             else:
                 if self._flow_type == FlowType.prefect:
                     from prefect import task
@@ -150,7 +152,7 @@ class DataFlow:
             self._logger.debug(f"transformed {self.data_model} data by '{transform.__name__}'")
         return data
     
-    def _load(self, data: GenericData | StreamingMessage):
+    def _load(self, data: GenericData | StreamingData):
         if self.sink is None:
             if self.extract_type != ExtractType.retrieve:
                 self._logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')

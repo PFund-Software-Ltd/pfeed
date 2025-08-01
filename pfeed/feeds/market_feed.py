@@ -161,11 +161,6 @@ class MarketFeed(TimeBasedFeed):
         data_resolution: Resolution = max(unit_resolution, lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
-        self.logger.info(f'Downloading historical {product.symbol} {data_resolution} data, from {str(start_date)} to {str(end_date)} (UTC), data_layer={data_layer.name}/{data_domain=}')
-        if auto_transform and data_layer != DataLayer.RAW:
-            default_transformations = lambda: self._add_default_transformations_to_download(data_resolution, resolution, product)
-        else:
-            default_transformations = None
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin, env=env),
             partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=data_resolution, data_origin=data_origin, env=env),
@@ -173,7 +168,7 @@ class MarketFeed(TimeBasedFeed):
             end_date=end_date,
             dataflow_per_date=dataflow_per_date, 
             include_metadata=include_metadata,
-            add_default_transformations=default_transformations,
+            add_default_transformations=(lambda: self._add_default_transformations_to_download(data_resolution, resolution, product)) if auto_transform else None,
             load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
         )
     
@@ -274,11 +269,6 @@ class MarketFeed(TimeBasedFeed):
         data_domain = data_domain or self.data_domain.value
         if env:
             env = Environment[env.upper()]
-        self.logger.info(f'Retrieving {product} {resolution} data {from_storage=} (env={env}), from {str(start_date)} to {str(end_date)} (UTC), data_layer={data_layer.name}/{data_domain=}')
-        if auto_transform and data_layer != DataLayer.RAW:
-            default_transformations = lambda: self._add_default_transformations_to_retrieve(resolution)
-        else:
-            default_transformations = None
         return self._run_retrieve(
             # NOTE: dataflow's data model will always have the input resolution
             partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin, env=env),
@@ -289,7 +279,7 @@ class MarketFeed(TimeBasedFeed):
             data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
-            add_default_transformations=default_transformations,
+            add_default_transformations=(lambda: self._add_default_transformations_to_retrieve(resolution)) if auto_transform else None,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
         )
@@ -437,15 +427,10 @@ class MarketFeed(TimeBasedFeed):
             start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
         )
         channel: FullDataChannel = self._add_data_channel(data_model.product, data_model.resolution)
-        self.logger.info(f'Streaming(env={self._env}) {product.symbol} {resolution} data, data_layer={data_layer.name}/{data_domain=}')
-        if auto_transform and data_layer != DataLayer.RAW:
-            default_transformations = lambda: self._add_default_transformations_to_stream(product, resolution)
-        else:
-            default_transformations = None
         return self._run_stream(
             data_model=data_model,
             channel=channel,
-            add_default_transformations=default_transformations,
+            add_default_transformations=(lambda: self._add_default_transformations_to_stream(product, resolution)) if auto_transform else None,
             load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
             callback=callback,
         )

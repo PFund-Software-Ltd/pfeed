@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, AsyncGenerator, ClassVar
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, AsyncGenerator, Coroutine
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -268,12 +268,11 @@ class BaseFeed(ABC):
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     @abstractmethod
-    def _eager_run_batch(self, include_metadata: bool=False, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
+    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> tuple[list[DataFlow], list[DataFlow]]:
         pass
     
-    @abstractmethod
-    def _eager_run_stream(self, ray_kwargs: dict | None=None) -> tuple[list[DataFlow], list[DataFlow]]:
-        pass
+    async def _eager_run_stream(self, ray_kwargs: dict):
+        raise NotImplementedError(f'{self.name} _eager_run_stream() is not implemented')
     
     def create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
         from pfeed.flows.dataflow import DataFlow
@@ -562,8 +561,8 @@ class BaseFeed(ABC):
                             transformations = transformations_per_dataflow[dataflow_name]
                             for transform in transformations:
                                 data: dict | StreamingMessage = transform(data)
-                            sink = sinks_per_dataflow[dataflow_name]
-                            sink.flush(data, streaming=True)
+                            if sink := sinks_per_dataflow[dataflow_name]:
+                                sink.flush(data, streaming=True)
                     msg_queue.terminate()
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
@@ -645,7 +644,7 @@ class BaseFeed(ABC):
             await _run_dataflows()
         self._clear_dataflows_after_run()
         
-    def _eager_run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False) -> GenericData | asyncio.Future:
+    def _eager_run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False) -> GenericData | Coroutine:
         ray_kwargs = ray_kwargs or {}
         prefect_kwargs = prefect_kwargs or {}
         if self._use_ray:
@@ -656,8 +655,8 @@ class BaseFeed(ABC):
         else:
             return self._eager_run_stream(ray_kwargs=ray_kwargs)
     
-    def run(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs):
-        result = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+    def run(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> GenericData | None:
+        result: GenericData | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         if inspect.isawaitable(result):
             try:
                 asyncio.get_running_loop()
@@ -677,8 +676,8 @@ class BaseFeed(ABC):
         else:
             return result
     
-    async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs):
-        result = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+    async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> GenericData | None:
+        result: GenericData | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         if inspect.isawaitable(result):
             return await result
         else:

@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.sources.base_source import BaseSource
     from pfeed.flows.dataflow import DataFlow
+    from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed._typing import GenericData
 
 import logging    
@@ -87,6 +88,8 @@ class Faucet:
     
     async def _streaming_callback(self, channel_key: str, data: dict):
         channel: FullDataChannel = data[channel_key] if channel_key in data else None
+        # NOTE: only send raw data (not transformed) to user callback and streaming queue
+        # if user wants to use transformed data, they should use the dataflow's transform() method
         if self._user_streaming_callback:
             result = self._user_streaming_callback(data)
             if inspect.isawaitable(result):
@@ -98,7 +101,7 @@ class Faucet:
             await self._streaming_queue.put(data)
         if channel:
             dataflow: DataFlow = self._streaming_bindings[channel]
-            await dataflow._run_stream_etl(data)
+            dataflow._run_stream_etl(data)
         
     def set_streaming_callback(self, callback: Callable[[dict], Awaitable[None] | None]):
         if self._user_streaming_callback is not None and self._user_streaming_callback != callback:

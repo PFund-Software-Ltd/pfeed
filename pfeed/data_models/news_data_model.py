@@ -38,6 +38,7 @@ class NewsDeltaMetadata(TypedDict, total=True):
 
 class NewsDataModel(TimeBasedDataModel):
     product: BaseProduct | None = None  # when product is None, it means general news (e.g. market news)
+    data_handler_class: type[NewsDataHandler] = NewsDataHandler
 
     def __str__(self):
         return ':'.join([super().__str__(), repr(self.product) if self.product else 'GENERAL', 'NEWS'])
@@ -75,10 +76,6 @@ class NewsDataModel(TimeBasedDataModel):
                 / f'month={month}' 
                 / f'day={day}'
             )
-    
-    @property
-    def data_handler_class(self) -> type[NewsDataHandler]:
-        return NewsDataHandler
 
     def to_metadata(self) -> NewsMetadata:
         return {

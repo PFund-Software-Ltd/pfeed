@@ -2,8 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
-    from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed._typing import GenericFrame, StorageMetadata
+    from pfeed._typing import GenericFrame, StorageMetadata, StreamingData
     from pfeed.data_models.time_based_data_model import (
         TimeBasedDataModel, 
         TimeBasedMetadata, 
@@ -26,6 +25,7 @@ except ImportError:
 from pfeed.enums import DataLayer, StreamMode
 from pfeed.data_handlers.base_data_handler import BaseDataHandler
 from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
+from pfeed.messaging.streaming_message import StreamingMessage
 
 
 class TimeBasedDataHandler(BaseDataHandler):
@@ -114,46 +114,50 @@ class TimeBasedDataHandler(BaseDataHandler):
             file_paths = ['/'.join([self._data_path, str(data_model.create_storage_path(data_model.dates[0], use_deltalake=self._use_deltalake))])]
         return file_paths
     
-    def write(self, data: GenericFrame | StreamingMessage, streaming: bool=False):
+    def write(self, data: GenericFrame | StreamingData, streaming: bool=False):
         if streaming:
             self._write_stream(data)
         else:
             self._write_batch(data)
             
+    def _standardize_streaming_data(self, data: dict) -> dict:
+        '''standardize custom streaming data thats not of type StreamingMessage'''
+        raise NotImplementedError('_standardize_streaming_data is not implemented')
+    
     # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same columns in write_batch (env=BACKTEST)
-    def _create_streaming_data(self, msg: StreamingMessage) -> dict:
+    def _standardize_streaming_msg(self, msg: StreamingMessage) -> dict:
         '''
         Convert StreamingMessage to dict and standardize it, e.g. convert timestamp to datetime (UTC)
         '''
-        streaming_buffer = msg.to_dict()
+        data = msg.to_dict()
         
         # drop empty dicts
         dict_fields = ['extra_data', 'custom_data']
         for field in dict_fields:
-            if not streaming_buffer[field]:
-                streaming_buffer.pop(field)
+            if not data[field]:
+                data.pop(field)
         
         # flatten specs, make each spec a column, e.g. strike_price is now a column
-        for k, v in streaming_buffer['specs'].items():
-            streaming_buffer[k] = v
-        streaming_buffer.pop('specs')
+        for k, v in data['specs'].items():
+            data[k] = v
+        data.pop('specs')
 
         # convert timestamp to datetime (UTC)
         date = datetime.datetime.fromtimestamp(
-            streaming_buffer['ts'],
+            data['ts'],
             tz=datetime.timezone.utc
         ).replace(tzinfo=None)
-        streaming_buffer['date'] = date
+        data['date'] = date
 
         # add year, month, day columns for delta table partitioning
-        streaming_buffer['year'] = date.year
-        streaming_buffer['month'] = date.month
-        streaming_buffer['day'] = date.day
-        return streaming_buffer
+        data['year'] = date.year
+        data['month'] = date.month
+        data['day'] = date.day
+        return data
 
-    def _infer_message_schema(self, streaming_data: dict) -> pa.Schema:
+    def _infer_message_schema(self, data: dict) -> pa.Schema:
         if self._buffer_path not in self._message_schemas:
-            self._message_schemas[self._buffer_path] = self._adapter.dict_to_schema(streaming_data)
+            self._message_schemas[self._buffer_path] = self._adapter.dict_to_schema(data)
         return self._message_schemas[self._buffer_path]
     
     # OPTIMIZE
@@ -168,10 +172,13 @@ class TimeBasedDataHandler(BaseDataHandler):
         )
         self._buffer_io.clear(self._buffer_path)
         
-    def _write_stream(self, msg: StreamingMessage):
-        streaming_data = self._create_streaming_data(msg)
-        schema = self._infer_message_schema(streaming_data)
-        self._buffer_io.write(self._buffer_path, streaming_data, schema)
+    def _write_stream(self, data: StreamingData):
+        if isinstance(data, StreamingMessage):
+            data = self._standardize_streaming_msg(data)
+        else:
+            data = self._standardize_streaming_data(data)
+        schema = self._infer_message_schema(data)
+        self._buffer_io.write(self._buffer_path, data, schema)
         now = time.time()
         if now - self._last_delta_flush > self._delta_flush_interval:
             self._write_buffer_to_deltalake()

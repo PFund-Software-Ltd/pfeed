@@ -79,11 +79,6 @@ class NewsFeed(TimeBasedFeed):
             product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
-        self.logger.info(f'Downloading {self.name} historical news data, from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
-        if auto_transform and data_layer != DataLayer.RAW:
-            default_transformations = lambda: self._add_default_transformations_to_download(product=product)
-        else:
-            default_transformations = None
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin, env=env),
             partial_faucet_data_model=partial(self.create_data_model, product=product, data_origin=data_origin, env=env),
@@ -93,7 +88,7 @@ class NewsFeed(TimeBasedFeed):
             data_domain=data_domain,
             to_storage=to_storage,
             storage_options=storage_options,
-            add_default_transformations=default_transformations,
+            add_default_transformations=(lambda: self._add_default_transformations_to_download(product=product)) if auto_transform else None,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
         )
@@ -137,11 +132,6 @@ class NewsFeed(TimeBasedFeed):
         data_domain = data_domain or self.data_domain.value
         if env:
             env = Environment[env.upper()]
-        self.logger.info(f'Retrieving {self.name} {product=} data {from_storage=} (env={env}), from {str(start_date)} to {str(end_date)} (UTC), {data_layer=}/{data_domain=}')
-        if auto_transform and data_layer != DataLayer.RAW:
-            default_transformations = lambda: self._add_default_transformations_to_retrieve()
-        else:
-            default_transformations = None
         return self._run_retrieve(
             partial_dataflow_data_model=partial(self.create_data_model, product=product, data_origin=data_origin, env=env),
             partial_faucet_data_model=partial(self.create_data_model, product=product, data_origin=data_origin, env=env),
@@ -151,7 +141,7 @@ class NewsFeed(TimeBasedFeed):
             data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
-            add_default_transformations=default_transformations,
+            add_default_transformations=(lambda: self._add_default_transformations_to_retrieve()) if auto_transform else None,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
         )

@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import pandas as pd
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
-    from pfund._typing import FullDataChannel
+    from pfund._typing import FullDataChannel, tEnvironment
     from pfeed._typing import GenericFrame
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed._typing import tStorage, tDataLayer
@@ -20,6 +20,29 @@ __all__ = ['BybitMarketFeed']
 
 
 class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
+    def create_data_model(
+        self,
+        product: str | BybitProduct,
+        resolution: str | Resolution,
+        start_date: str | datetime.date,
+        end_date: str | datetime.date | None = None,
+        data_origin: str = '',
+        env: tEnvironment | None = None,
+        **product_specs
+    ) -> MarketDataModel:
+        from pfeed.sources.bybit.market_data_handler import BybitMarketDataHandler
+        data_model = super().create_data_model(
+            product=product,
+            resolution=resolution,
+            start_date=start_date,
+            end_date=end_date,
+            data_origin=data_origin,
+            env=env,
+            **product_specs
+        )
+        data_model.data_handler_class = BybitMarketDataHandler
+        return data_model
+        
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.

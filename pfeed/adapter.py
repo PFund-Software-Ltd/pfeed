@@ -89,6 +89,13 @@ class TypeMapper:
         if python_type is dict and isinstance(value, dict) and value:
             return self._convert_dict_to_struct(value)
         
+        # 🚀 SMART: Handle concrete list instances by inspecting the first element
+        if python_type is list and isinstance(value, list) and value:
+            # Inspect the first element to determine the element type
+            first_element = value[0]
+            element_type = self.python_type_to_pyarrow(type(first_element), None, first_element)
+            return pa.list_(element_type)
+        
         # Handle nested Pydantic/Msgspec models as structs
         if self._is_nested_model(python_type):
             return self._convert_model_to_struct(python_type)

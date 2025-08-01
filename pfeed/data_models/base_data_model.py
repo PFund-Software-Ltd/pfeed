@@ -28,6 +28,7 @@ class BaseDataModel(BaseModel, ABC):
     env: Environment
     data_source: BaseSource
     data_origin: str = ''
+    data_handler_class: type[BaseDataHandler] = BaseDataHandler
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
@@ -41,9 +42,9 @@ class BaseDataModel(BaseModel, ABC):
     
     def __str__(self):
         if self.is_data_origin_effective():
-            return f'{self.data_source.name.value}:{self.data_origin}'
+            return f'{self.env.value}:{self.data_source.name.value}:{self.data_origin}'
         else:
-            return f'{self.data_source.name.value}'
+            return f'{self.env.value}:{self.data_source.name.value}'
 
     @abstractmethod
     def create_filename(self, *args, **kwargs) -> str:

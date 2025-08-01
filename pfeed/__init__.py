@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         FinancialModelingPrep,
         FinancialModelingPrep as FMP,
     )
+    from pfeed.engine import DataEngine
     from pfeed.sources.pfund import PFund
 
 from importlib.metadata import version
@@ -31,6 +32,9 @@ def __getattr__(name: str):
     elif name == 'plot':
         import pfund_plot as plot
         return plot
+    elif name == 'DataEngine':
+        from pfeed.engine import DataEngine
+        return DataEngine
     elif name == 'DuckDBStorage':
         from pfeed.storages.duckdb_storage import DuckDBStorage
         return DuckDBStorage
@@ -62,6 +66,7 @@ __all__ = (
     "get_config",
     "aliases",
     "plot",
+    "DataEngine",
     # sugar functions
     "create_storage",
     "create_feed",

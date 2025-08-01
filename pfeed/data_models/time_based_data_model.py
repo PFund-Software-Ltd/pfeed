@@ -40,6 +40,7 @@ class TimeBasedDeltaMetadata(TypedDict, total=True):
 class TimeBasedDataModel(BaseDataModel):
     start_date: datetime.date
     end_date: datetime.date = Field(description='Must be greater than or equal to start date.')
+    data_handler_class: type[TimeBasedDataHandler] = TimeBasedDataHandler
 
     @property
     def date(self) -> datetime.date:
@@ -80,11 +81,6 @@ class TimeBasedDataModel(BaseDataModel):
     @abstractmethod
     def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
         pass
-
-    @property
-    @abstractmethod
-    def data_handler_class(self) -> type[TimeBasedDataHandler]:
-        return TimeBasedDataHandler
 
     def create_data_handler(
         self, 

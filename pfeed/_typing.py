@@ -9,7 +9,6 @@ from narwhals.dataframe import DataFrame, LazyFrame
 class DataFrameLike(Protocol):
     def __dataframe__(self, *args: Any, **kwargs: Any) -> Any: ...
 
-
 try:
     import dask.dataframe as dd
 except ImportError:
@@ -26,12 +25,14 @@ except ImportError:
             pass
     class SparkDataFrame:
         pass
-    
+
+from pfeed.messaging.streaming_message import StreamingMessage
+ 
 
 GenericFrame = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
 GenericSeries = Series[Any]
-GenericData = GenericFrame | bytes | dict | list[dict]
-
+GenericData = GenericFrame | bytes
+StreamingData = dict | StreamingMessage
 
 tDataTool = Literal['pandas', 'polars']
 tDataSource = Literal['YAHOO_FINANCE', 'DATABENTO', 'BYBIT', 'FINANCIAL_MODELING_PREP']

@@ -50,6 +50,7 @@ class MarketDataModel(TimeBasedDataModel):
     '''
     product: BaseProduct
     resolution: Resolution
+    data_handler_class: type[MarketDataHandler] = MarketDataHandler
     
     def __str__(self):
         return ':'.join([super().__str__(), str(self.product.asset_type), self.product.symbol, repr(self.resolution)])
@@ -89,10 +90,6 @@ class MarketDataModel(TimeBasedDataModel):
             year, month, day = str(date).split('-')
             return path / f'year={year}' / f'month={month}' / f'day={day}'
 
-    @property
-    def data_handler_class(self) -> type[MarketDataHandler]:
-        return MarketDataHandler
-    
     def to_metadata(self) -> MarketMetadata:
         return {
             **super().to_metadata(),

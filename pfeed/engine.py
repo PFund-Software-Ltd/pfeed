@@ -1,18 +1,25 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Coroutine
+from typing import TYPE_CHECKING, Coroutine, AsyncGenerator
 if TYPE_CHECKING:
     from pfund._typing import tEnvironment
     from pfeed._typing import tDataTool, tDataSource, tDataCategory, GenericData
     from pfeed.feeds.base_feed import BaseFeed
 
 import asyncio
+import logging
 
+from pfund import print_warning
 import pfeed as pe
 from pfeed.enums import DataSource, DataCategory
 
 
+logger = logging.getLogger('pfeed')
+
+
 # NOTE: only data engine has the ability to run background tasks in pfeed
 class DataEngine:
+    STREAMING_QUEUE_MAXSIZE = 1000
+
     def __init__(
         self,
         env: tEnvironment,
@@ -86,15 +93,63 @@ class DataEngine:
         return result
     
     def run(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> dict[BaseFeed, GenericData] | None:
-        result: dict[BaseFeed, GenericData] | list[Coroutine] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         if not self._is_streaming_feeds():
+            result: dict[BaseFeed, GenericData] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
             return result
         else:
-            return asyncio.run(asyncio.gather(*result))
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:  # if no running loop, asyncio.get_running_loop() will raise RuntimeError
+                # No running event loop, safe to use asyncio.run()
+                pass
+            else:
+                print_warning("Cannot call engine.run() from within a running event loop. Did you mean to call engine.run_async()?")
+                return
+            return asyncio.run(self.run_async())
     
     async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> None:
         assert self._is_streaming_feeds(), 'Only streaming feeds can be run asynchronously'
         result: list[Coroutine] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
-        return await asyncio.gather(*result)
+        try:
+            return await asyncio.gather(*result)
+        except asyncio.CancelledError:
+            logger.warning('engine feeds were cancelled')
     
-    
+    def __aiter__(self) -> AsyncGenerator[Coroutine, None]:
+        assert self._is_streaming_feeds(), 'Only streaming feeds support async iteration'
+        
+        async def _iter():
+            queue = asyncio.Queue(maxsize=self.STREAMING_QUEUE_MAXSIZE)
+            
+            async def _producer(feed):
+                """Put messages from a feed into the shared queue"""
+                try:
+                    async for msg in feed:
+                        if queue.full():
+                            logger.warning(f"Streaming queue full, dropping oldest message - consider increasing maxsize (current: {self.STREAMING_QUEUE_MAXSIZE}) or improving consumer speed")
+                            queue.get_nowait()  # Remove oldest
+                        await queue.put((feed, msg))
+                except Exception:
+                    logger.exception(f"Exception in feed {feed.name}:")
+                finally:
+                    await queue.put((feed, None))  # Sentinel for this feed
+                    
+            producers = [asyncio.create_task(_producer(feed)) for feed in self._feeds]
+            completed_feeds = 0
+            
+            try:
+                while completed_feeds < len(self._feeds):
+                    feed, msg = await queue.get()
+                    
+                    if msg is None:  # Feed completed
+                        completed_feeds += 1
+                    else:
+                        yield feed, msg
+            finally:
+                # Clean up
+                for producer in producers:
+                    if not producer.done():
+                        producer.cancel()
+            
+        return _iter()
+        

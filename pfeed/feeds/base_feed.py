@@ -112,7 +112,11 @@ class BaseFeed(ABC):
             async with asyncio.TaskGroup() as task_group:
                 producer = task_group.create_task(self.run_async())
                 while True:
-                    msg = await queue.get()
+                    try:
+                        msg = await queue.get()
+                    except asyncio.CancelledError:
+                        producer.cancel()
+                        break
                     if msg is None:          # sentinel from faucet.close_stream()
                         break
                     yield msg
@@ -665,8 +669,8 @@ class BaseFeed(ABC):
                 pass
             else:
                 print_warning(
-                    "Cannot call .run() from within a running event loop.\n"
-                    "Did you mean to call .run_async() or forget to set 'pipeline_mode=True'?"
+                    "Cannot call feed.run() from within a running event loop.\n"
+                    "Did you mean to call feed.run_async() or forget to set 'pipeline_mode=True'?"
                 )
                 # We're in a running event loop, can't use asyncio.run()
                 # Close the coroutine to prevent RuntimeWarning about unawaited coroutine

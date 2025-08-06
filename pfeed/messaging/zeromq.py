@@ -2,6 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Union, Literal
 if TYPE_CHECKING:
     from zmq import SocketType, SocketOption
+    from pfeed.enums import DataSource
+    from pfund.products.product_base import BaseProduct
+    from pfund.datas.resolution import Resolution
 
 import time
 import logging
@@ -21,6 +24,12 @@ class SocketMethod(StrEnum):
 
 class ZeroMQDataChannel(StrEnum):
     signal = 'signal'
+
+    @staticmethod
+    def create_market_data_channel(data_source: DataSource, data_origin: str, product: BaseProduct, resolution: Resolution) -> str:
+        return f'{data_source}.{data_origin}.{repr(resolution)}.{product.name}'
+
+        
 DataChannel = Union[ZeroMQDataChannel, PFundDataChannel, PublicDataChannel, PrivateDataChannel]
 JSONValue = Union[dict, list, str, int, float, bool, None]
 
@@ -121,6 +130,11 @@ class ZeroMQ:
     
     def set_target_identity(self, identity: str):
         assert self._sender, 'sender is not initialized'
+        if self._sender.socket_type != zmq.ROUTER:
+            raise ValueError(
+                f'set_target_identity() is only supported for ROUTER socket, '
+                f'but sender socket type is {self._sender.socket_type.name}'
+            )
         self._target_identity = identity.encode()
     
     def get_ports_in_use(self, socket: zmq.Socket) -> list[int]:
@@ -128,8 +142,9 @@ class ZeroMQ:
     
     def bind(self, socket: zmq.Socket, port: int | None=None):
         '''Binds a socket which uses bind method to a port.'''
+        assert isinstance(socket, zmq.Socket), f'{socket=} is not a zmq.Socket'
         assert socket in self._socket_methods, f'{socket=} has not been initialized'
-        assert self._socket_methods[socket] == SocketMethod.bind, f'{socket=} is not a socket used for binding'
+        assert self._socket_methods[socket] == SocketMethod.bind, f'{socket=} registered with socket_method={self._socket_methods[socket]}'
         if port is None:
             port: int = socket.bind_to_random_port(self._url)
         else:
@@ -141,8 +156,9 @@ class ZeroMQ:
     
     def connect(self, socket: zmq.Socket, port: int):
         '''Connects to a port which uses connect method.'''
+        assert isinstance(socket, zmq.Socket), f'{socket=} is not a zmq.Socket'
         assert socket in self._socket_methods, f'{socket=} has not been initialized'
-        assert self._socket_methods[socket] == SocketMethod.connect, f'{socket=} is not a socket used for connecting'
+        assert self._socket_methods[socket] == SocketMethod.connect, f'{socket=} registered with socket_method={self._socket_methods[socket]}'
         socket.connect(f"{self._url}:{port}")
         if port not in self._socket_ports[socket]:
             self._socket_ports[socket].append(port)
@@ -150,6 +166,9 @@ class ZeroMQ:
             raise ValueError(f'{port=} is already subscribed')
     
     def terminate(self):
+        # send STOP signal to notice listeners, which probably have a while True loop running
+        self.send(channel=ZeroMQDataChannel.signal, topic='', data=ZeroMQSignal.STOP)
+        
         if self._poller and self._receiver:
             self._poller.unregister(self._receiver)
 
@@ -178,6 +197,7 @@ class ZeroMQ:
         try:
             msg_ts = time.time()
             msg = [channel.encode(), topic.encode(), self._encoder.encode(data), self._encoder.encode(msg_ts)]
+            # REVIEW: currently only used for ROUTER socket
             if self._sender.socket_type == zmq.ROUTER:
                 msg.insert(0, self._target_identity)
             self._sender.send_multipart(msg, zmq.NOBLOCK)
@@ -199,6 +219,8 @@ class ZeroMQ:
                 msg = self._receiver.recv_multipart(zmq.NOBLOCK)
                 channel, topic, data, msg_ts = msg
                 return channel.decode(), topic.decode(), self._decoder.decode(data), self._decoder.decode(msg_ts)
+            else:
+                return None
         except zmq.error.Again:  # no message available, will be raised when using zmq.NOBLOCK
             self._logger.warning(f'{self.receiver_name} zmq.error.Again, no message available')
         except zmq.error.ContextTerminated:

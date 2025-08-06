@@ -8,7 +8,8 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund._typing import FullDataChannel, tEnvironment
     from pfeed._typing import GenericFrame
-    from pfeed.data_models.market_data_model import MarketDataModel
+    from pfeed.sources.bybit.stream_api import ChannelKey
+    from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
     from pfeed._typing import tStorage, tDataLayer
 
 from pfund.products.product_bybit import BybitProduct
@@ -29,7 +30,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         data_origin: str = '',
         env: tEnvironment | None = None,
         **product_specs
-    ) -> MarketDataModel:
+    ) -> BybitMarketDataModel:
         from pfeed.sources.bybit.market_data_handler import BybitMarketDataHandler
         data_model = super().create_data_model(
             product=product,
@@ -103,7 +104,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
             **product_specs
         )
 
-    def _download_impl(self, data_model: MarketDataModel) -> bytes | None:
+    def _download_impl(self, data_model: BybitMarketDataModel) -> bytes | None:
         self.logger.debug(f'downloading {data_model}')
         data = self.data_source.batch_api.get_data(data_model.product, data_model.date)
         self.logger.debug(f'downloaded {data_model}')
@@ -143,12 +144,19 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
             **product_specs
         )
     
-    async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict], Awaitable[None] | None]):
-        async def _callback(msg: dict):
-            channel_key = 'topic'  # tell faucet which key to use to get the channel
-            await faucet_streaming_callback(channel_key, msg)
-        self.data_source.stream_api.set_callback(_callback)
-        await self.data_source.stream_api.connect()
+    async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict, BybitMarketDataModel | None], Awaitable[None] | None]):
+        stream_api = self.data_source.stream_api
+        async def _callback(ws_name: str, msg: dict):
+            if channel := msg.get('topic', None):
+                category = ws_name.split('_')[1]
+                category = BybitProduct.ProductCategory[category.upper()]
+                channel_key: ChannelKey = stream_api._generate_channel_key(category, channel)
+                data_model = stream_api._streaming_bindings[channel_key]
+            else:
+                data_model = None
+            await faucet_streaming_callback(ws_name, msg, data_model)
+        stream_api.set_callback(_callback)
+        await stream_api.connect()
         
     async def _close_stream(self):
         await self.data_source.stream_api.disconnect()
@@ -167,8 +175,8 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         BybitWebSocketAPIClass: type[BybitWebSocketAPI] = WebSocketAPI._get_api_class(product.category)
         return BybitWebSocketAPIClass._parse_message(msg)
     
-    def _add_data_channel(self, product: BybitProduct, resolution: Resolution) -> str:
-        return self.data_source.stream_api._add_data_channel(product, resolution)
+    def _add_data_channel(self, data_model: BybitMarketDataModel) -> FullDataChannel:
+        return self.data_source.stream_api._add_data_channel(data_model)
 
     def add_channel(
         self, 

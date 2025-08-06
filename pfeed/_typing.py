@@ -1,5 +1,5 @@
 from typing_extensions import TypedDict
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TypeAlias
 
 import os
 import datetime
@@ -26,6 +26,7 @@ except ImportError:
     class SparkDataFrame:
         pass
 
+from pfund._typing import FullDataChannel
 from pfeed.messaging.streaming_message import StreamingMessage
  
 

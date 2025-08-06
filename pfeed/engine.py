@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from pfund._typing import tEnvironment
     from pfeed._typing import tDataTool, tDataSource, tDataCategory, GenericData
     from pfeed.feeds.base_feed import BaseFeed
+    from pfeed.messaging.zeromq import ZeroMQ
 
 import asyncio
 import logging
@@ -39,11 +40,43 @@ class DataEngine:
         # NOTE: pipeline_mode must be turned on for the engine to work so that users can add tasks to the feed
         self._params['pipeline_mode'] = True
         self._feeds: list[BaseFeed] = []
+        self._msg_queue: ZeroMQ | None = None
+        if use_ray:
+            self._setup_messaging()
         # self._backfill: bool = backfill
     
     @property
     def feeds(self) -> dict[DataCategory, list[BaseFeed]]:
         return self._feeds
+    
+    def _setup_messaging(self):
+        import zmq
+        from pfeed.messaging.zeromq import ZeroMQ
+        self._msg_queue = ZeroMQ(
+            name='data_engine',
+            logger=logger,
+            sender_type=zmq.XPUB,
+            receiver_type=zmq.PULL,
+            receiver_method='bind',
+        )
+        self._msg_queue.bind(self._msg_queue.receiver)
+    
+    def _run_zmq_loop(self):
+        '''receive messages from Ray workers'''
+        from pfeed.messaging.zeromq import ZeroMQDataChannel, ZeroMQSignal
+        while True:
+            msg = self._msg_queue.recv()
+            if msg is None:
+                continue
+            # NOTE: received data is after transformations in Ray workers
+            channel, topic, data, msg_ts = msg
+            if channel == ZeroMQDataChannel.signal:
+                signal: ZeroMQSignal = data
+                if signal == ZeroMQSignal.STOP:
+                    break
+            else:
+                # TODO: send to subscribers, e.g. strategies, models in pfund
+                pass
     
     # TODO: async background task
     def backfill(self):
@@ -56,6 +89,7 @@ class DataEngine:
         '''
         assert 'pipeline_mode' not in kwargs, 'pipeline_mode is True by default and cannot be overridden'
         feed: BaseFeed = pe.create_feed(data_source=data_source, data_category=data_category, **self._params, **kwargs)
+        feed._set_engine(self)
         self._feeds.append(feed)
         return feed
     

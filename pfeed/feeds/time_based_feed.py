@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
     import polars as pl
     from narwhals.typing import Frame
-    from pfund._typing import FullDataChannel
     from pfeed._typing import tStorage, tDataLayer, GenericFrame, StorageMetadata
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
@@ -358,7 +357,6 @@ class TimeBasedFeed(BaseFeed):
     def _run_stream(
         self,
         data_model: TimeBasedDataModel,
-        channel: FullDataChannel,
         add_default_transformations: Callable | None,
         load_to_storage: Callable | None,
         callback: Callable[[dict], Awaitable[None] | None] | None,
@@ -369,14 +367,14 @@ class TimeBasedFeed(BaseFeed):
         else:
             faucet: Faucet = self._create_faucet(
                 data_model=data_model,
-                extract_func=self._stream_impl, 
+                extract_func=self._stream_impl,
                 extract_type=ExtractType.stream,
                 close_stream=self._close_stream,
             )
         if callback:
             faucet.set_streaming_callback(callback)
         dataflow: DataFlow = self.create_dataflow(data_model=data_model, faucet=faucet)
-        faucet.bind_channel_to_dataflow(dataflow, channel)
+        faucet.bind_data_model_to_dataflow(data_model, dataflow)
         if add_default_transformations:
             add_default_transformations()
         if load_to_storage:

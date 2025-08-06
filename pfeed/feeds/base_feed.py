@@ -5,10 +5,10 @@ if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
     from pfund._typing import tEnvironment
     from pfund.products.product_base import BaseProduct
-    from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.sources.base_source import BaseSource
+    from pfeed.engine import DataEngine
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed._typing import tStorage, tDataTool, tDataLayer, GenericData, tStreamMode
+    from pfeed._typing import tStorage, tDataTool, tDataLayer, GenericData, tStreamMode, StreamingData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
@@ -20,6 +20,7 @@ import asyncio
 import logging
 import inspect
 from collections import defaultdict
+from threading import Thread
 from abc import ABC, abstractmethod
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
@@ -63,6 +64,7 @@ class BaseFeed(ABC):
         self._data_tool = DataTool[data_tool.lower()]
         self.data_source: BaseSource = self._create_data_source(env=self._env)
         self.logger = logging.getLogger(self.name.lower() + '_data')
+        self._engine: DataEngine | None = None
         self._pipeline_mode: bool = pipeline_mode
         self._use_ray: bool = use_ray
         self._use_prefect: bool = use_prefect
@@ -181,6 +183,12 @@ class BaseFeed(ABC):
         import ray
         if ray.is_initialized():
             ray.shutdown()
+    
+    def _set_engine(self, engine: DataEngine) -> None:
+        from pfeed.engine import DataEngine
+        if not isinstance(engine, DataEngine):
+            raise TypeError("engine must be a DataEngine instance")
+        self._engine = engine
 
     @abstractmethod
     def download(self, *args, **kwargs) -> GenericData | None | BaseFeed:
@@ -523,11 +531,11 @@ class BaseFeed(ABC):
 
             @ray.remote
             def ray_task(
-                feed_name: str, 
-                worker_name: str, 
-                transformations_per_dataflow: dict[DataFlowName, list[Callable]], 
+                feed_name: str,
+                worker_name: str,
+                transformations_per_dataflow: dict[DataFlowName, list[Callable]],
                 sinks_per_dataflow: dict[DataFlowName, Sink],
-                ports_to_connect: list[int],
+                ports_to_connect: dict[Literal['sender', 'receiver'], list[int]],
                 ready_queue: Queue,
             ):
                 logger = logging.getLogger(feed_name.lower() + '_data')
@@ -542,14 +550,17 @@ class BaseFeed(ABC):
                     msg_queue = ZeroMQ(
                         name=f'{feed_name}.stream.{worker_name}',
                         logger=logger,
-                        sender_type=zmq.PUSH,  # TODO: push to Data Engine if in use
+                        sender_type=zmq.PUSH,
                         receiver_type=zmq.DEALER,
+                        sender_method='connect',
                     )
                     msg_queue.receiver.setsockopt(zmq.IDENTITY, worker_name.encode())
-                    for port in ports_to_connect:
-                        msg_queue.connect(msg_queue.receiver, port)
+                    for sender_or_receiver, ports in ports_to_connect.items():
+                        for port in ports:
+                            msg_queue.connect(getattr(msg_queue, sender_or_receiver), port)
+
                     ready_queue.put(worker_name)
-                    
+                    is_data_engine_running = 'sender' in ports_to_connect
                     while True:
                         msg = msg_queue.recv()
                         if msg is None:
@@ -560,11 +571,14 @@ class BaseFeed(ABC):
                             if signal == ZeroMQSignal.STOP:
                                 break
                         else:
-                            dataflow_name = channel
-                            # data_model_in_str = topic
+                            dataflow_name, data = data
                             transformations = transformations_per_dataflow[dataflow_name]
                             for transform in transformations:
-                                data: dict | StreamingMessage = transform(data)
+                                data: StreamingData = transform(data)
+                            
+                            if is_data_engine_running:
+                                msg_queue.send(channel=channel, topic=topic, data=data)
+                            
                             if sink := sinks_per_dataflow[dataflow_name]:
                                 sink.flush(data, streaming=True)
                     msg_queue.terminate()
@@ -583,8 +597,9 @@ class BaseFeed(ABC):
                     return f'worker-{worker_num}'
                 transformations_per_worker: dict[WorkerName, dict[DataFlowName, list[Callable]]] = defaultdict(dict)
                 sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
-                ports_to_connect: dict[WorkerName, list[int]] = defaultdict(list)
+                ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], list[int]]] = defaultdict(lambda: defaultdict(list))
                 dataflow_zmqs: list[ZeroMQ] = [] 
+                engine_thread: Thread | None = None
                 for i, dataflow in enumerate(self._dataflows):
                     worker_num: int = i % num_workers
                     worker_num += 1  # convert to 1-indexed, i.e. starting from 1
@@ -592,10 +607,18 @@ class BaseFeed(ABC):
                     dataflow._setup_messaging(worker_name)
                     transformations_per_worker[worker_name][dataflow.name] = dataflow._transformations
                     sinks_per_worker[worker_name][dataflow.name] = dataflow._sink
+                    # get ports in use for dataflow's ZMQ.ROUTER
                     dataflow_zmq: ZeroMQ = dataflow._msg_queue
                     dataflow_zmqs.append(dataflow_zmq)
                     ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)
-                    ports_to_connect[worker_name].extend(ports_in_use)
+                    ports_to_connect[worker_name]['receiver'].extend(ports_in_use)
+                    # get ports in use for engine's ZMQ.PULL
+                    if self._engine:
+                        engine_zmq: ZeroMQ = self._engine._msg_queue
+                        ports_in_use: list[int] = engine_zmq.get_ports_in_use(engine_zmq.receiver)
+                        ports_to_connect[worker_name]['sender'].extend(ports_in_use)
+                        engine_thread = Thread(target=self._engine._run_zmq_loop, daemon=True)
+                        engine_thread.start()
 
                 worker_names = [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
                 ready_queue = Queue()  # let ray worker notify the main thread that it's ready to receive messages
@@ -626,6 +649,7 @@ class BaseFeed(ABC):
                 
                 # start streaming
                 await _run_dataflows()
+                
             except KeyboardInterrupt:
                 print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
             except Exception:
@@ -633,17 +657,17 @@ class BaseFeed(ABC):
             finally:
                 log_listener.stop()
                 self.logger.debug('waiting for ray tasks to finish...')
-                # send STOP signal to notice the while loop in the ray worker to break
-                for dataflow_zmq in dataflow_zmqs:
-                    dataflow_zmq.send(
-                        channel=ZeroMQDataChannel.signal,
-                        topic='',
-                        data=ZeroMQSignal.STOP,
-                    )
-                    dataflow_zmq.terminate()
+                for dataflow in self._dataflows:
+                    dataflow._msg_queue.terminate()
                 ray.get(futures)
                 self.logger.debug('shutting down ray...')
                 self._shutdown_ray()
+                if engine_thread:
+                    engine_thread.join(timeout=10)
+                    if engine_thread.is_alive():
+                        self.logger.debug("Engine thread is still running after timeout")
+                    else:
+                        self.logger.debug("Engine thread finished")
         else:
             await _run_dataflows()
         self._clear_dataflows_after_run()

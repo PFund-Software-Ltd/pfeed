@@ -18,6 +18,7 @@ from pfeed.enums import ExtractType, FlowType
 class DataFlow:
     def __init__(self, data_model: BaseDataModel, faucet: Faucet):
         self._data_model: BaseDataModel = data_model
+        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
         self._is_streaming = faucet._extract_type == ExtractType.stream
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
@@ -25,7 +26,8 @@ class DataFlow:
         self._result = FlowResult()
         self._flow_type: FlowType = FlowType.native
         self._msg_queue: ZeroMQ | None = None
-        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
+        self._zmq_channel: str | None = None
+        self._zmq_topic: str | None = None
     
     @property
     def name(self):
@@ -107,19 +109,28 @@ class DataFlow:
             worker_name: Ray worker name (e.g. worker-1) thats responsible for handling the dataflow's ETL
         '''
         import zmq
-        from pfeed.messaging.zeromq import ZeroMQ
-        self._msg_queue = ZeroMQ(
-            name=f'{self.name}', 
-            logger=self._logger,
-            sender_type=zmq.ROUTER
-        )
+        from pfund.enums.data_channel import PublicDataChannel
+        from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel
+        self._msg_queue = ZeroMQ(name=f'{self.name}', logger=self._logger, sender_type=zmq.ROUTER)
         self._msg_queue.bind(self._msg_queue.sender)
         self._msg_queue.set_target_identity(worker_name)  # store zmq.DEALER's identity to send to
+        self._zmq_channel = ZeroMQDataChannel.create_market_data_channel(
+            data_source=self.data_source.name,
+            data_origin=self.data_model.data_origin,
+            product=self.data_model.product,
+            resolution=self.data_model.resolution
+        )
+        if self.data_model.resolution.is_quote():
+            self._zmq_topic = PublicDataChannel.orderbook
+        elif self.data_model.resolution.is_tick():
+            self._zmq_topic = PublicDataChannel.tradebook
+        else:
+            self._zmq_topic = PublicDataChannel.candlestick
     
     def _run_stream_etl(self, msg: dict) -> None | StreamingData:
         # if zeromq is in use (when use_ray=True), send msg to Ray's worker and let it perform ETL
         if self._msg_queue:
-            self._msg_queue.send(channel=self.name, topic=str(self.data_model), data=msg)
+            self._msg_queue.send(channel=self._zmq_channel, topic=self._zmq_topic, data=(self.name, msg))
         else:
             data: StreamingData = self._transform(msg)
             self._load(data)

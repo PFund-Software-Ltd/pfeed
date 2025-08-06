@@ -426,10 +426,9 @@ class MarketFeed(TimeBasedFeed):
             data_origin=data_origin, 
             start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
         )
-        channel: FullDataChannel = self._add_data_channel(data_model.product, data_model.resolution)
+        self._add_data_channel(data_model)
         return self._run_stream(
             data_model=data_model,
-            channel=channel,
             add_default_transformations=(lambda: self._add_default_transformations_to_stream(product, resolution)) if auto_transform else None,
             load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
             callback=callback,
@@ -469,7 +468,7 @@ class MarketFeed(TimeBasedFeed):
         pass
     
     @abstractmethod
-    def _add_data_channel(self, product: BaseProduct, resolution: Resolution):
+    def _add_data_channel(self, data_model: MarketDataModel) -> FullDataChannel:
         pass
     
     @abstractmethod

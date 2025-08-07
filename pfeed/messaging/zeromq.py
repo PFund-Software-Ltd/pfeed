@@ -14,7 +14,7 @@ from collections import defaultdict
 import zmq
 from msgspec import msgpack
 
-from pfund.enums import PublicDataChannel, PrivateDataChannel, PFundDataChannel, PFundDataTopic
+from pfund.enums import PublicDataChannel, PrivateDataChannel, PFundDataChannel
 
 
 class SocketMethod(StrEnum):
@@ -26,8 +26,8 @@ class ZeroMQDataChannel(StrEnum):
     signal = 'signal'
 
     @staticmethod
-    def create_market_data_channel(data_source: DataSource, data_origin: str, product: BaseProduct, resolution: Resolution) -> str:
-        return f'{data_source}.{data_origin}.{repr(resolution)}.{product.name}'
+    def create_market_data_channel(data_source: DataSource, product: BaseProduct, resolution: Resolution) -> str:
+        return f'{product.trading_venue}.{data_source}.{repr(resolution)}.{product.name}'
 
         
 DataChannel = Union[ZeroMQDataChannel, PFundDataChannel, PublicDataChannel, PrivateDataChannel]
@@ -51,7 +51,6 @@ class ZeroMQ:
         self,
         name: str,
         logger: logging.Logger,
-        url: str=DEFAULT_URL,
         io_threads: int=1,
         *,
         sender_method: SocketMethod | Literal['bind', 'connect']='bind',
@@ -77,10 +76,9 @@ class ZeroMQ:
         assert any([sender_type, receiver_type]), 'Either sender_type or receiver_type must be provided'
         self._name = name
         self._logger = logger
-        self._url = url
         self._ctx = zmq.Context(io_threads=io_threads)
         self._socket_methods: dict[zmq.Socket, SocketMethod] = {}
-        self._socket_ports: defaultdict[zmq.Socket, list[int]] = defaultdict(list)
+        self._socket_addresses: defaultdict[zmq.Socket, list[str]] = defaultdict(list)
         self._sender: zmq.Socket | None = None
         self._target_identity: bytes | None = None  # identity of the sender socket to send to, currently only used for ROUTER socket
         self._receiver: zmq.Socket | None = None
@@ -137,37 +135,60 @@ class ZeroMQ:
             )
         self._target_identity = identity.encode()
     
+    def get_addresses_in_use(self, socket: zmq.Socket) -> list[str]:
+        return self._socket_addresses[socket]
+    
+    def get_urls_in_use(self, socket: zmq.Socket) -> list[str]:
+        addresses = self.get_addresses_in_use(socket)
+        return [addr.split(':')[0] for addr in addresses]
+    
     def get_ports_in_use(self, socket: zmq.Socket) -> list[int]:
-        return self._socket_ports[socket]
+        addresses = self.get_addresses_in_use(socket)
+        return [int(addr.split(':')[-1]) for addr in addresses]
     
-    def bind(self, socket: zmq.Socket, port: int | None=None):
+    def _assert_socket_initialized(self, socket: zmq.Socket, socket_method: SocketMethod):
+        assert isinstance(socket, zmq.Socket), f'{socket=} is not a zmq.Socket'
+        assert socket in self._socket_methods, f'{socket=} has not been initialized'
+        assert self._socket_methods[socket] == socket_method, f'{socket=} registered with socket_method={self._socket_methods[socket]}'
+    
+    def bind(self, socket: zmq.Socket, port: int | None=None, url: str=DEFAULT_URL):
         '''Binds a socket which uses bind method to a port.'''
-        assert isinstance(socket, zmq.Socket), f'{socket=} is not a zmq.Socket'
-        assert socket in self._socket_methods, f'{socket=} has not been initialized'
-        assert self._socket_methods[socket] == SocketMethod.bind, f'{socket=} registered with socket_method={self._socket_methods[socket]}'
+        self._assert_socket_initialized(socket, SocketMethod.bind)
         if port is None:
-            port: int = socket.bind_to_random_port(self._url)
+            port: int = socket.bind_to_random_port(url)
+        address = f"{url}:{port}"
+        socket.bind(address)
+        if address not in self._socket_addresses[socket]:
+            self._socket_addresses[socket].append(address)
         else:
-            socket.bind(f"{self._url}:{port}")
-        if port not in self._socket_ports[socket]:
-            self._socket_ports[socket].append(port)
-        else:
-            raise ValueError(f'{port=} is already bound')
+            raise ValueError(f'{address=} is already bound')
     
-    def connect(self, socket: zmq.Socket, port: int):
+    def unbind(self, socket: zmq.Socket, address: str):
+        self._assert_socket_initialized(socket, SocketMethod.bind)
+        socket.unbind(address)
+        if address in self._socket_addresses[socket]:
+            self._socket_addresses[socket].remove(address)
+    
+    def connect(self, socket: zmq.Socket, port: int, url: str=DEFAULT_URL):
         '''Connects to a port which uses connect method.'''
-        assert isinstance(socket, zmq.Socket), f'{socket=} is not a zmq.Socket'
-        assert socket in self._socket_methods, f'{socket=} has not been initialized'
-        assert self._socket_methods[socket] == SocketMethod.connect, f'{socket=} registered with socket_method={self._socket_methods[socket]}'
-        socket.connect(f"{self._url}:{port}")
-        if port not in self._socket_ports[socket]:
-            self._socket_ports[socket].append(port)
+        self._assert_socket_initialized(socket, SocketMethod.connect)
+        address = f"{url}:{port}"
+        socket.connect(address)
+        if address not in self._socket_addresses[socket]:
+            self._socket_addresses[socket].append(address)
         else:
-            raise ValueError(f'{port=} is already subscribed')
+            raise ValueError(f'{address=} is already subscribed')
+    
+    def disconnect(self, socket: zmq.Socket, address: str):
+        self._assert_socket_initialized(socket, SocketMethod.connect)
+        socket.disconnect(address)
+        if address in self._socket_addresses[socket]:
+            self._socket_addresses[socket].remove(address)
     
     def terminate(self):
         # send STOP signal to notice listeners, which probably have a while True loop running
-        self.send(channel=ZeroMQDataChannel.signal, topic='', data=ZeroMQSignal.STOP)
+        if self._sender:
+            self.send(channel=ZeroMQDataChannel.signal, topic=self.sender_name, data=ZeroMQSignal.STOP)
         
         if self._poller and self._receiver:
             self._poller.unregister(self._receiver)
@@ -176,18 +197,18 @@ class ZeroMQ:
         for socket in [self._sender, self._receiver]:
             if socket is None:
                 continue
-            for port in self._socket_ports[socket]:
+            for address in self._socket_addresses[socket][:]:
                 if self._socket_methods[socket] == SocketMethod.bind:
-                    socket.unbind(f"{self._url}:{port}")
+                    self.unbind(socket, address)
                 else:
-                    socket.disconnect(f"{self._url}:{port}")
+                    self.disconnect(socket, address)
             socket.setsockopt(zmq.LINGER, 5000)  # wait up to 5 seconds, then close anyway
             socket.close()
 
         # terminate context
         self._ctx.term()
 
-    def send(self, channel: DataChannel | str, topic: PFundDataTopic | str, data: JSONValue) -> None:
+    def send(self, channel: DataChannel | str, topic: str, data: JSONValue) -> None:
         '''
         Sends message to receivers
         Args:
@@ -211,7 +232,7 @@ class ZeroMQ:
         except Exception:
             self._logger.exception(f'{self.sender_name} send() unhandled exception:')
 
-    def recv(self) -> tuple[DataChannel | str, PFundDataTopic | str, JSONValue, float] | None:
+    def recv(self) -> tuple[DataChannel | str, str, JSONValue, float] | None:
         try:
             # REVIEW: blocks for 1ms to avoid busy-waiting and 100% CPU usage
             events = self._poller.poll(1)

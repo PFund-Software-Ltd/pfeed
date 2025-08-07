@@ -38,6 +38,7 @@ class Sink:
         else:
             return f'{self.storage.name} (data_layer={self.storage.data_layer.name.lower()}/data_domain={self.storage.data_domain})'
 
+    # OPTIMIZE: use a thread pool for data writing (I/O bound)? not sure how much IO bound is writing to a delta lake
     def flush(self, data: GenericData | StreamingMessage, streaming: bool=False):
         try:
             log_level = logging.DEBUG if streaming else logging.INFO

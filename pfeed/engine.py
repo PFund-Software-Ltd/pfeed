@@ -23,13 +23,13 @@ class DataEngine:
 
     def __init__(
         self,
-        env: tEnvironment,
         data_tool: tDataTool='polars',
         use_ray: bool=True,
         use_prefect: bool=False,
         use_deltalake: bool=False,
         # TODO
         # backfill: bool=True,
+        env: tEnvironment='LIVE',
     ):
         '''
         Args:
@@ -41,29 +41,31 @@ class DataEngine:
         self._params['pipeline_mode'] = True
         self._feeds: list[BaseFeed] = []
         self._msg_queue: ZeroMQ | None = None
-        if use_ray:
-            self._setup_messaging()
+        # TODO
         # self._backfill: bool = backfill
     
     @property
     def feeds(self) -> dict[DataCategory, list[BaseFeed]]:
         return self._feeds
     
-    def _setup_messaging(self):
+    def _setup_messaging(self, zmq_url: str | None=None):
         import zmq
         from pfeed.messaging.zeromq import ZeroMQ
         self._msg_queue = ZeroMQ(
             name='data_engine',
             logger=logger,
+            io_threads=2,
             sender_type=zmq.XPUB,
             receiver_type=zmq.PULL,
             receiver_method='bind',
         )
-        self._msg_queue.bind(self._msg_queue.receiver)
+        self._msg_queue.bind(self._msg_queue.sender, url=zmq_url or ZeroMQ.DEFAULT_URL)
+        self._msg_queue.bind(self._msg_queue.receiver, url=zmq_url or ZeroMQ.DEFAULT_URL)
     
     def _run_zmq_loop(self):
         '''receive messages from Ray workers'''
         from pfeed.messaging.zeromq import ZeroMQDataChannel, ZeroMQSignal
+        num_senders = len(self._msg_queue.get_ports_in_use(self._msg_queue.receiver))
         while True:
             msg = self._msg_queue.recv()
             if msg is None:
@@ -73,10 +75,16 @@ class DataEngine:
             if channel == ZeroMQDataChannel.signal:
                 signal: ZeroMQSignal = data
                 if signal == ZeroMQSignal.STOP:
-                    break
+                    sender_name = topic
+                    num_senders -= 1
+                    logger.debug(f'Data engine received STOP signal from {sender_name}, {num_senders} senders left')
+                    if num_senders == 0:
+                        logger.debug('Data engine received STOP signals from all senders, terminating')
+                        break
             else:
-                # TODO: send to subscribers, e.g. strategies, models in pfund
-                pass
+                # send to subscribers, e.g. strategies, models in pfund
+                self._msg_queue.send(channel=channel, topic=topic, data=data)
+        self._msg_queue.terminate()
     
     # TODO: async background task
     def backfill(self):

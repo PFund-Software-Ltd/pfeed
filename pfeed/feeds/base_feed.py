@@ -513,7 +513,7 @@ class BaseFeed(ABC):
             try:
                 await asyncio.gather(*[dataflow.run_stream(flow_type='native') for dataflow in self._dataflows])
             except asyncio.CancelledError:
-                self.logger.warning(f'{self.name} dataflows were cancelled')
+                self.logger.warning(f'{self.name} dataflows were cancelled, ending streams...')
                 await asyncio.gather(*[dataflow.end_stream() for dataflow in self._dataflows])
                     
         WorkerName: TypeAlias = str
@@ -561,6 +561,7 @@ class BaseFeed(ABC):
 
                     ready_queue.put(worker_name)
                     is_data_engine_running = 'sender' in ports_to_connect
+                    num_senders = len(msg_queue.get_ports_in_use(msg_queue.receiver))
                     while True:
                         msg = msg_queue.recv()
                         if msg is None:
@@ -569,7 +570,12 @@ class BaseFeed(ABC):
                         if channel == ZeroMQDataChannel.signal:
                             signal: ZeroMQSignal = data
                             if signal == ZeroMQSignal.STOP:
-                                break
+                                sender_name = topic
+                                num_senders -= 1
+                                logger.debug(f'Ray {worker_name} received STOP signal from {sender_name}, {num_senders} senders left')
+                                if num_senders == 0:
+                                    logger.debug(f'Ray {worker_name} received STOP signals from all senders, terminating')
+                                    break
                         else:
                             dataflow_name, data = data
                             transformations = transformations_per_dataflow[dataflow_name]
@@ -598,8 +604,9 @@ class BaseFeed(ABC):
                 transformations_per_worker: dict[WorkerName, dict[DataFlowName, list[Callable]]] = defaultdict(dict)
                 sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
                 ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], list[int]]] = defaultdict(lambda: defaultdict(list))
-                dataflow_zmqs: list[ZeroMQ] = [] 
                 engine_thread: Thread | None = None
+                if self._engine and self._engine._msg_queue is None:
+                    self._engine._setup_messaging()
                 for i, dataflow in enumerate(self._dataflows):
                     worker_num: int = i % num_workers
                     worker_num += 1  # convert to 1-indexed, i.e. starting from 1
@@ -609,7 +616,6 @@ class BaseFeed(ABC):
                     sinks_per_worker[worker_name][dataflow.name] = dataflow._sink
                     # get ports in use for dataflow's ZMQ.ROUTER
                     dataflow_zmq: ZeroMQ = dataflow._msg_queue
-                    dataflow_zmqs.append(dataflow_zmq)
                     ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)
                     ports_to_connect[worker_name]['receiver'].extend(ports_in_use)
                     # get ports in use for engine's ZMQ.PULL
@@ -657,8 +663,6 @@ class BaseFeed(ABC):
             finally:
                 log_listener.stop()
                 self.logger.debug('waiting for ray tasks to finish...')
-                for dataflow in self._dataflows:
-                    dataflow._msg_queue.terminate()
                 ray.get(futures)
                 self.logger.debug('shutting down ray...')
                 self._shutdown_ray()

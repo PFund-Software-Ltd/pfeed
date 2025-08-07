@@ -88,6 +88,8 @@ class DataFlow:
             self._result.set_metadata(metadata)
         if (data is not None) and not (is_dataframe(data) and is_empty_dataframe(data)):
             data: GenericData = self._transform(data)
+            if self.sink is None and self.extract_type != ExtractType.retrieve:
+                self._logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
             self._load(data)
         return data
     
@@ -116,7 +118,6 @@ class DataFlow:
         self._msg_queue.set_target_identity(worker_name)  # store zmq.DEALER's identity to send to
         self._zmq_channel = ZeroMQDataChannel.create_market_data_channel(
             data_source=self.data_source.name,
-            data_origin=self.data_model.data_origin,
             product=self.data_model.product,
             resolution=self.data_model.resolution
         )
@@ -141,10 +142,14 @@ class DataFlow:
         if self.sink:
             assert self.sink.storage.use_deltalake, \
                 'writing streaming data is only supported when using deltalake, please set use_deltalake=True'
+        else:
+            self._logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
         self._flow_type = FlowType[flow_type.lower()]
         await self.faucet.open_stream()  # this will trigger _run_stream_etl()
         
     async def end_stream(self):
+        if self._msg_queue:
+            self._msg_queue.terminate()
         await self.faucet.close_stream()
         
     def _transform(self, data: GenericData) -> GenericData | StreamingData:
@@ -165,8 +170,6 @@ class DataFlow:
     
     def _load(self, data: GenericData | StreamingData):
         if self.sink is None:
-            if self.extract_type != ExtractType.retrieve:
-                self._logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
             return
         if self.is_streaming():
             self.sink.flush(data, streaming=True)

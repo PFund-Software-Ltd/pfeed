@@ -94,6 +94,7 @@ class Faucet:
             result = self._user_streaming_callback(ws_name, msg)
             if inspect.isawaitable(result):
                 await result
+        # put msg to streaming queue, which is mainly used in feed's __aiter__()
         if self._streaming_queue:
             if self._streaming_queue.full():
                 self._logger.warning(f"Streaming queue full, dropping oldest message - consider increasing maxsize (current: {self.STREAMING_QUEUE_MAXSIZE}) or improving consumer speed")

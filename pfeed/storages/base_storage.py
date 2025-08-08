@@ -37,7 +37,7 @@ class BaseStorage(ABC):
     ):
         from pfeed.enums import DataStorage, DataLayer
         self.name = DataStorage[name.upper()]
-        self.data_layer = DataLayer[data_layer.upper()]
+        self.data_layer = DataLayer[data_layer.upper()] if not isinstance(data_layer, DataLayer) else data_layer
         self.data_domain = data_domain.lower()
         self.use_deltalake = use_deltalake
         self._data_model: BaseDataModel | None = None

@@ -20,7 +20,6 @@ import asyncio
 import logging
 import inspect
 from collections import defaultdict
-from threading import Thread
 from abc import ABC, abstractmethod
 from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
@@ -604,9 +603,6 @@ class BaseFeed(ABC):
                 transformations_per_worker: dict[WorkerName, dict[DataFlowName, list[Callable]]] = defaultdict(dict)
                 sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
                 ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], list[int]]] = defaultdict(lambda: defaultdict(list))
-                engine_thread: Thread | None = None
-                if self._engine and self._engine._msg_queue is None:
-                    self._engine._setup_messaging()
                 for i, dataflow in enumerate(self._dataflows):
                     worker_num: int = i % num_workers
                     worker_num += 1  # convert to 1-indexed, i.e. starting from 1
@@ -623,8 +619,6 @@ class BaseFeed(ABC):
                         engine_zmq: ZeroMQ = self._engine._msg_queue
                         ports_in_use: list[int] = engine_zmq.get_ports_in_use(engine_zmq.receiver)
                         ports_to_connect[worker_name]['sender'].extend(ports_in_use)
-                        engine_thread = Thread(target=self._engine._run_zmq_loop, daemon=True)
-                        engine_thread.start()
 
                 worker_names = [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
                 ready_queue = Queue()  # let ray worker notify the main thread that it's ready to receive messages
@@ -666,12 +660,6 @@ class BaseFeed(ABC):
                 ray.get(futures)
                 self.logger.debug('shutting down ray...')
                 self._shutdown_ray()
-                if engine_thread:
-                    engine_thread.join(timeout=10)
-                    if engine_thread.is_alive():
-                        self.logger.debug("Engine thread is still running after timeout")
-                    else:
-                        self.logger.debug("Engine thread finished")
         else:
             await _run_dataflows()
         self._clear_dataflows_after_run()

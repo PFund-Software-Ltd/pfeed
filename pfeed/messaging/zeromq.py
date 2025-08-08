@@ -3,8 +3,10 @@ from typing import TYPE_CHECKING, Union, Literal
 if TYPE_CHECKING:
     from zmq import SocketType, SocketOption
     from pfeed.enums import DataSource
+    from pfund.accounts.account_base import BaseAccount
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
+    from pfund.enums import PrivateDataChannel
 
 import time
 import logging
@@ -14,7 +16,8 @@ from collections import defaultdict
 import zmq
 from msgspec import msgpack
 
-from pfund.enums import PublicDataChannel, PrivateDataChannel, PFundDataChannel
+
+JSONValue = Union[dict, list, str, int, float, bool, None]
 
 
 class SocketMethod(StrEnum):
@@ -26,12 +29,12 @@ class ZeroMQDataChannel(StrEnum):
     signal = 'signal'
 
     @staticmethod
+    def create_private_channel(account: BaseAccount, channel: PrivateDataChannel):
+        return f'{account.trading_venue}.{account.name}.{channel}'
+
+    @staticmethod
     def create_market_data_channel(data_source: DataSource, product: BaseProduct, resolution: Resolution) -> str:
         return f'{product.trading_venue}.{data_source}.{repr(resolution)}.{product.name}'
-
-        
-DataChannel = Union[ZeroMQDataChannel, PFundDataChannel, PublicDataChannel, PrivateDataChannel]
-JSONValue = Union[dict, list, str, int, float, bool, None]
 
 
 class ZeroMQSignal(StrEnum):
@@ -156,8 +159,10 @@ class ZeroMQ:
         self._assert_socket_initialized(socket, SocketMethod.bind)
         if port is None:
             port: int = socket.bind_to_random_port(url)
-        address = f"{url}:{port}"
-        socket.bind(address)
+            address = f"{url}:{port}"
+        else:
+            address = f"{url}:{port}"
+            socket.bind(address)
         if address not in self._socket_addresses[socket]:
             self._socket_addresses[socket].append(address)
         else:
@@ -208,7 +213,7 @@ class ZeroMQ:
         # terminate context
         self._ctx.term()
 
-    def send(self, channel: DataChannel | str, topic: str, data: JSONValue) -> None:
+    def send(self, channel: str, topic: str, data: JSONValue) -> None:
         '''
         Sends message to receivers
         Args:
@@ -232,7 +237,7 @@ class ZeroMQ:
         except Exception:
             self._logger.exception(f'{self.sender_name} send() unhandled exception:')
 
-    def recv(self) -> tuple[DataChannel | str, str, JSONValue, float] | None:
+    def recv(self) -> tuple[str, str, JSONValue, float] | None:
         try:
             # REVIEW: blocks for 1ms to avoid busy-waiting and 100% CPU usage
             events = self._poller.poll(1)

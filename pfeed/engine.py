@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
 import asyncio
 import logging
+from threading import Thread
 
 from pfund import print_warning
 import pfeed as pe
@@ -40,15 +41,22 @@ class DataEngine:
         # NOTE: pipeline_mode must be turned on for the engine to work so that users can add tasks to the feed
         self._params['pipeline_mode'] = True
         self._feeds: list[BaseFeed] = []
+        self._is_running: bool = False
         self._msg_queue: ZeroMQ | None = None
+        self._zmq_thread: Thread | None = None
         # TODO
         # self._backfill: bool = backfill
+        if use_ray:
+            self._setup_messaging()
+    
+    def is_running(self) -> bool:
+        return self._is_running
     
     @property
     def feeds(self) -> dict[DataCategory, list[BaseFeed]]:
         return self._feeds
     
-    def _setup_messaging(self, zmq_url: str | None=None):
+    def _setup_messaging(self, zmq_url: str | None=None, zmq_sender_port: int | None=None, zmq_receiver_port: int | None=None):
         import zmq
         from pfeed.messaging.zeromq import ZeroMQ
         self._msg_queue = ZeroMQ(
@@ -59,31 +67,19 @@ class DataEngine:
             receiver_type=zmq.PULL,
             receiver_method='bind',
         )
-        self._msg_queue.bind(self._msg_queue.sender, url=zmq_url or ZeroMQ.DEFAULT_URL)
-        self._msg_queue.bind(self._msg_queue.receiver, url=zmq_url or ZeroMQ.DEFAULT_URL)
+        self._msg_queue.bind(self._msg_queue.sender, port=zmq_sender_port, url=zmq_url or ZeroMQ.DEFAULT_URL)
+        self._msg_queue.bind(self._msg_queue.receiver, port=zmq_receiver_port, url=zmq_url or ZeroMQ.DEFAULT_URL)
     
     def _run_zmq_loop(self):
         '''receive messages from Ray workers'''
-        from pfeed.messaging.zeromq import ZeroMQDataChannel, ZeroMQSignal
-        num_senders = len(self._msg_queue.get_ports_in_use(self._msg_queue.receiver))
-        while True:
+        while self.is_running():
             msg = self._msg_queue.recv()
             if msg is None:
                 continue
-            # NOTE: received data is after transformations in Ray workers
+            # NOTE: received transformed/standardized data from Ray workers
             channel, topic, data, msg_ts = msg
-            if channel == ZeroMQDataChannel.signal:
-                signal: ZeroMQSignal = data
-                if signal == ZeroMQSignal.STOP:
-                    sender_name = topic
-                    num_senders -= 1
-                    logger.debug(f'Data engine received STOP signal from {sender_name}, {num_senders} senders left')
-                    if num_senders == 0:
-                        logger.debug('Data engine received STOP signals from all senders, terminating')
-                        break
-            else:
-                # send to subscribers, e.g. strategies, models in pfund
-                self._msg_queue.send(channel=channel, topic=topic, data=data)
+            # send to subscribers, e.g. strategies, models in pfund
+            self._msg_queue.send(channel=channel, topic=topic, data=data)
         self._msg_queue.terminate()
     
     # TODO: async background task
@@ -122,6 +118,9 @@ class DataEngine:
         prefect_kwargs: dict | None=None, 
         include_metadata: bool=False
     ) -> dict[BaseFeed, GenericData] | list[Coroutine]:
+        if self.is_running():
+            raise RuntimeError('Data Engine is already running, cannot run again')
+        self._is_running = True
         if not self._is_streaming_feeds():
             result: dict[BaseFeed, GenericData] = {}
             for feed in self._feeds:
@@ -152,10 +151,27 @@ class DataEngine:
     async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> None:
         assert self._is_streaming_feeds(), 'Only streaming feeds can be run asynchronously'
         result: list[Coroutine] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+        self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
+        self._zmq_thread.start()
         try:
             return await asyncio.gather(*result)
         except asyncio.CancelledError:
-            logger.warning('engine feeds were cancelled')
+            logger.warning('Data Engine feeds were cancelled')
+            if self.is_running():
+                self.end()
+    
+    def end(self):
+        if not self.is_running():
+            logger.debug('Data Engine is not running, skipping end')
+            return
+        logger.debug('Data Engine is ending')
+        self._is_running = False
+        if self._zmq_thread:
+            self._zmq_thread.join(timeout=10)
+            if self._zmq_thread.is_alive():
+                logger.debug("ZMQ thread is still running after timeout")
+            else:
+                logger.debug("ZMQ thread finished")
     
     def __aiter__(self) -> AsyncGenerator[Coroutine, None]:
         assert self._is_streaming_feeds(), 'Only streaming feeds support async iteration'

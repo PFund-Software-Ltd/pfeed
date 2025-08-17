@@ -15,6 +15,7 @@ from functools import partial
 
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
+from pfund import print_warning
 from pfeed.messaging import BarMessage
 from pfeed.enums import DataCategory, MarketDataType, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
@@ -71,12 +72,12 @@ class MarketFeed(TimeBasedFeed):
         
     def create_data_model(
         self,
+        env: tEnvironment,
         product: str | BaseProduct,
         resolution: str | Resolution,
         start_date: str | datetime.date,
-        end_date: str | datetime.date | None = None,
-        data_origin: str = '',
-        env: tEnvironment | None = None,
+        end_date: str | datetime.date | None=None,
+        data_origin: str='',
         **product_specs
     ) -> MarketDataModel:
         from pfeed.data_models.market_data_model import MarketDataModel
@@ -88,7 +89,7 @@ class MarketFeed(TimeBasedFeed):
         # if isinstance(end_date, str) and end_date:
         #     end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return MarketDataModel(
-            env=env or self._env,
+            env=env,
             data_source=self.data_source,
             data_origin=data_origin,
             product=product,
@@ -161,15 +162,17 @@ class MarketFeed(TimeBasedFeed):
         data_resolution: Resolution = max(unit_resolution, lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
+        if self._pipeline_mode and to_storage:
+            print_warning('"to_storage" in download() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
         return self._run_download(
-            partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin, env=env),
-            partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=data_resolution, data_origin=data_origin, env=env),
+            partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
+            partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, resolution=data_resolution, data_origin=data_origin),
             start_date=start_date, 
             end_date=end_date,
-            dataflow_per_date=dataflow_per_date, 
+            dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
             add_default_transformations=(lambda: self._add_default_transformations_to_download(data_resolution, resolution, product)) if auto_transform else None,
-            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage and not self._pipeline_mode else None,
         )
     
     def _add_default_transformations_to_download(
@@ -221,7 +224,7 @@ class MarketFeed(TimeBasedFeed):
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
-        env: tEnvironment | None = None,
+        env: tEnvironment='BACKTEST',
         **product_specs
     ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | MarketFeed:
         '''Retrieve data from storage.
@@ -258,8 +261,8 @@ class MarketFeed(TimeBasedFeed):
                 )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
             env: Environment to retrieve data from.
-                If not specified, use the environment of the feed.
         '''
+        env = Environment[env.upper()]
         product: BaseProduct = self.create_product(product, **product_specs)
         resolution: Resolution = self._create_resolution(resolution)
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
@@ -267,12 +270,10 @@ class MarketFeed(TimeBasedFeed):
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer = DataLayer[data_layer.upper()]
         data_domain = data_domain or self.data_domain.value
-        if env:
-            env = Environment[env.upper()]
         return self._run_retrieve(
             # NOTE: dataflow's data model will always have the input resolution
-            partial_dataflow_data_model=partial(self.create_data_model, product=product, resolution=resolution, data_origin=data_origin, env=env),
-            partial_faucet_data_model=partial(self.create_data_model, product=product, resolution=unit_resolution, data_origin=data_origin, env=env),
+            partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
+            partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, resolution=unit_resolution, data_origin=data_origin),
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,
@@ -349,59 +350,60 @@ class MarketFeed(TimeBasedFeed):
             )
         )
     
-    def get_historical_data(
-        self,
-        product: str,
-        resolution: Resolution | str | tDataType | Literal['max'],
-        symbol: str='',
-        rollback_period: str | Literal['ytd', 'max']="1w",
-        start_date: str='',
-        end_date: str='',
-        data_origin: str='',
-        data_layer: tDataLayer | None=None,
-        data_domain: str='',
-        from_storage: tStorage | None=None,
-        to_storage: tStorage | None=None,
-        storage_options: dict | None=None,
-        force_download: bool=False,
-        retrieve_per_date: bool=False,
-        **product_specs
-    ) -> GenericFrame | None:
-        from pfeed._etl import market as etl
-        from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
+    # DEPRECATED
+    # def get_historical_data(
+    #     self,
+    #     product: str,
+    #     resolution: Resolution | str | tDataType | Literal['max'],
+    #     symbol: str='',
+    #     rollback_period: str | Literal['ytd', 'max']="1w",
+    #     start_date: str='',
+    #     end_date: str='',
+    #     data_origin: str='',
+    #     data_layer: tDataLayer | None=None,
+    #     data_domain: str='',
+    #     from_storage: tStorage | None=None,
+    #     to_storage: tStorage | None=None,
+    #     storage_options: dict | None=None,
+    #     force_download: bool=False,
+    #     retrieve_per_date: bool=False,
+    #     **product_specs
+    # ) -> GenericFrame | None:
+    #     from pfeed._etl import market as etl
+    #     from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
 
-        resolution: Resolution = self._create_resolution(resolution)
-        # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
-        data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
-        data_domain = data_domain or self.data_domain.value
-        df: GenericFrame | None = self._get_historical_data_impl(
-            product=product,
-            symbol=symbol,
-            rollback_period=rollback_period,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            from_storage=from_storage,
-            to_storage=to_storage,
-            storage_options=storage_options,
-            force_download=force_download,
-            retrieve_per_date=retrieve_per_date,
-            product_specs=product_specs,
-            # NOTE: feed specific kwargs
-            resolution=data_resolution,
-        )
+    #     resolution: Resolution = self._create_resolution(resolution)
+    #     # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
+    #     data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
+    #     data_domain = data_domain or self.data_domain.value
+    #     df: GenericFrame | None = self._get_historical_data_impl(
+    #         product=product,
+    #         symbol=symbol,
+    #         rollback_period=rollback_period,
+    #         start_date=start_date,
+    #         end_date=end_date,
+    #         data_origin=data_origin,
+    #         data_layer=data_layer,
+    #         data_domain=data_domain,
+    #         from_storage=from_storage,
+    #         to_storage=to_storage,
+    #         storage_options=storage_options,
+    #         force_download=force_download,
+    #         retrieve_per_date=retrieve_per_date,
+    #         product_specs=product_specs,
+    #         # NOTE: feed specific kwargs
+    #         resolution=data_resolution,
+    #     )
 
-        # NOTE: df from storage/source should have been resampled, 
-        # this is only called when resolution is less than the minimum resolution, e.g. '3d' -> '1d'
-        if df is not None:
-            is_resample_required = resolution < data_resolution
-            if is_resample_required:
-                df: pd.DataFrame = etl.resample_data(convert_to_pandas_df(df), resolution)
-                self.logger.debug(f'resampled {product} {data_resolution} data to {resolution}')
-            df: GenericFrame = convert_to_user_df(df, self._data_tool)
-        return df
+    #     # NOTE: df from storage/source should have been resampled, 
+    #     # this is only called when resolution is less than the minimum resolution, e.g. '3d' -> '1d'
+    #     if df is not None:
+    #         is_resample_required = resolution < data_resolution
+    #         if is_resample_required:
+    #             df: pd.DataFrame = etl.resample_data(convert_to_pandas_df(df), resolution)
+    #             self.logger.debug(f'resampled {product} {data_resolution} data to {resolution}')
+    #         df: GenericFrame = convert_to_user_df(df, self._data_tool)
+    #     return df
     
     def stream(
         self,
@@ -414,23 +416,28 @@ class MarketFeed(TimeBasedFeed):
         storage_options: dict | None=None,
         auto_transform: bool=True,
         callback: Callable[[dict], Awaitable[None] | None] | None=None,
+        env: tEnvironment='LIVE',
         **product_specs
     ) -> MarketFeed:
-        assert self._env != Environment.BACKTEST, 'streaming is not supported in env BACKTEST'
+        env = Environment[env.upper()]
+        assert env != Environment.BACKTEST, 'streaming is not supported in env BACKTEST'
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution: Resolution = self._create_resolution(resolution)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
         data_model: MarketDataModel = self.create_data_model(
-            product=product, 
-            resolution=resolution, 
-            data_origin=data_origin, 
+            env=env,
+            product=product,
+            resolution=resolution,
+            data_origin=data_origin,
             start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
         )
         self._add_data_channel(data_model)
+        if self._pipeline_mode and to_storage:
+            print_warning('"to_storage" in stream() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
         return self._run_stream(
             data_model=data_model,
             add_default_transformations=(lambda: self._add_default_transformations_to_stream(product, resolution)) if auto_transform else None,
-            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage and not self._pipeline_mode else None,
             callback=callback,
         )
     
@@ -446,6 +453,11 @@ class MarketFeed(TimeBasedFeed):
         if resolution.is_bar():
             data: dict= msg['data']
             message = BarMessage(
+                trading_venue=product.trading_venue.value,
+                broker=product.broker.value,
+                exchange=str(product.exchange),
+                product=product.name,
+                basis=str(product.basis),
                 symbol=product.symbol,
                 specs=product.specs,
                 resolution=repr(resolution),
@@ -457,6 +469,7 @@ class MarketFeed(TimeBasedFeed):
                 close=data['close'],
                 volume=data['volume'],
                 extra_data=msg['extra_data'],
+                is_incremental=msg['is_incremental'],
             )
         else:
             raise NotImplementedError(f'{product.symbol} {resolution} is not supported')

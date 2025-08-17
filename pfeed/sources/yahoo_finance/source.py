@@ -3,44 +3,48 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
 
+import yfinance
 
+from pfeed.enums import DataSource
 from pfeed.sources.tradfi_source import TradFiSource
+from pfeed.sources.yahoo_finance.stream_api import StreamAPI
 
 
 __all__ = ["YahooFinanceSource"]
 
 
 class YahooFinanceSource(TradFiSource):
+    name = DataSource.YAHOO_FINANCE
+    
     def __init__(self):
-        import yfinance
-        super().__init__('YAHOO_FINANCE')
-        self.api = yfinance
+        super().__init__()
+        self.batch_api = yfinance
+        self.stream_api = StreamAPI()
 
-    def create_product(self, product_basis: str, symbol='', **product_specs) -> BaseProduct:
-        product = super().create_product(product_basis, symbol=symbol, **product_specs)
+    def create_product(self, basis: str, symbol='', **specs) -> BaseProduct:
+        product = super().create_product(basis, symbol=symbol, **specs)
         if not symbol:
+            # if not specified, derive symbol used in yahoo finance
             symbol = self._create_symbol(product)
-            product.set_symbol(symbol)
+            product.symbol = symbol
         return product
     
+    # conceptually, this should be put inside sth like YahooFinanceProduct, but since yahoo finance is not a trading venue, put it here instead
     def _create_symbol(self, product: BaseProduct) -> str:
-        '''Creates symbol based on product type'''
-        from pfund.enums import TradFiProductType
-        ptype = product.type
-        if ptype == TradFiProductType.STK:
+        if product.is_stock():
             symbol = product.symbol  # using the default symbol created in product creation
-        elif ptype == TradFiProductType.OPT:
+        elif product.is_option():
             symbol = product.symbol  # using the default symbol created in product creation
-        elif ptype == TradFiProductType.FUT:
+        elif product.is_future():
             symbol = product.base_asset + '=F'  # e.g. ES=F
-        elif ptype in (TradFiProductType.ETF, TradFiProductType.MTF):
+        elif product.is_etf() or product.is_mutual_fund():
             symbol = product.base_asset  # e.g. SPY
-        elif ptype == TradFiProductType.FX:
+        elif product.is_forex():
             symbol = product.base_asset + product.quote_asset + '=X'  # e.g. EURUSD=X
-        elif ptype == TradFiProductType.CRYPTO:
+        elif product.is_crypto():
             symbol = product.base_asset + '-' + product.quote_asset  # e.g. BTC-USD
-        elif ptype == TradFiProductType.INDEX:
+        elif product.is_index():
             symbol = "^" + product.base_asset  # e.g. ^GSPC
         else:
-            raise ValueError(f'Unsupported product type: {ptype}')
+            raise ValueError(f'Unsupported product: {product}')
         return symbol

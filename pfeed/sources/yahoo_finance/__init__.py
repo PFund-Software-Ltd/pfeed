@@ -1,4 +1,4 @@
-from pfeed.sources.yahoo_finance.yahoo_finance import YahooFinance
+from pfeed.sources.yahoo_finance.client import YahooFinance
 
 
 __all__ = ['YahooFinance']

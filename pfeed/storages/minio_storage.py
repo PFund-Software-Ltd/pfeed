@@ -16,6 +16,7 @@ import os
 import io
 import datetime
 from functools import lru_cache
+from copy import deepcopy
 
 from cloudpathlib import CloudPath
 import pyarrow.fs as pa_fs
@@ -24,6 +25,7 @@ from minio.versioningconfig import VersioningConfig
 from minio.commonconfig import ENABLED
 
 from pfeed.storages.base_storage import BaseStorage
+from pfeed.enums import StreamMode
 
 
 class MinioStorageOptions(TypedDict):
@@ -59,12 +61,14 @@ class MinioStorage(BaseStorage):
             use_deltalake=use_deltalake, 
             storage_options=self._normalize_storage_options(storage_options),
         )
+        self._minio_options = storage_options or {}
         if self.use_deltalake:
             self._adjust_storage_options_for_deltalake()
         cache_time = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
         if not MinioStorage._check_if_server_running(cache_time, self.endpoint):
             raise ServerError(f"{self.name} is not running", 503)
-        self.minio: Minio = self._create_minio(storage_options)
+        
+        self.minio: Minio = self._create_minio()
         if not self.minio.bucket_exists(self.BUCKET_NAME):
             self.minio.make_bucket(self.BUCKET_NAME)
         if enable_bucket_versioning:
@@ -79,7 +83,7 @@ class MinioStorage(BaseStorage):
     def __setstate__(self, state: object):
         self.__dict__.update(state)
         # NOTE: re-create self.minio
-        self.minio = self._create_minio(self._storage_options)
+        self.minio = self._create_minio()
     
     @classmethod
     def from_data_model(
@@ -89,7 +93,11 @@ class MinioStorage(BaseStorage):
         data_domain: str,
         use_deltalake: bool=False,
         storage_options: MinioStorageOptions | None=None,
+        stream_mode: StreamMode=StreamMode.FAST,
+        delta_flush_interval: int=100,
         enable_bucket_versioning: bool=False,
+        # EXTEND
+        # **storage_kwargs,  
     ) -> BaseStorage:
         return super().from_data_model(
             data_model=data_model,
@@ -97,7 +105,10 @@ class MinioStorage(BaseStorage):
             data_domain=data_domain,
             use_deltalake=use_deltalake,
             storage_options=storage_options,
+            stream_mode=stream_mode,
+            delta_flush_interval=delta_flush_interval,
             enable_bucket_versioning=enable_bucket_versioning,
+            # **storage_kwargs,
         )
     
     @staticmethod
@@ -126,7 +137,6 @@ class MinioStorage(BaseStorage):
                 "access_key_id": minio_options.pop("access_key", default_access_key),
                 "secret_access_key": minio_options.pop("secret_key", default_secret_key),
             }
-
         return storage_options
     
     def _adjust_storage_options_for_deltalake(self):
@@ -137,13 +147,13 @@ class MinioStorage(BaseStorage):
         # if 'region' not in self._storage_options:
         #     self._storage_options["region"] = 'us-east-1'
     
-    def _create_minio(self, minio_options: MinioStorageOptions | None) -> Minio:
+    def _create_minio(self) -> Minio:
         return Minio(
             endpoint=self.endpoint.replace('http://', '').replace('https://', ''),
             access_key=self._storage_options['access_key_id'],
             secret_key=self._storage_options['secret_access_key'],
             secure=self.endpoint.startswith('https://'),  # turn off TLS, i.e. not using HTTPS
-            **(minio_options or {}),
+            **self._minio_options,
         )
     
     def get_filesystem(self) -> pa_fs.S3FileSystem:

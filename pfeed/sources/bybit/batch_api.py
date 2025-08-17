@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.products.product_crypto import CryptoProduct
-    from pfund.exchanges.bybit.rest_api import RESTfulAPI
-
+    from pfund._typing import tEnvironment
+    from pfund.enums import Environment
 
 from pfund.enums import CryptoAssetType, AssetTypeModifier
 
@@ -29,8 +29,14 @@ class BatchAPI:
         CryptoAssetType.CRYPTO: '.*',  # match everything since everything from https://public.bybit.com/spot is spot
     }
 
-    def __init__(self, rest_api: RESTfulAPI):
-        self._rest_api = rest_api
+    def __init__(self, env: tEnvironment):
+        # TODO: if rest api env is PAPER or SANDBOX, should not allow downloading LIVE data (historical data is still env=LIVE)
+        from pfund.exchanges.bybit.rest_api import RESTfulAPI
+        self._rest_api = RESTfulAPI(env)
+    
+    @property
+    def env(self) -> Environment:
+        return self._rest_api._env
 
     @staticmethod
     def _get(url, frequency=1, num_retry=3):

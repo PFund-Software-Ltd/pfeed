@@ -101,6 +101,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
             storage_options=storage_options,
             auto_transform=auto_transform,
             dataflow_per_date=True,
+            include_metadata=False,
             **product_specs
         )
 
@@ -110,39 +111,40 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         self.logger.debug(f'downloaded {data_model}')
         return data
 
-    def get_historical_data(
-        self,
-        product: str,
-        resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day']="1tick",
-        rollback_period: str="1day",
-        start_date: str="",
-        end_date: str="",
-        data_origin: str='',
-        data_layer: tDataLayer | None=None,
-        data_domain: str='',
-        from_storage: tStorage | None=None,
-        to_storage: tStorage | None=None,
-        storage_options: dict | None=None,
-        force_download: bool=False,
-        retrieve_per_date: bool=False,
-        **product_specs
-    ) -> GenericFrame | None | BybitMarketFeed:
-        return super().get_historical_data(
-            product=product,
-            resolution=resolution,
-            rollback_period=rollback_period,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            from_storage=from_storage,
-            to_storage=to_storage,
-            storage_options=storage_options,
-            force_download=force_download,
-            retrieve_per_date=retrieve_per_date,
-            **product_specs
-        )
+    # DEPRECATED
+    # def get_historical_data(
+    #     self,
+    #     product: str,
+    #     resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day']="1tick",
+    #     rollback_period: str="1day",
+    #     start_date: str="",
+    #     end_date: str="",
+    #     data_origin: str='',
+    #     data_layer: tDataLayer | None=None,
+    #     data_domain: str='',
+    #     from_storage: tStorage | None=None,
+    #     to_storage: tStorage | None=None,
+    #     storage_options: dict | None=None,
+    #     force_download: bool=False,
+    #     retrieve_per_date: bool=False,
+    #     **product_specs
+    # ) -> GenericFrame | None | BybitMarketFeed:
+    #     return super().get_historical_data(
+    #         product=product,
+    #         resolution=resolution,
+    #         rollback_period=rollback_period,
+    #         start_date=start_date,
+    #         end_date=end_date,
+    #         data_origin=data_origin,
+    #         data_layer=data_layer,
+    #         data_domain=data_domain,
+    #         from_storage=from_storage,
+    #         to_storage=to_storage,
+    #         storage_options=storage_options,
+    #         force_download=force_download,
+    #         retrieve_per_date=retrieve_per_date,
+    #         **product_specs
+    #     )
     
     async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict, BybitMarketDataModel | None], Awaitable[None] | None]):
         stream_api = self.data_source.stream_api
@@ -150,7 +152,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
             if channel := msg.get('topic', None):
                 category = ws_name.split('_')[1]
                 category = BybitProduct.ProductCategory[category.upper()]
-                channel_key: ChannelKey = stream_api._generate_channel_key(category, channel)
+                channel_key: ChannelKey = stream_api.generate_channel_key(category, channel)
                 data_model = stream_api._streaming_bindings[channel_key]
             else:
                 data_model = None
@@ -176,6 +178,8 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         return BybitWebSocketAPIClass._parse_message(msg)
     
     def _add_data_channel(self, data_model: BybitMarketDataModel) -> FullDataChannel:
+        if data_model.env != self.data_source.stream_api.env:
+            self.data_source.create_stream_api(env=data_model.env)
         return self.data_source.stream_api._add_data_channel(data_model)
 
     def add_channel(
@@ -192,3 +196,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
                 Useful for subscribing channels not related to resolution.
         '''
         self.data_source.stream_api.add_channel(channel, channel_type=channel_type, category=category)
+
+    # TODO: use data_source.batch_api
+    def _fetch_impl(self, data_model: BybitMarketDataModel, *args, **kwargs) -> GenericFrame | None:
+        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')

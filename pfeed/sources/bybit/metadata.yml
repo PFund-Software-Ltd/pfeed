@@ -8,7 +8,7 @@ data_categories:
       - FUTURE
       - INVERSE-FUTURE
       - CRYPTO
-provider_type: exchange
+provider_type: exchange  # refer to enum DataProviderType
 api_key_required: false
 access_type: free  # refer to enum DataAccessType
 rate_limits: null

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
+    from cloudpathlib import CloudPath
     import pyarrow.fs as pa_fs
     from pathlib import Path
 
@@ -64,9 +65,8 @@ class TabularIO(BaseIO):
         with self._filesystem.open_output_stream(str(file_path).replace('s3://', '')) as f:
             pq.write_table(table, f, compression=self._compression)
             
-    def _is_empty_parquet_file(self, file_path: str) -> bool:
-        file_path = file_path.replace('s3://', '')
-        return self._exists(file_path) and pq.read_metadata(file_path, filesystem=self._filesystem).num_rows == 0
+    def _is_empty_parquet_file(self, file_path: CloudPath | Path) -> bool:
+        return self._exists(file_path) and pq.read_metadata(str(file_path).replace('s3://', ''), filesystem=self._filesystem).num_rows == 0
     
     def write(
         self,
@@ -89,14 +89,14 @@ class TabularIO(BaseIO):
 
     def read(
         self,
-        file_paths: list[str],
+        file_paths: list[CloudPath | Path],
         delta_version: int | None=None,
     ) -> tuple[pl.LazyFrame | None, dict[str, Any]]:
         lf: pl.LazyFrame | None = None
         metadata: dict[str, Any] = {}
         if self._use_deltalake:
             from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
-            exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path + '/' + DeltaLakeStorageMixin.metadata_filename)]
+            exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path / DeltaLakeStorageMixin.metadata_filename)]
             non_empty_file_paths = [file_path for file_path in exists_file_paths if DeltaTable.is_deltatable(file_path, storage_options=self._storage_options)]
             if non_empty_file_paths:
                 assert len(non_empty_file_paths) == 1, f'Expected only one file path for deltalake, got {len(non_empty_file_paths)}'
@@ -121,10 +121,10 @@ class TabularIO(BaseIO):
         metadata['missing_file_paths'] = list(set(file_paths) - set(exists_file_paths))
         return lf, metadata
     
-    def _read_pyarrow_table_metadata(self, file_paths: list[str]) -> dict[str, Any]:
+    def _read_pyarrow_table_metadata(self, file_paths: list[CloudPath | Path]) -> dict[str, Any]:
         metadata: dict[str, Any] = {}
         for file_path in file_paths:
-            file_path = file_path.replace('s3://', '')
+            file_path = str(file_path).replace('s3://', '')
             with self._filesystem.open_input_file(file_path) as f:
                 parquet_file = pq.ParquetFile(f)
                 parquet_file_metadata = parquet_file.schema.to_arrow_schema().metadata

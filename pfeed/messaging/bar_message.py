@@ -11,6 +11,7 @@ class BarMessage(StreamingMessage):
     low: Annotated[float, Meta(gt=0)]
     close: Annotated[float, Meta(gt=0)]
     volume: Annotated[float, Meta(ge=0)]
+    is_incremental: bool = True  # if True, the bar update is incremental, otherwise it is a full bar update
     
     def __post_init__(self):
         # Validate high is highest
@@ -27,5 +28,3 @@ class BarMessage(StreamingMessage):
             
         if not (self.low <= self.close <= self.high):
             raise ValueError(f"Close ({self.close}) must be between low and high")
-            
-    

@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment
     from pfeed._typing import tDataTool, tDataCategory
     from pfeed.enums import DataCategory
     from pfeed.sources.base_source import BaseSource
@@ -9,14 +8,13 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 
-from pfund.enums import Environment
 from pfeed.enums import DataTool
+from pfeed.feeds import create_feed
 
 
 class DataClient(ABC):
     def __init__(
         self,
-        env: tEnvironment,
         # NOTE: these params should be the same as the ones in BaseFeed
         data_tool: tDataTool='polars',
         pipeline_mode: bool=False,
@@ -29,19 +27,17 @@ class DataClient(ABC):
         Args:
             kwargs: kwargs specific to the data client, e.g. api_key for Databento
         '''
-        from pfeed.feeds import create_feed
 
         params = {k: v for k, v in locals().items() if k not in ['self', 'kwargs']}
         params.update(kwargs)
         
-        self._env = Environment[env.upper()]
         self._data_tool = DataTool[data_tool.lower()]
         self._pipeline_mode: bool = pipeline_mode
         self._use_ray: bool = use_ray
         self._use_prefect: bool = use_prefect
         self._use_deltalake: bool = use_deltalake
 
-        self.data_source = self._create_data_source(env=self._env)
+        self.data_source = self._create_data_source()
 
         # initialize data feeds
         for data_category in self.data_categories:
@@ -58,7 +54,7 @@ class DataClient(ABC):
     
     @staticmethod
     @abstractmethod
-    def _create_data_source(env: Environment, *args, **kwargs) -> BaseSource:
+    def _create_data_source(*args, **kwargs) -> BaseSource:
         pass
 
     @property

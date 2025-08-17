@@ -11,9 +11,15 @@ class StreamingMessage(
     frozen=True,
     omit_defaults=True,
     forbid_unknown_fields=True,
-    array_like=True,  # NOTE: setting array_like=True for 1.5-2x speedup
+    array_like=False,  # NOTE: setting array_like=True will boost performance by 1.5-2x
     gc=True,  # OPTIMIZE: consider setting gc=False for performance boost (but then you can't use lists, dicts etc.)
+    # tag=True,
 ):
+    trading_venue: str
+    broker: str
+    exchange: str
+    product: str  # product.name
+    basis: str
     symbol: str
     resolution: str
     specs: dict  # product specifications, e.g. for options, specs are strike_price, expiration, etc.
@@ -32,3 +38,4 @@ class StreamingMessage(
     def to_dict(self):
         # return {f: getattr(self, f) for f in self.__struct_fields__}
         return structs.asdict(self)
+    

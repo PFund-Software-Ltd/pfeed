@@ -1,19 +1,14 @@
-from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfund._typing import tEnvironment
-    from pfeed.sources.base_source import BaseSource
-
 from enum import StrEnum
 
 from pfeed.utils.utils import to_camel_case
 
 
 class DataSource(StrEnum):
-    YAHOO_FINANCE = 'YAHOO_FINANCE'
-    FINANCIAL_MODELING_PREP = 'FINANCIAL_MODELING_PREP'
+    YAHOO_FINANCE = YF = 'YAHOO_FINANCE'
+    FINANCIAL_MODELING_PREP = FMP = 'FINANCIAL_MODELING_PREP'
     BYBIT = 'BYBIT'
     BINANCE = 'BINANCE'
+    INTERACTIVE_BROKERS = IB = 'INTERACTIVE_BROKERS'
     # DATABENTO = 'DATABENTO'
 
     @property

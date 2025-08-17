@@ -165,6 +165,7 @@ class DataFlow:
                     data: GenericData = transform(quote(data))
                 else:
                     data: GenericData = transform(data)
+            assert data is not None, f'transform function {transform} should return transformed data, but got None'
             self._logger.debug(f"transformed {self.data_model} data by '{transform.__name__}'")
         return data
     

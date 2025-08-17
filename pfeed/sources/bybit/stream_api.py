@@ -1,9 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
+    from pfund.enums import Environment
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
-    from pfund.exchanges.bybit.ws_api import WebSocketAPI
+    from pfund._typing import tEnvironment
     from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
 
 from pfund._typing import FullDataChannel
@@ -15,11 +16,16 @@ ChannelKey = tuple[BybitProduct.ProductCategory, FullDataChannel]
 
 class StreamAPI:
     '''Simple wrapper of exchange's websocket API to connect to public channels'''
-    def __init__(self, ws_api: WebSocketAPI):
-        self._ws_api: WebSocketAPI = ws_api
+    def __init__(self, env: tEnvironment):
+        from pfund.exchanges.bybit.ws_api import WebSocketAPI
+        self._ws_api = WebSocketAPI(env)
         # set the logger to be "bybit_stream", override the default logger 'bybit' in pfund
         self._ws_api.set_logger(f'{self._ws_api.exch.lower()}_data')
         self._streaming_bindings: dict[ChannelKey, BybitMarketDataModel] = {}
+    
+    @property
+    def env(self) -> Environment:
+        return self._ws_api._env
     
     async def connect(self):
         assert not self._ws_api._accounts, 'Accounts should be empty in streaming'
@@ -33,20 +39,13 @@ class StreamAPI:
         resolution: Resolution = data_model.resolution
         channel: FullDataChannel = self._ws_api._create_public_channel(product, resolution)
         self.add_channel(channel, channel_type='public', category=product.category)
-        channel_key: ChannelKey = self._generate_channel_key(product.category, channel)
-        self._bind_channel_key_to_data_model(channel_key, data_model)
+        channel_key: ChannelKey = self.generate_channel_key(product.category, channel)
+        self._streaming_bindings[channel_key] = data_model
         return channel
     
     @staticmethod
-    def _generate_channel_key(category: BybitProduct.ProductCategory, channel: FullDataChannel) -> ChannelKey:
+    def generate_channel_key(category: BybitProduct.ProductCategory, channel: FullDataChannel) -> ChannelKey:
         return (category, channel)
-    
-    def _bind_channel_key_to_data_model(
-        self, 
-        channel_key: ChannelKey,
-        data_model: BybitMarketDataModel, 
-    ):
-        self._streaming_bindings[channel_key] = data_model
     
     def add_channel(
         self, 

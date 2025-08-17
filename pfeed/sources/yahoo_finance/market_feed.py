@@ -1,17 +1,20 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
+    from pfund._typing import FullDataChannel
     from pfund.datas.resolution import Resolution
-    from pfeed._typing import tStorage, tDataLayer
-    from pfeed._typing import GenericFrame
-    from pfeed.data_models.market_data_model import MarketDataModel
+    from pfund.products.product_base import BaseProduct
+    from pfeed._typing import tStorage, tDataLayer, GenericFrame, tDataTool
+    from pfeed.sources.yahoo_finance.stream_api import ChannelKey
+    from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 
 import time
 import datetime
 
 from pfeed.feeds.market_feed import MarketFeed
+from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 
 
 __all__ = ["YahooFinanceMarketFeed"]
@@ -19,7 +22,7 @@ __all__ = ["YahooFinanceMarketFeed"]
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
-class YahooFinanceMarketFeed(MarketFeed):
+class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     _URLS = {
         "rest": "https://query1.finance.yahoo.com",
         "ws": "wss://streamer.finance.yahoo.com",
@@ -51,7 +54,7 @@ class YahooFinanceMarketFeed(MarketFeed):
     # }
     
     _yfinance_kwargs: dict | None = None
-    
+
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         # convert to UTC and reset index
@@ -73,7 +76,7 @@ class YahooFinanceMarketFeed(MarketFeed):
     
     def _handle_rollback_max_period(self, resolution: Resolution | str | Literal['minute', 'hour', 'day'], start_date: str, end_date: str):
         from pfeed.enums import MarketDataType
-        resolution: Resolution = self.create_resolution(resolution)
+        resolution: Resolution = self._create_resolution(resolution)
         dtype = MarketDataType[str(resolution.timeframe)]
         if dtype == MarketDataType.DAY:
             # HACK: use '1900-01-01' as the start date for daily data since we don't know the exact start date when rollback_period == 'max'
@@ -95,15 +98,6 @@ class YahooFinanceMarketFeed(MarketFeed):
         assert "start" not in yfinance_kwargs, "`start` duplicates with pfeed's `start_date`, please remove it"
         assert "end" not in yfinance_kwargs, "`end` duplicates with pfeed's `end_date`, please remove it"
         return yfinance_kwargs
-    
-    # TODO
-    def stream(self) -> YahooFinanceMarketFeed:
-        raise NotImplementedError(f'{self.name} stream() is not implemented')
-        return self
-
-    # TODO
-    def _stream_impl(self, data_model: MarketDataModel):
-        raise NotImplementedError(f'{self.name} _stream_impl() is not implemented')
     
     def download(
         self,
@@ -158,10 +152,11 @@ class YahooFinanceMarketFeed(MarketFeed):
             storage_options=storage_options,
             auto_transform=auto_transform,
             dataflow_per_date=False,
+            include_metadata=False,
             **product_specs
         )
     
-    def _download_impl(self, data_model: MarketDataModel) -> pd.DataFrame | None:
+    def _download_impl(self, data_model: YahooFinanceMarketDataModel) -> pd.DataFrame | None:
         # convert pfund's resolution format to yfinance's interval
         resolution = data_model.resolution
         timeframe = repr(resolution.timeframe)
@@ -171,7 +166,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         product = data_model.product
         symbol = product.symbol
         assert symbol, f'symbol is required for {data_model}'
-        ticker = self.api.Ticker(symbol)
+        ticker = self.batch_api.Ticker(symbol)
         
         no_df = True
         NUM_RETRIES = 3
@@ -214,66 +209,67 @@ class YahooFinanceMarketFeed(MarketFeed):
         self._yfinance_kwargs.clear()
         return df
 
-    def get_historical_data(
-        self,
-        product: str,
-        symbol: str='',
-        resolution: Resolution | str = "1day",
-        rollback_period: str | Literal["ytd", "max"] = "max",
-        start_date: str = "",
-        end_date: str = "",
-        data_origin: str='',
-        data_layer: tDataLayer | None=None,
-        data_domain: str='',
-        from_storage: tStorage | None=None,
-        to_storage: tStorage | None=None,
-        storage_options: dict | None=None,
-        force_download: bool=False,
-        retrieve_per_date: bool=False,
-        yfinance_kwargs: dict | None=None,
-        **product_specs,
-    ) -> GenericFrame | None:
-        """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
-        Args:
-            product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP
-            symbol: symbol that will be used by yfinance's Ticker.history().
-                If not specified, it will be derived from `product`, which might be inaccurate.
-            rollback_period: Data resolution or 'ytd' or 'max'
-                Period to rollback from today, only used when `start_date` is not specified.
-                Default is '1M' = 1 month.
-                if 'period' in kwargs is specified, it will be used instead of `rollback_period`.
-            resolution: Data resolution
-                e.g. '1m' = 1 minute as the unit of each data bar/candle.
-                Default is '1d' = 1 day.
-            force_download: Whether to skip retrieving data from storage.
-            yfinance_kwargs: kwargs supported by `yfinance`
-                refer to kwargs in history() in yfinance/scrapers/history.py
-        """
-        self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
-        if rollback_period == 'max' and not start_date:
-            start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
-            # HACK: for daily data with rollback_period='max', retrieving data from storage takes too long (too many dates), skip it
-            if start_date == '1900-01-01':
-                force_download = True
-        df = super().get_historical_data(
-            product,
-            resolution,
-            symbol=symbol,
-            rollback_period=rollback_period,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            from_storage=from_storage,
-            to_storage=to_storage,
-            storage_options=storage_options,
-            force_download=force_download,
-            retrieve_per_date=retrieve_per_date,
-            **product_specs,
-        )
-        self._yfinance_kwargs.clear()
-        return df
+    # DEPRECATED
+    # def get_historical_data(
+    #     self,
+    #     product: str,
+    #     symbol: str='',
+    #     resolution: Resolution | str = "1day",
+    #     rollback_period: str | Literal["ytd", "max"] = "max",
+    #     start_date: str = "",
+    #     end_date: str = "",
+    #     data_origin: str='',
+    #     data_layer: tDataLayer | None=None,
+    #     data_domain: str='',
+    #     from_storage: tStorage | None=None,
+    #     to_storage: tStorage | None=None,
+    #     storage_options: dict | None=None,
+    #     force_download: bool=False,
+    #     retrieve_per_date: bool=False,
+    #     yfinance_kwargs: dict | None=None,
+    #     **product_specs,
+    # ) -> GenericFrame | None:
+    #     """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
+    #     Args:
+    #         product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP
+    #         symbol: symbol that will be used by yfinance's Ticker.history().
+    #             If not specified, it will be derived from `product`, which might be inaccurate.
+    #         rollback_period: Data resolution or 'ytd' or 'max'
+    #             Period to rollback from today, only used when `start_date` is not specified.
+    #             Default is '1M' = 1 month.
+    #             if 'period' in kwargs is specified, it will be used instead of `rollback_period`.
+    #         resolution: Data resolution
+    #             e.g. '1m' = 1 minute as the unit of each data bar/candle.
+    #             Default is '1d' = 1 day.
+    #         force_download: Whether to skip retrieving data from storage.
+    #         yfinance_kwargs: kwargs supported by `yfinance`
+    #             refer to kwargs in history() in yfinance/scrapers/history.py
+    #     """
+    #     self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
+    #     if rollback_period == 'max' and not start_date:
+    #         start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
+    #         # HACK: for daily data with rollback_period='max', retrieving data from storage takes too long (too many dates), skip it
+    #         if start_date == '1900-01-01':
+    #             force_download = True
+    #     df = super().get_historical_data(
+    #         product,
+    #         resolution,
+    #         symbol=symbol,
+    #         rollback_period=rollback_period,
+    #         start_date=start_date,
+    #         end_date=end_date,
+    #         data_origin=data_origin,
+    #         data_layer=data_layer,
+    #         data_domain=data_domain,
+    #         from_storage=from_storage,
+    #         to_storage=to_storage,
+    #         storage_options=storage_options,
+    #         force_download=force_download,
+    #         retrieve_per_date=retrieve_per_date,
+    #         **product_specs,
+    #     )
+    #     self._yfinance_kwargs.clear()
+    #     return df
 
 
     ###
@@ -281,7 +277,7 @@ class YahooFinanceMarketFeed(MarketFeed):
     ###
     def get_option_expirations(self, symbol: str) -> tuple[str]:
         '''Get all available option expirations for a given symbol.'''
-        ticker: Ticker = self.api.Ticker(symbol)
+        ticker: Ticker = self.batch_api.Ticker(symbol)
         expirations = ticker.options
         return expirations
 
@@ -294,7 +290,7 @@ class YahooFinanceMarketFeed(MarketFeed):
         '''
         from pfeed._etl.base import convert_to_user_df
         
-        ticker: Ticker = self.api.Ticker(symbol)
+        ticker: Ticker = self.batch_api.Ticker(symbol)
         option_chain = ticker.option_chain(expiration)
         if option_type.upper() == 'CALL':
             df = option_chain.calls
@@ -303,3 +299,44 @@ class YahooFinanceMarketFeed(MarketFeed):
         else:
             raise ValueError(f"Invalid option type: {option_type}")
         return convert_to_user_df(df, self._data_tool)
+    
+    async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict, YahooFinanceMarketDataModel | None], Awaitable[None] | None]):
+        stream_api = self.data_source.stream_api
+        async def _callback(msg: dict):
+            # TEMP
+            from pfund import print_warning
+            print_warning(f'***CALLBACK: {msg=}')
+
+            symbol = msg['symbol']  # FIXME
+            # FIXME: separate the data into quote and tick data and use for loop to call faucet_streaming_callback() twice
+            for resolution in msg['resolution']  :
+                channel_key: ChannelKey = stream_api.generate_channel_key(symbol, resolution)
+                data_model = stream_api._streaming_bindings[channel_key]
+                await faucet_streaming_callback(self.name.value, msg, data_model)
+        stream_api.set_callback(_callback)
+        await stream_api.connect()
+    
+    async def _close_stream(self):
+        await self.data_source.stream_api.disconnect()
+    
+    def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
+        from pfeed.utils.utils import lambda_with_name
+        self.transform(
+            lambda_with_name('parse_message', lambda msg: YahooFinanceMarketFeed._parse_message(product, msg)),
+        )
+        super()._add_default_transformations_to_stream(product, resolution)
+    
+    # TODO
+    @staticmethod
+    def _parse_message(product: BaseProduct, msg: dict) -> dict:
+        return msg
+    
+    def _add_data_channel(self, data_model: YahooFinanceMarketDataModel) -> None:
+        return self.data_source.stream_api._add_data_channel(data_model)
+    
+    def add_channel(self, channel: FullDataChannel, channel_type: Literal['public', 'private'], *args, **kwargs):
+        raise NotImplementedError(f'{self.name} add_channel() is not implemented')
+    
+    # TODO: use data_source.batch_api
+    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args, **kwargs) -> GenericFrame | None:
+        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')

@@ -86,7 +86,7 @@ class BaseStorage(ABC):
     def initialize_data_handler(self, stream_mode: StreamMode, delta_flush_interval: int):
         data_handler_configs = {
             'data_layer': self.data_layer,
-            'data_path': str(self.data_path),
+            'data_path': self.data_path,
             'filesystem': self.get_filesystem(),
             'storage_options': self._storage_options,
             'use_deltalake': self.use_deltalake,

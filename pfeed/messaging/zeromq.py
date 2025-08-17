@@ -1,12 +1,12 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Union, Literal
+from typing import TYPE_CHECKING, Literal, Any, Union
 if TYPE_CHECKING:
     from zmq import SocketType, SocketOption
-    from pfeed.enums import DataSource
     from pfund.accounts.account_base import BaseAccount
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from pfund.enums import PrivateDataChannel
+    from pfeed.enums import DataSource
 
 import time
 import logging
@@ -14,10 +14,7 @@ from enum import StrEnum
 from collections import defaultdict
 
 import zmq
-from msgspec import msgpack
-
-
-JSONValue = Union[dict, list, str, int, float, bool, None]
+from msgspec import msgpack, Raw, ValidationError
 
 
 class SocketMethod(StrEnum):
@@ -76,6 +73,8 @@ class ZeroMQ:
                 Only the newest unprocessed message is kept; arriving messages overwrite older ones if not yet received.
                 Use when you only care about the most recent data and not the message history.
         '''
+        from pfeed.messaging import BarMessage
+        
         assert any([sender_type, receiver_type]), 'Either sender_type or receiver_type must be provided'
         self._name = name
         self._logger = logger
@@ -88,6 +87,8 @@ class ZeroMQ:
         self._poller: zmq.Poller | None = None
         self._encoder = msgpack.Encoder()
         self._decoder = msgpack.Decoder()
+        self._msg_decoder = msgpack.Decoder(type=Union[BarMessage])
+        self._peek_decoder = msgpack.Decoder(type=dict[str, Raw])
 
         if sender_type:
             self._sender = self._ctx.socket(sender_type)
@@ -213,7 +214,7 @@ class ZeroMQ:
         # terminate context
         self._ctx.term()
 
-    def send(self, channel: str, topic: str, data: JSONValue) -> None:
+    def send(self, channel: str, topic: str, data: Any) -> None:
         '''
         Sends message to receivers
         Args:
@@ -237,14 +238,30 @@ class ZeroMQ:
         except Exception:
             self._logger.exception(f'{self.sender_name} send() unhandled exception:')
 
-    def recv(self) -> tuple[str, str, JSONValue, float] | None:
+    def recv(self) -> tuple[str, str, Any, float] | None:
         try:
+            def _is_streaming_msg(buf: bytes) -> bool:
+                '''Peeks at the fields to check if the message is of type StreamingMessage, etc.'''
+                try:
+                    outer = self._peek_decoder.decode(buf)
+                except ValidationError:
+                    return False  # Not a dict at the top level
+                # if 'specs' and '_created_at' is also present, it is a streaming message
+                if outer.get("_created_at") and outer.get('specs'):  
+                    return True
+                else:
+                    return False
+
             # REVIEW: blocks for 1ms to avoid busy-waiting and 100% CPU usage
             events = self._poller.poll(1)
             if events:
                 msg = self._receiver.recv_multipart(zmq.NOBLOCK)
                 channel, topic, data, msg_ts = msg
-                return channel.decode(), topic.decode(), self._decoder.decode(data), self._decoder.decode(msg_ts)
+                if _is_streaming_msg(data):
+                    decoded_data = self._msg_decoder.decode(data)
+                else:
+                    decoded_data = msgpack.decode(data)
+                return channel.decode(), topic.decode(), decoded_data, self._decoder.decode(msg_ts)
             else:
                 return None
         except zmq.error.Again:  # no message available, will be raised when using zmq.NOBLOCK

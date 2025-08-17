@@ -30,7 +30,6 @@ class DataEngine:
         use_deltalake: bool=False,
         # TODO
         # backfill: bool=True,
-        env: tEnvironment='LIVE',
     ):
         '''
         Args:
@@ -53,7 +52,7 @@ class DataEngine:
         return self._is_running
     
     @property
-    def feeds(self) -> dict[DataCategory, list[BaseFeed]]:
+    def feeds(self) -> list[BaseFeed]:
         return self._feeds
     
     def _setup_messaging(self, zmq_url: str | None=None, zmq_sender_port: int | None=None, zmq_receiver_port: int | None=None):
@@ -151,8 +150,9 @@ class DataEngine:
     async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> None:
         assert self._is_streaming_feeds(), 'Only streaming feeds can be run asynchronously'
         result: list[Coroutine] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
-        self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
-        self._zmq_thread.start()
+        if self._params['use_ray']:
+            self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
+            self._zmq_thread.start()
         try:
             return await asyncio.gather(*result)
         except asyncio.CancelledError:
@@ -162,7 +162,7 @@ class DataEngine:
     
     def end(self):
         if not self.is_running():
-            logger.debug('Data Engine is not running, skipping end')
+            logger.debug('Data Engine is not running, skipping end()')
             return
         logger.debug('Data Engine is ending')
         self._is_running = False

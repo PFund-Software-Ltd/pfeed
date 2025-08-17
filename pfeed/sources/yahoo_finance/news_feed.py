@@ -2,14 +2,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
+    from pfeed._typing import tDataTool
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
 
 from pfeed.feeds.news_feed import NewsFeed
+from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 
 
-class YahooFinanceNewsFeed(NewsFeed):
+class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
     # REVIEW: better handle some potentially useful attributes: "storyline" and "editorsPick"
     @staticmethod
     def _normalize_raw_data(data: list[dict]) -> pd.DataFrame:
@@ -37,11 +39,11 @@ class YahooFinanceNewsFeed(NewsFeed):
             })
         return df
     
-    def _download_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
+    def _download_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict]]]:
         self.logger.debug(f'downloading {data_model}')
         symbol = data_model.product.symbol
         assert symbol, f'symbol is required for {data_model}'
-        ticker = self.api.Ticker(symbol)
+        ticker = self.batch_api.Ticker(symbol)
         # FIXME: hard-code count to 100
         data = ticker.get_news(count=100, tab='news')
 

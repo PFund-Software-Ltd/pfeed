@@ -2,30 +2,30 @@ data_origin: https://www.csidata.com
 data_categories:
   market_data:
     minute:
-      - STK
+      - STOCK
       - ETF
-      - MTF
-      - OPT
-      - FUT
-      - FX
+      - FUND  # mutual fund
+      - OPTION
+      - FUTURE
+      - FOREX
       - CRYPTO
       - INDEX
     hour:
-      - STK
+      - STOCK
       - ETF
-      - MTF
-      - OPT
-      - FUT
-      - FX
+      - FUND  # mutual fund
+      - OPTION
+      - FUTURE
+      - FOREX
       - CRYPTO
       - INDEX
     day:
-      - STK
+      - STOCK
       - ETF
-      - MTF
-      - OPT
-      - FUT
-      - FX
+      - FUND  # mutual fund
+      - OPTION
+      - FUTURE
+      - FOREX
       - CRYPTO
       - INDEX
 provider_type: aggregator  # refer to enum DataProviderType

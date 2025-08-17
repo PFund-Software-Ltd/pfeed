@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.sources.bybit.batch_api import BatchAPI
     from pfeed.sources.bybit.stream_api import StreamAPI
-    from pfund.enums import Environment
 
 from pfeed.sources.bybit.source import BybitSource
 
@@ -20,5 +19,5 @@ class BybitMixin:
         return self.data_source.stream_api
     
     @staticmethod
-    def _create_data_source(env: Environment, *args, **kwargs) -> BybitSource:
-        return BybitSource(env=env)
+    def _create_data_source(*args, **kwargs) -> BybitSource:
+        return BybitSource()

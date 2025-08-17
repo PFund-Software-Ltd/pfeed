@@ -49,7 +49,6 @@ class BaseFeed(ABC):
         use_ray: bool=True,
         use_prefect: bool=False,
         use_deltalake: bool=False,
-        env: tEnvironment='LIVE',
     ):
         '''
         Args:
@@ -58,10 +57,8 @@ class BaseFeed(ABC):
                 Other functions, such as `stream()` and `retrieve()`, will utilize the environment specified here.
             storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
         '''
-        self._env = Environment[env.upper()]
-        self._setup_logging()
         self._data_tool = DataTool[data_tool.lower()]
-        self.data_source: BaseSource = self._create_data_source(env=self._env)
+        self.data_source: BaseSource = self._create_data_source()
         self.logger = logging.getLogger(self.name.lower() + '_data')
         self._engine: DataEngine | None = None
         self._pipeline_mode: bool = pipeline_mode
@@ -79,20 +76,19 @@ class BaseFeed(ABC):
     def name(self):
         return self.data_source.name
     
-    def _setup_logging(self):
+    def _setup_logging(self, env: tEnvironment):
         from pfund._logging import setup_logging_config
         from pfund._logging.config import LoggingDictConfigurator
         from pfeed.config import get_config
-        is_loggers_set_up = bool(logging.getLogger('pfeed').handlers)
-        if not is_loggers_set_up:
-            config = get_config()
-            log_path = f'{config.log_path}/{self._env}'
-            user_logging_config = config.logging_config
-            logging_config_file_path = config.logging_config_file_path
-            logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
-            # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-            logging_configurator = LoggingDictConfigurator(logging_config)
-            logging_configurator.configure()
+        env = Environment[env.upper()]
+        config = get_config()
+        log_path = f'{config.log_path}/{env}'
+        user_logging_config = config.logging_config
+        logging_config_file_path = config.logging_config_file_path
+        logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
+        # ≈ logging.config.dictConfig(logging_config) with a custom configurator
+        logging_configurator = LoggingDictConfigurator(logging_config)
+        logging_configurator.configure()
     
     def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
         if not hasattr(self.data_source, 'create_product'):
@@ -204,9 +200,6 @@ class BaseFeed(ABC):
     # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
     def fetch(self, *args, **kwargs) -> GenericData | None | BaseFeed:
         raise NotImplementedError(f'{self.name} fetch() is not implemented')
-    
-    def get_historical_data(self, *args, **kwargs) -> GenericData | None:
-        raise NotImplementedError(f'{self.name} get_historical_data() is not implemented')
     
     def get_realtime_data(self, *args, **kwargs) -> GenericData | None:
         raise NotImplementedError(f'{self.name} get_realtime_data() is not implemented')
@@ -580,6 +573,7 @@ class BaseFeed(ABC):
                             transformations = transformations_per_dataflow[dataflow_name]
                             for transform in transformations:
                                 data: StreamingData = transform(data)
+                                assert data is not None, f'transform function {transform} should return transformed data, but got None'
                             
                             if is_data_engine_running:
                                 msg_queue.send(channel=channel, topic=topic, data=data)
@@ -670,6 +664,12 @@ class BaseFeed(ABC):
         if self._use_ray:
             if 'num_cpus' not in ray_kwargs:
                 ray_kwargs['num_cpus'] = os.cpu_count()
+        envs = set(dataflow.data_model.env for dataflow in self._dataflows)
+        if len(envs) > 1:
+            raise ValueError(f'{self.name} dataflows have different environments: {envs}')
+        env = envs.pop()
+        # REVIEW: not sure if this is the best place to setup logging
+        self._setup_logging(env)
         if not self.streaming_dataflows:
             return self._eager_run_batch(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         else:

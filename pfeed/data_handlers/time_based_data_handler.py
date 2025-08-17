@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
+    from cloudpathlib import CloudPath
     import pyarrow.fs as pa_fs
     from pfeed._typing import GenericFrame, StorageMetadata, StreamingData
     from pfeed.data_models.time_based_data_model import (
@@ -35,7 +36,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         self, 
         data_model: TimeBasedDataModel,
         data_layer: DataLayer,
-        data_path: str,
+        data_path: CloudPath | Path,
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
         use_deltalake: bool = False,
@@ -80,8 +81,11 @@ class TimeBasedDataHandler(BaseDataHandler):
         )
         self._stream_mode = stream_mode
         self._delta_flush_interval = delta_flush_interval
-        self._buffer_path: Path = Path(self._create_file_paths()[0]) / self._buffer_io.BUFFER_FILENAME
-        self._buffer_io._mkdir(self._buffer_path)
+        if use_deltalake:
+            self._buffer_path: CloudPath | Path = self._create_file_paths()[0] / self._buffer_io.BUFFER_FILENAME
+            self._buffer_io._mkdir(self._buffer_path)
+        else:
+            self._buffer_path = None
         self._last_delta_flush = time.time()
         self._adapter = Adapter()
         self._message_schemas: dict[Path, pa.Schema] = {}
@@ -92,26 +96,24 @@ class TimeBasedDataHandler(BaseDataHandler):
         '''
         Recover from crash by reading buffer.arrow and writing it to deltalake
         '''
-        if self._stream_mode == StreamMode.SAFE and self._buffer_path.exists() and self._buffer_path.stat().st_size != 0:
+        if self._stream_mode == StreamMode.SAFE and self._buffer_path and self._buffer_path.exists() and self._buffer_path.stat().st_size != 0:
             self._write_buffer_to_deltalake()
         
     # FIXME: being used as a better type hint, fix this
     def _validate_schema(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
-    def _create_file_paths(self, data_model: TimeBasedDataModel | None=None) -> list[str]:
+    def _create_file_paths(self, data_model: TimeBasedDataModel | None=None) -> list[CloudPath | Path]:
         data_model = data_model or self._data_model
         if not self._use_deltalake:
             file_paths = [
-                '/'.join([
-                    self._data_path, 
-                    str(data_model.create_storage_path(date, use_deltalake=self._use_deltalake)), 
-                    data_model.create_filename(date)
-                ])
+                self._data_path
+                / data_model.create_storage_path(date, use_deltalake=self._use_deltalake)
+                / data_model.create_filename(date)
                 for date in data_model.dates
             ]
         else:
-            file_paths = ['/'.join([self._data_path, str(data_model.create_storage_path(data_model.dates[0], use_deltalake=self._use_deltalake))])]
+            file_paths = [self._data_path / data_model.create_storage_path(data_model.dates[0], use_deltalake=self._use_deltalake)]
         return file_paths
     
     def write(self, data: GenericFrame | StreamingData, streaming: bool=False):

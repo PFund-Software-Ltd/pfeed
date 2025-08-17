@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, overload, Literal
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment
     from pfeed._typing import tDataSource, tDataTool, tDataCategory
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.feeds.market_feed import MarketFeed
@@ -16,7 +15,6 @@ def create_market_feed(
     use_ray: bool=True,
     use_prefect: bool=False,
     use_deltalake: bool=False,
-    env: tEnvironment='BACKTEST',
 ) -> MarketFeed:
     params = {k: v for k, v in locals().items()}
     return create_feed(**params, data_category=DataCategory.MARKET_DATA)
@@ -32,7 +30,6 @@ def create_feed(
     use_ray: bool = True,
     use_prefect: bool = False,
     use_deltalake: bool = False,
-    env: tEnvironment = 'LIVE',
 ) -> MarketFeed: ...
 
 
@@ -44,7 +41,6 @@ def create_feed(
     use_ray: bool=True,
     use_prefect: bool=False,
     use_deltalake: bool=False,
-    env: tEnvironment='LIVE',
 ) -> BaseFeed:
     import importlib
     from pfeed.utils.utils import to_camel_case
@@ -57,7 +53,6 @@ def create_feed(
     except Exception:
         raise ValueError(f"{data_source} has no feed for {data_category}")
     feed: BaseFeed = Feed(
-        env=env,
         data_tool=data_tool, 
         pipeline_mode=pipeline_mode, 
         use_ray=use_ray, 

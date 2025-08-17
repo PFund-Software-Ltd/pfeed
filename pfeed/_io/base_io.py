@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from cloudpathlib import CloudPath
     from pfeed._typing import GenericData
     from pfeed._typing import tDataTool
 
@@ -20,18 +21,18 @@ class BaseIO(ABC):
     def is_local_fs(self) -> bool:
         return isinstance(self._filesystem, pa_fs.LocalFileSystem)
     
-    def _mkdir(self, file_path: Path):
+    def _mkdir(self, file_path: CloudPath | Path):
         if self.is_local_fs:
             file_path.parent.mkdir(parents=True, exist_ok=True)
         
-    def _exists(self, file_path: Path) -> bool:
+    def _exists(self, file_path: CloudPath | Path) -> bool:
         file_info = self._filesystem.get_file_info(str(file_path).replace('s3://', ''))
         return file_info.type == pa_fs.FileType.File
         
     @abstractmethod
-    def write(self, file_path: Path, data: GenericData, **kwargs):
+    def write(self, file_path: CloudPath | Path, data: GenericData, **kwargs):
         pass
 
     @abstractmethod
-    def read(self, file_path: Path, data_tool: tDataTool='polars', **kwargs) -> GenericData | None:
+    def read(self, file_path: CloudPath | Path, data_tool: tDataTool='polars', **kwargs) -> GenericData | None:
         pass

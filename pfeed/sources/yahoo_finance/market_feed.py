@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
-    from pfund._typing import FullDataChannel
+    from pfund._typing import FullDataChannel, tEnvironment
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
-    from pfeed._typing import tStorage, tDataLayer, GenericFrame, tDataTool
+    from pfeed._typing import tStorage, tDataLayer, GenericFrame
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
     from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 
@@ -53,7 +53,28 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     #     "M": [1, 3],
     # }
     
-    _yfinance_kwargs: dict | None = None
+    def create_data_model(
+        self,
+        env: tEnvironment,
+        product: str | BaseProduct,
+        resolution: str | Resolution,
+        start_date: str | datetime.date,
+        end_date: str | datetime.date | None = None,
+        data_origin: str = '',
+        **product_specs
+    ) -> YahooFinanceMarketDataModel:
+        from pfeed.sources.yahoo_finance.market_data_handler import YahooFinanceMarketDataHandler
+        data_model = super().create_data_model(
+            env=env,
+            product=product,
+            resolution=resolution,
+            start_date=start_date,
+            end_date=end_date,
+            data_origin=data_origin,
+            **product_specs
+        )
+        data_model.data_handler_class = YahooFinanceMarketDataHandler
+        return data_model
 
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -114,7 +135,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         auto_transform: bool=True,
         yfinance_kwargs: dict | None=None,
         **product_specs
-    ) -> GenericFrame | None | dict[datetime.date, GenericFrame | None] | YahooFinanceMarketFeed:
+    ) -> GenericFrame | None | YahooFinanceMarketFeed:
         '''
         Download historical data from Yahoo Finance.
         Be reminded that if you include today's data, it can be incomplete, this especially applies to the usage of rollback_period.
@@ -208,6 +229,88 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             )
         self._yfinance_kwargs.clear()
         return df
+    
+    async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict, YahooFinanceMarketDataModel | None], Awaitable[None] | None]):
+        stream_api = self.data_source.stream_api
+        async def _callback(msg: dict):
+            symbol = msg['id']
+            channel_key: ChannelKey = stream_api.generate_channel_key(symbol)
+            if channel_key not in stream_api._last_day_volume:
+                # needs two 'day_volume' and 'time' to derive the volume, so return for the first message
+                stream_api._last_day_volume[channel_key] = int(msg['day_volume'])
+                stream_api._last_time_in_mts[channel_key] = int(msg['time'])
+                return
+            data_model = stream_api._streaming_bindings[channel_key]
+            await faucet_streaming_callback(self.name.value, msg, data_model)
+        stream_api.set_callback(_callback)
+        await stream_api.connect()
+    
+    async def _close_stream(self):
+        await self.data_source.stream_api.disconnect()
+    
+    def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
+        from pfeed.utils.utils import lambda_with_name
+        # since Ray can't serialize the "self" in self._parse_message, disable it for now
+        assert self._use_ray is False, "Transformations in Yahoo Finance streaming data is not supported with Ray, please set use_ray=False"
+        self.transform(
+            lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),
+        )
+        super()._add_default_transformations_to_stream(product, resolution)
+    
+    def _parse_message(self, product: BaseProduct, msg: dict) -> dict:
+        '''
+        Args:
+            msg: raw message from yahoo finance streaming data
+        NOTE: lots of quirks in yahoo finance streaming data:
+        - weird 'last_size', sometimes it's provided, sometimes not
+        - 'time' can be duplicated, i.e. trades can be backfilled, 
+        e.g.
+            {'id': 'AAPL', 'price': 230.605, 'time': '1755531691000', 'exchange': 'NMS', 'quote_type': 8, 'market_hours': 1, 'change_percent': -0.42533004, 'day_volume': '14805050', 'change': -0.9850006, 'last_size': '120', 'price_hint': '2'}
+            {'id': 'AAPL', 'price': 230.605, 'time': '1755531691000', 'exchange': 'NMS', 'quote_type': 8, 'market_hours': 1, 'change_percent': -0.4253209, 'day_volume': '14805114', 'change': -0.9850006, 'price_hint': '2'}
+        currently interpret it as this is how yahoo finance handles delayed trades
+        REVIEW: current solution is, ignore 'last_size', derive volume = diff(day_volume - previous day_volume); +1 to duplicated 'time'
+        another more accurate solution to handle duplicated 'time' is, wait for the 'time' to change to get the most accurate volume, 
+        but it might not be worth it due the quality of yahoo finance streaming data
+        ''' 
+        stream_api = self.data_source.stream_api
+        channel_key: ChannelKey = stream_api.generate_channel_key(product.symbol)
+        
+        # compute traded volume
+        last_day_volume = stream_api._last_day_volume[channel_key]
+        current_day_volume = int(msg['day_volume'])
+        volume = current_day_volume - last_day_volume
+        stream_api._last_day_volume[channel_key] = current_day_volume
+        
+        # detect duplicated 'time', if duplicated, add 1 to it to make it unique
+        last_time_in_mts = stream_api._last_time_in_mts[channel_key]
+        current_time_in_mts = int(msg['time'])
+        if current_time_in_mts == last_time_in_mts:
+            current_time_in_mts += 1
+        stream_api._last_time_in_mts[channel_key] = current_time_in_mts
+        
+        parsed_msg = {
+            'data': {
+                'ts': current_time_in_mts / 1000,  # convert to seconds
+                'price': msg['price'],
+                'volume': volume,
+            },
+            'extra_data': {
+                'exchange': msg['exchange'],
+                'market_hours': msg['market_hours'],
+                'last_size': msg.get('last_size', None),
+            }
+        }
+        return parsed_msg
+    
+    def _add_data_channel(self, data_model: YahooFinanceMarketDataModel) -> None:
+        return self.data_source.stream_api._add_data_channel(data_model)
+    
+    def add_channel(self, channel: FullDataChannel, channel_type: Literal['public', 'private'], *args, **kwargs):
+        raise NotImplementedError(f'{self.name} add_channel() is not implemented')
+    
+    # TODO: use data_source.batch_api
+    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args, **kwargs) -> GenericFrame | None:
+        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
 
     # DEPRECATED
     # def get_historical_data(
@@ -300,43 +403,3 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             raise ValueError(f"Invalid option type: {option_type}")
         return convert_to_user_df(df, self._data_tool)
     
-    async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict, YahooFinanceMarketDataModel | None], Awaitable[None] | None]):
-        stream_api = self.data_source.stream_api
-        async def _callback(msg: dict):
-            # TEMP
-            from pfund import print_warning
-            print_warning(f'***CALLBACK: {msg=}')
-
-            symbol = msg['symbol']  # FIXME
-            # FIXME: separate the data into quote and tick data and use for loop to call faucet_streaming_callback() twice
-            for resolution in msg['resolution']  :
-                channel_key: ChannelKey = stream_api.generate_channel_key(symbol, resolution)
-                data_model = stream_api._streaming_bindings[channel_key]
-                await faucet_streaming_callback(self.name.value, msg, data_model)
-        stream_api.set_callback(_callback)
-        await stream_api.connect()
-    
-    async def _close_stream(self):
-        await self.data_source.stream_api.disconnect()
-    
-    def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
-        from pfeed.utils.utils import lambda_with_name
-        self.transform(
-            lambda_with_name('parse_message', lambda msg: YahooFinanceMarketFeed._parse_message(product, msg)),
-        )
-        super()._add_default_transformations_to_stream(product, resolution)
-    
-    # TODO
-    @staticmethod
-    def _parse_message(product: BaseProduct, msg: dict) -> dict:
-        return msg
-    
-    def _add_data_channel(self, data_model: YahooFinanceMarketDataModel) -> None:
-        return self.data_source.stream_api._add_data_channel(data_model)
-    
-    def add_channel(self, channel: FullDataChannel, channel_type: Literal['public', 'private'], *args, **kwargs):
-        raise NotImplementedError(f'{self.name} add_channel() is not implemented')
-    
-    # TODO: use data_source.batch_api
-    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args, **kwargs) -> GenericFrame | None:
-        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')

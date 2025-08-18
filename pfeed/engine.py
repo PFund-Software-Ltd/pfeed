@@ -91,7 +91,9 @@ class DataEngine:
             kwargs: kwargs for the data client to override the default params in the engine
         '''
         assert 'pipeline_mode' not in kwargs, 'pipeline_mode is True by default and cannot be overridden'
-        feed: BaseFeed = pe.create_feed(data_source=data_source, data_category=data_category, **self._params, **kwargs)
+        params = self._params.copy()
+        params.update(kwargs)
+        feed: BaseFeed = pe.create_feed(data_source=data_source, data_category=data_category, **params)
         feed._set_engine(self)
         self._feeds.append(feed)
         return feed

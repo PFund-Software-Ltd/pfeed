@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 import datetime
 from functools import partial
 
+from pfund import print_warning
 from pfund.enums import Environment
 from pfeed.enums import DataCategory, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
@@ -37,10 +38,6 @@ class NewsFeed(TimeBasedFeed):
         from pfeed.data_models.news_data_model import NewsDataModel
         if isinstance(product, str) and product:
             product = self.create_product(product, **product_specs)
-        if isinstance(start_date, str) and start_date:
-            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-        if isinstance(end_date, str) and end_date:
-            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         return NewsDataModel(
             env=env,
             data_source=self.data_source,
@@ -79,18 +76,17 @@ class NewsFeed(TimeBasedFeed):
             product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
+        if self._pipeline_mode and to_storage:
+            print_warning('"to_storage" in download() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, data_origin=data_origin),
             partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, data_origin=data_origin),
             start_date=start_date,
             end_date=end_date,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            to_storage=to_storage,
-            storage_options=storage_options,
-            add_default_transformations=(lambda: self._add_default_transformations_to_download(product=product)) if auto_transform else None,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
+            add_default_transformations=(lambda: self._add_default_transformations_to_download(product=product)) if auto_transform else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage and not self._pipeline_mode else None,
         )
     
     def _add_default_transformations_to_download(self, product: BaseProduct | None=None):
@@ -153,6 +149,10 @@ class NewsFeed(TimeBasedFeed):
                 lambda df: convert_to_user_df(df, self._data_tool)
             )
         )
+    
+    # TODO:
+    def fetch(self) -> GenericFrame | None | NewsFeed:
+        raise NotImplementedError(f"{self.name} fetch() is not implemented")
 
     # DEPRECATED
     # def get_historical_data(
@@ -196,7 +196,3 @@ class NewsFeed(TimeBasedFeed):
     #         retrieve_per_date=retrieve_per_date,
     #         product_specs=product_specs,
     #     )
-            
-    # TODO:
-    def fetch(self) -> GenericFrame | None | NewsFeed:
-        raise NotImplementedError(f"{self.name} fetch() is not implemented")

@@ -28,6 +28,7 @@ data_categories:
       - FOREX
       - CRYPTO
       - INDEX
+  news_data:
 provider_type: aggregator  # refer to enum DataProviderType
 api_key_required: false
 access_type: free  # refer to enum DataAccessType

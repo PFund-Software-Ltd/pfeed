@@ -23,12 +23,12 @@ __all__ = ['BybitMarketFeed']
 class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
     def create_data_model(
         self,
+        env: tEnvironment,
         product: str | BybitProduct,
         resolution: str | Resolution,
         start_date: str | datetime.date,
         end_date: str | datetime.date | None = None,
         data_origin: str = '',
-        env: tEnvironment | None = None,
         **product_specs
     ) -> BybitMarketDataModel:
         from pfeed.sources.bybit.market_data_handler import BybitMarketDataHandler

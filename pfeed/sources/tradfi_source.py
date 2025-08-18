@@ -16,7 +16,11 @@ class TradFiSource(BaseSource):
             symbol=symbol,   
         )
         # HACK: write it back to data source's name
-        data_source_name = self.name.value
-        product.trading_venue = data_source_name
-        product.broker = data_source_name
+        # data_source_name = self.name.value
+        # product.trading_venue = data_source_name
+        # product.broker = data_source_name
+        # # recreate symbol and name after changing trading venue and broker
+        # product.specs = product._create_specs()
+        # product.symbol = product._create_symbol()
+        # product.name = product._create_name()
         return product

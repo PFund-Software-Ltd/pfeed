@@ -18,7 +18,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
     def api(self) -> News:
         return self.data_source.api.news
     
-    def _normalize_raw_data(self, datas: dict[str, list[list[dict] | []]]) -> pd.DataFrame:
+    def _normalize_raw_data(self, datas: dict[str, list[list[dict]]]) -> pd.DataFrame:
         dfs = []
         for func, data in datas.items():
             if func == 'FMP_articles':
@@ -47,7 +47,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
             dfs.append(df)
         return pd.concat(dfs, ignore_index=True)
     
-    def _normalize_raw_data_from_FMP_articles(self, data: list[list[dict] | []]) -> pd.DataFrame:
+    def _normalize_raw_data_from_FMP_articles(self, data: list[list[dict]]) -> pd.DataFrame:
         if not data:
             return pd.DataFrame()
         df = pd.DataFrame(data)
@@ -55,16 +55,16 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
         df[["exchange", "symbol"]] = df["tickers"].str.split(":", expand=True)
         return df
     
-    def _normalize_raw_data_from_search(self, data: list[list[dict] | []]) -> pd.DataFrame:
+    def _normalize_raw_data_from_search(self, data: list[list[dict]]) -> pd.DataFrame:
         if not data:
             return pd.DataFrame()
         df = pd.DataFrame(data)
         df.rename(columns={'publishedDate': 'date', 'text': 'content'}, inplace=True)
         return df
     
-    def _download_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
+    def _download_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict]]]:
         self.logger.debug(f'downloading {data_model}')
-        datas: dict[str, list[list[dict] | []]] = asyncio.run(self._adownload_impl(data_model))
+        datas: dict[str, list[list[dict]]] = asyncio.run(self._adownload_impl(data_model))
         for func, data in datas.items():
             if not data:
                 self.logger.warning(f'no data downloaded using function {func} for {data_model}')
@@ -72,7 +72,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
                 self.logger.debug(f'downloaded using function {func} for {data_model}')
         return datas
 
-    async def _adownload_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict] | []]]:
+    async def _adownload_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict]]]:
         product = data_model.product
         start_date, end_date = str(data_model.start_date), str(data_model.end_date)
         tasks = {}

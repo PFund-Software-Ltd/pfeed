@@ -12,9 +12,8 @@ if TYPE_CHECKING:
 import datetime
 from pprint import pformat
 
-from pfund.enums import Environment
 from pfeed.utils.dataframe import is_empty_dataframe
-from pfeed.enums import ExtractType, DataLayer, DataStorage
+from pfeed.enums import ExtractType
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 
 
@@ -213,6 +212,78 @@ class TimeBasedFeed(BaseFeed):
             self.logger.debug(f'failed to find data {data_model} in any storage ({data_layer=})')
         return df, metadata
     
+    @clear_subflows
+    def _run_stream(
+        self,
+        data_model: TimeBasedDataModel,
+        add_default_transformations: Callable | None,
+        load_to_storage: Callable | None,
+        callback: Callable[[dict], Awaitable[None] | None] | None,
+    ) -> None | TimeBasedFeed:
+        # reuse existing faucet for streaming dataflows since they share the same extract_func
+        if self.streaming_dataflows:
+            existing_dataflow = self.streaming_dataflows[0]
+            assert existing_dataflow.data_model.env == data_model.env, \
+                f'env mismatch in streaming: {existing_dataflow.data_model.env} != {data_model.env}'
+            faucet: Faucet = existing_dataflow.faucet
+        else:
+            faucet: Faucet = self._create_faucet(
+                data_model=data_model,
+                extract_func=self._stream_impl,
+                extract_type=ExtractType.stream,
+                close_stream=self._close_stream,
+            )
+        if callback:
+            faucet.set_streaming_callback(callback)
+        dataflow: DataFlow = self.create_dataflow(data_model=data_model, faucet=faucet)
+        faucet.bind_data_model_to_dataflow(data_model, dataflow)
+        if add_default_transformations:
+            add_default_transformations()
+        if load_to_storage:
+            load_to_storage()
+        if not self._pipeline_mode:
+            return self.run()
+        else:
+            return self
+  
+    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata]:
+        '''Runs dataflows and handles the results.'''
+        import narwhals as nw
+        
+        completed_dataflows, failed_dataflows = self._run_batch_dataflows(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
+
+        dfs: list[GenericFrame | None] = []
+        metadata: TimeBasedFeedMetadata = {'missing_dates': []}
+        
+        for dataflow in completed_dataflows + failed_dataflows:
+            data_model: TimeBasedDataModel = dataflow.data_model
+            result: FlowResult = dataflow.result
+            _df: GenericFrame | None = result.data
+            _metadata: StorageMetadata = result.metadata
+            
+            dfs.append(_df)
+            
+            # Handle missing dates
+            # NOTE: only data read from storage will have 'missing_dates' in metadata
+            # downloaded data will need to create 'missing_dates' by itself by checking if _df is None
+            if 'missing_dates' in _metadata:
+                metadata['missing_dates'].extend(_metadata['missing_dates'])
+            elif _df is None:
+                metadata['missing_dates'].extend(data_model.dates)
+
+        dfs: list[Frame] = [nw.from_native(df) for df in dfs if df is not None and not is_empty_dataframe(df)]
+        if dfs:
+            df: Frame = nw.concat(dfs)
+            df: Frame = df.sort(by='date', descending=False)
+            df: GenericFrame = nw.to_native(df)
+        else:
+            df = None
+
+        return df if not include_metadata else (df, metadata)
+    
+    async def _eager_run_stream(self, ray_kwargs: dict):
+        return await self._run_stream_dataflows(ray_kwargs=ray_kwargs)
+    
     # DEPRECATED: trying to do too much, let users handle it
     # def _get_historical_data_impl(
     #     self,
@@ -353,74 +424,3 @@ class TimeBasedFeed(BaseFeed):
             
     #     return df
     
-    @clear_subflows
-    def _run_stream(
-        self,
-        data_model: TimeBasedDataModel,
-        add_default_transformations: Callable | None,
-        load_to_storage: Callable | None,
-        callback: Callable[[dict], Awaitable[None] | None] | None,
-    ) -> None | TimeBasedFeed:
-        # reuse existing faucet for streaming dataflows since they share the same extract_func
-        if self.streaming_dataflows:
-            existing_dataflow = self.streaming_dataflows[0]
-            assert existing_dataflow.data_model.env == data_model.env, \
-                f'env mismatch in streaming: {existing_dataflow.data_model.env} != {data_model.env}'
-            faucet: Faucet = existing_dataflow.faucet
-        else:
-            faucet: Faucet = self._create_faucet(
-                data_model=data_model,
-                extract_func=self._stream_impl,
-                extract_type=ExtractType.stream,
-                close_stream=self._close_stream,
-            )
-        if callback:
-            faucet.set_streaming_callback(callback)
-        dataflow: DataFlow = self.create_dataflow(data_model=data_model, faucet=faucet)
-        faucet.bind_data_model_to_dataflow(data_model, dataflow)
-        if add_default_transformations:
-            add_default_transformations()
-        if load_to_storage:
-            load_to_storage()
-        if not self._pipeline_mode:
-            return self.run()
-        else:
-            return self
-  
-    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata]:
-        '''Runs dataflows and handles the results.'''
-        import narwhals as nw
-        
-        completed_dataflows, failed_dataflows = self._run_batch_dataflows(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
-
-        dfs: list[GenericFrame | None] = []
-        metadata: TimeBasedFeedMetadata = {'missing_dates': []}
-        
-        for dataflow in completed_dataflows + failed_dataflows:
-            data_model: TimeBasedDataModel = dataflow.data_model
-            result: FlowResult = dataflow.result
-            _df: GenericFrame | None = result.data
-            _metadata: StorageMetadata = result.metadata
-            
-            dfs.append(_df)
-            
-            # Handle missing dates
-            # NOTE: only data read from storage will have 'missing_dates' in metadata
-            # downloaded data will need to create 'missing_dates' by itself by checking if _df is None
-            if 'missing_dates' in _metadata:
-                metadata['missing_dates'].extend(_metadata['missing_dates'])
-            elif _df is None:
-                metadata['missing_dates'].extend(data_model.dates)
-
-        dfs: list[Frame] = [nw.from_native(df) for df in dfs if df is not None and not is_empty_dataframe(df)]
-        if dfs:
-            df: Frame = nw.concat(dfs)
-            df: Frame = df.sort(by='date', descending=False)
-            df: GenericFrame = nw.to_native(df)
-        else:
-            df = None
-
-        return df if not include_metadata else (df, metadata)
-    
-    async def _eager_run_stream(self, ray_kwargs: dict):
-        return await self._run_stream_dataflows(ray_kwargs=ray_kwargs)

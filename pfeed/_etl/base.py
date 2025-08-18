@@ -1,24 +1,16 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from types import ModuleType
 if TYPE_CHECKING:
     from pfeed._typing import tDataTool
     from pfeed._typing import GenericFrame, GenericData
     
-import importlib
 
 import pandas as pd
 import polars as pl
 import narwhals as nw
 
-from pfeed._typing import dd
 from pfeed.enums import DataTool
 from pfeed.utils.dataframe import is_dataframe
-
-
-def get_data_tool(data_tool: DataTool | tDataTool) -> ModuleType:
-    dtl = DataTool[data_tool.lower()] if isinstance(data_tool, str) else data_tool
-    return importlib.import_module(f'pfeed.data_tools.data_tool_{dtl}')
 
 
 def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -63,8 +55,7 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> Gen
     Returns:
         The converted dataframe.
     '''
-    if isinstance(data_tool, str):
-        data_tool = DataTool[data_tool.lower()]
+    data_tool = DataTool[data_tool.lower()]
         
     # if the input dataframe is already in the desired data tool, return it directly
     if isinstance(df, pd.DataFrame) and data_tool == DataTool.pandas:

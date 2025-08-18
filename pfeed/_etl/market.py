@@ -4,41 +4,36 @@ ETL for market data.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed._typing import tProductType
+    from pfund.products.product_base import BaseProduct
 
 import pandas as pd
 
 from pfund.datas.resolution import Resolution
 
 
-def standardize_columns(df: pd.DataFrame, resolution: Resolution, product_name: str, symbol: str='') -> pd.DataFrame:
+def standardize_columns(df: pd.DataFrame, product: BaseProduct, resolution: Resolution) -> pd.DataFrame:
     """Standardizes the columns of a DataFrame.
-    Adds columns 'resolution', 'product', 'symbol', and convert 'date' to datetime
-    Args:
-        product_name: Full name of the product, using the 'name' attribute of the product
+    Adds columns 'product', 'resolution', 'symbol', and convert 'date' to datetime
     """
     from pfeed._etl.base import standardize_date_column
+    df['product'] = product.name
     df['resolution'] = repr(resolution)
-    df['product'] = product_name.upper()
-    if symbol:
-        df['symbol'] = symbol.upper()
+    df['symbol'] = product.symbol
     df = standardize_date_column(df)
     return df
 
 
-def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
+def filter_columns(df: pd.DataFrame, product: BaseProduct) -> pd.DataFrame:
     """Filter out unnecessary columns from raw data."""
     is_tick_data = 'price' in df.columns
-    pdt = df['product'][0]
-    ptype: tProductType = pdt.split('_')[2]
     if is_tick_data:
-        standard_cols = ['date', 'product', 'resolution', 'side', 'volume', 'price']
+        standard_cols = ['date', 'product', 'resolution', 'symbol', 'side', 'volume', 'price']
     else:
-        standard_cols = ['date', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']
+        standard_cols = ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
     df_cols = df.columns
-    extra_cols = ['symbol']
+    extra_cols = []
     # EXTEND
-    if ptype == 'STK':
+    if product.is_stock():
         extra_cols.extend(['dividends', 'splits'])
     for extra_col in extra_cols:
         if extra_col in df_cols:
@@ -49,14 +44,12 @@ def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
     '''Moves 'date', 'product', 'resolution', 'symbol' to the leftmost side.'''
-    left_cols = ['date', 'resolution', 'product']
-    if 'symbol' in df.columns:
-        left_cols.append('symbol')
+    left_cols = ['date', 'product', 'resolution', 'symbol']
     df = df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
     return df
     
 
-def resample_data(df: pd.DataFrame, resolution: str | Resolution, offset: str = None) -> pd.DataFrame:
+def resample_data(df: pd.DataFrame, resolution: str | Resolution, offset: str | None = None) -> pd.DataFrame:
     '''Resamples the input dataframe based on the target resolution.
     Args:
         df: The input dataframe to be resampled.
@@ -100,7 +93,7 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution, offset: str = 
         'volume': 'sum',
     }
     
-    for col in ['resolution', 'product', 'symbol']:
+    for col in ['product', 'resolution', 'symbol']:
         if col in df.columns:
             resample_logic[col] = 'first'
     if 'dividends' in df.columns:
@@ -124,8 +117,5 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution, offset: str = 
         .reset_index()
     )
     resampled_df['resolution'] = repr(resolution)
-    # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
-    # otherwise, polars will not be able to collect correctly
-    # resampled_df = organize_columns(resampled_df)
     return resampled_df
 

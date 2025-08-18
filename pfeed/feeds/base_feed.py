@@ -189,9 +189,8 @@ class BaseFeed(ABC):
     def download(self, *args, **kwargs) -> GenericData | None | BaseFeed:
         pass
     
-    @abstractmethod
     def stream(self, *args, **kwargs) -> BaseFeed:
-        pass
+        raise NotImplementedError(f'{self.name} stream() is not implemented')
 
     @abstractmethod
     def retrieve(self, *args, **kwargs) -> GenericData | None:

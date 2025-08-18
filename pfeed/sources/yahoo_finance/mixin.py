@@ -8,6 +8,7 @@ from pfeed.sources.yahoo_finance.source import YahooFinanceSource
 
 class YahooFinanceMixin:
     data_source: YahooFinanceSource
+    _yfinance_kwargs: dict | None = None
 
     @property
     def batch_api(self):

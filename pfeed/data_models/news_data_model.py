@@ -80,6 +80,8 @@ class NewsDataModel(TimeBasedDataModel):
     def to_metadata(self) -> NewsMetadata:
         return {
             **super().to_metadata(),
+            'product_basis': str(self.product.basis) if self.product else None,
+            'product_specs': self.product.specs if self.product else None,
             'symbol': self.product.symbol if self.product else None,
             'asset_type': str(self.product.asset_type) if self.product else None,
         }

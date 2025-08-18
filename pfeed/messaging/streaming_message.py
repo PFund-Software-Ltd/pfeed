@@ -4,6 +4,8 @@ import time
 
 from msgspec import Meta, Struct, field, ValidationError, structs
 
+from pfeed.enums import DataSource
+
 
 class StreamingMessage(
     Struct, 
@@ -15,9 +17,7 @@ class StreamingMessage(
     gc=True,  # OPTIMIZE: consider setting gc=False for performance boost (but then you can't use lists, dicts etc.)
     # tag=True,
 ):
-    trading_venue: str
-    broker: str
-    exchange: str
+    data_source: DataSource
     product: str  # product.name
     basis: str
     symbol: str

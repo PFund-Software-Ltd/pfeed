@@ -1,13 +1,13 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, Any, Callable, Awaitable
 if TYPE_CHECKING:
-    import pandas as pd
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from pfund._typing import tEnvironment, FullDataChannel
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed._typing import tStorage, tDataLayer, GenericFrame, StorageMetadata, tDataType
     from pfeed.data_models.market_data_model import MarketDataModel
+    from pfeed.enums import DataSource
 
 import datetime
 from abc import abstractmethod
@@ -16,7 +16,7 @@ from functools import partial
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
 from pfund import print_warning
-from pfeed.messaging import BarMessage
+from pfeed.messaging import BarMessage, TickMessage
 from pfeed.enums import DataCategory, MarketDataType, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 
@@ -195,13 +195,19 @@ class MarketFeed(TimeBasedFeed):
             self._normalize_raw_data,
             lambda_with_name(
                 'standardize_columns',
-                lambda df: etl.standardize_columns(df, data_resolution, str(product.basis), symbol=product.symbol),
+                lambda df: etl.standardize_columns(df, product, data_resolution),
             ),
-            etl.filter_columns,
+            lambda_with_name(
+                'filter_columns',
+                lambda df: etl.filter_columns(df, product),
+            ),
             lambda_with_name(
                 'resample_data_if_necessary', 
                 lambda df: etl.resample_data(df, target_resolution)
             ),
+            # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
+            # otherwise, polars will not be able to collect correctly
+            # resampled_df = organize_columns(resampled_df)
             etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
@@ -444,18 +450,32 @@ class MarketFeed(TimeBasedFeed):
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
         from pfeed.utils.utils import lambda_with_name
+        # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
+        data_source: DataSource = self.data_source.name
         self.transform(
-            lambda_with_name('standardize_message', lambda msg: MarketFeed._standardize_message(product, resolution, msg)),
+            lambda_with_name('standardize_message', lambda msg: MarketFeed._standardize_message(data_source, product, resolution, msg)),
         )
     
     @staticmethod
-    def _standardize_message(product: BaseProduct, resolution: Resolution, msg: dict) -> StreamingMessage:
-        if resolution.is_bar():
+    def _standardize_message(data_source: DataSource, product: BaseProduct, resolution: Resolution, msg: dict) -> StreamingMessage:
+        if resolution.is_tick():
+            data = msg['data']
+            message = TickMessage(
+                data_source=data_source.value,
+                product=product.name,
+                basis=str(product.basis),
+                symbol=product.symbol,
+                specs=product.specs,
+                resolution=repr(resolution),
+                ts=data['ts'],
+                price=data['price'],
+                volume=data['volume'],
+                extra_data=msg.get('extra_data', {}),
+            )
+        elif resolution.is_bar():
             data: dict= msg['data']
             message = BarMessage(
-                trading_venue=product.trading_venue.value,
-                broker=product.broker.value,
-                exchange=str(product.exchange),
+                data_source=data_source.value,
                 product=product.name,
                 basis=str(product.basis),
                 symbol=product.symbol,
@@ -468,7 +488,7 @@ class MarketFeed(TimeBasedFeed):
                 low=data['low'],
                 close=data['close'],
                 volume=data['volume'],
-                extra_data=msg['extra_data'],
+                extra_data=msg.get('extra_data', {}),
                 is_incremental=msg['is_incremental'],
             )
         else:

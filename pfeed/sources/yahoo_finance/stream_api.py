@@ -9,7 +9,7 @@ ChannelKey: TypeAlias = str
 
 
 class StreamAPI:
-    def __init__(self, verbose=True):
+    def __init__(self, verbose=False):
         import yfinance as yf
         self._ws_api = yf.AsyncWebSocket(verbose=verbose)
         self._streaming_bindings: dict[ChannelKey, YahooFinanceMarketDataModel] = {}

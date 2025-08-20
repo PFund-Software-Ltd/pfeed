@@ -11,6 +11,7 @@ class LocalDataStorage(StrEnum):
     LOCAL = 'LOCAL'
     MINIO = 'MINIO'
     DUCKDB = 'DUCKDB'
+    LANCEDB = 'LANCEDB'
 
     
 class DataStorage(StrEnum):

@@ -11,6 +11,7 @@ import narwhals as nw
 
 from pfeed.enums import DataTool
 from pfeed.utils.dataframe import is_dataframe
+from pfeed._typing import dd, ps, SparkDataFrame
 
 
 def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -46,7 +47,7 @@ def convert_to_pandas_df(data: GenericData) -> pd.DataFrame:
         raise ValueError(f'{type(data)=}')
 
 
-def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> GenericFrame:
+def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> pd.DataFrame | pl.LazyFrame | dd.DataFrame | SparkDataFrame:
     '''Converts the input dataframe to the user's desired data tool.
     Args:
         df: The input dataframe to be converted.
@@ -55,28 +56,61 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> Gen
     Returns:
         The converted dataframe.
     '''
+
     data_tool = DataTool[data_tool.lower()]
+
+    def _narwhalify(_df: GenericFrame) -> nw.DataFrame:
+        nw_df = nw.from_native(_df)
+        if isinstance(nw_df, nw.LazyFrame):
+            nw_df = nw_df.collect()
+        return nw_df
         
     # if the input dataframe is already in the desired data tool, return it directly
-    if isinstance(df, pd.DataFrame) and data_tool == DataTool.pandas:
-        return df
-    elif isinstance(df, (pl.DataFrame, pl.LazyFrame)) and data_tool == DataTool.polars:
-        return df.lazy() if isinstance(df, pl.DataFrame) else df
-    # elif isinstance(df, dd.DataFrame) and data_tool == DataTool.dask:
-    #     return df
-
-    nw_df = nw.from_native(df)
-    if isinstance(nw_df, nw.LazyFrame):
-        nw_df = nw_df.collect()
-    
     if data_tool == DataTool.pandas:
-        return nw_df.to_pandas()
+        if isinstance(df, pd.DataFrame):
+            return df
+        elif isinstance(df, ps.DataFrame):
+            return df.to_pandas()
+        elif isinstance(df, SparkDataFrame):
+            return df.toPandas()
+        else:
+            nw_df = _narwhalify(df)
+            return nw_df.to_pandas()
     elif data_tool == DataTool.polars:
-        return nw_df.to_polars().lazy()
-    # elif data_tool == DataTool.dask:
-    #     return dd.from_pandas(nw_df.to_pandas(), npartitions=1)
-    # elif data_tool == DataTool.spark:
-    #     spark = SparkSession.builder.getOrCreate()
-    #     return spark.createDataFrame(df)
+        if isinstance(df, (pl.LazyFrame, pl.DataFrame)):
+            return df.lazy()
+        elif isinstance(df, ps.DataFrame):
+            df = df.to_pandas()
+        elif isinstance(df, SparkDataFrame):
+            df = df.toPandas()
+        nw_df = _narwhalify(df)
+        df = nw_df.to_polars()
+        return df.lazy()
+    elif data_tool == DataTool.dask:
+        if isinstance(df, pd.DataFrame):
+            pass
+        elif isinstance(df, dd.DataFrame):
+            return df
+        elif isinstance(df, ps.DataFrame):
+            df = df.to_pandas()
+        elif isinstance(df, SparkDataFrame):
+            df = df.toPandas()
+        else:
+            nw_df = _narwhalify(df)
+            df = nw_df.to_pandas()
+        return dd.from_pandas(df, npartitions=1)
+    elif data_tool == DataTool.spark:
+        if isinstance(df, pd.DataFrame):
+            pass
+        if isinstance(df, ps.DataFrame):
+            return df.to_spark()
+        elif isinstance(df, SparkDataFrame):
+            return df
+        else:
+            nw_df = _narwhalify(df)
+            df = nw_df.to_pandas()
+        from pyspark.sql import SparkSession
+        spark = SparkSession.builder.getOrCreate()
+        return spark.createDataFrame(df)
     else:
         raise ValueError(f'{data_tool=}')

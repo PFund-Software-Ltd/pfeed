@@ -2,22 +2,23 @@
 authors = ["softwareentrepreneer <softwareentrepreneer+pfeed@gmail.com>"]
 channels = ["conda-forge"]
 name = "pfeed"
-platforms = ["osx-arm64", "linux-64", "osx-64", "win-64"]
+platforms = ["osx-arm64", "linux-64", "osx-64"]  # TODO: add "win-64"
 version = "0.0.5"
 
 [tasks]
 
 [tasks.test-all]
 depends-on = [
-  { task = "test", environment = "test-py311" },
-  { task = "test", environment = "test-py312" },
-  { task = "test", environment = "test-py313" },
-  # { task = "test", environment = "test-py314" },
+  { task = "test", environment = "py311" },
+  { task = "test", environment = "py312" },
+  { task = "test", environment = "py313" },
+  # { task = "test", environment = "py314" },
 ]
 
 [dependencies]
 python = ">=3.11"
 uv = ">=0.8.11"
+openjdk = "21.*"
 
 [pypi-dependencies]
 pfund = ">=0.0.2"
@@ -31,44 +32,46 @@ pandera = ">=0.26.0"
 msgspec = ">=0.19.0"
 pydantic = ">=2.11.7"
 narwhals = ">=2.1.2"
-yfinance = ">=0.2.65"
 zstandard = ">=0.23.0"
 beautifulsoup4 = ">=4.13.4"
 cloudpathlib = { version = ">=0.21.1", extras = ["s3", "gs", "azure"] }
 
 [environments]
 dev = ["py311", "dev"]
-py311-wasm = ["py311", "test"]
-py311 = ["py311", "test", "core", "crawl4ai", "lancedb", "fmp"]
-py312-wasm = ["py312", "test"]
-py312 = ["py312", "test", "core", "crawl4ai", "lancedb", "fmp"]
-py313-wasm = ["py313", "test"]
-py313 = ["py313", "test", "core", "crawl4ai", "lancedb", "fmp"]
-# py314-wasm = ["py314", "test"]
-# py314 = ["py314", "test", "core", "crawl4ai", "lancedb", "fmp"]
+py311-wasm = ["py311", "test", "editable"]
+py311 = ["py311", "test", "editable", "core", "dask", "spark"]
+py312-wasm = ["py312", "test", "editable"]
+py312 = ["py312", "test", "editable", "core", "dask", "spark"]
+py313-wasm = ["py313", "test", "editable"]
+py313 = ["py313", "test", "editable", "core", "dask", "spark"]
+# py314-wasm = ["py314", "test", "editable"]
+# py314 = ["py314", "test", "editable", "core", "dask", "spark"]
+
+[activation.env]
+JAVA_HOME = "$CONDA_PREFIX/lib/jvm"
+JDK_HOME  = "$JAVA_HOME"
+PATH      = "$JAVA_HOME/bin:$PATH"
 
 [feature.core.pypi-dependencies]
+yfinance = ">=0.2.65"
+fmp-api-client = ">=0.0.1"
 ray = ">=2.48.0"
 pyzmq = ">=27.0.1"
 minio = ">=7.2.16"
 deltalake = ">=1.1.4"
 prefect = ">=3.4.13"
-
-[feature.crawl4ai.pypi-dependencies]
-crawl4ai = ">=0.7.3"
-
-[feature.lancedb.pypi-dependencies]
 lancedb = ">=0.24.3"
 
-[feature.fmp.pypi-dependencies]
-fmp-api-client = ">=0.0.1"
+[feature.editable.pypi-dependencies]
+pfund = { path = "../pfund", editable = true }
+fmp-api-client = { path = "../fmp-api-client", editable = true }
 
-# [feature.dask.pypi-dependencies]
-# dask = { version = ">=2025.5.1", extras = ["complete", "dataframe"] }
-# coiled = ">=1.101.1"
+[feature.dask.pypi-dependencies]
+dask = { version = ">=2025.7.0", extras = ["complete", "dataframe"] }
+coiled = ">=1.118.2"
 
-# [feature.spark.pypi-dependencies]
-# pyspark = { version = ">=4.0.0", extras = ["connect", "pandas-on-spark", "sql"] }
+[feature.spark.pypi-dependencies]
+pyspark = { version = ">=4.0.0", extras = ["connect", "pandas-on-spark", "sql"] }
 
 [feature.dev.pypi-dependencies]
 ruff = ">=0.12.9"

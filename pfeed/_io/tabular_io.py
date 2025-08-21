@@ -97,7 +97,7 @@ class TabularIO(BaseIO):
         if self._use_deltalake:
             from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
             exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path / DeltaLakeStorageMixin.metadata_filename)]
-            non_empty_file_paths = [file_path for file_path in exists_file_paths if DeltaTable.is_deltatable(file_path, storage_options=self._storage_options)]
+            non_empty_file_paths = [file_path for file_path in exists_file_paths if DeltaTable.is_deltatable(str(file_path), storage_options=self._storage_options)]
             if non_empty_file_paths:
                 assert len(non_empty_file_paths) == 1, f'Expected only one file path for deltalake, got {len(non_empty_file_paths)}'
                 dt = DeltaTable(

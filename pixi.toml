@@ -89,8 +89,11 @@ pytest-cov = ">=6.2.1"
 pytest-mock = ">=3.14.1"
 pytest-xdist = ">=3.8.0"
 pytest-asyncio = ">=1.1.0"
+pytest-recording = ">=0.13.2"
 [feature.test.tasks]
 test = "pytest"
+test-new = "pytest --record-mode=all"  # record new interactions, useful to update recordings in case data formats returned have changed
+test-ci = "pytest --record-mode=none"  # fail a test if no recording is found
 
 [feature.py311.dependencies]
 python = "3.11.*"

@@ -186,19 +186,25 @@ class TimeBasedDataHandler(BaseDataHandler):
             self._write_buffer_to_deltalake()
             self._last_delta_flush = now
         
-    def _write_batch(self, df: GenericFrame):
+    def _write_batch(self, df: GenericFrame, validate=True, date_column: str='date'):
+        '''
+        Args:
+            validate: Whether to validate the schema of the dataframe.
+            date_column: The column name of the time column, needed when the dataframe is raw and not normalized, default is 'date'.
+        '''
         from pfeed._etl.base import convert_to_pandas_df
 
         DeltaTableMetadata: TimeBasedDeltaMetadata | dict[str, Any]
 
         df: pd.DataFrame = convert_to_pandas_df(df)
-        # reset index to avoid pandera.errors.SchemaError: DataFrameSchema failed series or dataframe validator 0: <Check validate_index_reset>
-        df = df.reset_index(drop=True)
-        df = self._validate_schema(df)
+        if validate:
+            # reset index to avoid pandera.errors.SchemaError: DataFrameSchema failed series or dataframe validator 0: <Check validate_index_reset>
+            df = df.reset_index(drop=True)
+            df = self._validate_schema(df)
 
         data_model: TimeBasedDataModel = self._data_model
         # split data with a date range into chunks per date
-        data_chunks_per_date = {} if df.empty else {date: group for date, group in df.groupby(df['date'].dt.date)}
+        data_chunks_per_date = {} if df.empty else {date: group for date, group in df.groupby(df[date_column].dt.date)}
         if not self._use_deltalake:
             for date in data_model.dates:
                 data_model_copy = data_model.model_copy(deep=False)
@@ -214,25 +220,25 @@ class TimeBasedDataHandler(BaseDataHandler):
         else:            
             # Preprocess table to add year, month, day columns for partitioning
             df = df.assign(
-                year=df["date"].dt.year,
-                month=df["date"].dt.month,
-                day=df["date"].dt.day,
+                year=df[date_column].dt.year,
+                month=df[date_column].dt.month,
+                day=df[date_column].dt.day,
             )
             
             file_path = self._create_file_paths(data_model=data_model)[0]
-            is_deltatable = DeltaTable.is_deltatable(file_path, storage_options=self._storage_options)
+            is_deltatable = DeltaTable.is_deltatable(str(file_path), storage_options=self._storage_options)
             existing_dates = []
             if is_deltatable:
-                metadata_file_path = file_path + '/' + DeltaLakeStorageMixin.metadata_filename
+                metadata_file_path = file_path / DeltaLakeStorageMixin.metadata_filename
                 existing_metadata: dict[str, Any] = self._io._read_pyarrow_table_metadata([metadata_file_path])
-                file_metadata: DeltaTableMetadata = existing_metadata.get(metadata_file_path, {})
+                file_metadata: DeltaTableMetadata = existing_metadata.get(str(metadata_file_path), {})
                 existing_dates = file_metadata.get('dates', [])
                 existing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in existing_dates]
 
                 # Delete any overlapping data within the date range before inserting
                 dt = DeltaTable(file_path, storage_options=self._storage_options)
-                start_ts, end_ts = df['date'].iloc[0], df['date'].iloc[-1]
-                dt.delete(predicate=f"date >= '{start_ts}' AND date <= '{end_ts}'")
+                start_ts, end_ts = df[date_column].iloc[0], df[date_column].iloc[-1]
+                dt.delete(predicate=f"{date_column} >= '{start_ts}' AND {date_column} <= '{end_ts}'")
             
             metadata: TimeBasedMetadata = data_model.to_metadata()
             dates_in_data = pd.date_range(metadata.pop('start_date'), metadata.pop('end_date')).date.tolist()

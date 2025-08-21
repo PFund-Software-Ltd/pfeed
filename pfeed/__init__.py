@@ -19,10 +19,15 @@ if TYPE_CHECKING:
     from pfeed.engine import DataEngine
     from pfeed.sources.pfund import PFund
 
+import os
 from importlib.metadata import version
+
 from pfeed.config import configure, get_config
 from pfeed.storages import create_storage
 from pfeed.feeds import create_feed, create_market_feed
+
+
+os.environ['PYARROW_IGNORE_TIMEZONE'] = '1'  # used to suppress warning from pyspark
 
 
 def __getattr__(name: str):

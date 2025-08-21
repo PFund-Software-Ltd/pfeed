@@ -1,7 +1,6 @@
 from typing_extensions import TypedDict
 from typing import Any, Literal, Protocol, TypeAlias
 
-import os
 import datetime
 
 from narwhals.series import Series
@@ -16,7 +15,6 @@ except ImportError:
         class DataFrame:
             pass
 try:
-    os.environ['PYARROW_IGNORE_TIMEZONE'] = '1'  # used to suppress warning
     import pyspark.pandas as ps
     from pyspark.sql import DataFrame as SparkDataFrame
 except ImportError:

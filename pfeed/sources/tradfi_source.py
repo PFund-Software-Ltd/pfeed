@@ -11,6 +11,8 @@ class TradFiSource(BaseSource):
         product = Product(
             trading_venue=trading_venue,
             broker=trading_venue,
+            # avoid missing "exchange" error in IBProduct, since in real trading, exchange must be provided for some asset types, e.g. futures
+            exchange='SMART',
             basis=basis,
             specs=specs,
             symbol=symbol,   

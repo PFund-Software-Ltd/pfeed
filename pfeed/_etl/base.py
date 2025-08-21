@@ -60,41 +60,32 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> pd.
     data_tool = DataTool[data_tool.lower()]
 
     def _narwhalify(_df: GenericFrame) -> nw.DataFrame:
+        # narwhals only supports SparkDataFrame, not ps.DataFrame, so convert to SparkDataFrame first
+        if isinstance(_df, ps.DataFrame):
+            _df = _df.to_spark()
         nw_df = nw.from_native(_df)
         if isinstance(nw_df, nw.LazyFrame):
             nw_df = nw_df.collect()
         return nw_df
-        
+    
     # if the input dataframe is already in the desired data tool, return it directly
     if data_tool == DataTool.pandas:
         if isinstance(df, pd.DataFrame):
             return df
-        elif isinstance(df, ps.DataFrame):
-            return df.to_pandas()
-        elif isinstance(df, SparkDataFrame):
-            return df.toPandas()
         else:
             nw_df = _narwhalify(df)
             return nw_df.to_pandas()
     elif data_tool == DataTool.polars:
         if isinstance(df, (pl.LazyFrame, pl.DataFrame)):
             return df.lazy()
-        elif isinstance(df, ps.DataFrame):
-            df = df.to_pandas()
-        elif isinstance(df, SparkDataFrame):
-            df = df.toPandas()
-        nw_df = _narwhalify(df)
-        df = nw_df.to_polars()
-        return df.lazy()
+        else:
+            nw_df = _narwhalify(df)
+            return nw_df.to_polars().lazy()
     elif data_tool == DataTool.dask:
         if isinstance(df, pd.DataFrame):
             pass
         elif isinstance(df, dd.DataFrame):
             return df
-        elif isinstance(df, ps.DataFrame):
-            df = df.to_pandas()
-        elif isinstance(df, SparkDataFrame):
-            df = df.toPandas()
         else:
             nw_df = _narwhalify(df)
             df = nw_df.to_pandas()
@@ -102,8 +93,6 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> pd.
     elif data_tool == DataTool.spark:
         if isinstance(df, pd.DataFrame):
             pass
-        if isinstance(df, ps.DataFrame):
-            return df.to_spark()
         elif isinstance(df, SparkDataFrame):
             return df
         else:

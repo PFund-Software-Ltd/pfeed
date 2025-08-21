@@ -1,10 +1,30 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed._typing import GenericFrame
+
 import datetime
+
+import pandas as pd
 
 from pfeed.data_handlers.market_data_handler import MarketDataHandler
 
 
 class YahooFinanceMarketDataHandler(MarketDataHandler):
-    pass
+    def _write_batch(self, df: GenericFrame):
+        from pfeed._etl.base import convert_to_pandas_df
+        df: pd.DataFrame = convert_to_pandas_df(df)
+        df.reset_index(inplace=True)
+        columns = df.columns
+        # raw df = df directly from yfinance, not the normalized one (i.e. auto_transform=False)
+        is_raw_df = 'Date' in columns or 'Datetime' in columns
+        kwargs = {
+            'validate': not is_raw_df,
+        }
+        if is_raw_df:
+            kwargs['date_column'] = 'Datetime' if 'Datetime' in columns else 'Date'
+        super()._write_batch(df, **kwargs)
+        
     # TODO: handle raw data streaming
     # def _standardize_streaming_data(self, data: dict) -> dict:
     #     mts = data['ts']  # in ms

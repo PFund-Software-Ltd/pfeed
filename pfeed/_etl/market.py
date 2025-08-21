@@ -32,8 +32,7 @@ def filter_columns(df: pd.DataFrame, product: BaseProduct) -> pd.DataFrame:
         standard_cols = ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
     df_cols = df.columns
     extra_cols = []
-    # EXTEND
-    if product.is_stock():
+    if product.is_stock() or product.is_etf():
         extra_cols.extend(['dividends', 'splits'])
     for extra_col in extra_cols:
         if extra_col in df_cols:

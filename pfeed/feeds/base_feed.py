@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed.sources.base_source import BaseSource
     from pfeed.engine import DataEngine
+    from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed._typing import tStorage, tDataTool, tDataLayer, GenericData, tStreamMode, StreamingData
     from pfeed.storages.base_storage import BaseStorage
@@ -14,6 +15,8 @@ if TYPE_CHECKING:
     from pfeed.flows.faucet import Faucet
     from pfeed.flows.sink import Sink
     from pfeed.flows.result import FlowResult
+    GenericDataOrNone = GenericData | None
+    GenericDataOrNoneWithMetadata = tuple[GenericDataOrNone, dict[str, Any]]
     
 import os
 import asyncio
@@ -26,7 +29,7 @@ from pprint import pformat
 
 from pfund import print_warning
 from pfund.enums import Environment
-from pfeed.enums import DataTool, DataStorage, LocalDataStorage, ExtractType, StreamMode
+from pfeed.enums import DataTool, DataStorage, ExtractType, StreamMode
 
 
 __all__ = ["BaseFeed"]
@@ -40,7 +43,7 @@ def clear_subflows(func):
     
     
 class BaseFeed(ABC):
-    data_domain = 'general_data'
+    data_domain = 'GENERAL_DATA'
     
     def __init__(
         self, 
@@ -186,32 +189,29 @@ class BaseFeed(ABC):
         self._engine = engine
 
     @abstractmethod
-    def download(self, *args, **kwargs) -> GenericData | None | BaseFeed:
+    def download(self, *args, **kwargs) -> GenericDataOrNone | BaseFeed:
         pass
     
     def stream(self, *args, **kwargs) -> BaseFeed:
         raise NotImplementedError(f'{self.name} stream() is not implemented')
 
     @abstractmethod
-    def retrieve(self, *args, **kwargs) -> GenericData | None:
+    def retrieve(self, *args, **kwargs) -> GenericDataOrNone:
         pass
     
     # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
-    def fetch(self, *args, **kwargs) -> GenericData | None | BaseFeed:
+    def fetch(self, *args, **kwargs) -> GenericDataOrNone | BaseFeed:
         raise NotImplementedError(f'{self.name} fetch() is not implemented')
     
-    def get_realtime_data(self, *args, **kwargs) -> GenericData | None:
-        raise NotImplementedError(f'{self.name} get_realtime_data() is not implemented')
-    
     @abstractmethod
-    def _download_impl(self, data_model: BaseDataModel) -> GenericData:
+    def _download_impl(self, data_model: BaseDataModel) -> GenericDataOrNone:
         pass
 
     @abstractmethod
     def _add_default_transformations_to_download(self, *args, **kwargs):
         pass
     
-    def _stream_impl(self, data_model: BaseDataModel) -> GenericData:
+    def _stream_impl(self, data_model: BaseDataModel) -> GenericDataOrNone:
         raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
     
     def _close_stream(self):
@@ -229,49 +229,33 @@ class BaseFeed(ABC):
         data_model: BaseDataModel, 
         data_domain: str, 
         data_layer: tDataLayer,
-        from_storage: tStorage | None,
+        from_storage: tStorage,
         storage_options: dict | None,
-    ) -> tuple[dict[tStorage, pl.LazyFrame | None], dict[tStorage, dict[str, Any]]]:
+    ) -> tuple[pl.LazyFrame | None, StorageMetadata]:
         '''Retrieves data by searching through all local storages, using polars for scanning data'''
-        from minio import ServerError as MinioServerError
-        
-        storage_options = storage_options or {}
-        if storage_options:
-            assert from_storage is not None, 'from_storage is required when storage_options is provided'
-        # NOTE: skip searching for DUCKDB, should require users to explicitly specify the storage
-        search_storages = [_storage for _storage in LocalDataStorage.__members__ if _storage.upper() != DataStorage.DUCKDB] if from_storage is None else [from_storage]
-        
-        data_in_storages: dict[tStorage, pl.LazyFrame | None] = {}
-        metadata_in_storages: dict[tStorage, dict[str, Any]] = {}
-        for search_storage in search_storages:
-            search_storage_options = storage_options or self._storage_options.get(search_storage, {})
-            Storage = DataStorage[search_storage.upper()].storage_class
-            self.logger.debug(f'searching for data {data_model} in {search_storage} ({data_layer=})...')
-            try:
-                storage: BaseStorage = Storage.from_data_model(
-                    data_model=data_model,
-                    data_layer=data_layer, 
-                    data_domain=data_domain,
-                    use_deltalake=self._use_deltalake,
-                    storage_options=search_storage_options,
-                )
-                data, metadata = storage.read_data()
-                metadata['from_storage'] = search_storage
-                metadata['data_domain'] = data_domain
-                metadata['data_layer'] = data_layer
-                data_in_storages[search_storage] = data
-                metadata_in_storages[search_storage] = metadata
-            except Exception as e:  # e.g. minio's ServerError if server is not running
-                if not isinstance(e, MinioServerError):
-                    self.logger.exception(f'Error in retrieving data {data_model} in {search_storage} ({data_layer=}):')
-        return data_in_storages, metadata_in_storages
+        data_storage = DataStorage[from_storage.upper()]
+        storage_options = storage_options or self._storage_options.get(data_storage, {})
+        self.logger.debug(f'searching for data {data_model} in {data_storage} ({data_layer=})...')
+        try:
+            Storage = data_storage.storage_class
+            storage: BaseStorage = Storage.from_data_model(
+                data_model=data_model,
+                data_layer=data_layer, 
+                data_domain=data_domain,
+                use_deltalake=self._use_deltalake,
+                storage_options=storage_options,
+            )
+            data, metadata = storage.read_data()
+        except Exception:
+            self.logger.exception(f'Error in retrieving data {data_model} in {data_storage} ({data_layer=}):')
+        return data, metadata
 
     # TODO
-    def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> GenericData | None:
+    def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> GenericDataOrNone:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     @abstractmethod
-    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> tuple[list[DataFlow], list[DataFlow]]:
+    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericDataOrNone | GenericDataOrNoneWithMetadata:
         pass
     
     async def _eager_run_stream(self, ray_kwargs: dict):
@@ -657,7 +641,7 @@ class BaseFeed(ABC):
             await _run_dataflows()
         self._clear_dataflows_after_run()
         
-    def _eager_run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False) -> GenericData | Coroutine:
+    def _eager_run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None, include_metadata: bool=False) -> GenericDataOrNone | GenericDataOrNoneWithMetadata | Coroutine:
         ray_kwargs = ray_kwargs or {}
         prefect_kwargs = prefect_kwargs or {}
         if self._use_ray:
@@ -667,15 +651,14 @@ class BaseFeed(ABC):
         if len(envs) > 1:
             raise ValueError(f'{self.name} dataflows have different environments: {envs}')
         env = envs.pop()
-        # REVIEW: not sure if this is the best place to setup logging
         self._setup_logging(env)
         if not self.streaming_dataflows:
             return self._eager_run_batch(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         else:
             return self._eager_run_stream(ray_kwargs=ray_kwargs)
     
-    def run(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> GenericData | None:
-        result: GenericData | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+    def run(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> GenericDataOrNone | GenericDataOrNoneWithMetadata:
+        result: GenericDataOrNone | GenericDataOrNoneWithMetadata | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         if inspect.isawaitable(result):
             try:
                 asyncio.get_running_loop()
@@ -695,8 +678,8 @@ class BaseFeed(ABC):
         else:
             return result
     
-    async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> GenericData | None:
-        result: GenericData | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+    async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> GenericDataOrNone | GenericDataOrNoneWithMetadata:
+        result: GenericDataOrNone | GenericDataOrNoneWithMetadata | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         if inspect.isawaitable(result):
             return await result
         else:

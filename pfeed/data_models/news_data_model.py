@@ -1,12 +1,14 @@
 from __future__ import annotations
-from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    import pyarrow.fs as pa_fs
-    from pfund._typing import tEnvironment
-    from pfeed.enums import DataLayer
-    from pfeed._typing import tDataSource
-
+    from pfeed.data_models.time_based_data_model import TimeBasedFileMetadata
+    class NewsMetadata(TimeBasedFileMetadata, total=True):
+        product_name: str | None
+        product_basis: str | None
+        product_specs: dict | None
+        symbol: str | None
+        asset_type: str | None
+        
 import datetime
 from pathlib import Path
 
@@ -15,25 +17,6 @@ from pydantic import model_validator
 from pfund.products.product_base import BaseProduct
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 from pfeed.data_handlers import NewsDataHandler
-
-
-class NewsMetadata(TypedDict, total=True):
-    env: tEnvironment
-    data_source: tDataSource
-    data_origin: str
-    start_date: datetime.date
-    end_date: datetime.date
-    symbol: str | None
-    asset_type: str | None
-    
-
-class NewsDeltaMetadata(TypedDict, total=True):
-    env: tEnvironment
-    data_source: tDataSource
-    data_origin: str
-    dates: list[datetime.date]
-    symbol: str | None
-    asset_type: str | None
 
 
 class NewsDataModel(TimeBasedDataModel):
@@ -80,6 +63,7 @@ class NewsDataModel(TimeBasedDataModel):
     def to_metadata(self) -> NewsMetadata:
         return {
             **super().to_metadata(),
+            'product_name': self.product.name if self.product else None,
             'product_basis': str(self.product.basis) if self.product else None,
             'product_specs': self.product.specs if self.product else None,
             'symbol': self.product.symbol if self.product else None,

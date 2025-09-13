@@ -1,14 +1,17 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from cloudpathlib import CloudPath
     import pyarrow.fs as pa_fs
-    from pfeed._typing import GenericFrame, StorageMetadata, StreamingData
+    from pfeed._typing import GenericFrame, StreamingData, FilePath
     from pfeed.data_models.time_based_data_model import (
         TimeBasedDataModel, 
-        TimeBasedMetadata, 
-        TimeBasedDeltaMetadata
+        TimeBasedFileMetadata, 
+        TimeBasedFileDeltaMetadata
     )
+    from pfeed._io.base_io import StorageMetadata
+    class TimeBasedStorageMetadata(StorageMetadata, total=True):
+        file_metadata: TimeBasedFileMetadata | TimeBasedFileDeltaMetadata
+        missing_dates: list[datetime.date]
 
 import time
 import atexit
@@ -23,7 +26,7 @@ try:
 except ImportError:
     DeltaTable = None
 
-from pfeed.enums import DataLayer, StreamMode
+from pfeed.enums import StreamMode
 from pfeed.data_handlers.base_data_handler import BaseDataHandler
 from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 from pfeed.messaging.streaming_message import StreamingMessage
@@ -35,8 +38,7 @@ class TimeBasedDataHandler(BaseDataHandler):
     def __init__(
         self, 
         data_model: TimeBasedDataModel,
-        data_layer: DataLayer,
-        data_path: CloudPath | Path,
+        data_path: FilePath,
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
         use_deltalake: bool = False,
@@ -64,7 +66,6 @@ class TimeBasedDataHandler(BaseDataHandler):
         
         super().__init__(
             data_model=data_model, 
-            data_layer=data_layer, 
             data_path=data_path,
             storage_options=storage_options,
             use_deltalake=use_deltalake,
@@ -82,7 +83,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         self._stream_mode = stream_mode
         self._delta_flush_interval = delta_flush_interval
         if use_deltalake:
-            self._buffer_path: CloudPath | Path = self._create_file_paths()[0] / self._buffer_io.BUFFER_FILENAME
+            self._buffer_path: FilePath = self._create_file_paths()[0] / self._buffer_io.BUFFER_FILENAME
             self._buffer_io._mkdir(self._buffer_path)
         else:
             self._buffer_path = None
@@ -103,7 +104,7 @@ class TimeBasedDataHandler(BaseDataHandler):
     def _validate_schema(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
-    def _create_file_paths(self, data_model: TimeBasedDataModel | None=None) -> list[CloudPath | Path]:
+    def _create_file_paths(self, data_model: TimeBasedDataModel | None=None) -> list[FilePath]:
         data_model = data_model or self._data_model
         if not self._use_deltalake:
             file_paths = [
@@ -194,8 +195,6 @@ class TimeBasedDataHandler(BaseDataHandler):
         '''
         from pfeed._etl.base import convert_to_pandas_df
 
-        DeltaTableMetadata: TimeBasedDeltaMetadata | dict[str, Any]
-
         df: pd.DataFrame = convert_to_pandas_df(df)
         if validate:
             # reset index to avoid pandera.errors.SchemaError: DataFrameSchema failed series or dataframe validator 0: <Check validate_index_reset>
@@ -215,6 +214,8 @@ class TimeBasedDataHandler(BaseDataHandler):
                 data_model_copy.update_start_date(date)
                 data_model_copy.update_end_date(date)
                 file_path = self._create_file_paths(data_model=data_model_copy)[0]
+                if 'index' in df_chunk.columns:
+                    df_chunk.drop(columns=['index'], inplace=True)
                 table = pa.Table.from_pandas(df_chunk, preserve_index=False)
                 self._io.write(table, file_path, metadata=data_model_copy.to_metadata())
         else:            
@@ -231,7 +232,7 @@ class TimeBasedDataHandler(BaseDataHandler):
             if is_deltatable:
                 metadata_file_path = file_path / DeltaLakeStorageMixin.metadata_filename
                 existing_metadata: dict[str, Any] = self._io._read_pyarrow_table_metadata([metadata_file_path])
-                file_metadata: DeltaTableMetadata = existing_metadata.get(str(metadata_file_path), {})
+                file_metadata: TimeBasedFileDeltaMetadata = existing_metadata.get(str(metadata_file_path), {})
                 existing_dates = file_metadata.get('dates', [])
                 existing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in existing_dates]
 
@@ -240,19 +241,19 @@ class TimeBasedDataHandler(BaseDataHandler):
                 start_ts, end_ts = df[date_column].iloc[0], df[date_column].iloc[-1]
                 dt.delete(predicate=f"{date_column} >= '{start_ts}' AND {date_column} <= '{end_ts}'")
             
-            metadata: TimeBasedMetadata = data_model.to_metadata()
+            metadata: TimeBasedFileMetadata = data_model.to_metadata()
             dates_in_data = pd.date_range(metadata.pop('start_date'), metadata.pop('end_date')).date.tolist()
             total_dates = list(set(dates_in_data + existing_dates))
             metadata['dates'] = total_dates
             table = pa.Table.from_pandas(df, preserve_index=False)
             self._io.write(table, file_path, metadata=metadata, delta_partition_by=self.DELTA_PARTITION_BY)
 
-    def read(self, delta_version: int | None=None) -> tuple[pl.LazyFrame | None, StorageMetadata]:
+    def read(self, delta_version: int | None=None) -> tuple[pl.LazyFrame | None, TimeBasedStorageMetadata]:
         lf, metadata = self._io.read(file_paths=self._create_file_paths(), delta_version=delta_version)
         data_model: TimeBasedDataModel = self._data_model
-        missing_file_paths: list[str] = metadata['missing_file_paths']
+        missing_file_paths: list[FilePath] = metadata['missing_file_paths']
         if not self._use_deltalake:
-            missing_dates = [fp.split('/')[-1].rsplit('_', 1)[-1].rsplit('.', 1)[0] for fp in missing_file_paths]
+            missing_dates = [str(fp).split('/')[-1].rsplit('_', 1)[-1].rsplit('.', 1)[0] for fp in missing_file_paths]
             missing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in missing_dates]
             metadata['missing_dates'] = missing_dates
         else:

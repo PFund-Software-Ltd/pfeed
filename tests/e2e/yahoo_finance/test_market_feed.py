@@ -1,3 +1,4 @@
+import os
 import time
 
 import pytest
@@ -8,30 +9,41 @@ from pfeed._etl.base import convert_to_pandas_df
 
 @pytest.mark.parametrize(('product', 'resolution'), [('AAPL_USD_STK', '1d')])
 @pytest.mark.rate_limit
-def test_download(tmp_path, yahoo_finance, product, resolution):
+def test_download_and_retrieve(tmp_path, yahoo_finance, product, resolution):
+    def _assert_df(df):
+        df = convert_to_pandas_df(df)
+        assert df.columns.tolist() == ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'dividends', 'splits']
+        is_strictly_increasing = df["date"].is_monotonic_increasing and df["date"].is_unique
+        assert is_strictly_increasing is True
+        assert df['resolution'].nunique() == 1
+        assert df['symbol'].nunique() == 1
+        assert df['product'].nunique() == 1
+        assert df['resolution'].iloc[0] == resolution
+        assert len(df) >= 1  # or > 0 to ensure we got data
     pe.configure(data_path=tmp_path / 'data')
+    start_date, end_date = '2025-08-01', '2025-08-07'
     feed = yahoo_finance.market_feed
     df = feed.download(
         product=product,
         resolution=resolution,
-        start_date='2025-08-01',
-        end_date='2025-08-07',
+        start_date=start_date,
+        end_date=end_date,
     )
-    df = convert_to_pandas_df(df)
-    assert df.columns.tolist() == ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'dividends', 'splits']
-    is_strictly_increasing = df["date"].is_monotonic_increasing and df["date"].is_unique
-    assert is_strictly_increasing is True
-    assert df['resolution'].nunique() == 1
-    assert df['symbol'].nunique() == 1
-    assert df['product'].nunique() == 1
-    assert df['resolution'].iloc[0] == resolution
-    assert len(df) >= 1  # or > 0 to ensure we got data
+    _assert_df(df)
     time.sleep(1)
+    # NOTE: test retrieve() after download() due to dependency on downloaded data in tmp_path
+    df = feed.retrieve(
+        product=product,
+        resolution=resolution,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    _assert_df(df)
 
 
 @pytest.mark.parametrize(('product', 'resolution'), [('ES_USD_FUTURE', '1h')])
 @pytest.mark.rate_limit
-def test_download_mixed(tmp_path, yahoo_finance_mixed, product, resolution):
+def test_download_and_retrieve_mixed(tmp_path, yahoo_finance_mixed, product, resolution):
     pe.configure(data_path=tmp_path / 'data')
     product_specs = {}
     is_futures = product.endswith('_FUTURE')
@@ -55,14 +67,9 @@ def test_download_mixed(tmp_path, yahoo_finance_mixed, product, resolution):
     time.sleep(1)
     
     
-def test_retrieve_after_download():
-    # TODO: also retrieve download_mixed, need to fix the data_path for them both
+def test_stream_and_retrieve(tmp_path, yahoo_finance):
     pass
 
 
-def test_stream():
-    pass
-
-
-def test_retrieve_after_stream():
+def test_stream_and_retrieve_mixed(tmp_path, yahoo_finance_mixed):
     pass

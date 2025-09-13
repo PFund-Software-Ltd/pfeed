@@ -19,6 +19,9 @@ def docker_compose(ctx, docker_compose_file_path):
     click.echo(f'Using docker-compose.yml file from "{docker_compose_file_path}"')
     command = ['docker-compose', '--file', str(docker_compose_file_path)] + ctx.args
     
+    data_path = Path(config.data_path).parent
     if 'MINIO_DATA_PATH' not in os.environ:
-        os.environ['MINIO_DATA_PATH'] = str(Path(config.data_path).parent / 'minio')  # used in docker-compose.yml
+        os.environ['MINIO_DATA_PATH'] = str(data_path / 'minio')  # used in docker-compose.yml
+    if 'TIMESCALEDB_DATA_PATH' not in os.environ:
+        os.environ['TIMESCALEDB_DATA_PATH'] = str(data_path / 'timescaledb')  # used in docker-compose.yml
     subprocess.run(command, env=os.environ)

@@ -1,9 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund._typing import tEnvironment
-    from pfeed._typing import tDataLayer, tStorage, GenericFrame, StorageMetadata
+    from pfeed._io.base_io import StorageMetadata
+    from pfeed._typing import tDataLayer, tStorage, GenericFrameOrNone
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
@@ -63,7 +64,7 @@ class NewsFeed(TimeBasedFeed):
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
+    ) -> GenericFrameOrNone | tuple[GenericFrameOrNone, StorageMetadata] | NewsFeed:
         '''
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
@@ -122,7 +123,7 @@ class NewsFeed(TimeBasedFeed):
         include_metadata: bool=False,
         env: tEnvironment='BACKTEST',
         **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
+    ) -> GenericFrameOrNone | tuple[GenericFrameOrNone, StorageMetadata] | NewsFeed:
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_domain = data_domain or self.data_domain.value
@@ -151,7 +152,7 @@ class NewsFeed(TimeBasedFeed):
         )
     
     # TODO:
-    def fetch(self) -> GenericFrame | None | NewsFeed:
+    def fetch(self) -> GenericFrameOrNone | NewsFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
 
     # DEPRECATED
@@ -171,7 +172,7 @@ class NewsFeed(TimeBasedFeed):
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,
     #     **product_specs
-    # ) -> GenericFrame | None:
+    # ) -> GenericFrameOrNone:
     #     '''
     #     Get news data from data source.
     #     Data will be stored in cache by default.

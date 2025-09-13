@@ -28,6 +28,7 @@ from pfeed.feeds import create_feed, create_market_feed
 
 
 os.environ['PYARROW_IGNORE_TIMEZONE'] = '1'  # used to suppress warning from pyspark
+config = get_config()
 
 
 def __getattr__(name: str):
@@ -68,7 +69,7 @@ __version__ = version("pfeed")
 __all__ = (
     "__version__",
     "configure",
-    "get_config",
+    'config',
     "aliases",
     "plot",
     "DataEngine",

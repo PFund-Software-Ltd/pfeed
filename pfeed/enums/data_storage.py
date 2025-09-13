@@ -19,6 +19,7 @@ class DataStorage(StrEnum):
     LOCAL = LocalDataStorage.LOCAL
     MINIO = LocalDataStorage.MINIO
     DUCKDB = LocalDataStorage.DUCKDB
+    LANCEDB = LocalDataStorage.LANCEDB
     # TODO:
     # HUGGINGFACE = HF = 'HUGGINGFACE'
     # S3 = 'S3'
@@ -29,11 +30,13 @@ class DataStorage(StrEnum):
     def storage_class(self) -> type[BaseStorage]:
         from pfeed.storages.local_storage import LocalStorage
         from pfeed.storages.minio_storage import MinioStorage
-        from pfeed.storages.duckdb_storage import DuckDBStorage
         from pfeed.storages.cache_storage import CacheStorage
+        from pfeed.storages.duckdb_storage import DuckDBStorage
+        from pfeed.storages.lancedb_storage import LanceDBStorage
         return {
             DataStorage.LOCAL: LocalStorage,
             DataStorage.CACHE: CacheStorage,
             DataStorage.MINIO: MinioStorage,
             DataStorage.DUCKDB: DuckDBStorage,
+            DataStorage.LANCEDB: LanceDBStorage,
         }[self]

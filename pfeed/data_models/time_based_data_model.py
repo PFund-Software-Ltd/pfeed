@@ -1,13 +1,16 @@
 from __future__ import annotations
-from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
     import pyarrow.fs as pa_fs
-    from pfeed.enums import DataLayer
-    from pfund._typing import tEnvironment
-    from pfeed._typing import tDataSource
-    
+    from pfeed.data_models.base_data_model import BaseFileMetadata
+    from pfeed._typing import FilePath
+    class TimeBasedFileMetadata(BaseFileMetadata, total=True):
+        start_date: datetime.date
+        end_date: datetime.date
+    class TimeBasedFileDeltaMetadata(BaseFileMetadata, total=True):
+        dates: list[datetime.date]
+
 import datetime
 from abc import abstractmethod
 
@@ -16,25 +19,6 @@ from pydantic import field_validator, Field, ValidationInfo
 from pfeed.data_models.base_data_model import BaseDataModel
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 from pfeed.enums import StreamMode
-
-
-class TimeBasedMetadata(TypedDict, total=True):
-    env: tEnvironment
-    data_source: tDataSource
-    data_origin: str
-    # REVIEW: is "date" already enough?
-    start_date: datetime.date
-    end_date: datetime.date
-
-
-# metadata for delta table
-class TimeBasedDeltaMetadata(TypedDict, total=True):
-    env: tEnvironment
-    data_source: tDataSource
-    data_origin: str
-    # FIXME: for consistency, turn it into "start_date" and "end_date"?
-    dates: list[datetime.date]
-
 
 
 class TimeBasedDataModel(BaseDataModel):
@@ -84,8 +68,7 @@ class TimeBasedDataModel(BaseDataModel):
 
     def create_data_handler(
         self, 
-        data_layer: DataLayer,
-        data_path: str,
+        data_path: FilePath,
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
         use_deltalake: bool = False,
@@ -95,7 +78,6 @@ class TimeBasedDataModel(BaseDataModel):
         DataHandler: type[TimeBasedDataHandler] = self.data_handler_class
         return DataHandler(
             data_model=self, 
-            data_layer=data_layer,
             data_path=data_path, 
             filesystem=filesystem, 
             storage_options=storage_options, 

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
     from pfund._typing import FullDataChannel, tEnvironment
-    from pfeed._typing import GenericFrame
+    from pfeed._typing import GenericFrameOrNone
     from pfeed.sources.bybit.stream_api import ChannelKey
     from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
     from pfeed._typing import tStorage, tDataLayer
@@ -77,7 +77,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         storage_options: dict | None=None,
         auto_transform: bool=True,
         **product_specs
-    ) -> GenericFrame | None | dict[datetime.date, GenericFrame | None] | BybitMarketFeed:
+    ) -> GenericFrameOrNone | dict[datetime.date, GenericFrameOrNone] | BybitMarketFeed:
         '''
         Args:
             product_specs: The specifications for the product.
@@ -163,7 +163,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         self.data_source.stream_api.add_channel(channel, channel_type=channel_type, category=category)
 
     # TODO: use data_source.batch_api
-    def _fetch_impl(self, data_model: BybitMarketDataModel, *args, **kwargs) -> GenericFrame | None:
+    def _fetch_impl(self, data_model: BybitMarketDataModel, *args, **kwargs) -> GenericFrameOrNone:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     # DEPRECATED
@@ -183,7 +183,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,
     #     **product_specs
-    # ) -> GenericFrame | None | BybitMarketFeed:
+    # ) -> GenericFrameOrNone | BybitMarketFeed:
     #     return super().get_historical_data(
     #         product=product,
     #         resolution=resolution,

@@ -4,7 +4,8 @@ if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed._typing import tStorage, tDataLayer, GenericData, StorageMetadata
+    from pfeed._typing import tStorage, tDataLayer, GenericData
+    from pfeed._io.base_io import StorageMetadata
     from pfeed.messaging.streaming_message import StreamingMessage
 
 from abc import ABC, abstractmethod
@@ -30,7 +31,7 @@ class BaseStorage(ABC):
         self,
         name: tStorage,
         data_layer: tDataLayer='CLEANED',
-        data_domain: str='general_data',
+        data_domain: str='GENERAL_DATA',
         use_deltalake: bool=False,
         storage_options: dict | None=None,
         **storage_kwargs,
@@ -38,7 +39,7 @@ class BaseStorage(ABC):
         from pfeed.enums import DataStorage, DataLayer
         self.name = DataStorage[name.upper()]
         self.data_layer = DataLayer[data_layer.upper()] if not isinstance(data_layer, DataLayer) else data_layer
-        self.data_domain = data_domain.lower()
+        self.data_domain = data_domain.upper()
         self.use_deltalake = use_deltalake
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
@@ -64,15 +65,15 @@ class BaseStorage(ABC):
             storage_options=storage_options,
             **storage_kwargs,
         )
-        instance.attach_data_model(data_model)
-        instance.initialize_data_handler(stream_mode=stream_mode, delta_flush_interval=delta_flush_interval)
+        instance._attach_data_model(data_model)
+        instance._attach_data_handler(stream_mode=stream_mode, delta_flush_interval=delta_flush_interval)
         return instance
     
     @abstractmethod
     def get_filesystem(self) -> pa_fs.FileSystem:
         pass
     
-    def attach_data_model(self, data_model: BaseDataModel) -> None:
+    def _attach_data_model(self, data_model: BaseDataModel) -> None:
         '''
         Attach a data model to the storage and update related attributes.
 
@@ -83,9 +84,8 @@ class BaseStorage(ABC):
         '''
         self._data_model = data_model
     
-    def initialize_data_handler(self, stream_mode: StreamMode, delta_flush_interval: int):
+    def _attach_data_handler(self, stream_mode: StreamMode, delta_flush_interval: int):
         data_handler_configs = {
-            'data_layer': self.data_layer,
             'data_path': self.data_path,
             'filesystem': self.get_filesystem(),
             'storage_options': self._storage_options,
@@ -104,7 +104,7 @@ class BaseStorage(ABC):
     @property
     def data_handler(self) -> BaseDataHandler:
         if not self._data_handler:
-            raise ValueError("No data handler has been initialized for this storage instance")
+            raise ValueError("No data handler has been attached to this storage instance")
         return self._data_handler
 
     @property
@@ -113,7 +113,7 @@ class BaseStorage(ABC):
         config = get_config()
         return (
             Path(config.data_path)
-            / f'data_layer={self.data_layer.name.lower()}'
+            / f'data_layer={self.data_layer.name}'
             / f'data_domain={self.data_domain}'
         )
     

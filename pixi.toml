@@ -2,7 +2,9 @@
 authors = ["softwareentrepreneer <softwareentrepreneer+pfeed@gmail.com>"]
 channels = ["conda-forge"]
 name = "pfeed"
-platforms = ["osx-arm64", "linux-64", "osx-64"]  # TODO: add "win-64"
+# NOTE: if encounter bug in pixi when running "pixi lock", remove pixi.lock, then set platforms = ["osx-arm64"] first
+# then manually add back other platforms
+platforms = ["osx-arm64", "linux-64"]
 version = "0.0.5"
 
 [tasks]
@@ -17,65 +19,62 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11"
-uv = ">=0.8.11"
+uv = ">=0.8.17"
 openjdk = "21.*"
 
 [pypi-dependencies]
 pfund = ">=0.0.2"
 rich = ">=13.9.4"
 tqdm = ">=4.67.1"
-pandas = ">=2.3.1"
-polars = ">=1.32.3"
-duckdb = ">=1.3.2"
+pandas = ">=2.3.2"
+polars = ">=1.33.1"
 pyarrow = ">=21.0.0"
-pandera = ">=0.26.0"
+pandera = ">=0.26.1"
 msgspec = ">=0.19.0"
 pydantic = ">=2.11.7"
-narwhals = ">=2.1.2"
-zstandard = ">=0.23.0"
-beautifulsoup4 = ">=4.13.4"
-cloudpathlib = { version = ">=0.21.1", extras = ["s3", "gs", "azure"] }
+narwhals = ">=2.5.0"
+zstandard = ">=0.24.0"
+beautifulsoup4 = ">=4.13.5"
+cloudpathlib = { version = ">=0.22.0", extras = ["s3", "gs", "azure"] }
+fmp-api-client = ">=0.0.1"
+# non-WASM-compatible dependencies
+yfinance = ">=0.2.65"
+ray = ">=2.49.1"
+pyzmq = ">=27.1.0"
+minio = ">=7.2.16"
+deltalake = ">=1.1.4"
 
 [environments]
-dev = ["py311", "dev"]
-py311-wasm = ["py311", "test", "editable"]
-py311 = ["py311", "test", "editable", "core", "dask", "spark"]
-py312-wasm = ["py312", "test", "editable"]
-py312 = ["py312", "test", "editable", "core", "dask", "spark"]
-py313-wasm = ["py313", "test", "editable"]
-py313 = ["py313", "test", "editable", "core", "dask", "spark"]
-# py314-wasm = ["py314", "test", "editable"]
-# py314 = ["py314", "test", "editable", "core", "dask", "spark"]
+dev = ["py311", "dev", "editable", "optional"]
+py311 = ["py311", "test", "editable", "optional"]
+py312 = ["py312", "test", "editable", "optional"]
+py313 = ["py313", "test", "editable", "optional"]
+# py314 = ["py314", "test", "editable", "optional"]
 
 [activation.env]
 JAVA_HOME = "$CONDA_PREFIX/lib/jvm"
 JDK_HOME  = "$JAVA_HOME"
 PATH      = "$JAVA_HOME/bin:$PATH"
 
-[feature.core.pypi-dependencies]
-yfinance = ">=0.2.65"
-fmp-api-client = ">=0.0.1"
-ray = ">=2.48.0"
-pyzmq = ">=27.0.1"
-minio = ">=7.2.16"
-deltalake = ">=1.1.4"
-prefect = ">=3.4.13"
-lancedb = ">=0.24.3"
+[feature.optional.pypi-dependencies]
+prefect = ">=3.4.17"
+# polars-cloud = ">=0.1.4"
+dask = { version = ">=2025.9.0", extras = ["complete", "dataframe"] }
+# coiled = ">=1.118.4"
+pyspark = { version = ">=4.0.1", extras = ["connect", "pandas-on-spark", "sql"] }
+duckdb = ">=1.3.2"
+lancedb = ">=0.25.0"
 
 [feature.editable.pypi-dependencies]
 pfund = { path = "../pfund", editable = true }
 fmp-api-client = { path = "../fmp-api-client", editable = true }
 
-[feature.dask.pypi-dependencies]
-dask = { version = ">=2025.7.0", extras = ["complete", "dataframe"] }
-coiled = ">=1.118.2"
-
-[feature.spark.pypi-dependencies]
-pyspark = { version = ">=4.0.0", extras = ["connect", "pandas-on-spark", "sql"] }
-
 [feature.dev.pypi-dependencies]
-ruff = ">=0.12.9"
+ruff = ">=0.13.0"
 pre-commit = ">=4.3.0"
+commitizen = ">=4.9.1"
+python-semantic-release = ">=10.4.0"
+pdoc = ">=15.0.4"
 [feature.dev.tasks]
 precommit = "pre-commit run --all-files"
 lint = "ruff check ."
@@ -83,13 +82,17 @@ lint-fix = "ruff check --fix ."
 fmt = "ruff format ."
 typecheck = "uvx ty check"
 
-[feature.test.dependencies]
-pytest = ">=8.4.1"
-pytest-cov = ">=6.2.1"
-pytest-mock = ">=3.14.1"
+[feature.dev.dependencies]
+mystmd = ">=1.6.1"
+
+[feature.test.pypi-dependencies]
+pytest = ">=8.4.2"
+pytest-cov = ">=7.0.0"
+pytest-mock = ">=3.15.0"
 pytest-xdist = ">=3.8.0"
 pytest-asyncio = ">=1.1.0"
-pytest-recording = ">=0.13.2"
+pytest-recording = ">=0.13.4"
+testcontainers = ">=4.13.0"
 [feature.test.tasks]
 test = "pytest"
 test-new = "pytest --record-mode=all"  # record new interactions, useful to update recordings in case data formats returned have changed

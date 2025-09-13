@@ -39,14 +39,13 @@ class DeltaLakeStorageMixin:
                         delta_tables.append(dt)
         # TODO: Azure, GCS, etc.
         else:
-            data_path, _, _ = str(self.data_path).rsplit('/', 2)
-            for file_dir_or_path in Path(data_path).rglob("*"):
+            for file_dir_or_path in self.data_path.parents[1].rglob("*"):
                 if 'minio' in str(file_dir_or_path) or file_dir_or_path.is_dir() or '_delta_log' in str(file_dir_or_path):
                     continue
-                file_path_without_filename, filename = str(file_dir_or_path).rsplit('/', 1)
-                if DeltaTable.is_deltatable(file_path_without_filename, storage_options=storage_options):
+                file_path_without_filename = file_dir_or_path.parent
+                if DeltaTable.is_deltatable(str(file_path_without_filename), storage_options=storage_options):
                     dt = DeltaTable(
-                        file_path_without_filename,
+                        str(file_path_without_filename),
                         storage_options=storage_options,
                     )
                     if dt.table_uri not in [_dt.table_uri for _dt in delta_tables]:

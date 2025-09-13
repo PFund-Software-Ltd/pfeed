@@ -11,7 +11,7 @@ class LocalStorage(BaseStorage):
         self,
         name: Literal['LOCAL', 'CACHE']='LOCAL',
         data_layer: tDataLayer='CLEANED',
-        data_domain: str='general_data',
+        data_domain: str='GENERAL_DATA',
         use_deltalake: bool=False, 
         storage_options: dict | None=None,
     ):

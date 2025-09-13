@@ -16,6 +16,3 @@ class BinanceMarketFeed(BaseFeed):
     def __init__(self, data_tool: tSUPPORTED_DATA_TOOLS='pandas', config: Configuration | None=None):
         super().__init__('binance', data_tool=data_tool, config=config)
         
-    # TODO
-    def get_realtime_data(self, env='LIVE'):
-        pass

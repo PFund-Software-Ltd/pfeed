@@ -1,8 +1,18 @@
-from typing import Any
+from __future__ import annotations
+from typing_extensions import TypedDict
+from typing import Any, TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfund._typing import tEnvironment
+    from pfeed._typing import tDataSource
+    class BaseFileMetadata(TypedDict, total=True):
+        env: tEnvironment
+        data_source: tDataSource
+        data_origin: str
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from pfund.enums import Environment
 from pfeed.sources.base_source import BaseSource

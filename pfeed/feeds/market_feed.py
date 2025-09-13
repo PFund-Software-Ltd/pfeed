@@ -1,13 +1,15 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING, Any, Callable, Awaitable
+from typing import Literal, TYPE_CHECKING, Callable, Awaitable
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from pfund._typing import tEnvironment, FullDataChannel
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed._typing import tStorage, tDataLayer, GenericFrame, StorageMetadata, tDataType
+    from pfeed._typing import tStorage, tDataLayer, tDataType, GenericFrameOrNone
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.enums import DataSource
+    from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
+    from pfeed.feeds.time_based_feed import GenericFrameOrNoneWithMetadata
 
 import datetime
 from abc import abstractmethod
@@ -115,7 +117,7 @@ class MarketFeed(TimeBasedFeed):
         dataflow_per_date: bool=True,
         include_metadata: bool=False,
         **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | MarketFeed:
+    ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | MarketFeed:
         '''
         Download historical data from data source.
         
@@ -225,14 +227,14 @@ class MarketFeed(TimeBasedFeed):
         data_origin: str='',
         data_layer: tDataLayer='CLEANED',
         data_domain: str='',
-        from_storage: tStorage | None=None,
+        from_storage: tStorage='LOCAL',
         storage_options: dict | None=None,
         auto_transform: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         env: tEnvironment='BACKTEST',
         **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | MarketFeed:
+    ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | MarketFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -296,10 +298,10 @@ class MarketFeed(TimeBasedFeed):
         data_model: MarketDataModel,
         data_layer: tDataLayer,
         data_domain: str,
-        from_storage: tStorage | None,
+        from_storage: tStorage,
         storage_options: dict | None,
         add_default_transformations: Callable | None,
-    ) -> tuple[GenericFrame | None, dict[str, Any]]:
+    ) -> tuple[GenericFrameOrNone, TimeBasedStorageMetadata]:
         '''Retrieve data from storage. If data is not found, search for higher resolutions.
         
         Args:
@@ -318,8 +320,8 @@ class MarketFeed(TimeBasedFeed):
                 # remove resolutions that are not supported by the data source
                 if resolution <= highest_resolution
             ]
-        df: GenericFrame | None = None
-        metadata: dict[str, Any] = {}
+        df: GenericFrameOrNone = None
+        metadata: TimeBasedStorageMetadata = {}
         for search_resolution in search_resolutions:
             data_model_copy = data_model.model_copy(deep=False)
             data_model_copy.update_resolution(search_resolution)
@@ -333,9 +335,6 @@ class MarketFeed(TimeBasedFeed):
             )
             if df is not None:
                 break
-        # HACK: use metadata to record the resolution change so that the caller (Faucet) can update its data_model
-        if data_model.resolution != data_model_copy.resolution:
-            metadata['updated_resolution'] = data_model_copy.resolution
         return df, metadata
     
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
@@ -460,15 +459,9 @@ class MarketFeed(TimeBasedFeed):
         pass
         
     # TODO: General-purpose data fetching/LLM call? without storage overhead
-    def fetch(self) -> GenericFrame | None | MarketFeed:
+    def fetch(self) -> GenericFrameOrNone | MarketFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
     
-    # TODO
-    def get_realtime_data(self) -> GenericFrame | None:
-        raise NotImplementedError(f"{self.name} get_realtime_data() is not implemented")
-        # assert not self._pipeline_mode, 'pipeline mode is not supported in get_realtime_data()'
-        # self.fetch()
-
     # DEPRECATED
     # def get_historical_data(
     #     self,
@@ -487,7 +480,7 @@ class MarketFeed(TimeBasedFeed):
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,
     #     **product_specs
-    # ) -> GenericFrame | None:
+    # ) -> GenericFrameOrNone:
     #     from pfeed._etl import market as etl
     #     from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
 
@@ -495,7 +488,7 @@ class MarketFeed(TimeBasedFeed):
     #     # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
     #     data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
     #     data_domain = data_domain or self.data_domain.value
-    #     df: GenericFrame | None = self._get_historical_data_impl(
+    #     df: GenericFrameOrNone = self._get_historical_data_impl(
     #         product=product,
     #         symbol=symbol,
     #         rollback_period=rollback_period,

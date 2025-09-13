@@ -1,14 +1,11 @@
 from __future__ import annotations
 from typing_extensions import TypedDict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generator
 if TYPE_CHECKING:
     import urllib3
-    try:
-        from minio.api import ObjectWriteResult, Tags
-    except ImportError:
-        pass
+    from minio.api import ObjectWriteResult, Tags
     from minio.credentials.providers import Provider
-    from typing import Generator
+    from minio import Minio
     from pfeed._typing import tDataLayer
     from pfeed.data_models.base_data_model import BaseDataModel
 
@@ -16,13 +13,9 @@ import os
 import io
 import datetime
 from functools import lru_cache
-from copy import deepcopy
 
 from cloudpathlib import CloudPath
 import pyarrow.fs as pa_fs
-from minio import S3Error, ServerError, Minio
-from minio.versioningconfig import VersioningConfig
-from minio.commonconfig import ENABLED
 
 from pfeed.storages.base_storage import BaseStorage
 from pfeed.enums import StreamMode
@@ -44,7 +37,7 @@ class MinioStorage(BaseStorage):
     def __init__(
         self,
         data_layer: tDataLayer='CLEANED',
-        data_domain: str='general_data',
+        data_domain: str='GENERAL_DATA',
         use_deltalake: bool=False, 
         storage_options: MinioStorageOptions | None=None,
         enable_bucket_versioning: bool=False,
@@ -53,6 +46,10 @@ class MinioStorage(BaseStorage):
         Args:
             storage_options: kwargs specific to minio client
         '''
+        from minio.versioningconfig import VersioningConfig
+        from minio.commonconfig import ENABLED
+        from minio import ServerError
+
         self.endpoint = self._create_endpoint()
         super().__init__(
             name='minio', 
@@ -148,6 +145,7 @@ class MinioStorage(BaseStorage):
         #     self._storage_options["region"] = 'us-east-1'
     
     def _create_minio(self) -> Minio:
+        from minio import Minio
         return Minio(
             endpoint=self.endpoint.replace('http://', '').replace('https://', ''),
             access_key=self._storage_options['access_key_id'],
@@ -187,11 +185,12 @@ class MinioStorage(BaseStorage):
     def data_path(self) -> CloudPath:
         return (
             CloudPath("s3://" + self.BUCKET_NAME)
-            / f'data_layer={self.data_layer.name.lower()}'
+            / f'data_layer={self.data_layer.name}'
             / f'data_domain={self.data_domain}'
         )
     
     def get_object(self, object_name: str) -> bytes | None:
+        from minio import S3Error
         try:
             res = self.minio.get_object(self.BUCKET_NAME, object_name)
             # minio_object = self.minio.stat_object(self.BUCKET_NAME, object_name)
@@ -202,6 +201,7 @@ class MinioStorage(BaseStorage):
             return None
 
     def exist_object(self, object_name: str) -> bool:
+        from minio import S3Error
         try:
             res: Tags | None = self.minio.get_object_tags(self.BUCKET_NAME, object_name)
             return True

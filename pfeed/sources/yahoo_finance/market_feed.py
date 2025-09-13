@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund._typing import FullDataChannel, tEnvironment
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
-    from pfeed._typing import tStorage, tDataLayer, GenericFrame
+    from pfeed._typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
     from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 
@@ -135,7 +135,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         auto_transform: bool=True,
         yfinance_kwargs: dict | None=None,
         **product_specs
-    ) -> GenericFrame | None | YahooFinanceMarketFeed:
+    ) -> GenericFrameOrNone | YahooFinanceMarketFeed:
         '''
         Download historical data from Yahoo Finance.
         Be reminded that if you include today's data, it can be incomplete, this especially applies to the usage of rollback_period.
@@ -309,7 +309,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         raise NotImplementedError(f'{self.name} add_channel() is not implemented')
     
     # TODO: use data_source.batch_api
-    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args, **kwargs) -> GenericFrame | None:
+    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args, **kwargs) -> GenericFrameOrNone:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
 
     # DEPRECATED
@@ -331,7 +331,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     #     retrieve_per_date: bool=False,
     #     yfinance_kwargs: dict | None=None,
     #     **product_specs,
-    # ) -> GenericFrame | None:
+    # ) -> GenericFrameOrNone:
     #     """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
     #     Args:
     #         product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP

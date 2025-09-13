@@ -1,10 +1,13 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Awaitable, TypeAlias
+from typing import Callable, TYPE_CHECKING, Awaitable, TypeAlias, Any
 if TYPE_CHECKING:
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.data_models.base_data_model import BaseDataModel, BaseFileMetadata
     from pfeed.sources.base_source import BaseSource
     from pfeed.flows.dataflow import DataFlow
     from pfeed._typing import GenericData
+    from pfeed._io.base_io import StorageMetadata
+    from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
+    from pfeed.data_models.market_data_model import MarketFileMetadata
 
 import logging    
 import asyncio
@@ -60,16 +63,19 @@ class Faucet:
             return None
         return self._data_model
     
-    def open_batch(self):
+    def open_batch(self) -> tuple[GenericData | None, dict[str, Any] | StorageMetadata | TimeBasedStorageMetadata]:
         if self._extract_type == ExtractType.retrieve:
+            metadata: StorageMetadata | TimeBasedStorageMetadata
             data, metadata = self._extract_func(self.data_model)
-            if 'updated_resolution' in metadata:
-                self.data_model.update_resolution(metadata['updated_resolution'])
-                del metadata['updated_resolution']
+            file_metadata: BaseFileMetadata | MarketFileMetadata = metadata['file_metadata']
+            # NOTE: the initial data model was created with an input resolution (e.g. '1minute'), 
+            # but the retrieved data may have a different resolution (e.g. '1tick'), so we need to update the data model's resolution
+            if 'resolution' in file_metadata and file_metadata['resolution'] != repr(self.data_model.resolution):
+                self._data_model.update_resolution(file_metadata['resolution'])
         else:
             data: GenericData | None = self._extract_func(self.data_model)
-            # NOTE: currently no metadata for other extract_types
-            metadata = {}
+            # NOTE: currently no metadata for other ExtractType
+            metadata: dict[str, Any] = {}
         return data, metadata
     
     async def open_stream(self):

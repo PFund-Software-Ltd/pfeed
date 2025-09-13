@@ -1,13 +1,18 @@
 from __future__ import annotations
 from typing_extensions import TypedDict
-from typing import TYPE_CHECKING, Literal, Callable, Awaitable
+from typing import TYPE_CHECKING, Literal, Callable, Awaitable, Any
 if TYPE_CHECKING:
     import polars as pl
     from narwhals.typing import Frame
-    from pfeed._typing import tStorage, tDataLayer, GenericFrame, StorageMetadata
+    from pfeed._io.base_io import StorageMetadata
+    from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
+    from pfeed._typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
     from pfeed.flows.faucet import Faucet
+    class TimeBasedFeedMetadata(TypedDict, total=True):
+        missing_dates: list[datetime.date]
+    GenericFrameOrNoneWithMetadata = tuple[GenericFrameOrNone, TimeBasedFeedMetadata]
 
 import datetime
 from pprint import pformat
@@ -18,11 +23,6 @@ from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 
 
 __all__ = ["TimeBasedFeed"]
-
-
-class TimeBasedFeedMetadata(TypedDict):
-    missing_dates: list[datetime.date]
-
 
 
 class TimeBasedFeed(BaseFeed):
@@ -76,7 +76,7 @@ class TimeBasedFeed(BaseFeed):
         self, 
         extract_func: Callable,
         partial_dataflow_data_model: Callable,
-        partial_faucet_data_model: Callable | None,
+        partial_faucet_data_model: Callable,
         dataflow_per_date: bool, 
         start_date: datetime.date, 
         end_date: datetime.date,
@@ -109,12 +109,12 @@ class TimeBasedFeed(BaseFeed):
         end_date: datetime.date,
         data_layer: tDataLayer,
         data_domain: str,
-        from_storage: tStorage | None,
+        from_storage: tStorage,
         storage_options: dict | None,
         add_default_transformations: Callable | None,
         dataflow_per_date: bool,
         include_metadata: bool,
-    ) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata] | TimeBasedFeed:
+    ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | TimeBasedFeed:
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(
                 data_model=data_model,
@@ -138,6 +138,35 @@ class TimeBasedFeed(BaseFeed):
         else:
             return self
         
+    def _retrieve_impl(
+        self,
+        data_model: TimeBasedDataModel,
+        data_layer: tDataLayer,
+        data_domain: str,
+        from_storage: tStorage,
+        storage_options: dict | None,
+        add_default_transformations: Callable | None,
+    ) -> GenericFrameOrNoneWithMetadata:
+        '''Retrieves data among all scanned data loaded from local storages.
+        Returns the data from the storage with the least missing dates.
+        '''
+        from pfeed._etl.base import convert_to_user_df
+        df: pl.LazyFrame | None
+        metadata: TimeBasedStorageMetadata
+        df, metadata = super()._retrieve_impl(
+            data_model=data_model,
+            data_domain=data_domain,
+            data_layer=data_layer,
+            from_storage=from_storage,
+            storage_options=storage_options,
+        )
+        if df is not None:
+            df: GenericFrame = convert_to_user_df(df, self._data_tool)
+            self.logger.info(f'found data {data_model} in {from_storage} (data_layer={data_layer.name})')
+        else:
+            self.logger.debug(f'failed to find data {data_model} in any storage (data_layer={data_layer.name})')
+        return df, metadata
+        
     @clear_subflows
     def _run_download(
         self,
@@ -149,7 +178,7 @@ class TimeBasedFeed(BaseFeed):
         include_metadata: bool,
         add_default_transformations: Callable | None,
         load_to_storage: Callable | None,
-    ) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata] | TimeBasedFeed:
+    ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | TimeBasedFeed:
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._download_impl(data_model),
             partial_dataflow_data_model=partial_dataflow_data_model,
@@ -164,6 +193,7 @@ class TimeBasedFeed(BaseFeed):
         if load_to_storage:
             load_to_storage()
         if not self._pipeline_mode:
+            metadata: TimeBasedFeedMetadata
             df, metadata = self.run(include_metadata=True)
             if missing_dates := metadata.get('missing_dates', []):
                 self.logger.warning(
@@ -173,44 +203,6 @@ class TimeBasedFeed(BaseFeed):
             return df if not include_metadata else (df, metadata)
         else:
             return self
-    
-    def _retrieve_impl(
-        self,
-        data_model: TimeBasedDataModel,
-        data_layer: tDataLayer,
-        data_domain: str,
-        from_storage: tStorage | None,
-        storage_options: dict | None,
-        add_default_transformations: Callable | None,
-    ) -> tuple[GenericFrame | None, TimeBasedFeedMetadata]:
-        '''Retrieves data among all scanned data loaded from local storages.
-        Returns the data from the storage with the least missing dates.
-        '''
-        from pfeed._etl.base import convert_to_user_df
-        df_in_storages, metadata_in_storages = super()._retrieve_impl(
-            data_model=data_model,
-            data_domain=data_domain,
-            data_layer=data_layer,
-            from_storage=from_storage,
-            storage_options=storage_options,
-        )
-
-        # choose the storage with the least missing dates
-        missing_dates_in_storages: dict[tStorage, list[datetime.date]] = {
-            storage: metadata['missing_dates']
-            for storage, metadata in metadata_in_storages.items()
-        }
-        storage_with_the_least_missing_dates = min(missing_dates_in_storages, key=lambda x: len(missing_dates_in_storages[x]))
-        
-        polars_lf: pl.LazyFrame | None = df_in_storages[storage_with_the_least_missing_dates]
-        metadata = metadata_in_storages[storage_with_the_least_missing_dates]
-        if polars_lf is not None:
-            df: GenericFrame = convert_to_user_df(polars_lf, self._data_tool)
-            self.logger.info(f'found data {data_model} in {storage_with_the_least_missing_dates} ({data_layer=})')
-        else:
-            df = None
-            self.logger.debug(f'failed to find data {data_model} in any storage ({data_layer=})')
-        return df, metadata
     
     @clear_subflows
     def _run_stream(
@@ -246,20 +238,20 @@ class TimeBasedFeed(BaseFeed):
         else:
             return self
   
-    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericFrame | None | tuple[GenericFrame | None, TimeBasedFeedMetadata]:
+    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
         
         completed_dataflows, failed_dataflows = self._run_batch_dataflows(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
 
-        dfs: list[GenericFrame | None] = []
+        dfs: list[GenericFrameOrNone] = []
         metadata: TimeBasedFeedMetadata = {'missing_dates': []}
         
         for dataflow in completed_dataflows + failed_dataflows:
             data_model: TimeBasedDataModel = dataflow.data_model
             result: FlowResult = dataflow.result
-            _df: GenericFrame | None = result.data
-            _metadata: StorageMetadata = result.metadata
+            _df: GenericFrameOrNone = result.data
+            _metadata: dict[str, Any] | StorageMetadata | TimeBasedStorageMetadata = result.metadata
             
             dfs.append(_df)
             
@@ -304,7 +296,7 @@ class TimeBasedFeed(BaseFeed):
     #     retrieve_per_date: bool,
     #     product_specs: dict | None,
     #     **feed_kwargs
-    # ) -> GenericFrame | None:
+    # ) -> GenericFrameOrNone:
     #     '''
     #     """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
     #     Args:

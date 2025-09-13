@@ -8,11 +8,12 @@ duckdb storage structure:
 - one table per product_name/resolution, where year/month/day is removed
 '''
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Any
+from typing import TYPE_CHECKING, Literal
 from typing_extensions import TypedDict
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
-    from pfeed._typing import tDataLayer, GenericFrame, StorageMetadata
+    from pfeed._typing import tDataLayer, GenericFrame
+    from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
 
 import datetime
@@ -24,13 +25,10 @@ import polars as pl
 import duckdb
 
 from pfund import print_warning
+from pfeed import config
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
-from pfeed import get_config
-
-
-config = get_config()
 
 
 class DuckDBMetadata(TypedDict):
@@ -44,7 +42,7 @@ class DuckDBStorage(BaseStorage):
     def __init__(
         self,
         data_layer: tDataLayer='CLEANED',
-        data_domain: str='general_data',
+        data_domain: str='GENERAL_DATA',
         use_deltalake: bool=False,   # for consistency with other storages only, not used
         storage_options: dict | None=None,
         in_memory: bool=False, 
@@ -151,7 +149,7 @@ class DuckDBStorage(BaseStorage):
             return (
                 Path(config.data_path).parent 
                 / self.name.lower()
-                / f'data_layer={self.data_layer.name.lower()}'
+                / f'data_layer={self.data_layer.name}'
                 / f'data_domain={self.data_domain}'
             )
     

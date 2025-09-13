@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from cloudpathlib import CloudPath
+    from pfeed._typing import FilePath
     import pyarrow.fs as pa_fs
-    from pathlib import Path
+    from pfeed._io.base_io import StorageMetadata
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -31,7 +31,7 @@ class TabularIO(BaseIO):
         if use_deltalake:
             assert DeltaTable is not None, 'deltalake is not installed'
     
-    def _write_deltalake_metadata(self, file_path: Path, metadata: dict):
+    def _write_deltalake_metadata(self, file_path: FilePath, metadata: dict):
         from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
         # HACK: delta-rs doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
         empty_df_with_metadata = pd.DataFrame()
@@ -41,7 +41,7 @@ class TabularIO(BaseIO):
     def _write_deltalake(
         self,
         table: pa.Table,
-        file_path: Path,
+        file_path: FilePath,
         metadata: dict,
         delta_partition_by: list[str] | None=None,
     ):
@@ -57,7 +57,7 @@ class TabularIO(BaseIO):
             )
         self._write_deltalake_metadata(file_path, metadata)
 
-    def _write_pyarrow_table(self, table: pa.Table, file_path: Path, metadata: dict | None=None):
+    def _write_pyarrow_table(self, table: pa.Table, file_path: FilePath, metadata: dict | None=None):
         metadata = metadata or {}
         metadata_json = json.encode(metadata)
         schema = table.schema.with_metadata({b'metadata_json': metadata_json})
@@ -65,13 +65,13 @@ class TabularIO(BaseIO):
         with self._filesystem.open_output_stream(str(file_path).replace('s3://', '')) as f:
             pq.write_table(table, f, compression=self._compression)
             
-    def _is_empty_parquet_file(self, file_path: CloudPath | Path) -> bool:
+    def _is_empty_parquet_file(self, file_path: FilePath) -> bool:
         return self._exists(file_path) and pq.read_metadata(str(file_path).replace('s3://', ''), filesystem=self._filesystem).num_rows == 0
     
     def write(
         self,
         table: pa.Table,
-        file_path: Path,
+        file_path: FilePath,
         metadata: dict | None=None,
         delta_partition_by: list[str] | None=None,
     ):
@@ -89,11 +89,11 @@ class TabularIO(BaseIO):
 
     def read(
         self,
-        file_paths: list[CloudPath | Path],
+        file_paths: list[FilePath],
         delta_version: int | None=None,
-    ) -> tuple[pl.LazyFrame | None, dict[str, Any]]:
+    ) -> tuple[pl.LazyFrame | None, StorageMetadata]:
         lf: pl.LazyFrame | None = None
-        metadata: dict[str, Any] = {}
+        metadata: StorageMetadata = {}
         if self._use_deltalake:
             from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
             exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path / DeltaLakeStorageMixin.metadata_filename)]
@@ -107,7 +107,7 @@ class TabularIO(BaseIO):
                 )
                 lf = pl.scan_delta(dt, use_pyarrow=True)
             metadata['file_metadata'] = self._read_pyarrow_table_metadata(
-                [file_path + '/' + DeltaLakeStorageMixin.metadata_filename for file_path in exists_file_paths]
+                [file_path / DeltaLakeStorageMixin.metadata_filename for file_path in exists_file_paths]
             )
         else:
             exists_file_paths = [file_path for file_path in file_paths if self._exists(file_path)]
@@ -121,7 +121,7 @@ class TabularIO(BaseIO):
         metadata['missing_file_paths'] = list(set(file_paths) - set(exists_file_paths))
         return lf, metadata
     
-    def _read_pyarrow_table_metadata(self, file_paths: list[CloudPath | Path]) -> dict[str, Any]:
+    def _read_pyarrow_table_metadata(self, file_paths: list[FilePath]) -> dict[str, Any]:
         metadata: dict[str, Any] = {}
         for file_path in file_paths:
             file_path = str(file_path).replace('s3://', '')

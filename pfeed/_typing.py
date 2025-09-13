@@ -1,10 +1,10 @@
-from typing_extensions import TypedDict
-from typing import Any, Literal, Protocol, TypeAlias
-
-import datetime
-
+from typing import Any, Literal, Protocol
+from pathlib import Path
+from cloudpathlib import CloudPath
 from narwhals.series import Series
 from narwhals.dataframe import DataFrame, LazyFrame
+from pfeed.messaging.streaming_message import StreamingMessage
+
 class DataFrameLike(Protocol):
     def __dataframe__(self, *args: Any, **kwargs: Any) -> Any: ...
 
@@ -24,10 +24,10 @@ except ImportError:
     class SparkDataFrame:
         pass
 
-from pfeed.messaging.streaming_message import StreamingMessage
+FilePath = CloudPath | Path
  
-
 GenericFrame = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
+GenericFrameOrNone = GenericFrame | None
 GenericSeries = Series[Any]
 GenericData = GenericFrame | bytes
 StreamingData = dict | StreamingMessage
@@ -39,9 +39,3 @@ tDataCategory = Literal['MARKET_DATA', 'NEWS_DATA']
 tDataType = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
 tStorage = Literal['CACHE', 'LOCAL', 'MINIO', 'DUCKDB', 'LANCEDB']
 tStreamMode = Literal["SAFE", "FAST"]
-
-
-class StorageMetadata(TypedDict, total=False):
-    file_metadata: dict[str, Any]
-    missing_file_paths: list[str]
-    missing_dates: list[datetime.date]

@@ -12,7 +12,7 @@ class CacheStorage(LocalStorage):
     def __init__(
         self,
         data_layer: tDataLayer='CLEANED',
-        data_domain: str='general_data',
+        data_domain: str='GENERAL_DATA',
         use_deltalake: bool=False, 
         storage_options: dict | None=None,
     ):
@@ -35,7 +35,7 @@ class CacheStorage(LocalStorage):
         config = get_config()
         return (
             Path(config.cache_path)
-            / f'data_layer={self.data_layer.name.lower()}'
+            / f'data_layer={self.data_layer.name}'
             / f'data_domain={self.data_domain}'
         )
 

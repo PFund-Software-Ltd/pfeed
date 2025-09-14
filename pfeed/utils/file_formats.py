@@ -123,14 +123,14 @@ def decompress_data(data: bytes) -> bytes:
     elif is_zstd(data):
         decompressed = decompress_zstd(data)
         return decompress_data(decompressed)
+    elif is_zip(data):
+        decompressed = decompress_zip(data)
+        return decompress_data(decompressed)
     elif is_bz2(data):
         decompressed = decompress_bz2(data)
         return decompress_data(decompressed)
     elif is_xz(data):
         decompressed = decompress_xz(data)
-        return decompress_data(decompressed)
-    elif is_zip(data):
-        decompressed = decompress_zip(data)
         return decompress_data(decompressed)
     elif is_tar(data):
         decompressed = extract_tar(data)

@@ -107,7 +107,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
 
     def _download_impl(self, data_model: BybitMarketDataModel) -> bytes | None:
         self.logger.debug(f'downloading {data_model}')
-        data = self.data_source.batch_api.get_data(data_model.product, data_model.date)
+        data = self.data_source.batch_api.get_data(data_model.product, data_model.resolution, data_model.date)
         self.logger.debug(f'downloaded {data_model}')
         return data
     

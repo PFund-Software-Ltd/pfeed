@@ -1,26 +1,35 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund.products.product_crypto import CryptoProduct
+    import pandas as pd
+    from httpx import Response
+    from pfund.products.product_bybit import BybitProduct
+    from pfund.datas.resolution import Resolution
     from pfund._typing import tEnvironment
-    from pfund.enums import Environment
+    
+import datetime
 
-from pfund.enums import CryptoAssetType, AssetTypeModifier
+from pfund.enums import Environment, CryptoAssetType, AssetTypeModifier
 
 
-# TODO: how to add bybit's rest api here to get public data?
-# TODO: add orderbook data support, one snapshot has 500 levels...can pandas handle this?
+# NOTE: do NOT trust the catalog in https://public.bybit.com/trading/, BTC_USDT_FUTs are missing, 
+# e.g. BTCUSDT-22AUG25 is missing in the catalog but its url is valid: https://public.bybit.com/trading/BTCUSDT-22AUG25/
+# the same applies to https://quote-saver.bycsi.com/orderbook/, 'spot' is missing in the catalog but its url is valid: https://quote-saver.bycsi.com/orderbook/spot
+'''
+Bybit's naming conventions for different contracts (non-spot, no options data):
+BTCUSDT = BTC_USDT_PERP
+BTCUSDT-22AUG25 = BTC_USDT_FUT
+BTCPERP = BTC_USDC_PERP
+BTC-30AUG24 = BTC_USDC_FUT
+BTCUSD = BTC_USD_IPERP
+BTCUSDH25 = BTC_USD_IFUT
+'''
 # url: e.g. https://quote-saver.bycsi.com/orderbook/linear/BTCUSDT/2025-01-01_BTCUSDT_ob500.data.zip
-# choices: https://www.bybit.com/x-api/quote/public/support/download/list-options?bizType=contract&productId=orderbook
+# NOTE: productId=orderbook/trade, bizType=contract/spot
+# See downloadable symbols: 
+# https://www.bybit.com/x-api/quote/public/support/download/list-options?bizType={contract_or_spot}&productId={orderbook_or_trade}
 class BatchAPI:
     '''Custom API for downloading data from Bybit'''
-    URLS = {
-        CryptoAssetType.PERPETUAL: 'https://public.bybit.com/trading',
-        AssetTypeModifier.INVERSE + '-' + CryptoAssetType.PERPETUAL: 'https://public.bybit.com/trading',
-        CryptoAssetType.FUTURE: 'https://public.bybit.com/trading',
-        AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUTURE: 'https://public.bybit.com/trading',
-        CryptoAssetType.CRYPTO: 'https://public.bybit.com/spot',
-    }
     DATA_NAMING_REGEX_PATTERNS = {
         CryptoAssetType.PERPETUAL: r'(USDT\/|PERP\/)$',  # USDT perp or USDC perp;
         CryptoAssetType.FUTURE: r'-\d{2}[A-Z]{3}\d{2}\/$',  # USDC futures e.g. BTC-10NOV23/
@@ -29,53 +38,107 @@ class BatchAPI:
         CryptoAssetType.CRYPTO: '.*',  # match everything since everything from https://public.bybit.com/spot is spot
     }
 
-    def __init__(self, env: tEnvironment):
-        # TODO: if rest api env is PAPER or SANDBOX, should not allow downloading LIVE data (historical data is still env=LIVE)
-        from pfund.exchanges.bybit.rest_api import RESTfulAPI
-        self._rest_api = RESTfulAPI(env)
+    def __init__(self, env: tEnvironment='BACKTEST'):
+        env = Environment[env.upper()]
+        if env != Environment.BACKTEST:
+            from pfund.exchanges.bybit.rest_api import RESTfulAPI
+            # TODO: use rest api to support fetch()?
+            self._rest_api = RESTfulAPI(env)
+        else:
+            self._rest_api = None
     
     @property
     def env(self) -> Environment:
+        if self._rest_api is None:
+            return Environment.BACKTEST
         return self._rest_api._env
-
+        
     @staticmethod
-    def _get(url, frequency=1, num_retry=3):
-        '''
-        Handles general requests.get with control on frequency and number of retry
-        '''
+    def _get_base_url(product: BybitProduct, resolution: Resolution) -> str:
+        if resolution.is_quote():
+            if product.is_spot():
+                return 'https://quote-saver.bycsi.com/orderbook/spot'
+            elif product.is_inverse():
+                return 'https://quote-saver.bycsi.com/orderbook/inverse'
+            else:
+                return 'https://quote-saver.bycsi.com/orderbook/linear'
+        else:
+            if product.is_spot():
+                return 'https://public.bybit.com/spot'
+            else:
+                return 'https://public.bybit.com/trading'
+    
+    @staticmethod
+    def _create_filename(product: BybitProduct, resolution: Resolution, date: str):
+        if resolution.is_quote():
+            orderbook_levels = 200
+            # NOTE: somehow after this date, the orderbook (non-spot) levels are changed from 500 to 200
+            cutoff_date = '2025-08-21'
+            is_before_cutoff = datetime.datetime.strptime(date, '%Y-%m-%d').date() < datetime.datetime.strptime(cutoff_date, '%Y-%m-%d').date()
+            if not product.is_spot():
+                if is_before_cutoff:
+                    orderbook_levels = 500
+            return f'{date}_{product.symbol}_ob{orderbook_levels}.data.zip'
+        else:
+            if product.is_spot():
+                return f'{product.symbol}_{date}.csv.gz'
+            else:
+                return f'{product.symbol}{date}.csv.gz'
+    
+    @staticmethod
+    def _get(url: str, params: dict | None=None):
         import time
-        import requests
-        from requests.exceptions import ConnectionError
-        
+        import httpx
         from pfund import print_warning
-
-        while num_retry:
-            try:
-                res = requests.get(url)
-                if res.status_code == 200:
-                    return res
-                elif res.status_code == 404:
-                    base_url = '/'.join(url.split('/')[:-1])
-                    print_warning(f'File not found {url}, please go to {base_url} to check if the file exists')
-                    break
-                else:
-                    print_warning(f'{res.status_code=} {res.text=}')
-            except ConnectionError:
-                print_warning(f'ConnectionError: failed to call {url}')
-            except Exception as err:
-                print_warning(f'Unhandled Error: failed to call {url}, {err=}')
-            time.sleep(frequency)
-        else:
-            print_warning(f'failed to call {url}')
-
-    @staticmethod
-    def _create_efilename(epdt: str, date: str, is_spot: bool):
-        if is_spot:
-            return f'{epdt}_{date}.csv.gz'
-        else:
-            return f'{epdt}{date}.csv.gz'
         
-    # def get_efilenames(self, ptype: str, epdt: str):
+        NUM_RETRY = 3
+        while NUM_RETRY:
+            NUM_RETRY -= 1
+            try:
+                response: Response = httpx.get(url, params=params)
+                result = response.raise_for_status().content
+                return result
+            except httpx.RequestError as exc:
+                print_warning(f'RequestError: failed to get data from {url}, {exc=}')
+            except Exception as exc:
+                print_warning(f'Error: failed to get data from {url}, {exc=}')
+            time.sleep(1)
+        else:
+            print_warning(f'Failed to get data from {url}')
+            return None
+    
+    def _create_url(self, product: BybitProduct, resolution: Resolution, date: str) -> str:
+        base_url = self._get_base_url(product, resolution)
+        filename = self._create_filename(product, resolution, date)
+        url = f'{base_url}/{product.symbol}/{filename}'
+        return url
+    
+    def _convert_orderbook_data_to_df(self, zipped_data: bytes) -> pd.DataFrame:
+        import pandas as pd
+        from msgspec import json
+        from pfeed.utils.file_formats import decompress_data
+        decoder = json.Decoder()
+        data = decompress_data(zipped_data)
+        data_str = data.decode("utf-8").strip().split('\n')
+        df = pd.json_normalize([decoder.decode(item) for item in data_str])
+        return df
+    
+    def get_data(self, product: BybitProduct, resolution: Resolution, date: str) -> bytes | pd.DataFrame | None:
+        if product.is_option():
+            raise NotImplementedError('Bybit does not provide options data')
+        # TODO: it's quote_L2 data, need to support converting to quote_L1, converting to different number of levels (e.g. 10quote_L1) etc.
+        # NOTE for the 'data.u' field in data:
+        # Update ID. Is a sequence. Occasionally, you'll receive "u"=1, which is a snapshot data due to the restart of the service. 
+        # So please overwrite your local orderbook
+        if resolution.is_quote():
+            raise NotImplementedError('orderbook data is not supported yet')
+        url = self._create_url(product, resolution, date)
+        if data := self._get(url):
+            if resolution.is_quote():
+                data: pd.DataFrame = self._convert_orderbook_data_to_df(data)
+            return data
+
+    # def _get_downloadable_symbols(self, ptype: str, epdt: str):
     #     '''Get external file names (e.g. BTCUSDT2022-10-04.csv.gz)'''
     #     from bs4 import BeautifulSoup
     #     url = '/'.join([self.URLS[ptype], epdt])
@@ -84,25 +147,13 @@ class BatchAPI:
     #         efilenames = [node.get('href') for node in soup.find_all('a')]
     #         return efilenames
     
-    def get_epdts_by_ptype(self, ptype: str):
-        '''Get external products based on product type'''
-        import re
-        from bs4 import BeautifulSoup
-        ptype = ptype.upper()
-        pattern = re.compile(self.DATA_NAMING_REGEX_PATTERNS[ptype])
-        url = self.URLS[ptype]
-        if res := self._get(url, frequency=1, num_retry=3):
-            soup = BeautifulSoup(res.text, 'html.parser')
-            epdts = [node.get('href').replace('/', '') for node in soup.find_all('a') if pattern.search(node.get('href'))]
-            return epdts
-    
-    def get_data(self, product: CryptoProduct, date: str) -> bytes | None:
-        # used to check if the efilename created by the date exists in the efilenames (files on the exchange's data server)
-        if product.is_option():
-            raise NotImplementedError('Bybit does not provide options data')
-        epdt, ptype = product.symbol, str(product.asset_type)
-        efilename = self._create_efilename(epdt, date, product.is_spot())
-        url = f"{self.URLS[ptype]}/{epdt}/{efilename}"
-        if res := self._get(url, frequency=1, num_retry=3):
-            data = res.content
-            return data
+    # def _get_symbols_by_asset_type(self, ptype: str):
+    #     import re
+    #     from bs4 import BeautifulSoup
+    #     ptype = ptype.upper()
+    #     pattern = re.compile(self.DATA_NAMING_REGEX_PATTERNS[ptype])
+    #     url = self.URLS[ptype]
+    #     if res := self._get(url):
+    #         soup = BeautifulSoup(res.text, 'html.parser')
+    #         epdts = [node.get('href').replace('/', '') for node in soup.find_all('a') if pattern.search(node.get('href'))]
+    #         return epdts

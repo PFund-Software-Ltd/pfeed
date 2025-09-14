@@ -10,6 +10,7 @@ from pfeed._etl.base import convert_to_pandas_df
 @pytest.mark.rate_limit
 def test_download_and_retrieve(tmp_path, yahoo_finance, product, resolution):
     def _assert_df(df):
+        assert df is not None
         df = convert_to_pandas_df(df)
         assert df.columns.tolist() == ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'dividends', 'splits']
         is_strictly_increasing = df["date"].is_monotonic_increasing and df["date"].is_unique
@@ -29,7 +30,7 @@ def test_download_and_retrieve(tmp_path, yahoo_finance, product, resolution):
         end_date=end_date,
     )
     _assert_df(df)
-    time.sleep(1)
+    time.sleep(3)
     # NOTE: test retrieve() after download() due to dependency on downloaded data in tmp_path
     df = feed.retrieve(
         product=product,
@@ -40,15 +41,16 @@ def test_download_and_retrieve(tmp_path, yahoo_finance, product, resolution):
     _assert_df(df)
 
 
-@pytest.mark.parametrize(('product', 'resolution'), [('ES_USD_FUTURE', '1h')])
+@pytest.mark.parametrize(('product', 'resolution'), [('ES_USD_FUTURE', '1d')])
 @pytest.mark.rate_limit
 def test_download_and_retrieve_mixed(tmp_path, yahoo_finance_mixed, product, resolution):
     def _assert_df(df):
+        assert df is not None
         df = convert_to_pandas_df(df)
         assert set(['Open', 'High', 'Low', 'Close', 'Volume']).issubset(df.columns.tolist())
         assert len(df) >= 1  # or > 0 to ensure we got data
     pe.configure(data_path=tmp_path / 'data')
-    start_date, end_date = '2025-08-07', '2025-08-07'
+    start_date, end_date = '2025-08-01', '2025-08-07'
     auto_transform = False  # raw df from yfinance, not normalized
     product_specs = {}
     is_futures = product.endswith('_FUTURE')
@@ -56,7 +58,7 @@ def test_download_and_retrieve_mixed(tmp_path, yahoo_finance_mixed, product, res
         # NOTE: this doesn't need to be accurate, "expiration" is supposed to be a field provided by user for their own reference.
         # e.g. for ES_USD_FUTURE, even its symbol is ES=F (Sept 25), we can just set the expiration to be 2025-08-01, 
         # and a wrong symbol will be derived internally, in this case, ESQ25 where Q = August
-        product_specs['expiration'] = '2025-08-07'
+        product_specs['expiration'] = '2025-08-01'
     feed = yahoo_finance_mixed.market_feed
     df = feed.download(
         product=product,

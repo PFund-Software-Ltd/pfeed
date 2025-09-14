@@ -33,3 +33,14 @@ def configure_test_env():
     pe.configure(logging_config={
         "handlers": {"stream_handler": {"level": "WARNING"}}
     })
+
+
+@pytest.fixture(scope="function", autouse=True)
+def cleanup_ray():
+    yield
+    try:
+        import ray
+        if ray.is_initialized():
+            ray.shutdown()
+    except:
+        pass

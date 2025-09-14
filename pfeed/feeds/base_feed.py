@@ -659,7 +659,7 @@ class BaseFeed(ABC):
     
     def run(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> GenericDataOrNone | GenericDataOrNoneWithMetadata:
         result: GenericDataOrNone | GenericDataOrNoneWithMetadata | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
-        if inspect.isawaitable(result):
+        if inspect.iscoroutine(result): 
             try:
                 asyncio.get_running_loop()
             except RuntimeError:  # if no running loop, asyncio.get_running_loop() will raise RuntimeError
@@ -680,7 +680,7 @@ class BaseFeed(ABC):
     
     async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> GenericDataOrNone | GenericDataOrNoneWithMetadata:
         result: GenericDataOrNone | GenericDataOrNoneWithMetadata | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
-        if inspect.isawaitable(result):
+        if inspect.iscoroutine(result):
             return await result
         else:
             return result

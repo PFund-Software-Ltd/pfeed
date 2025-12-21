@@ -9,7 +9,7 @@ import importlib.resources
 from types import TracebackType
 from dataclasses import dataclass, asdict, MISSING
 
-from pfund.utils.utils import load_yaml_file, dump_yaml_file
+from pfund.utils import load_yaml_file, dump_yaml_file
 from pfeed.const.paths import (
     PROJ_NAME, 
     LOG_PATH, 

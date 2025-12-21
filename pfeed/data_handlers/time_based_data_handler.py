@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
-    from pfeed._typing import GenericFrame, StreamingData, FilePath
+    from pfeed.typing import GenericFrame, StreamingData, FilePath
     from pfeed.data_models.time_based_data_model import (
         TimeBasedDataModel, 
         TimeBasedFileMetadata, 

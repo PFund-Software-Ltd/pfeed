@@ -15,6 +15,10 @@ __all__ = ["YahooFinanceSource"]
 
 class YahooFinanceSource(TradFiSource):
     name = DataSource.YAHOO_FINANCE
+    # hard-coded mappings for convenience
+    MAPPINGS = {
+        'HYPE_USD_CRYPTO': 'HYPE32196-USD',
+    }
     
     def __init__(self):
         super().__init__()
@@ -42,7 +46,10 @@ class YahooFinanceSource(TradFiSource):
         elif product.is_forex():
             symbol = product.base_asset + product.quote_asset + '=X'  # e.g. EURUSD=X
         elif product.is_crypto():
-            symbol = product.base_asset + '-' + product.quote_asset  # e.g. BTC-USD
+            if str(product.basis) in self.MAPPINGS:
+                symbol = self.MAPPINGS[str(product.basis)]
+            else:
+                symbol = product.base_asset + '-' + product.quote_asset  # e.g. BTC-USD
         elif product.is_index():
             symbol = "^" + product.base_asset  # e.g. ^GSPC
         else:

@@ -3,13 +3,13 @@ from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, A
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
-    from pfund._typing import tEnvironment
+    from pfund.typing import tEnvironment
     from pfund.products.product_base import BaseProduct
     from pfeed.sources.base_source import BaseSource
     from pfeed.engine import DataEngine
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed._typing import tStorage, tDataTool, tDataLayer, GenericData, tStreamMode, StreamingData
+    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tStreamMode, StreamingData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
@@ -80,8 +80,8 @@ class BaseFeed(ABC):
         return self.data_source.name
     
     def _setup_logging(self, env: tEnvironment):
-        from pfund._logging import setup_logging_config
-        from pfund._logging.config import LoggingDictConfigurator
+        from pfund.logging import setup_logging_config
+        from pfund.logging.config import LoggingDictConfigurator
         from pfeed.config import get_config
         env = Environment[env.upper()]
         config = get_config()
@@ -385,7 +385,7 @@ class BaseFeed(ABC):
     
     def _run_batch_dataflows(self, ray_kwargs: dict, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
         from tqdm import tqdm
-        from pfeed.utils.utils import generate_color
+        from pfeed.utils import generate_color
         
         color = generate_color(self.name.value)
         

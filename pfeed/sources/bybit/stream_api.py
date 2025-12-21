@@ -4,10 +4,10 @@ if TYPE_CHECKING:
     from pfund.enums import Environment
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
-    from pfund._typing import tEnvironment
+    from pfund.typing import tEnvironment
     from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
 
-from pfund._typing import FullDataChannel
+from pfund.typing import FullDataChannel
 from pfund.products.product_bybit import BybitProduct
 
 

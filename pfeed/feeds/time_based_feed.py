@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
-    from pfeed._typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
+    from pfeed.typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
     from pfeed.flows.faucet import Faucet
@@ -56,7 +56,7 @@ class TimeBasedFeed(BaseFeed):
         
     @staticmethod
     def _parse_date_range(start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd']) -> tuple[datetime.date, datetime.date]:
-        from pfeed.utils.utils import rollback_date_range
+        from pfeed.utils import rollback_date_range
         if start_date:
             if isinstance(start_date, str):
                 start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()

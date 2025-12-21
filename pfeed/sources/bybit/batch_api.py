@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from httpx import Response
     from pfund.products.product_bybit import BybitProduct
     from pfund.datas.resolution import Resolution
-    from pfund._typing import tEnvironment
+    from pfund.typing import tEnvironment
     
 import datetime
 

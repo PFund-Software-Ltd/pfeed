@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from pfeed._typing import FilePath
+    from pfeed.typing import FilePath
     import pyarrow.fs as pa_fs
     from pfeed._io.base_io import StorageMetadata
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed._typing.common_literals import tSUPPORTED_DATA_TOOLS
+    from pfeed.typing.common_literals import tSUPPORTED_DATA_TOOLS
     from pfeed.config import Configuration
 
 from pfeed.feeds.base_feed import BaseFeed

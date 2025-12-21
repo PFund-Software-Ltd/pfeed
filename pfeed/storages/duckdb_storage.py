@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Literal
 from typing_extensions import TypedDict
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
-    from pfeed._typing import tDataLayer, GenericFrame
+    from pfeed.typing import tDataLayer, GenericFrame
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
 
@@ -238,8 +238,7 @@ class DuckDBStorage(BaseStorage):
             BETWEEN CAST('{start_date}' AS DATE) AND CAST('{end_date}' AS DATE) 
             ORDER BY date
         """)
-        df: pl.DataFrame = conn.pl()
-        lf: pl.LazyFrame = df.lazy()
+        lf: pl.LazyFrame = conn.pl(lazy=True)
         return lf
 
     def _write_metadata(self, metadata: DuckDBMetadata) -> None:

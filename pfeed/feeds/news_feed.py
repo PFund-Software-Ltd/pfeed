@@ -2,9 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfund._typing import tEnvironment
+    from pfund.typing import tEnvironment
     from pfeed._io.base_io import StorageMetadata
-    from pfeed._typing import tDataLayer, tStorage, GenericFrameOrNone
+    from pfeed.typing import tDataLayer, tStorage, GenericFrameOrNone
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
@@ -14,7 +14,7 @@ from pfund import print_warning
 from pfund.enums import Environment
 from pfeed.enums import DataCategory, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
-from pfeed.utils.utils import lambda_with_name
+from pfeed.utils import lambda_with_name
 
 
 '''

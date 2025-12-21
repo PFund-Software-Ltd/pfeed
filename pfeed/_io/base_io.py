@@ -3,7 +3,7 @@ from typing_extensions import TypedDict
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseFileMetadata
-    from pfeed._typing import GenericData, tDataTool, FilePath
+    from pfeed.typing import GenericData, tDataTool, FilePath
     class StorageMetadata(TypedDict, total=True):
         file_metadata: BaseFileMetadata
         missing_file_paths: list[FilePath]

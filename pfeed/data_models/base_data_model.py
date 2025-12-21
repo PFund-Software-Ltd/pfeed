@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing_extensions import TypedDict
 from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment
-    from pfeed._typing import tDataSource
+    from pfund.typing import tEnvironment
+    from pfeed.typing import tDataSource
     class BaseFileMetadata(TypedDict, total=True):
         env: tEnvironment
         data_source: tDataSource

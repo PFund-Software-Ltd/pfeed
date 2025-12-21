@@ -36,7 +36,7 @@ handlers:
     level: 'DEBUG'
     formatter: 'file'
   compressed_timed_rotating_file_handler:
-    class: 'pfund._logging.handlers.CompressedTimedRotatingFileHandler'
+    class: 'pfund.logging.handlers.CompressedTimedRotatingFileHandler'
     level: 'DEBUG'
     formatter: 'file'
     kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}

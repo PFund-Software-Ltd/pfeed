@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed._typing import tStorage, tDataLayer, GenericData
+    from pfeed.typing import tStorage, tDataLayer, GenericData
     from pfeed._io.base_io import StorageMetadata
     from pfeed.messaging.streaming_message import StreamingMessage
 

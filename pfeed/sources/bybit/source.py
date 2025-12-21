@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund._typing import tEnvironment
+    from pfund.typing import tEnvironment
     from pfund.products.product_bybit import BybitProduct
 
 from pfund.exchanges import Bybit

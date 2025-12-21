@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from minio.api import ObjectWriteResult, Tags
     from minio.credentials.providers import Provider
     from minio import Minio
-    from pfeed._typing import tDataLayer
+    from pfeed.typing import tDataLayer
     from pfeed.data_models.base_data_model import BaseDataModel
 
 import os

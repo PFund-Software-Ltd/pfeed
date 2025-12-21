@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING, Literal, Callable, Awaitable
 if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
-    from pfund._typing import FullDataChannel, tEnvironment
+    from pfund.typing import FullDataChannel, tEnvironment
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
-    from pfeed._typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
+    from pfeed.typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
     from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 
@@ -249,7 +249,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         await self.data_source.stream_api.disconnect()
     
     def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
-        from pfeed.utils.utils import lambda_with_name
+        from pfeed.utils import lambda_with_name
         # since Ray can't serialize the "self" in self._parse_message, disable it for now
         assert self._use_ray is False, "Transformations in Yahoo Finance streaming data is not supported with Ray, please set use_ray=False"
         self.transform(

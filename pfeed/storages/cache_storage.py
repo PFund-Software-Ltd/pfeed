@@ -2,7 +2,7 @@ import shutil
 import datetime
 from pathlib import Path
 
-from pfeed._typing import tDataLayer
+from pfeed.typing import tDataLayer
 from pfeed.storages.local_storage import LocalStorage
 
 
@@ -42,7 +42,7 @@ class CacheStorage(LocalStorage):
     def _clear_caches(self):
         '''Clear old caches except the current date'''
         from pfund import print_error
-        from pfund.utils.utils import get_last_modified_time
+        from pfund.utils import get_last_modified_time
         from pfeed.config import get_config
         config = get_config()
         cache_path = config.cache_path

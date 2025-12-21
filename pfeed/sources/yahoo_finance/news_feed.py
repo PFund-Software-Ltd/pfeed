@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import pandas as pd
-    from pfeed._typing import tStorage, tDataLayer, GenericFrameOrNone
+    from pfeed.typing import tStorage, tDataLayer, GenericFrameOrNone
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime

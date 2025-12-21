@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed._typing import tDataTool, tDataCategory
+    from pfeed.typing import tDataTool, tDataCategory
     from pfeed.enums import DataCategory
     from pfeed.sources.base_source import BaseSource
     from pfeed.feeds.base_feed import BaseFeed

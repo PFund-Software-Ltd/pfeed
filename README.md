@@ -1,11 +1,12 @@
 # PFeed: The Single Source of Truth for Algo-Trading Data. Uniting Traders to Clean Once & Share with All.
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)
-![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfeed?style=social)
+<!-- ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfeed?style=social) -->
 ![PyPI downloads](https://img.shields.io/pypi/dm/pfeed?label=downloads)
 [![PyPI](https://img.shields.io/pypi/v/pfeed.svg)](https://pypi.org/project/pfeed)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfeed)
-![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)
+[![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfeed/discussions)
+[![afterpython](https://afterpython.org/shield.svg)](https://afterpython.org)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PFund-Software-Ltd/pfeed)
 <!-- [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfeed/main/docs/images/jupyterbook.svg)](https://jupyterbook.org) -->
 <!-- [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/) -->

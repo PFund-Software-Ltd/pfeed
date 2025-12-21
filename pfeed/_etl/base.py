@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed._typing import tDataTool
-    from pfeed._typing import GenericFrame, GenericData
+    from pfeed.typing import tDataTool
+    from pfeed.typing import GenericFrame, GenericData
     
 
 import pandas as pd
@@ -11,12 +11,12 @@ import narwhals as nw
 
 from pfeed.enums import DataTool
 from pfeed.utils.dataframe import is_dataframe
-from pfeed._typing import dd, ps, SparkDataFrame
+from pfeed.typing import dd, ps, SparkDataFrame
 
 
 def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
     from pandas.api.types import is_datetime64_any_dtype
-    from pfeed.utils.utils import determine_timestamp_integer_unit_and_scaling_factor
+    from pfeed.utils import determine_timestamp_integer_unit_and_scaling_factor
     if not is_datetime64_any_dtype(df['date']):
         first_date = df.loc[0, 'date']
         if isinstance(first_date, str):

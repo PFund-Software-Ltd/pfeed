@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfund._typing import ResolutionRepr, tTradingVenue
+    from pfund.typing import ResolutionRepr, tTradingVenue
     from pfeed.data_models.time_based_data_model import TimeBasedFileMetadata
     class MarketFileMetadata(TimeBasedFileMetadata, total=True):
         trading_venue: tTradingVenue

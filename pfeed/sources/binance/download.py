@@ -10,14 +10,14 @@ from tqdm import tqdm
 from pfund import cprint
 from pfeed._etl import etl
 from pfeed.config import Configuration
-from pfeed.utils.utils import get_dates_in_between
+from pfeed.utils import get_dates_in_between
 from pfeed.utils.validate import validate_pdts_and_ptypes
 from pfeed.const.common import SUPPORTED_DATA_TYPES
 from pfeed.sources.binance.const import DATA_START_DATE, DATA_SOURCE, SUPPORTED_RAW_DATA_TYPES, SUPPORTED_PRODUCT_TYPES, PTYPE_TO_CATEGORY, create_efilename
 from pfeed.sources.binance import api
 from pfund.products.product_base import BaseProduct
 from pfund.exchanges.binance.exchange import Exchange
-from pfund._logging import setup_loggers
+from pfund.logging import setup_loggers
 
 
 logger = logging.getLogger(DATA_SOURCE.lower() + '_data')

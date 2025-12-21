@@ -3,9 +3,9 @@ from typing import Literal, TYPE_CHECKING, Callable, Awaitable
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
-    from pfund._typing import tEnvironment, FullDataChannel
+    from pfund.typing import tEnvironment, FullDataChannel
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed._typing import tStorage, tDataLayer, tDataType, GenericFrameOrNone
+    from pfeed.typing import tStorage, tDataLayer, tDataType, GenericFrameOrNone
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.enums import DataSource
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
@@ -190,7 +190,7 @@ class MarketFeed(TimeBasedFeed):
         '''
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
-        from pfeed.utils.utils import lambda_with_name
+        from pfeed.utils import lambda_with_name
 
         self.transform(
             convert_to_pandas_df,
@@ -340,7 +340,7 @@ class MarketFeed(TimeBasedFeed):
     def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
-        from pfeed.utils.utils import lambda_with_name
+        from pfeed.utils import lambda_with_name
 
         self.transform(
             convert_to_pandas_df,
@@ -362,7 +362,7 @@ class MarketFeed(TimeBasedFeed):
         resolution: Resolution | str | tDataType="quote_L1",
         data_layer: tDataLayer='CLEANED',
         data_origin: str='',
-        to_storage: tStorage | None='LOCAL',
+        to_storage: tStorage | None=None,
         storage_options: dict | None=None,
         auto_transform: bool=True,
         callback: Callable[[dict], Awaitable[None] | None] | None=None,
@@ -393,7 +393,7 @@ class MarketFeed(TimeBasedFeed):
     
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
-        from pfeed.utils.utils import lambda_with_name
+        from pfeed.utils import lambda_with_name
         # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
         data_source: DataSource = self.data_source.name
         self.transform(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, overload, Literal
 if TYPE_CHECKING:
-    from pfeed._typing import tDataSource, tDataTool, tDataCategory
+    from pfeed.typing import tDataSource, tDataTool, tDataCategory
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.feeds.market_feed import MarketFeed
 
@@ -43,7 +43,7 @@ def create_feed(
     use_deltalake: bool=False,
 ) -> BaseFeed:
     import importlib
-    from pfeed.utils.utils import to_camel_case
+    from pfeed.utils import to_camel_case
     data_category = DataCategory[data_category.upper()]
     try:
         Feed: type[BaseFeed] = getattr(

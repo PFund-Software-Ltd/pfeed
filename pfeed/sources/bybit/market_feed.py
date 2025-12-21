@@ -6,11 +6,11 @@ if TYPE_CHECKING:
     import pandas as pd
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
-    from pfund._typing import FullDataChannel, tEnvironment
-    from pfeed._typing import GenericFrameOrNone
+    from pfund.typing import FullDataChannel, tEnvironment
+    from pfeed.typing import GenericFrameOrNone
     from pfeed.sources.bybit.stream_api import ChannelKey
     from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
-    from pfeed._typing import tStorage, tDataLayer
+    from pfeed.typing import tStorage, tDataLayer
 
 from pfund.products.product_bybit import BybitProduct
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
@@ -63,6 +63,8 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         RENAMING_COLS = {'timestamp': 'date', 'size': 'volume'}
         df = df.rename(columns=RENAMING_COLS)
         df['side'] = df['side'].map(MAPPING_COLS)
+        # Convert volume column to float64 to pass pandera schema validation, since inverse products have int volume
+        df["volume"] = df["volume"].astype("float64")
         return df
     
     def download(
@@ -129,7 +131,7 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         await self.data_source.stream_api.disconnect()
     
     def _add_default_transformations_to_stream(self, product: BybitProduct, resolution: Resolution):
-        from pfeed.utils.utils import lambda_with_name
+        from pfeed.utils import lambda_with_name
         self.transform(
             lambda_with_name('parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
         )

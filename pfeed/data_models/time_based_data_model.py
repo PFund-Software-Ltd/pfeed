@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     import pyarrow.fs as pa_fs
     from pfeed.data_models.base_data_model import BaseFileMetadata
-    from pfeed._typing import FilePath
+    from pfeed.typing import FilePath
     class TimeBasedFileMetadata(BaseFileMetadata, total=True):
         start_date: datetime.date
         end_date: datetime.date

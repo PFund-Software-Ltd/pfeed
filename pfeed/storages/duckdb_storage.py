@@ -29,6 +29,7 @@ from pfeed import config
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
+from pfeed.enums import DataTool, DataStorage
 
 
 class DuckDBMetadata(TypedDict):
@@ -41,11 +42,12 @@ class DuckDBMetadata(TypedDict):
 class DuckDBStorage(BaseStorage):
     def __init__(
         self,
+        base_data_path: Path | None = None,
         data_layer: tDataLayer='CLEANED',
         data_domain: str='GENERAL_DATA',
         use_deltalake: bool=False,   # for consistency with other storages only, not used
         storage_options: dict | None=None,
-        in_memory: bool=False, 
+        in_memory: bool=False,
         memory_limit: str='4GB',
         **storage_kwargs
     ):
@@ -57,7 +59,8 @@ class DuckDBStorage(BaseStorage):
         self._in_memory = in_memory
         self._memory_limit = memory_limit
         super().__init__(
-            name='duckdb', 
+            name=DataStorage.DUCKDB,
+            base_data_path=base_data_path,
             data_layer=data_layer,
             data_domain=data_domain,
             use_deltalake=use_deltalake,
@@ -85,12 +88,14 @@ class DuckDBStorage(BaseStorage):
         data_layer: tDataLayer,
         data_domain: str,
         use_deltalake: bool,   # for consistency with other storages only, not used
+        base_data_path: Path | None = None,
         storage_options: dict | None=None,
         in_memory: bool=False,
         memory_limit: str='4GB',
         **storage_kwargs
     ) -> BaseStorage:
         instance = cls(
+            base_data_path=base_data_path,
             data_layer=data_layer,
             data_domain=data_domain,
             use_deltalake=use_deltalake,
@@ -289,10 +294,10 @@ class DuckDBStorage(BaseStorage):
         return storage_metadata
 
     def write_data(self, data: GenericFrame) -> bool:
-        from pfeed._etl.base import convert_to_pandas_df
+        from pfeed._etl.base import convert_to_desired_df
         try:
             with self:
-                df: pd.DataFrame = convert_to_pandas_df(data)
+                df: pd.DataFrame = convert_to_desired_df(data, DataTool.pandas)
                 if df.empty:
                     print_warning(f'Empty DataFrame for {self.name} {self.data_model}')
                     return False

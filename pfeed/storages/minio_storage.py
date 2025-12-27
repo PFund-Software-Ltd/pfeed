@@ -12,13 +12,14 @@ if TYPE_CHECKING:
 import os
 import io
 import datetime
+from pathlib import Path
 from functools import lru_cache
 
 from cloudpathlib import CloudPath
 import pyarrow.fs as pa_fs
 
 from pfeed.storages.base_storage import BaseStorage
-from pfeed.enums import StreamMode
+from pfeed.enums import StreamMode, DataStorage
 
 
 class MinioStorageOptions(TypedDict):
@@ -33,12 +34,13 @@ class MinioStorageOptions(TypedDict):
 
 class MinioStorage(BaseStorage):
     BUCKET_NAME: str = 'pfeed'
-    
+
     def __init__(
         self,
+        base_data_path=None,
         data_layer: tDataLayer='CLEANED',
         data_domain: str='GENERAL_DATA',
-        use_deltalake: bool=False, 
+        use_deltalake: bool=False,
         storage_options: MinioStorageOptions | None=None,
         enable_bucket_versioning: bool=False,
     ):
@@ -52,10 +54,11 @@ class MinioStorage(BaseStorage):
 
         self.endpoint = self._create_endpoint()
         super().__init__(
-            name='minio', 
-            data_layer=data_layer, 
-            data_domain=data_domain, 
-            use_deltalake=use_deltalake, 
+            name=DataStorage.MINIO,
+            base_data_path=base_data_path,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            use_deltalake=use_deltalake,
             storage_options=self._normalize_storage_options(storage_options),
         )
         self._minio_options = storage_options or {}
@@ -88,15 +91,16 @@ class MinioStorage(BaseStorage):
         data_model: BaseDataModel,
         data_layer: tDataLayer,
         data_domain: str,
+        base_data_path: Path | None = None,
         use_deltalake: bool=False,
         storage_options: MinioStorageOptions | None=None,
         stream_mode: StreamMode=StreamMode.FAST,
         delta_flush_interval: int=100,
+        # EXTEND: extend storage_kwargs, currently only allow "enable_bucket_versioning"
         enable_bucket_versioning: bool=False,
-        # EXTEND
-        # **storage_kwargs,  
     ) -> BaseStorage:
         return super().from_data_model(
+            base_data_path=base_data_path,
             data_model=data_model,
             data_layer=data_layer,
             data_domain=data_domain,
@@ -104,8 +108,8 @@ class MinioStorage(BaseStorage):
             storage_options=storage_options,
             stream_mode=stream_mode,
             delta_flush_interval=delta_flush_interval,
+            # storage_kwargs:
             enable_bucket_versioning=enable_bucket_versioning,
-            # **storage_kwargs,
         )
     
     @staticmethod

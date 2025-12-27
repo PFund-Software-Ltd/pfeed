@@ -31,32 +31,30 @@ def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def convert_to_pandas_df(data: GenericData) -> pd.DataFrame:
-    import io
-    from pfeed.utils.file_formats import decompress_data, is_parquet, is_likely_csv
-    if isinstance(data, bytes):
-        data = decompress_data(data)
-        if is_parquet(data):
-            return pd.read_parquet(io.BytesIO(data))
-        elif is_likely_csv(data):
-            return pd.read_csv(io.BytesIO(data))
-        else:
-            raise ValueError("Unknown or unsupported format")
-    elif is_dataframe(data):
-        return convert_to_user_df(data, DataTool.pandas)
-    else:
-        raise ValueError(f'{type(data)=}')
-
-
-def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> pd.DataFrame | pl.LazyFrame | dd.DataFrame | SparkDataFrame:
-    '''Converts the input dataframe to the user's desired data tool.
+def convert_to_desired_df(data: GenericData, data_tool: DataTool | tDataTool) -> pd.DataFrame | pl.LazyFrame | dd.DataFrame | SparkDataFrame:
+    '''Converts the input data to the user's desired data tool.
     Args:
-        df: The input dataframe to be converted.
+        data: The input data to be converted.
         data_tool: The data tool to convert the dataframe to.
             e.g. if data_tool is 'pandas', the returned the dataframe is a pandas dataframe.
     Returns:
         The converted dataframe.
     '''
+    import io
+    from pfeed.utils.file_formats import decompress_data, is_parquet, is_likely_csv
+    
+    if isinstance(data, bytes):
+        data = decompress_data(data)
+        if is_parquet(data):
+            df = pd.read_parquet(io.BytesIO(data))
+        elif is_likely_csv(data):
+            df = pd.read_csv(io.BytesIO(data))
+        else:
+            raise ValueError("Unknown or unsupported format")
+    elif is_dataframe(data):
+        df: GenericFrame = data
+    else:
+        raise ValueError(f'{type(data)=}')
 
     data_tool = DataTool[data_tool.lower()]
 
@@ -64,32 +62,32 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> pd.
         # narwhals only supports SparkDataFrame, not ps.DataFrame, so convert to SparkDataFrame first
         if isinstance(_df, ps.DataFrame):
             _df = _df.to_spark()
-        nw_df = nw.from_native(_df)
-        if isinstance(nw_df, nw.LazyFrame):
-            nw_df = nw_df.collect()
-        return nw_df
+        nwdf = nw.from_native(_df)
+        if isinstance(nwdf, nw.LazyFrame):
+            nwdf = nwdf.collect()
+        return nwdf
     
     # if the input dataframe is already in the desired data tool, return it directly
     if data_tool == DataTool.pandas:
         if isinstance(df, pd.DataFrame):
             return df
         else:
-            nw_df = _narwhalify(df)
-            return nw_df.to_pandas()
+            nwdf = _narwhalify(df)
+            return nwdf.to_pandas()
     elif data_tool == DataTool.polars:
         if isinstance(df, (pl.LazyFrame, pl.DataFrame)):
             return df.lazy()
         else:
-            nw_df = _narwhalify(df)
-            return nw_df.to_polars().lazy()
+            nwdf = _narwhalify(df)
+            return nwdf.to_polars().lazy()
     elif data_tool == DataTool.dask:
         if isinstance(df, pd.DataFrame):
             pass
         elif isinstance(df, dd.DataFrame):
             return df
         else:
-            nw_df = _narwhalify(df)
-            df = nw_df.to_pandas()
+            nwdf = _narwhalify(df)
+            df = nwdf.to_pandas()
         return dd.from_pandas(df, npartitions=1)
     elif data_tool == DataTool.spark:
         if isinstance(df, pd.DataFrame):
@@ -97,8 +95,8 @@ def convert_to_user_df(df: GenericFrame, data_tool: DataTool | tDataTool) -> pd.
         elif isinstance(df, SparkDataFrame):
             return df
         else:
-            nw_df = _narwhalify(df)
-            df = nw_df.to_pandas()
+            nwdf = _narwhalify(df)
+            df = nwdf.to_pandas()
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
         return spark.createDataFrame(df)

@@ -67,11 +67,6 @@ class Faucet:
         if self._extract_type == ExtractType.retrieve:
             metadata: StorageMetadata | TimeBasedStorageMetadata
             data, metadata = self._extract_func(self.data_model)
-            file_metadata: BaseFileMetadata | MarketFileMetadata = metadata['file_metadata']
-            # NOTE: the initial data model was created with an input resolution (e.g. '1minute'), 
-            # but the retrieved data may have a different resolution (e.g. '1tick'), so we need to update the data model's resolution
-            if 'resolution' in file_metadata and file_metadata['resolution'] != repr(self.data_model.resolution):
-                self._data_model.update_resolution(file_metadata['resolution'])
         else:
             data: GenericData | None = self._extract_func(self.data_model)
             # NOTE: currently no metadata for other ExtractType

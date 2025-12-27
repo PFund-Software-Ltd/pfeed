@@ -1,4 +1,5 @@
 from typing import Literal
+from pathlib import Path
 
 import pyarrow.fs as pa_fs
 
@@ -10,16 +11,18 @@ class LocalStorage(BaseStorage):
     def __init__(
         self,
         name: Literal['LOCAL', 'CACHE']='LOCAL',
+        base_data_path: Path | None = None,
         data_layer: tDataLayer='CLEANED',
         data_domain: str='GENERAL_DATA',
-        use_deltalake: bool=False, 
+        use_deltalake: bool=False,
         storage_options: dict | None=None,
     ):
         super().__init__(
-            name=name, 
-            data_layer=data_layer, 
-            data_domain=data_domain, 
-            use_deltalake=use_deltalake, 
+            name=name,
+            base_data_path=base_data_path,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            use_deltalake=use_deltalake,
             storage_options=storage_options,
         )
 

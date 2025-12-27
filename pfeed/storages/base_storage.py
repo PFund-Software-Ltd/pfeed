@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pfeed.enums import StreamMode
+from pfeed.enums import StreamMode, DataLayer, DataStorage
 
 
 class BaseStorage(ABC):
@@ -30,13 +30,14 @@ class BaseStorage(ABC):
     def __init__(
         self,
         name: tStorage,
+        base_data_path: Path | None = None,
         data_layer: tDataLayer='CLEANED',
         data_domain: str='GENERAL_DATA',
         use_deltalake: bool=False,
         storage_options: dict | None=None,
         **storage_kwargs,
     ):
-        from pfeed.enums import DataStorage, DataLayer
+        from pfeed.config import get_config
         self.name = DataStorage[name.upper()]
         self.data_layer = DataLayer[data_layer.upper()] if not isinstance(data_layer, DataLayer) else data_layer
         self.data_domain = data_domain.upper()
@@ -45,6 +46,7 @@ class BaseStorage(ABC):
         self._data_handler: BaseDataHandler | None = None
         self._storage_options = storage_options or {}
         self._storage_kwargs = storage_kwargs
+        self.base_data_path = base_data_path or get_config().data_path
 
     @classmethod
     def from_data_model(
@@ -52,6 +54,7 @@ class BaseStorage(ABC):
         data_model: BaseDataModel, 
         data_layer: tDataLayer,
         data_domain: str,
+        base_data_path: Path | None = None,
         use_deltalake: bool=False, 
         storage_options: dict | None=None,
         stream_mode: StreamMode=StreamMode.FAST,
@@ -59,6 +62,7 @@ class BaseStorage(ABC):
         **storage_kwargs,
     ) -> BaseStorage:
         instance = cls(
+            base_data_path=base_data_path,
             data_layer=data_layer,
             data_domain=data_domain,
             use_deltalake=use_deltalake, 
@@ -87,6 +91,7 @@ class BaseStorage(ABC):
     def _attach_data_handler(self, stream_mode: StreamMode, delta_flush_interval: int):
         data_handler_configs = {
             'data_path': self.data_path,
+            'data_layer': self.data_layer,
             'filesystem': self.get_filesystem(),
             'storage_options': self._storage_options,
             'use_deltalake': self.use_deltalake,
@@ -109,10 +114,8 @@ class BaseStorage(ABC):
 
     @property
     def data_path(self) -> Path:
-        from pfeed.config import get_config
-        config = get_config()
         return (
-            Path(config.data_path)
+            Path(self.base_data_path)
             / f'data_layer={self.data_layer.name}'
             / f'data_domain={self.data_domain}'
         )

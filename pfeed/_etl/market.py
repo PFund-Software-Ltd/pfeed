@@ -23,7 +23,7 @@ def standardize_columns(df: pd.DataFrame, product: BaseProduct, resolution: Reso
     return df
 
 
-def filter_columns(df: pd.DataFrame, product: BaseProduct) -> pd.DataFrame:
+def filter_columns(df: pd.DataFrame, product: BaseProduct | None = None) -> pd.DataFrame:
     """Filter out unnecessary columns from raw data."""
     is_tick_data = 'price' in df.columns
     if is_tick_data:
@@ -32,8 +32,9 @@ def filter_columns(df: pd.DataFrame, product: BaseProduct) -> pd.DataFrame:
         standard_cols = ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
     df_cols = df.columns
     extra_cols = []
-    if product.is_stock() or product.is_etf():
-        extra_cols.extend(['dividends', 'splits'])
+    if product:
+        if product.is_stock() or product.is_etf():
+            extra_cols.extend(['dividends', 'splits'])
     for extra_col in extra_cols:
         if extra_col in df_cols:
             standard_cols.append(extra_col)
@@ -48,7 +49,7 @@ def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
     
 
-def resample_data(df: pd.DataFrame, resolution: str | Resolution, offset: str | None = None) -> pd.DataFrame:
+def resample_data(df: pd.DataFrame, resolution: str | Resolution, product: BaseProduct | None = None, offset: str | None = None) -> pd.DataFrame:
     '''Resamples the input dataframe based on the target resolution.
     Args:
         df: The input dataframe to be resampled.
@@ -66,6 +67,8 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution, offset: str | 
         is_resample_required = resolution < df_resolution
         if not is_resample_required:
             return df
+    
+    df = filter_columns(df, product=product)
         
     # converts to pandas's resolution format
     eresolution = (

@@ -9,41 +9,23 @@ if TYPE_CHECKING:
     from pfund.typing import FullDataChannel, tEnvironment
     from pfeed.typing import GenericFrameOrNone
     from pfeed.sources.bybit.stream_api import ChannelKey
-    from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
     from pfeed.typing import tStorage, tDataLayer
 
 from pfund.products.product_bybit import BybitProduct
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
 from pfeed.sources.bybit.mixin import BybitMixin
+from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
+from pfeed.enums import DataLayer
 
 
 __all__ = ['BybitMarketFeed']
 
 
 class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
-    def create_data_model(
-        self,
-        env: tEnvironment,
-        product: str | BybitProduct,
-        resolution: str | Resolution,
-        start_date: str | datetime.date,
-        end_date: str | datetime.date | None = None,
-        data_origin: str = '',
-        **product_specs
-    ) -> BybitMarketDataModel:
-        from pfeed.sources.bybit.market_data_handler import BybitMarketDataHandler
-        data_model = super().create_data_model(
-            product=product,
-            resolution=resolution,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            env=env,
-            **product_specs
-        )
-        data_model.data_handler_class = BybitMarketDataHandler
-        return data_model
-        
+    @property
+    def data_model_class(self) -> type[BybitMarketDataModel]:
+        return BybitMarketDataModel
+    
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.
@@ -59,7 +41,8 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         Returns:
             pd.DataFrame: Normalized DataFrame with standardized column names and values
         """
-        MAPPING_COLS = {'Buy': 1, 'Sell': -1}
+        df['side'] = df['side'].str.lower()  # some products use "Buy"/"Sell" while some use "buy"/"sell"
+        MAPPING_COLS = {'buy': 1, 'sell': -1}
         RENAMING_COLS = {'timestamp': 'date', 'size': 'volume'}
         df = df.rename(columns=RENAMING_COLS)
         df['side'] = df['side'].map(MAPPING_COLS)
@@ -77,7 +60,6 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         data_layer: tDataLayer='CLEANED',
         to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
-        auto_transform: bool=True,
         **product_specs
     ) -> GenericFrameOrNone | dict[datetime.date, GenericFrameOrNone] | BybitMarketFeed:
         '''
@@ -101,7 +83,6 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
             data_layer=data_layer,
             to_storage=to_storage,
             storage_options=storage_options,
-            auto_transform=auto_transform,
             dataflow_per_date=True,
             include_metadata=False,
             **product_specs
@@ -130,12 +111,13 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
     async def _close_stream(self):
         await self.data_source.stream_api.disconnect()
     
-    def _add_default_transformations_to_stream(self, product: BybitProduct, resolution: Resolution):
+    def _add_default_transformations_to_stream(self, data_layer: DataLayer, product: BybitProduct, resolution: Resolution):
         from pfeed.utils import lambda_with_name
-        self.transform(
-            lambda_with_name('parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
-        )
-        super()._add_default_transformations_to_stream(product, resolution)
+        if data_layer != DataLayer.RAW:
+            self.transform(
+                lambda_with_name('parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
+            )
+        super()._add_default_transformations_to_stream(data_layer, product, resolution)
         
     @staticmethod
     def _parse_message(product: BybitProduct, msg: dict) -> dict:

@@ -4,8 +4,10 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericData
     from pfeed.typing import tDataTool
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.enums import DataLayer
 
 from abc import ABC, abstractmethod
+
 
 
 class BaseDataHandler(ABC):
@@ -13,11 +15,13 @@ class BaseDataHandler(ABC):
         self, 
         data_model: BaseDataModel, 
         data_path: str, 
+        data_layer: DataLayer,
         use_deltalake: bool,
         storage_options: dict | None=None,
     ):
         self._data_model = data_model
         self._data_path = data_path
+        self._data_layer = data_layer
         self._use_deltalake = use_deltalake
         self._storage_options = storage_options or {}
         

@@ -18,13 +18,16 @@ from pydantic import field_validator, Field, ValidationInfo
 
 from pfeed.data_models.base_data_model import BaseDataModel
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
-from pfeed.enums import StreamMode
+from pfeed.enums import StreamMode, DataLayer
 
 
 class TimeBasedDataModel(BaseDataModel):
     start_date: datetime.date
     end_date: datetime.date = Field(description='Must be greater than or equal to start date.')
-    data_handler_class: type[TimeBasedDataHandler] = TimeBasedDataHandler
+
+    @property
+    def data_handler_class(self) -> type[TimeBasedDataHandler]:
+        return TimeBasedDataHandler
 
     @property
     def date(self) -> datetime.date:
@@ -69,6 +72,7 @@ class TimeBasedDataModel(BaseDataModel):
     def create_data_handler(
         self, 
         data_path: FilePath,
+        data_layer: DataLayer,
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
         use_deltalake: bool = False,
@@ -79,6 +83,7 @@ class TimeBasedDataModel(BaseDataModel):
         return DataHandler(
             data_model=self, 
             data_path=data_path, 
+            data_layer=data_layer,
             filesystem=filesystem, 
             storage_options=storage_options, 
             use_deltalake=use_deltalake,

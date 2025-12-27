@@ -8,13 +8,14 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed.typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
-    from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 
 import time
 import datetime
 
 from pfeed.feeds.market_feed import MarketFeed
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
+from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
+from pfeed.enums import DataLayer
 
 
 __all__ = ["YahooFinanceMarketFeed"]
@@ -53,29 +54,10 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     #     "M": [1, 3],
     # }
     
-    def create_data_model(
-        self,
-        env: tEnvironment,
-        product: str | BaseProduct,
-        resolution: str | Resolution,
-        start_date: str | datetime.date,
-        end_date: str | datetime.date | None = None,
-        data_origin: str = '',
-        **product_specs
-    ) -> YahooFinanceMarketDataModel:
-        from pfeed.sources.yahoo_finance.market_data_handler import YahooFinanceMarketDataHandler
-        data_model = super().create_data_model(
-            env=env,
-            product=product,
-            resolution=resolution,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            **product_specs
-        )
-        data_model.data_handler_class = YahooFinanceMarketDataHandler
-        return data_model
-
+    @property
+    def data_model_class(self) -> type[YahooFinanceMarketDataModel]:
+        return YahooFinanceMarketDataModel
+    
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         # convert to UTC and reset index
@@ -132,7 +114,6 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         data_origin: str='',
         to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
-        auto_transform: bool=True,
         yfinance_kwargs: dict | None=None,
         **product_specs
     ) -> GenericFrameOrNone | YahooFinanceMarketFeed:
@@ -171,7 +152,6 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             data_origin=data_origin,
             to_storage=to_storage,
             storage_options=storage_options,
-            auto_transform=auto_transform,
             dataflow_per_date=False,
             include_metadata=False,
             **product_specs
@@ -248,14 +228,15 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     async def _close_stream(self):
         await self.data_source.stream_api.disconnect()
     
-    def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
+    def _add_default_transformations_to_stream(self, data_layer: DataLayer, product: BaseProduct, resolution: Resolution):
         from pfeed.utils import lambda_with_name
         # since Ray can't serialize the "self" in self._parse_message, disable it for now
         assert self._use_ray is False, "Transformations in Yahoo Finance streaming data is not supported with Ray, please set use_ray=False"
-        self.transform(
-            lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),
-        )
-        super()._add_default_transformations_to_stream(product, resolution)
+        if data_layer != DataLayer.RAW:
+            self.transform(
+                lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),
+            )
+        super()._add_default_transformations_to_stream(data_layer, product, resolution)
     
     def _parse_message(self, product: BaseProduct, msg: dict) -> dict:
         '''
@@ -391,7 +372,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             expiration: e.g. '2024-12-13', it must be one of the values returned by `get_option_expirations`.
             option_type: 'CALL' or 'PUT'
         '''
-        from pfeed._etl.base import convert_to_user_df
+        from pfeed._etl.base import convert_to_desired_df
         
         ticker: Ticker = self.batch_api.Ticker(symbol)
         option_chain = ticker.option_chain(expiration)
@@ -401,5 +382,5 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             df = option_chain.puts
         else:
             raise ValueError(f"Invalid option type: {option_type}")
-        return convert_to_user_df(df, self._data_tool)
+        return convert_to_desired_df(df, self._data_tool)
     

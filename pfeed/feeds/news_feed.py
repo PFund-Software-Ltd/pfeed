@@ -60,7 +60,6 @@ class NewsFeed(TimeBasedFeed):
         data_origin: str='',
         to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
-        auto_transform: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
@@ -77,8 +76,6 @@ class NewsFeed(TimeBasedFeed):
             product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
-        if self._pipeline_mode and to_storage:
-            print_warning('"to_storage" in download() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, data_origin=data_origin),
             partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, data_origin=data_origin),
@@ -86,24 +83,26 @@ class NewsFeed(TimeBasedFeed):
             end_date=end_date,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
-            add_default_transformations=(lambda: self._add_default_transformations_to_download(product=product)) if data_layer != DataLayer.RAW and auto_transform else None,
-            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage and not self._pipeline_mode else None,
+            add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, product=product),
+            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
         )
     
-    def _add_default_transformations_to_download(self, product: BaseProduct | None=None):
+    def _add_default_transformations_to_download(self, data_layer: DataLayer, product: BaseProduct | None=None):
         from pfeed._etl import news as etl
-        from pfeed._etl.base import convert_to_user_df
+        from pfeed._etl.base import convert_to_desired_df
+        if data_layer != DataLayer.RAW:
+            self.transform(
+                self._normalize_raw_data,
+                lambda_with_name(
+                    'standardize_columns',
+                    lambda df: etl.standardize_columns(df, product=product),
+                ),
+                etl.organize_columns,
+            )
         self.transform(
-            self._normalize_raw_data,
-            lambda_with_name(
-                'standardize_columns',
-                lambda df: etl.standardize_columns(df, product=product),
-            ),
-            etl.filter_columns,
-            etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_user_df(df, self._data_tool)
+                lambda df: convert_to_desired_df(df, self._data_tool)
             )
         )
         
@@ -118,7 +117,6 @@ class NewsFeed(TimeBasedFeed):
         data_domain: str='',
         from_storage: tStorage | None=None,
         storage_options: dict | None=None,
-        auto_transform: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         env: tEnvironment='BACKTEST',
@@ -137,20 +135,11 @@ class NewsFeed(TimeBasedFeed):
             data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
-            add_default_transformations=(lambda: self._add_default_transformations_to_retrieve()) if data_layer != DataLayer.RAW and auto_transform else None,
+            add_default_transformations=lambda: self._add_default_transformations_to_retrieve(),
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
         )
 
-    def _add_default_transformations_to_retrieve(self):
-        from pfeed._etl.base import convert_to_user_df
-        self.transform(
-            lambda_with_name(
-                'convert_to_user_df',
-                lambda df: convert_to_user_df(df, self._data_tool)
-            )
-        )
-    
     # TODO:
     def fetch(self) -> GenericFrameOrNone | NewsFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")

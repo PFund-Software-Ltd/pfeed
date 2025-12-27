@@ -53,8 +53,6 @@ class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
         data_origin: str='',
         to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
-        auto_transform: bool=True,
-        dataflow_per_date: bool=False,
         num_news: int=10,
         news_type: Literal['news', 'press releases', 'all']='news',
         **product_specs
@@ -78,7 +76,6 @@ class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
             data_origin=data_origin,
             to_storage=to_storage,
             storage_options=storage_options,
-            auto_transform=auto_transform,
             dataflow_per_date=False,
             include_metadata=False,
             **product_specs

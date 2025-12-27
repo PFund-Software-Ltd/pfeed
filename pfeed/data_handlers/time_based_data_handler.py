@@ -26,7 +26,7 @@ try:
 except ImportError:
     DeltaTable = None
 
-from pfeed.enums import StreamMode
+from pfeed.enums import StreamMode, DataTool, DataLayer
 from pfeed.data_handlers.base_data_handler import BaseDataHandler
 from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 from pfeed.messaging.streaming_message import StreamingMessage
@@ -39,6 +39,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         self, 
         data_model: TimeBasedDataModel,
         data_path: FilePath,
+        data_layer: DataLayer,
         filesystem: pa_fs.FileSystem,
         storage_options: dict | None = None,
         use_deltalake: bool = False,
@@ -67,6 +68,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         super().__init__(
             data_model=data_model, 
             data_path=data_path,
+            data_layer=data_layer,
             storage_options=storage_options,
             use_deltalake=use_deltalake,
         )
@@ -187,16 +189,15 @@ class TimeBasedDataHandler(BaseDataHandler):
             self._write_buffer_to_deltalake()
             self._last_delta_flush = now
         
-    def _write_batch(self, df: GenericFrame, validate=True, date_column: str='date'):
+    def _write_batch(self, df: GenericFrame, date_column: str='date'):
         '''
         Args:
-            validate: Whether to validate the schema of the dataframe.
             date_column: The column name of the time column, needed when the dataframe is raw and not normalized, default is 'date'.
         '''
-        from pfeed._etl.base import convert_to_pandas_df
+        from pfeed._etl.base import convert_to_desired_df
 
-        df: pd.DataFrame = convert_to_pandas_df(df)
-        if validate:
+        df: pd.DataFrame = convert_to_desired_df(df, DataTool.pandas)
+        if self._data_layer != DataLayer.RAW:
             # reset index to avoid pandera.errors.SchemaError: DataFrameSchema failed series or dataframe validator 0: <Check validate_index_reset>
             df = df.reset_index(drop=True)
             df = self._validate_schema(df)
@@ -231,7 +232,23 @@ class TimeBasedDataHandler(BaseDataHandler):
             existing_dates = []
             if is_deltatable:
                 metadata_file_path = file_path / DeltaLakeStorageMixin.metadata_filename
-                existing_metadata: dict[str, Any] = self._io._read_pyarrow_table_metadata([metadata_file_path])
+                # Handle race condition: delta table exists but metadata file doesn't yet.
+                # This happens when concurrent writers both check is_deltatable() at the same time:
+                # - Writer A creates the delta table (via write_deltalake)
+                # - Writer B sees is_deltatable=True and tries to read metadata
+                # - Writer A hasn't finished writing the metadata file yet → FileNotFoundError
+                # Solution: retry reading with exponential backoff, waiting for Writer A to finish
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        existing_metadata: dict[str, Any] = self._io._read_pyarrow_table_metadata([metadata_file_path])
+                        break
+                    except FileNotFoundError:
+                        if attempt < max_retries - 1:
+                            time.sleep(0.1 * (2 ** attempt))  # 0.1s, 0.2s, 0.4s
+                        else:
+                            # After retries, assume no metadata exists yet (very rare edge case)
+                            existing_metadata = {}
                 file_metadata: TimeBasedFileDeltaMetadata = existing_metadata.get(str(metadata_file_path), {})
                 existing_dates = file_metadata.get('dates', [])
                 existing_dates = [datetime.datetime.strptime(d, '%Y-%m-%d').date() for d in existing_dates]

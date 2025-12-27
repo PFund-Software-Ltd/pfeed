@@ -6,27 +6,32 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment, FullDataChannel
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.typing import tStorage, tDataLayer, tDataType, GenericFrameOrNone
-    from pfeed.data_models.market_data_model import MarketDataModel
+    from pfeed.data_models.retrieve_market_data_model import RetrieveMarketDataModel
     from pfeed.enums import DataSource
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
     from pfeed.feeds.time_based_feed import GenericFrameOrNoneWithMetadata
 
 import datetime
+from pathlib import Path
 from abc import abstractmethod
 from functools import partial
 
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
-from pfund import print_warning
 from pfeed.messaging import BarMessage, TickMessage
-from pfeed.enums import DataCategory, MarketDataType, DataLayer
+from pfeed.enums import DataCategory, MarketDataType, DataLayer, DataTool
 from pfeed.feeds.time_based_feed import TimeBasedFeed
+from pfeed.data_models.market_data_model import MarketDataModel
 
 
 class MarketFeed(TimeBasedFeed):
     data_domain = DataCategory.MARKET_DATA
 
     SUPPORTED_LOWEST_RESOLUTION = Resolution('1d')
+    
+    @property
+    def data_model_class(self) -> type[MarketDataModel]:
+        return MarketDataModel
     
     def get_highest_resolution(self) -> Resolution:
         '''
@@ -67,11 +72,6 @@ class MarketFeed(TimeBasedFeed):
     def _create_resolution(resolution: str | Resolution) -> Resolution:
         return Resolution(resolution) if isinstance(resolution, str) else resolution
     
-    def _create_unit_resolution(self, resolution: str | Resolution) -> Resolution:
-        if isinstance(resolution, str):
-            resolution: Resolution = self._create_resolution(resolution)
-        return self._create_resolution('1' + repr(resolution.timeframe))
-        
     def create_data_model(
         self,
         env: tEnvironment,
@@ -82,7 +82,6 @@ class MarketFeed(TimeBasedFeed):
         data_origin: str='',
         **product_specs
     ) -> MarketDataModel:
-        from pfeed.data_models.market_data_model import MarketDataModel
         if isinstance(product, str) and product:
             product = self.data_source.create_product(product, **product_specs)
         # TODO: move the type conversions to MarketDataModel, but how to handle product_specs?
@@ -90,7 +89,8 @@ class MarketFeed(TimeBasedFeed):
         #     start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
         # if isinstance(end_date, str) and end_date:
         #     end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
-        return MarketDataModel(
+        DataModel = self.data_model_class
+        return DataModel(
             env=env,
             data_source=self.data_source,
             data_origin=data_origin,
@@ -98,7 +98,6 @@ class MarketFeed(TimeBasedFeed):
             resolution=resolution,
             start_date=start_date,
             end_date=end_date or start_date,
-            use_deltalake=self._use_deltalake
         )
         
     def download(
@@ -113,7 +112,6 @@ class MarketFeed(TimeBasedFeed):
         data_origin: str='',
         to_storage: tStorage | None='LOCAL',
         storage_options: dict | None=None,
-        auto_transform: bool=True,
         dataflow_per_date: bool=True,
         include_metadata: bool=False,
         **product_specs
@@ -139,13 +137,6 @@ class MarketFeed(TimeBasedFeed):
                     option_type='CALL',
                 )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
-            auto_transform: Whether to apply default transformations to the data.
-                Default transformations include:
-                - normalizing raw data
-                - standardizing and organizing columns
-                - resampling data to the target resolution
-                - filtering non-standard columns if resampling is required
-                since during resampling, non-standard columns cannot be resampled/interpreted
             dataflow_per_date: Whether to create a dataflow for each date.
                 If True, a dataflow will be created for each date.
                 If False, a single dataflow will be created for the entire date range.
@@ -160,12 +151,10 @@ class MarketFeed(TimeBasedFeed):
             resolution: Resolution = self._create_resolution(resolution)
         assert highest_resolution >= resolution >= self.SUPPORTED_LOWEST_RESOLUTION, \
             f'resolution must be >= {self.SUPPORTED_LOWEST_RESOLUTION} and <= {highest_resolution}'
-        unit_resolution: Resolution = self._create_resolution('1' + repr(resolution.timeframe))
+        unit_resolution: Resolution = resolution.to_unit()
         data_resolution: Resolution = max(unit_resolution, lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
-        if self._pipeline_mode and to_storage:
-            print_warning('"to_storage" in download() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
             partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, resolution=data_resolution, data_origin=data_origin),
@@ -173,15 +162,16 @@ class MarketFeed(TimeBasedFeed):
             end_date=end_date,
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
-            add_default_transformations=(lambda: self._add_default_transformations_to_download(data_resolution, resolution, product)) if data_layer != DataLayer.RAW and auto_transform else None,
-            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage and not self._pipeline_mode else None,
+            add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, data_resolution, resolution, product),
+            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
         )
     
     def _add_default_transformations_to_download(
         self,
+        data_layer: DataLayer,
         data_resolution: Resolution,
         target_resolution: Resolution,
-        product: BaseProduct
+        product: BaseProduct,
     ):
         '''
         Args:
@@ -189,31 +179,34 @@ class MarketFeed(TimeBasedFeed):
             target_resolution: The resolution of the data to be stored.
         '''
         from pfeed._etl import market as etl
-        from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
+        from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
 
+        if data_layer != DataLayer.RAW:
+            # default transformations to normalize data:
+            self.transform(
+                lambda_with_name(
+                    'convert_to_pandas_df',
+                    lambda data: convert_to_desired_df(data, DataTool.pandas)
+                ),
+                self._normalize_raw_data,
+                lambda_with_name(
+                    'standardize_columns',
+                    lambda df: etl.standardize_columns(df, product, data_resolution),
+                ),
+                lambda_with_name(
+                    'resample_data_if_necessary', 
+                    lambda df: etl.resample_data(df, target_resolution, product=product)
+                ),
+                # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
+                # otherwise, polars will not be able to collect correctly
+                # resampled_df = organize_columns(resampled_df)
+                etl.organize_columns,
+            )
         self.transform(
-            convert_to_pandas_df,
-            self._normalize_raw_data,
-            lambda_with_name(
-                'standardize_columns',
-                lambda df: etl.standardize_columns(df, product, data_resolution),
-            ),
-            lambda_with_name(
-                'filter_columns',
-                lambda df: etl.filter_columns(df, product),
-            ),
-            lambda_with_name(
-                'resample_data_if_necessary', 
-                lambda df: etl.resample_data(df, target_resolution)
-            ),
-            # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
-            # otherwise, polars will not be able to collect correctly
-            # resampled_df = organize_columns(resampled_df)
-            etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_user_df(df, self._data_tool)
+                lambda df: convert_to_desired_df(df, self._data_tool)
             )
         )
 
@@ -229,7 +222,7 @@ class MarketFeed(TimeBasedFeed):
         data_domain: str='',
         from_storage: tStorage='LOCAL',
         storage_options: dict | None=None,
-        auto_transform: bool=True,
+        auto_resample: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         env: tEnvironment='BACKTEST',
@@ -253,9 +246,7 @@ class MarketFeed(TimeBasedFeed):
             from_storage: try to load data from this storage.
                 If not specified, will search through all storages, e.g. local, minio, cache.
                 If no data is found, will try to download the missing data from the data source.
-            auto_transform: Whether to apply default transformations to the data.
-                Default transformations include:
-                - resampling data to the target resolution
+            auto_resample: Whether to resample data to the target resolution if it is not found in storage.
             dataflow_per_date: Whether to create a dataflow for each date, where data is stored per date.
                 If True, a dataflow will be created for each date.
                 If False, a single dataflow will be created for the entire date range.
@@ -274,49 +265,44 @@ class MarketFeed(TimeBasedFeed):
         product: BaseProduct = self.create_product(product, **product_specs)
         resolution: Resolution = self._create_resolution(resolution)
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
-        unit_resolution: Resolution = self._create_unit_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer = DataLayer[data_layer.upper()]
         data_domain = data_domain or self.data_domain.value
         return self._run_retrieve(
-            # NOTE: dataflow's data model will always have the input resolution
             partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
-            partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, resolution=unit_resolution, data_origin=data_origin),
+            partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,
             data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
-            add_default_transformations=(lambda: self._add_default_transformations_to_retrieve(resolution)) if data_layer != DataLayer.RAW and auto_transform else None,
+            add_default_transformations=lambda: self._add_default_transformations_to_retrieve(resolution, auto_resample),
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
         )
     
     def _retrieve_impl(
         self,
-        data_model: MarketDataModel,
+        data_path: Path,
+        data_model: RetrieveMarketDataModel,
         data_layer: tDataLayer,
         data_domain: str,
         from_storage: tStorage,
         storage_options: dict | None,
-        add_default_transformations: Callable | None,
     ) -> tuple[GenericFrameOrNone, TimeBasedStorageMetadata]:
         '''Retrieve data from storage. If data is not found, search for higher resolutions.
         
         Args:
             data_model: data model passed in by dataflow
         '''
-        # if can't find unit_resolution in storage, search for higher resolutions
-        # e.g. search '1m' -> search '1t'
-        unit_resolution: Resolution = data_model.resolution
-        assert unit_resolution.period == 1, 'unit_resolution must have period = 1'
-        search_resolutions = [unit_resolution]
-        highest_resolution: Resolution = self.get_highest_resolution()
-        # if add_default_transformations is provided, it means auto-resampling is enabled, search for higher resolutions
-        if add_default_transformations:
+        data_resolution: Resolution = data_model.resolution
+        search_resolutions = [data_resolution]
+        if data_model.auto_resample:
+            highest_resolution: Resolution = self.get_highest_resolution()
+            # search for higher resolutions, e.g. search '1m' -> search '1t'
             search_resolutions += [
-                resolution for resolution in unit_resolution.get_higher_resolutions(exclude_quote=True) 
+                resolution for resolution in data_resolution.get_higher_resolutions(exclude_quote=True)
                 # remove resolutions that are not supported by the data source
                 if resolution <= highest_resolution
             ]
@@ -326,32 +312,41 @@ class MarketFeed(TimeBasedFeed):
             data_model_copy = data_model.model_copy(deep=False)
             data_model_copy.update_resolution(search_resolution)
             df, metadata = super()._retrieve_impl(
+                data_path=data_path,
                 data_model=data_model_copy,
                 data_domain=data_domain,
                 data_layer=data_layer,
                 from_storage=from_storage,
                 storage_options=storage_options,
-                add_default_transformations=add_default_transformations,
             )
             if df is not None:
+                # NOTE: This also updates the faucet's data model with the actual resolution found in storage.
+                # This is necessary for auto-resampling: e.g., user requests '1m', but we found '1t' data.
+                data_model.update_resolution(search_resolution)
                 break
         return df, metadata
     
-    def _add_default_transformations_to_retrieve(self, target_resolution: Resolution):
+    def _add_default_transformations_to_retrieve(self, target_resolution: Resolution, auto_resample: bool):
         from pfeed._etl import market as etl
-        from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
+        from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
 
+        if auto_resample:
+            self.transform(
+                lambda_with_name(
+                    'convert_to_pandas_df',
+                    lambda df: convert_to_desired_df(df, DataTool.pandas)
+                ),
+                lambda_with_name(
+                    'resample_data_if_necessary', 
+                    lambda df: etl.resample_data(df, target_resolution)
+                ),
+                etl.organize_columns,
+            )
         self.transform(
-            convert_to_pandas_df,
-            lambda_with_name(
-                'resample_data_if_necessary', 
-                lambda df: etl.resample_data(df, target_resolution)
-            ),
-            etl.organize_columns,
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_user_df(df, self._data_tool)
+                lambda df: convert_to_desired_df(df, self._data_tool)
             )
         )
     
@@ -364,7 +359,6 @@ class MarketFeed(TimeBasedFeed):
         data_origin: str='',
         to_storage: tStorage | None=None,
         storage_options: dict | None=None,
-        auto_transform: bool=True,
         callback: Callable[[dict], Awaitable[None] | None] | None=None,
         env: tEnvironment='LIVE',
         **product_specs
@@ -382,23 +376,22 @@ class MarketFeed(TimeBasedFeed):
             start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
         )
         self._add_data_channel(data_model)
-        if self._pipeline_mode and to_storage:
-            print_warning('"to_storage" in stream() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
         return self._run_stream(
             data_model=data_model,
-            add_default_transformations=(lambda: self._add_default_transformations_to_stream(product, resolution)) if data_layer != DataLayer.RAW and auto_transform else None,
-            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage and not self._pipeline_mode else None,
+            add_default_transformations=lambda: self._add_default_transformations_to_stream(data_layer, product, resolution),
+            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
             callback=callback,
         )
     
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
-    def _add_default_transformations_to_stream(self, product: BaseProduct, resolution: Resolution):
+    def _add_default_transformations_to_stream(self, data_layer: DataLayer, product: BaseProduct, resolution: Resolution):
         from pfeed.utils import lambda_with_name
-        # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
-        data_source: DataSource = self.data_source.name
-        self.transform(
-            lambda_with_name('standardize_message', lambda msg: MarketFeed._standardize_message(data_source, product, resolution, msg)),
-        )
+        if data_layer != DataLayer.RAW:
+            # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
+            data_source: DataSource = self.data_source.name
+            self.transform(
+                lambda_with_name('standardize_message', lambda msg: MarketFeed._standardize_message(data_source, product, resolution, msg)),
+            )
     
     @staticmethod
     def _standardize_message(data_source: DataSource, product: BaseProduct, resolution: Resolution, msg: dict) -> StreamingMessage:
@@ -482,7 +475,7 @@ class MarketFeed(TimeBasedFeed):
     #     **product_specs
     # ) -> GenericFrameOrNone:
     #     from pfeed._etl import market as etl
-    #     from pfeed._etl.base import convert_to_pandas_df, convert_to_user_df
+    #     from pfeed._etl.base import convert_to_pandas_df, convert_to_desired_df
 
     #     resolution: Resolution = self._create_resolution(resolution)
     #     # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
@@ -514,5 +507,5 @@ class MarketFeed(TimeBasedFeed):
     #         if is_resample_required:
     #             df: pd.DataFrame = etl.resample_data(convert_to_pandas_df(df), resolution)
     #             self.logger.debug(f'resampled {product} {data_resolution} data to {resolution}')
-    #         df: GenericFrame = convert_to_user_df(df, self._data_tool)
+    #         df: GenericFrame = convert_to_desired_df(df, self._data_tool)
     #     return df

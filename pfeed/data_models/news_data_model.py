@@ -21,7 +21,6 @@ from pfeed.data_handlers import NewsDataHandler
 
 class NewsDataModel(TimeBasedDataModel):
     product: BaseProduct | None = None  # when product is None, it means general news (e.g. market news)
-    data_handler_class: type[NewsDataHandler] = NewsDataHandler
 
     def __str__(self):
         return ':'.join([super().__str__(), repr(self.product) if self.product else 'GENERAL', 'NEWS'])
@@ -34,6 +33,10 @@ class NewsDataModel(TimeBasedDataModel):
             assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
         return data
     
+    @property
+    def data_handler_class(self) -> type[NewsDataHandler]:
+        return NewsDataHandler
+
     def create_filename(self, date: datetime.date, file_extension='.parquet') -> str:
         name = 'GENERAL_MARKET_NEWS' if self.product is None else self.product.symbol
         filename = '_'.join([name, str(date)])

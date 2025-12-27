@@ -2,12 +2,10 @@ from __future__ import annotations
 from typing_extensions import TypedDict
 from typing import TYPE_CHECKING, Literal, Callable, Awaitable, Any
 if TYPE_CHECKING:
-    import polars as pl
     from narwhals.typing import Frame
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
     from pfeed.typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
-    from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.flows.dataflow import DataFlow, FlowResult
     from pfeed.flows.faucet import Faucet
     class TimeBasedFeedMetadata(TypedDict, total=True):
@@ -17,15 +15,21 @@ if TYPE_CHECKING:
 import datetime
 from pprint import pformat
 
+from pfund import print_warning
 from pfeed.utils.dataframe import is_empty_dataframe
 from pfeed.enums import ExtractType
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
+from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 
 __all__ = ["TimeBasedFeed"]
 
 
 class TimeBasedFeed(BaseFeed):
+    @property
+    def data_model_class(self) -> type[TimeBasedDataModel]:
+        return TimeBasedDataModel
+
     def _standardize_dates(self, start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.
 
@@ -111,18 +115,20 @@ class TimeBasedFeed(BaseFeed):
         data_domain: str,
         from_storage: tStorage,
         storage_options: dict | None,
-        add_default_transformations: Callable | None,
+        add_default_transformations: Callable,
         dataflow_per_date: bool,
         include_metadata: bool,
     ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | TimeBasedFeed:
+        from pfeed.config import get_config
+        config = get_config()
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(
+                data_path=config.data_path,
                 data_model=data_model,
                 data_layer=data_layer,
                 data_domain=data_domain,
                 from_storage=from_storage,
                 storage_options=storage_options,
-                add_default_transformations=add_default_transformations,
             ),
             partial_dataflow_data_model=partial_dataflow_data_model,
             partial_faucet_data_model=partial_faucet_data_model,
@@ -131,41 +137,21 @@ class TimeBasedFeed(BaseFeed):
             end_date=end_date,
             extract_type=ExtractType.retrieve,
         )
-        if add_default_transformations:
-            add_default_transformations()
+        add_default_transformations()
         if not self._pipeline_mode:
             return self.run(include_metadata=include_metadata)
         else:
             return self
-        
-    def _retrieve_impl(
-        self,
-        data_model: TimeBasedDataModel,
-        data_layer: tDataLayer,
-        data_domain: str,
-        from_storage: tStorage,
-        storage_options: dict | None,
-        add_default_transformations: Callable | None,
-    ) -> GenericFrameOrNoneWithMetadata:
-        '''Retrieves data among all scanned data loaded from local storages.
-        Returns the data from the storage with the least missing dates.
-        '''
-        from pfeed._etl.base import convert_to_user_df
-        df: pl.LazyFrame | None
-        metadata: TimeBasedStorageMetadata
-        df, metadata = super()._retrieve_impl(
-            data_model=data_model,
-            data_domain=data_domain,
-            data_layer=data_layer,
-            from_storage=from_storage,
-            storage_options=storage_options,
+    
+    def _add_default_transformations_to_retrieve(self, *args, **kwargs):
+        from pfeed.utils import lambda_with_name
+        from pfeed._etl.base import convert_to_desired_df
+        self.transform(
+            lambda_with_name(
+                'convert_to_user_df',
+                lambda df: convert_to_desired_df(df, self._data_tool)
+            )
         )
-        if df is not None:
-            df: GenericFrame = convert_to_user_df(df, self._data_tool)
-            self.logger.info(f'found data {data_model} in {from_storage} (data_layer={data_layer.name})')
-        else:
-            self.logger.debug(f'failed to find data {data_model} in any storage (data_layer={data_layer.name})')
-        return df, metadata
         
     @clear_subflows
     def _run_download(
@@ -176,7 +162,7 @@ class TimeBasedFeed(BaseFeed):
         end_date: datetime.date,
         dataflow_per_date: bool, 
         include_metadata: bool,
-        add_default_transformations: Callable | None,
+        add_default_transformations: Callable,
         load_to_storage: Callable | None,
     ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | TimeBasedFeed:
         self._create_batch_dataflows(
@@ -188,10 +174,13 @@ class TimeBasedFeed(BaseFeed):
             end_date=end_date,
             extract_type=ExtractType.download,
         )
-        if add_default_transformations:
-            add_default_transformations()
+        add_default_transformations()
         if load_to_storage:
-            load_to_storage()
+            if not self._pipeline_mode:
+                load_to_storage()
+            else:
+                print_warning('"to_storage" in download() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
+                
         if not self._pipeline_mode:
             metadata: TimeBasedFeedMetadata
             df, metadata = self.run(include_metadata=True)
@@ -208,7 +197,7 @@ class TimeBasedFeed(BaseFeed):
     def _run_stream(
         self,
         data_model: TimeBasedDataModel,
-        add_default_transformations: Callable | None,
+        add_default_transformations: Callable,
         load_to_storage: Callable | None,
         callback: Callable[[dict], Awaitable[None] | None] | None,
     ) -> None | TimeBasedFeed:
@@ -229,10 +218,12 @@ class TimeBasedFeed(BaseFeed):
             faucet.set_streaming_callback(callback)
         dataflow: DataFlow = self.create_dataflow(data_model=data_model, faucet=faucet)
         faucet.bind_data_model_to_dataflow(data_model, dataflow)
-        if add_default_transformations:
-            add_default_transformations()
+        add_default_transformations()
         if load_to_storage:
-            load_to_storage()
+            if not self._pipeline_mode:
+                load_to_storage()
+            else:
+                print_warning('"to_storage" in stream() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
         if not self._pipeline_mode:
             return self.run()
         else:
@@ -252,9 +243,9 @@ class TimeBasedFeed(BaseFeed):
             result: FlowResult = dataflow.result
             _df: GenericFrameOrNone = result.data
             _metadata: dict[str, Any] | StorageMetadata | TimeBasedStorageMetadata = result.metadata
-            
+
             dfs.append(_df)
-            
+
             # Handle missing dates
             # NOTE: only data read from storage will have 'missing_dates' in metadata
             # downloaded data will need to create 'missing_dates' by itself by checking if _df is None

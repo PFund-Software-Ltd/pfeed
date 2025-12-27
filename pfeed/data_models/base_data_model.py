@@ -4,6 +4,7 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
     from pfeed.typing import tDataSource
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler
     class BaseFileMetadata(TypedDict, total=True):
         env: tEnvironment
         data_source: tDataSource
@@ -16,7 +17,6 @@ from pydantic import BaseModel, ConfigDict
 
 from pfund.enums import Environment
 from pfeed.sources.base_source import BaseSource
-from pfeed.data_handlers.base_data_handler import BaseDataHandler
 
 
 class BaseDataModel(BaseModel, ABC):
@@ -33,12 +33,11 @@ class BaseDataModel(BaseModel, ABC):
             If None, it means the data source is already a unique identifier.
             Default is None.
     '''
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
     env: Environment
     data_source: BaseSource
     data_origin: str = ''
-    data_handler_class: type[BaseDataHandler] = BaseDataHandler
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
@@ -66,6 +65,11 @@ class BaseDataModel(BaseModel, ABC):
 
     @abstractmethod
     def create_data_handler(self, *args, **kwargs) -> BaseDataHandler:
+        pass
+
+    @property
+    @abstractmethod
+    def data_handler_class(self) -> type[BaseDataHandler]:
         pass
 
     def to_metadata(self) -> dict:

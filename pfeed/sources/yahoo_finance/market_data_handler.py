@@ -8,15 +8,16 @@ import datetime
 import pandas as pd
 
 from pfeed.data_handlers.market_data_handler import MarketDataHandler
+from pfeed.enums import DataTool
 
 
 class YahooFinanceMarketDataHandler(MarketDataHandler):
     def _write_batch(self, df: GenericFrame):
-        from pfeed._etl.base import convert_to_pandas_df
-        df: pd.DataFrame = convert_to_pandas_df(df)
+        from pfeed._etl.base import convert_to_desired_df
+        df: pd.DataFrame = convert_to_desired_df(df, DataTool.pandas)
         df.reset_index(inplace=True)
         columns = df.columns
-        # raw df = df directly from yfinance, not the normalized one (i.e. auto_transform=False)
+        # raw df = df directly from yfinance, not the normalized one
         is_raw_df = 'Date' in columns or 'Datetime' in columns
         kwargs = {
             'validate': not is_raw_df,

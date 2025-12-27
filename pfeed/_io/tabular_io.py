@@ -44,17 +44,50 @@ class TabularIO(BaseIO):
         file_path: FilePath,
         metadata: dict,
         delta_partition_by: list[str] | None=None,
+        max_retries: int=5,
+        base_delay: float=0.1,
     ):
+        """Write data to Delta Lake with retry logic for concurrent write conflicts.
+
+        Delta Lake's transaction log can fail with "version X already exists" when
+        multiple writers try to create the same version simultaneously. This is
+        especially common for version 0 (initial table creation).
+
+        Args:
+            max_retries: Maximum number of retry attempts.
+            base_delay: Initial delay in seconds, doubles with each retry (exponential backoff).
+        """
+        import time
+        import random
         from deltalake import write_deltalake
+
         is_empty_table = (table.num_rows == 0)
         if not is_empty_table:
-            write_deltalake(
-                str(file_path),
-                table,
-                mode='append',
-                storage_options=self._storage_options,
-                partition_by=delta_partition_by,
-            )
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    write_deltalake(
+                        str(file_path),
+                        table,
+                        mode='append',
+                        storage_options=self._storage_options,
+                        partition_by=delta_partition_by,
+                    )
+                    break
+                except Exception as e:
+                    last_exception = e
+                    error_msg = str(e).lower()
+                    # Retry on transaction conflicts (e.g., "version 0 already exists")
+                    if 'already exists' in error_msg or 'transaction failed' in error_msg:
+                        if attempt < max_retries - 1:
+                            # Exponential backoff with jitter
+                            delay = base_delay * (2 ** attempt) + random.uniform(0, base_delay)
+                            time.sleep(delay)
+                            continue
+                    raise
+            else:
+                # All retries exhausted
+                raise last_exception
         self._write_deltalake_metadata(file_path, metadata)
 
     def _write_pyarrow_table(self, table: pa.Table, file_path: FilePath, metadata: dict | None=None):

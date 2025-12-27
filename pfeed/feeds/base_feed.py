@@ -22,6 +22,7 @@ import os
 import asyncio
 import logging
 import inspect
+from pathlib import Path
 from collections import defaultdict
 from abc import ABC, abstractmethod
 from logging.handlers import QueueHandler, QueueListener
@@ -92,7 +93,7 @@ class BaseFeed(ABC):
         # ≈ logging.config.dictConfig(logging_config) with a custom configurator
         logging_configurator = LoggingDictConfigurator(logging_config)
         logging_configurator.configure()
-    
+
     def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
         if not hasattr(self.data_source, 'create_product'):
             raise NotImplementedError(f'{self.data_source.name} does not support creating products')
@@ -125,6 +126,11 @@ class BaseFeed(ABC):
     
     @abstractmethod
     def _normalize_raw_data(self, data: Any) -> Any:
+        pass
+    
+    @property
+    @abstractmethod
+    def data_model_class(self) -> type[BaseDataModel]:
         pass
     
     @staticmethod
@@ -226,6 +232,7 @@ class BaseFeed(ABC):
 
     def _retrieve_impl(
         self,
+        data_path: Path,
         data_model: BaseDataModel, 
         data_domain: str, 
         data_layer: tDataLayer,
@@ -239,6 +246,7 @@ class BaseFeed(ABC):
         try:
             Storage = data_storage.storage_class
             storage: BaseStorage = Storage.from_data_model(
+                base_data_path=data_path,
                 data_model=data_model,
                 data_layer=data_layer, 
                 data_domain=data_domain,
@@ -246,6 +254,10 @@ class BaseFeed(ABC):
                 storage_options=storage_options,
             )
             data, metadata = storage.read_data()
+            if data is not None:
+                self.logger.info(f'found data {data_model} in {data_storage} (data_layer={data_layer.name})')
+            else:
+                self.logger.debug(f'failed to find data {data_model} in {data_storage} (data_layer={data_layer.name})')
         except Exception:
             self.logger.exception(f'Error in retrieving data {data_model} in {data_storage} ({data_layer=}):')
         return data, metadata

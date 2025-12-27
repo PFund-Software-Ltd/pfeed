@@ -30,11 +30,9 @@ class MarketDataModel(TimeBasedDataModel):
         symbol: unique identifier for the product.
         asset_type: asset type of the product. e.g. 'PERPETUAL', 'STOCK'.
         resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
-            Default is '1d' = 1 day.
     '''
     product: BaseProduct
     resolution: Resolution
-    data_handler_class: type[MarketDataHandler] = MarketDataHandler
     
     def __str__(self):
         return ':'.join([super().__str__(), str(self.product.asset_type), self.product.symbol, repr(self.resolution)])
@@ -52,10 +50,9 @@ class MarketDataModel(TimeBasedDataModel):
         data['resolution'] = resolution
         return data
     
-    def update_resolution(self, resolution: Resolution | ResolutionRepr) -> None:
-        if isinstance(resolution, str):
-            resolution = Resolution(resolution)
-        self.resolution = resolution
+    @property
+    def data_handler_class(self) -> type[MarketDataHandler]:
+        return MarketDataHandler
 
     def create_filename(self, date: datetime.date, file_extension='.parquet') -> str:
         filename = '_'.join([self.product.symbol, str(date)])

@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame, GenericData
     
 
+import numpy as np
 import pandas as pd
 import polars as pl
 import narwhals as nw
@@ -21,7 +22,7 @@ def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
         first_date = df.loc[0, 'date']
         if isinstance(first_date, str):
             df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
-        elif isinstance(first_date, (float, int)):
+        elif isinstance(first_date, (float, int, np.floating, np.integer)):
             ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_date)
             df['date'] = pd.to_datetime(df['date'] * scaling_factor, unit=ts_unit)
         else:

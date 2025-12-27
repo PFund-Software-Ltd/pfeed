@@ -22,11 +22,11 @@ openjdk = "21.*"
 
 [pypi-dependencies]
 pfeed = { path = ".", editable = true }
-# pfund = ">=0.0.2"
-# fmp-api-client = ">=0.0.1"
 # TEMP
 pfund = { path = "../pfund", editable = true }
 fmp-api-client = { path = "../fmp-api-client", editable = true }
+# pfund = ">=0.0.2"
+# fmp-api-client = ">=0.0.1"
 tqdm = ">=4.67.1"
 pandas = ">=2.3.3"
 polars = ">=1.36.1"
@@ -66,7 +66,6 @@ duckdb = ">=1.4.3"
 lancedb = ">=0.26.0"
 
 [pypi-options.dependency-overrides]
-platformdirs = ">=4.5.0"
 pfeed = { path = ".", editable = true }
 # TEMP
 pfund = { path = "../pfund", editable = true }
@@ -74,6 +73,7 @@ fmp-api-client = { path = "../fmp-api-client", editable = true }
 
 [feature.dev.pypi-dependencies]
 afterpython = ">=0.1.1"
+marimo = { version = ">=0.18.4", extras = ["recommended", "lsp"] }
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"

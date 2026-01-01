@@ -8,22 +8,21 @@ from pfeed.storages.local_storage import LocalStorage
 
 
 class CacheStorage(LocalStorage):
+    # FIXME: move to init?
     NUM_RETAINED_DAYS = 7
 
     def __init__(
         self,
+        data_layer: tDataLayer,
+        data_domain: str,
         base_data_path: Path | None = None,
-        data_layer: tDataLayer='CLEANED',
-        data_domain: str='GENERAL_DATA',
-        use_deltalake: bool=False,
         storage_options: dict | None=None,
     ):
         super().__init__(
             name=DataStorage.CACHE,
-            base_data_path=base_data_path,
             data_layer=data_layer,
             data_domain=data_domain,
-            use_deltalake=use_deltalake,
+            base_data_path=base_data_path,
             storage_options=storage_options,
         )
         self._clear_caches()
@@ -38,7 +37,7 @@ class CacheStorage(LocalStorage):
         config = get_config()
         return (
             Path(config.cache_path)
-            / f'data_layer={self.data_layer.name}'
+            / f'data_layer={self.data_layer}'
             / f'data_domain={self.data_domain}'
         )
 

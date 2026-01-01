@@ -1,36 +1,30 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfund.typing import ResolutionRepr, tTradingVenue
-    from pfeed.data_models.time_based_data_model import TimeBasedFileMetadata
-    class MarketFileMetadata(TimeBasedFileMetadata, total=True):
-        trading_venue: tTradingVenue
-        exchange: str
-        product_name: str
-        product_basis: str
-        product_specs: dict
-        symbol: str
-        resolution: ResolutionRepr
-        asset_type: str
-
-import datetime
-from pathlib import Path
+from typing import ClassVar
 
 from pydantic import model_validator
 
+from pfund.enums import TradingVenue
 from pfund.datas.resolution import Resolution
 from pfund.products.product_base import BaseProduct
-from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+from pfeed.data_models.time_based_data_model import TimeBasedDataModel, TimeBasedMetadataModel
 from pfeed.data_handlers import MarketDataHandler
 
 
+class MarketMetadataModel(TimeBasedMetadataModel):
+    trading_venue: TradingVenue
+    exchange: str
+    product_name: str
+    product_basis: str
+    product_specs: dict
+    symbol: str
+    resolution: Resolution
+    asset_type: str
+    
+
 class MarketDataModel(TimeBasedDataModel):
-    '''
-    Args:
-        symbol: unique identifier for the product.
-        asset_type: asset type of the product. e.g. 'PERPETUAL', 'STOCK'.
-        resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
-    '''
+    data_handler_class: ClassVar[type[MarketDataHandler]] = MarketDataHandler
+    metadata_class: ClassVar[type[MarketMetadataModel]] = MarketMetadataModel
+
     product: BaseProduct
     resolution: Resolution
     
@@ -50,38 +44,15 @@ class MarketDataModel(TimeBasedDataModel):
         data['resolution'] = resolution
         return data
     
-    @property
-    def data_handler_class(self) -> type[MarketDataHandler]:
-        return MarketDataHandler
-
-    def create_filename(self, date: datetime.date, file_extension='.parquet') -> str:
-        filename = '_'.join([self.product.symbol, str(date)])
-        return filename + file_extension
-
-    def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
-        path = (
-            Path(f'env={self.env.value}')
-            / f'data_source={self.data_source.name}'
-            / f'data_origin={self.data_origin}'
-            / f'asset_type={str(self.product.asset_type)}'
-            / f'symbol={self.product.symbol}'
-            / f'resolution={repr(self.resolution)}'
+    def to_metadata(self) -> MarketMetadataModel:
+        return MarketMetadataModel(
+            **super().to_metadata().model_dump(),
+            trading_venue=self.product.trading_venue,
+            exchange=self.product.exchange,
+            product_name=self.product.name,
+            product_basis=str(self.product.basis),
+            product_specs=self.product.specs,
+            symbol=self.product.symbol,
+            resolution=self.resolution,
+            asset_type=str(self.product.asset_type),
         )
-        if use_deltalake:
-            return path
-        else:
-            year, month, day = str(date).split('-')
-            return path / f'year={year}' / f'month={month}' / f'day={day}'
-
-    def to_metadata(self) -> MarketFileMetadata:
-        return {
-            **super().to_metadata(),
-            'trading_venue': self.product.trading_venue,
-            'exchange': self.product.exchange,
-            'product_name': self.product.name,
-            'product_basis': str(self.product.basis),
-            'product_specs': self.product.specs,
-            'symbol': self.product.symbol,
-            'resolution': repr(self.resolution),
-            'asset_type': str(self.product.asset_type),
-        }

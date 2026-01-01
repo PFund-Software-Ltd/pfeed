@@ -8,9 +8,6 @@ if TYPE_CHECKING:
         product_specs: dict | None
         symbol: str | None
         asset_type: str | None
-        
-import datetime
-from pathlib import Path
 
 from pydantic import model_validator
 
@@ -36,32 +33,6 @@ class NewsDataModel(TimeBasedDataModel):
     @property
     def data_handler_class(self) -> type[NewsDataHandler]:
         return NewsDataHandler
-
-    def create_filename(self, date: datetime.date, file_extension='.parquet') -> str:
-        name = 'GENERAL_MARKET_NEWS' if self.product is None else self.product.symbol
-        filename = '_'.join([name, str(date)])
-        return filename + file_extension
-
-    def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
-        path = (
-            Path(f'env={self.env.value}')
-            / f'data_source={self.data_source.name}'
-            / f'data_origin={self.data_origin}'
-        )
-        if use_deltalake:
-            return path
-        else:
-            asset_type = 'NONE' if self.product is None else str(self.product.asset_type)
-            symbol = 'NONE' if self.product is None else self.product.symbol
-            year, month, day = str(date).split('-')
-            return (
-                path 
-                / f'asset_type={asset_type}'
-                / f'symbol={symbol}'   
-                / f'year={year}' 
-                / f'month={month}' 
-                / f'day={day}'
-            )
 
     def to_metadata(self) -> NewsMetadata:
         return {

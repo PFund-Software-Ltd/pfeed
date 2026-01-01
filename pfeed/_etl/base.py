@@ -41,16 +41,18 @@ def convert_to_desired_df(data: GenericData, data_tool: DataTool | tDataTool) ->
         The converted dataframe.
     '''
     import io
-    from pfeed.utils.file_formats import decompress_data, is_parquet, is_likely_csv
-    
+    from pfeed.enums.compression import Compression
+    from pfeed.enums.file_format import FileFormat
+
     if isinstance(data, bytes):
-        data = decompress_data(data)
-        if is_parquet(data):
+        data = Compression.decompress(data)
+        file_format = FileFormat.detect(data)
+        if file_format == FileFormat.PARQUET:
             df = pd.read_parquet(io.BytesIO(data))
-        elif is_likely_csv(data):
+        elif file_format == FileFormat.CSV:
             df = pd.read_csv(io.BytesIO(data))
         else:
-            raise ValueError("Unknown or unsupported format")
+            raise ValueError(f'{file_format=}')
     elif is_dataframe(data):
         df: GenericFrame = data
     else:

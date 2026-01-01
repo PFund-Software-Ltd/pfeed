@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, AsyncGenerator, Coroutine
+from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, AsyncGenerator, Coroutine, ClassVar
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -7,9 +7,10 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed.sources.base_source import BaseSource
     from pfeed.engine import DataEngine
+    from pfeed.streaming_settings import StreamingSettings
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, tStreamMode, StreamingData
+    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, StreamingData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.flows.dataflow import DataFlow
     from pfeed.flows.faucet import Faucet
@@ -30,7 +31,7 @@ from pprint import pformat
 
 from pfund import print_warning
 from pfund.enums import Environment
-from pfeed.enums import DataTool, DataStorage, ExtractType, StreamMode
+from pfeed.enums import DataTool, DataStorage, ExtractType, FileFormat, Compression, DataLayer, DataCategory
 
 
 __all__ = ["BaseFeed"]
@@ -44,7 +45,8 @@ def clear_subflows(func):
     
     
 class BaseFeed(ABC):
-    data_domain = 'GENERAL_DATA'
+    data_model_class: ClassVar[type[BaseDataModel]]
+    data_domain: ClassVar[DataCategory | str]
     
     def __init__(
         self, 
@@ -75,6 +77,7 @@ class BaseFeed(ABC):
         self._completed_dataflows: list[DataFlow] = []
         self._storage_options: dict[tStorage, dict] = {}
         self._storage_kwargs: dict[tStorage, dict] = {}
+        self._streaming_settings: StreamingSettings | None = None
     
     @property
     def name(self):
@@ -128,11 +131,6 @@ class BaseFeed(ABC):
     def _normalize_raw_data(self, data: Any) -> Any:
         pass
     
-    @property
-    @abstractmethod
-    def data_model_class(self) -> type[BaseDataModel]:
-        pass
-    
     @staticmethod
     @abstractmethod
     def _create_data_source(env: Environment, *args, **kwargs) -> BaseSource:
@@ -145,16 +143,6 @@ class BaseFeed(ABC):
     @abstractmethod
     def _create_batch_dataflows(self, *args, **kwargs) -> list[DataFlow]:
         pass
-    
-    @overload
-    def configure_storage(
-        self, 
-        storage: Literal['duckdb'],
-        storage_options: dict, 
-        in_memory: bool=False, 
-        memory_limit: str='4GB', 
-    ) -> BaseFeed:
-        ...
     
     @overload
     def configure_storage(
@@ -250,14 +238,13 @@ class BaseFeed(ABC):
                 data_model=data_model,
                 data_layer=data_layer, 
                 data_domain=data_domain,
-                use_deltalake=self._use_deltalake,
                 storage_options=storage_options,
             )
             data, metadata = storage.read_data()
             if data is not None:
-                self.logger.info(f'found data {data_model} in {data_storage} (data_layer={data_layer.name})')
+                self.logger.info(f'found data {data_model} in {data_storage} ({data_layer=})')
             else:
-                self.logger.debug(f'failed to find data {data_model} in {data_storage} (data_layer={data_layer.name})')
+                self.logger.debug(f'failed to find data {data_model} in {data_storage} ({data_layer=})')
         except Exception:
             self.logger.exception(f'Error in retrieving data {data_model} in {data_storage} ({data_layer=}):')
         return data, metadata
@@ -335,41 +322,36 @@ class BaseFeed(ABC):
     
     def load(
         self, 
-        to_storage: tStorage,
-        data_layer: tDataLayer='CLEANED',
+        to_storage: DataStorage | str,
+        data_layer: DataLayer | str=DataLayer.CLEANED,
         data_domain: str='',
         storage_options: dict | None=None,
-        stream_mode: tStreamMode='FAST', 
-        delta_flush_interval: int=100,
+        file_format: FileFormat | str=FileFormat.PARQUET,
+        compression: Compression | str | None=Compression.SNAPPY,
         **storage_kwargs,
     ) -> BaseFeed:
         '''
         Args:
             data_domain: custom domain of the data, used in data_path/data_layer/data_domain
                 useful for grouping data
-            stream_mode: SAFE or FAST
-                if "FAST" is chosen, streaming data will be cached to memory to a certain amount before writing to disk,
-                faster write speed, but data loss risk will increase.
-                if "SAFE" is chosen, streaming data will be written to disk immediately,
-                slower write speed, but data loss risk will be minimized.
-            delta_flush_interval: Interval in seconds for flushing streaming data to DeltaLake. Default is 100 seconds.
-                Frequent flushes will reduce write performance and generate many small files 
-                (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
-                Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
-                This is expected to be fine-tuned based on the actual use case.
         '''
-        is_storage_duckdb = to_storage.upper() == DataStorage.DUCKDB.value
-        if self._use_ray:
-            assert not is_storage_duckdb, 'DuckDB is not thread-safe, cannot be used with Ray'
+        file_format = FileFormat[file_format.upper()]
+        if self._use_ray and (file_format == FileFormat.DUCKDB):
+            raise RuntimeError('DuckDB is not thread-safe, cannot be used with Ray')
 
+        data_layer = DataLayer[data_layer.upper()]
+        if data_layer == DataLayer.RAW and file_format == FileFormat.DELTALAKE:
+            raise RuntimeError(f'Delta Lake is not supported for {data_layer=}')
+        
         Storage = DataStorage[to_storage.upper()].storage_class
         data_domain = data_domain or self.data_domain
         storage_options = storage_options or self._storage_options.get(to_storage, {})
-        if self._subflows and self._subflows[0].is_streaming() and not is_storage_duckdb and not self._use_deltalake:
-            use_deltalake = True
-            print_warning("Automatically setting use_deltalake=True for streaming dataflows")
-        else:
-            use_deltalake = self._use_deltalake
+        file_format = FileFormat[file_format.upper()]
+
+        is_streaming = self._subflows and self._subflows[0].is_streaming()
+        if is_streaming and file_format != FileFormat.DELTALAKE:
+            print_warning(f"Automatically setting file_format={FileFormat.DELTALAKE} for streaming dataflows")
+            file_format = FileFormat.DELTALAKE
 
         for dataflow in self._subflows:
             data_model = dataflow.data_model
@@ -377,11 +359,13 @@ class BaseFeed(ABC):
                 data_model=data_model,
                 data_layer=data_layer,
                 data_domain=data_domain,
-                use_deltalake=use_deltalake,
                 storage_options=storage_options,
-                stream_mode=StreamMode[stream_mode.upper()],
-                delta_flush_interval=delta_flush_interval,
                 **storage_kwargs,
+            )
+            storage._create_data_handler(
+                file_format=file_format, 
+                compression=compression,
+                streaming_settings=self._streaming_settings if is_streaming else None,
             )
             sink: Sink = self._create_sink(data_model, storage)
             dataflow.set_sink(sink)

@@ -38,14 +38,13 @@ class DuckDBMetadata(TypedDict):
     updated_at: datetime.datetime
     
 
-# EXTEND: only supports MarketDataModel for now
+# FIXME: DEPRECATED, convert it to file foramt .duckdb
 class DuckDBStorage(BaseStorage):
     def __init__(
         self,
+        data_layer: tDataLayer,
+        data_domain: str,
         base_data_path: Path | None = None,
-        data_layer: tDataLayer='CLEANED',
-        data_domain: str='GENERAL_DATA',
-        use_deltalake: bool=False,   # for consistency with other storages only, not used
         storage_options: dict | None=None,
         in_memory: bool=False,
         memory_limit: str='4GB',
@@ -60,10 +59,9 @@ class DuckDBStorage(BaseStorage):
         self._memory_limit = memory_limit
         super().__init__(
             name=DataStorage.DUCKDB,
-            base_data_path=base_data_path,
             data_layer=data_layer,
             data_domain=data_domain,
-            use_deltalake=use_deltalake,
+            base_data_path=base_data_path,
             storage_options=storage_options,
             **storage_kwargs,
         )
@@ -154,7 +152,7 @@ class DuckDBStorage(BaseStorage):
             return (
                 Path(config.data_path).parent 
                 / self.name.lower()
-                / f'data_layer={self.data_layer.name}'
+                / f'data_layer={self.data_layer}'
                 / f'data_domain={self.data_domain}'
             )
     

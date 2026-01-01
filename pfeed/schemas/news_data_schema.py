@@ -1,11 +1,10 @@
-import datetime
-
 import pandera.pandas as pa
 from pandera.typing import Series
 
+from pfeed.schemas.time_based_data_schema import TimeBasedDataSchema
 
-class NewsDataSchema(pa.DataFrameModel):
-    date: Series[datetime.datetime]
+
+class NewsDataSchema(TimeBasedDataSchema):
     title: Series[str]
     content: Series[str]
     publisher: Series[str]

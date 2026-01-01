@@ -47,6 +47,7 @@ class DuckDBCollector(BaseCollector):
                 # Typically named like "cleaned_market_data.db"
                 parts = db_file.stem.split("_", 1)
                 layer_name = parts[0].upper() if len(parts) > 0 else "CLEANED"
+                # FIXME: GENERAL_DATA is not used anymore
                 domain_name = parts[1] if len(parts) > 1 else "GENERAL_DATA"
                 
                 # Check if db filename has environment info

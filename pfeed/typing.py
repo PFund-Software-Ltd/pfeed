@@ -1,6 +1,4 @@
 from typing import Any, Literal, Protocol
-from pathlib import Path
-from cloudpathlib import CloudPath
 from narwhals.series import Series
 from narwhals.dataframe import DataFrame, LazyFrame
 from pfeed.messaging.streaming_message import StreamingMessage
@@ -24,7 +22,6 @@ except ImportError:
     class SparkDataFrame:
         pass
 
-FilePath = CloudPath | Path
  
 GenericFrame = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
 GenericFrameOrNone = GenericFrame | None

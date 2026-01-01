@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from deltalake.table import FilterConjunctionType
 
 from datetime import timedelta
-from pathlib import Path
 
 from rich.pretty import Pretty
 from rich.panel import Panel
@@ -15,7 +14,6 @@ from pfund import cprint
 
 
 class DeltaLakeStorageMixin:
-    metadata_filename = 'deltalake_metadata.parquet'
     
     def get_delta_tables(self: BaseStorage | DeltaLakeStorageMixin) -> list[DeltaTable]:
         if not self.use_deltalake:

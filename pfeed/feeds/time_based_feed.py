@@ -1,6 +1,5 @@
 from __future__ import annotations
-from typing_extensions import TypedDict
-from typing import TYPE_CHECKING, Literal, Callable, Awaitable, Any
+from typing import TYPE_CHECKING, TypedDict, Literal, Callable, Awaitable, Any, ClassVar
 if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfeed._io.base_io import StorageMetadata
@@ -8,6 +7,7 @@ if TYPE_CHECKING:
     from pfeed.typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
     from pfeed.flows.dataflow import DataFlow, FlowResult
     from pfeed.flows.faucet import Faucet
+    from pfeed.enums import StreamMode
     class TimeBasedFeedMetadata(TypedDict, total=True):
         missing_dates: list[datetime.date]
     GenericFrameOrNoneWithMetadata = tuple[GenericFrameOrNone, TimeBasedFeedMetadata]
@@ -19,6 +19,7 @@ from pfund import print_warning
 from pfeed.utils.dataframe import is_empty_dataframe
 from pfeed.enums import ExtractType
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
+from pfeed.streaming_settings import StreamingSettings
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 
@@ -26,10 +27,8 @@ __all__ = ["TimeBasedFeed"]
 
 
 class TimeBasedFeed(BaseFeed):
-    @property
-    def data_model_class(self) -> type[TimeBasedDataModel]:
-        return TimeBasedDataModel
-
+    data_model_class: ClassVar[type[TimeBasedDataModel]]
+    
     def _standardize_dates(self, start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.
 
@@ -228,6 +227,9 @@ class TimeBasedFeed(BaseFeed):
             return self.run()
         else:
             return self
+    
+    def _create_streaming_settings(self, mode: StreamMode | str, flush_interval: int):
+        self._streaming_settings = StreamingSettings(mode=mode, flush_interval=flush_interval)
   
     def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata:
         '''Runs dataflows and handles the results.'''

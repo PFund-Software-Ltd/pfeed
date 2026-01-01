@@ -1,80 +1,67 @@
 from __future__ import annotations
-from typing_extensions import TypedDict
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment
-    from pfeed.typing import tDataSource
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
-    class BaseFileMetadata(TypedDict, total=True):
-        env: tEnvironment
-        data_source: tDataSource
-        data_origin: str
 
-from abc import ABC, abstractmethod
-from pathlib import Path
+from abc import ABC
 
 from pydantic import BaseModel, ConfigDict
 
-from pfund.enums import Environment
+from pfund.enums import Environment, DataSource
 from pfeed.sources.base_source import BaseSource
 
 
+class BaseMetadataModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    env: Environment
+    data_source: DataSource
+    data_origin: str
+
+
 class BaseDataModel(BaseModel, ABC):
-    '''
+    """
     Args:
         env: trading environment, e.g. 'PAPER' | 'LIVE'.
         source: The source of the data.
         data_origin:
             A unique identifier for the data.
             If specified, it will be used to differentiate where the data is actually from.
-                For example, 
+                For example,
                     for Databento, Publisher (comprised of dataset and trading venue, e.g. DATASET_VENUE) is used to be the unique identifier.
                     This is because a product can be traded on multiple venues.
             If None, it means the data source is already a unique identifier.
             Default is None.
-    '''
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    data_handler_class: ClassVar[type[BaseDataHandler]]
+    metadata_class: ClassVar[type[BaseMetadataModel]] = BaseMetadataModel
 
     env: Environment
     data_source: BaseSource
-    data_origin: str = ''
+    data_origin: str = ""
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
             self.data_origin = self.data_source.name.value
-    
+
     def is_data_origin_effective(self) -> bool:
-        '''
+        """
         A data_origin is not effective if it is the same as the source name.
-        '''
+        """
         return self.data_origin != self.data_source.name.value
-    
+
     def __str__(self):
         if self.is_data_origin_effective():
-            return f'{self.env.value}:{self.data_source.name.value}:{self.data_origin}'
+            return f"{self.env.value}:{self.data_source.name.value}:{self.data_origin}"
         else:
-            return f'{self.env.value}:{self.data_source.name.value}'
+            return f"{self.env.value}:{self.data_source.name.value}"
 
-    @abstractmethod
-    def create_filename(self, *args, **kwargs) -> str:
-        pass
-    
-    @abstractmethod
-    def create_storage_path(self, *args, **kwargs) -> Path:
-        pass
-
-    @abstractmethod
-    def create_data_handler(self, *args, **kwargs) -> BaseDataHandler:
-        pass
-
-    @property
-    @abstractmethod
-    def data_handler_class(self) -> type[BaseDataHandler]:
-        pass
-
-    def to_metadata(self) -> dict:
-        return {
-            'env': self.env.value,
-            'data_source': self.data_source.name.value,
-            'data_origin': self.data_origin,
-        }
+    def to_metadata(self) -> BaseMetadataModel:
+        return BaseMetadataModel(
+            env=self.env,
+            data_source=self.data_source,
+            data_origin=self.data_origin,
+        )

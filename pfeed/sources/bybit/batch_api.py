@@ -116,9 +116,9 @@ class BatchAPI:
     def _convert_orderbook_data_to_df(self, zipped_data: bytes) -> pd.DataFrame:
         import pandas as pd
         from msgspec import json
-        from pfeed.utils.file_formats import decompress_data
+        from pfeed.enums.compression import Compression
         decoder = json.Decoder()
-        data = decompress_data(zipped_data)
+        data = Compression.decompress(zipped_data)
         data_str = data.decode("utf-8").strip().split('\n')
         df = pd.json_normalize([decoder.decode(item) for item in data_str])
         return df

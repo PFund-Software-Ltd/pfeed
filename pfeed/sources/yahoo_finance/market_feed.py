@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, Awaitable
+from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
@@ -24,6 +24,8 @@ __all__ = ["YahooFinanceMarketFeed"]
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
 class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
+    data_model_class: ClassVar[type[YahooFinanceMarketDataModel]] = YahooFinanceMarketDataModel
+    
     _URLS = {
         "rest": "https://query1.finance.yahoo.com",
         "ws": "wss://streamer.finance.yahoo.com",

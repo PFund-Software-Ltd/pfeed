@@ -1,28 +1,26 @@
-from typing import Literal
 from pathlib import Path
 
 import pyarrow.fs as pa_fs
 
 from pfeed.typing import tDataLayer
+from pfeed.enums import DataStorage
 from pfeed.storages.base_storage import BaseStorage
 
 
 class LocalStorage(BaseStorage):
     def __init__(
         self,
-        name: Literal['LOCAL', 'CACHE']='LOCAL',
+        data_layer: tDataLayer,
+        data_domain: str,
+        name: DataStorage=DataStorage.LOCAL,
         base_data_path: Path | None = None,
-        data_layer: tDataLayer='CLEANED',
-        data_domain: str='GENERAL_DATA',
-        use_deltalake: bool=False,
         storage_options: dict | None=None,
     ):
         super().__init__(
             name=name,
-            base_data_path=base_data_path,
             data_layer=data_layer,
             data_domain=data_domain,
-            use_deltalake=use_deltalake,
+            base_data_path=base_data_path,
             storage_options=storage_options,
         )
 

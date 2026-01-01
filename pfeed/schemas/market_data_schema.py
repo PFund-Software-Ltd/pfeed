@@ -1,22 +1,17 @@
-import datetime
-
 import pandas as pd
 import pandera.pandas as pa
 from pandera.typing import Series
 
+from pfeed.schemas.time_based_data_schema import TimeBasedDataSchema
 
-class MarketDataSchema(pa.DataFrameModel):
-    date: Series[datetime.datetime]
+
+class MarketDataSchema(TimeBasedDataSchema):
     resolution: Series[str] = pa.Field(isin=[
         '1q_L1', '1q_L2', '1q_L3', '1t',
         '1s', '1m', '1h', '1d',
         '1w', '1M', '1y',
     ])
     symbol: Series[str] | None
-    
-    @pa.check('date', error='date is not monotonic increasing')
-    def validate_date(cls, date: Series[datetime.datetime]) -> bool:
-        return date.is_monotonic_increasing
 
     @pa.dataframe_check
     def validate_index_reset(cls, df: pd.DataFrame) -> bool:

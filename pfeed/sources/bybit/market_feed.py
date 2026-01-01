@@ -1,6 +1,6 @@
 """High-level API for getting historical/streaming data from Bybit."""
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, Awaitable
+from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
     import datetime
     import pandas as pd
@@ -22,9 +22,7 @@ __all__ = ['BybitMarketFeed']
 
 
 class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
-    @property
-    def data_model_class(self) -> type[BybitMarketDataModel]:
-        return BybitMarketDataModel
+    data_model_class: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
     
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:

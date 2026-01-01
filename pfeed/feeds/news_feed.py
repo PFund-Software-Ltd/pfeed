@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.typing import tEnvironment
@@ -25,7 +25,8 @@ e.g. if changing the params for the same API call, the data could be different.
 how to handle this? handled by metadata?
 '''
 class NewsFeed(TimeBasedFeed):
-    data_domain = DataCategory.NEWS_DATA
+    data_model_class: ClassVar[type[NewsDataModel]] = NewsDataModel
+    data_domain: ClassVar[DataCategory] = DataCategory.NEWS_DATA
 
     def create_data_model(
         self,

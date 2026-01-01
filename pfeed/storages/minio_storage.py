@@ -37,10 +37,9 @@ class MinioStorage(BaseStorage):
 
     def __init__(
         self,
-        base_data_path=None,
-        data_layer: tDataLayer='CLEANED',
-        data_domain: str='GENERAL_DATA',
-        use_deltalake: bool=False,
+        data_layer: tDataLayer,
+        data_domain: str,
+        base_data_path: Path | None = None,
         storage_options: MinioStorageOptions | None=None,
         enable_bucket_versioning: bool=False,
     ):
@@ -55,13 +54,13 @@ class MinioStorage(BaseStorage):
         self.endpoint = self._create_endpoint()
         super().__init__(
             name=DataStorage.MINIO,
-            base_data_path=base_data_path,
             data_layer=data_layer,
             data_domain=data_domain,
-            use_deltalake=use_deltalake,
+            base_data_path=base_data_path,
             storage_options=self._normalize_storage_options(storage_options),
         )
         self._minio_options = storage_options or {}
+        # FIXME
         if self.use_deltalake:
             self._adjust_storage_options_for_deltalake()
         cache_time = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
@@ -189,7 +188,7 @@ class MinioStorage(BaseStorage):
     def data_path(self) -> CloudPath:
         return (
             CloudPath("s3://" + self.BUCKET_NAME)
-            / f'data_layer={self.data_layer.name}'
+            / f'data_layer={self.data_layer}'
             / f'data_domain={self.data_domain}'
         )
     

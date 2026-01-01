@@ -1,36 +1,28 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pathlib import Path
-    import pyarrow.fs as pa_fs
-    from pfeed.data_models.base_data_model import BaseFileMetadata
-    from pfeed.typing import FilePath
-    class TimeBasedFileMetadata(BaseFileMetadata, total=True):
-        start_date: datetime.date
-        end_date: datetime.date
-    class TimeBasedFileDeltaMetadata(BaseFileMetadata, total=True):
-        dates: list[datetime.date]
+from typing import ClassVar
 
 import datetime
-from abc import abstractmethod
 
 from pydantic import field_validator, Field, ValidationInfo
 
-from pfeed.data_models.base_data_model import BaseDataModel
+from pfeed.data_models.base_data_model import BaseDataModel, BaseMetadataModel
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
-from pfeed.enums import StreamMode, DataLayer
+
+
+class TimeBasedMetadataModel(BaseMetadataModel):
+    dates: list[datetime.date]
 
 
 class TimeBasedDataModel(BaseDataModel):
-    start_date: datetime.date
-    end_date: datetime.date = Field(description='Must be greater than or equal to start date.')
+    data_handler_class: ClassVar[type[TimeBasedDataHandler]] = TimeBasedDataHandler
+    metadata_class: ClassVar[type[TimeBasedMetadataModel]] = TimeBasedMetadataModel
 
-    @property
-    def data_handler_class(self) -> type[TimeBasedDataHandler]:
-        return TimeBasedDataHandler
+    start_date: datetime.date = Field(description="Start of the date range.")
+    end_date: datetime.date = Field(description="End of the date range. Must be greater than or equal to start date.")
 
     @property
     def date(self) -> datetime.date:
+        assert not self.is_date_range(), 'start_date and end_date must be the same for a single date'
         return self.start_date
     
     @field_validator('end_date')
@@ -60,40 +52,9 @@ class TimeBasedDataModel(BaseDataModel):
             return ':'.join([super().__str__(), str(self.start_date)])
         else:
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
-    
-    @abstractmethod
-    def create_filename(self, date: datetime.date, file_extension='.parquet') -> str:
-        pass
-    
-    @abstractmethod
-    def create_storage_path(self, date: datetime.date, use_deltalake: bool=False) -> Path:
-        pass
 
-    def create_data_handler(
-        self, 
-        data_path: FilePath,
-        data_layer: DataLayer,
-        filesystem: pa_fs.FileSystem,
-        storage_options: dict | None = None,
-        use_deltalake: bool = False,
-        stream_mode: StreamMode=StreamMode.FAST,
-        delta_flush_interval: int=100,
-    ) -> TimeBasedDataHandler:
-        DataHandler: type[TimeBasedDataHandler] = self.data_handler_class
-        return DataHandler(
-            data_model=self, 
-            data_path=data_path, 
-            data_layer=data_layer,
-            filesystem=filesystem, 
-            storage_options=storage_options, 
-            use_deltalake=use_deltalake,
-            stream_mode=stream_mode,
-            delta_flush_interval=delta_flush_interval,
+    def to_metadata(self) -> TimeBasedMetadataModel:
+        return TimeBasedMetadataModel(
+            **super().to_metadata().model_dump(),
+            dates=self.dates,
         )
-
-    def to_metadata(self) -> dict:
-        return {
-            **super().to_metadata(),
-            'start_date': self.start_date,
-            'end_date': self.end_date,
-        }

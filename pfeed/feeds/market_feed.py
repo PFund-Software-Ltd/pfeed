@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING, Callable, Awaitable
+from typing import Literal, TYPE_CHECKING, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
@@ -19,19 +19,16 @@ from functools import partial
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
 from pfeed.messaging import BarMessage, TickMessage
-from pfeed.enums import DataCategory, MarketDataType, DataLayer, DataTool
+from pfeed.enums import DataCategory, MarketDataType, DataLayer, DataTool, StreamMode
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 
 
 class MarketFeed(TimeBasedFeed):
-    data_domain = DataCategory.MARKET_DATA
+    data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
+    data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
 
     SUPPORTED_LOWEST_RESOLUTION = Resolution('1d')
-    
-    @property
-    def data_model_class(self) -> type[MarketDataModel]:
-        return MarketDataModel
     
     def get_highest_resolution(self) -> Resolution:
         '''
@@ -361,8 +358,24 @@ class MarketFeed(TimeBasedFeed):
         storage_options: dict | None=None,
         callback: Callable[[dict], Awaitable[None] | None] | None=None,
         env: tEnvironment='LIVE',
+        mode: StreamMode | str=StreamMode.FAST,
+        flush_interval: int=100,  # in seconds
         **product_specs
     ) -> MarketFeed:
+        '''
+        Args:
+            stream_mode: SAFE or FAST
+                if "FAST" is chosen, streaming data will be cached to memory to a certain amount before writing to disk,
+                faster write speed, but data loss risk will increase.
+                if "SAFE" is chosen, streaming data will be written to disk immediately,
+                slower write speed, but data loss risk will be minimized.
+            flush_interval: Interval in seconds for flushing buffered streaming data to storage. Default is 100 seconds.
+                If using deltalake:
+                Frequent flushes will reduce write performance and generate many small files 
+                (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
+                Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
+                This is expected to be fine-tuned based on the actual use case.
+        '''
         env = Environment[env.upper()]
         assert env != Environment.BACKTEST, 'streaming is not supported in env BACKTEST'
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
@@ -376,6 +389,7 @@ class MarketFeed(TimeBasedFeed):
             start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
         )
         self._add_data_channel(data_model)
+        self._create_streaming_settings(mode=mode, flush_interval=flush_interval)
         return self._run_stream(
             data_model=data_model,
             add_default_transformations=lambda: self._add_default_transformations_to_stream(data_layer, product, resolution),

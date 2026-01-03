@@ -74,6 +74,7 @@ fmp-api-client = { path = "../fmp-api-client", editable = true }
 [feature.dev.pypi-dependencies]
 afterpython = ">=0.1.1"
 marimo = { version = ">=0.18.4", extras = ["recommended", "lsp"] }
+pandas-stubs = ">=2.3.3.251219"
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"

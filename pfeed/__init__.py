@@ -2,11 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
-    import pfund_plot as plot
-    from pfeed.storages.duckdb_storage import DuckDBStorage
-    from pfeed.storages.minio_storage import MinioStorage
     from pfeed.storages.local_storage import LocalStorage
-    from pfeed.const.aliases import ALIASES as aliases
+    from pfeed.aliases import ALIASES as alias
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
         YahooFinance as YF,
@@ -31,21 +28,12 @@ os.environ['PYARROW_IGNORE_TIMEZONE'] = '1'  # used to suppress warning from pys
 
 
 def __getattr__(name: str):
-    if name == 'aliases':
-        from pfeed.const.aliases import ALIASES
+    if name == 'alias':
+        from pfeed.aliases import ALIASES
         return ALIASES
-    elif name == 'plot':
-        import pfund_plot as plot
-        return plot
     elif name == 'DataEngine':
         from pfeed.engine import DataEngine
         return DataEngine
-    elif name == 'DuckDBStorage':
-        from pfeed.storages.duckdb_storage import DuckDBStorage
-        return DuckDBStorage
-    elif name == 'MinioStorage':
-        from pfeed.storages.minio_storage import MinioStorage
-        return MinioStorage
     elif name == 'LocalStorage':
         from pfeed.storages.local_storage import LocalStorage
         return LocalStorage
@@ -69,7 +57,7 @@ __all__ = (
     "__version__",
     "configure",
     'get_config',
-    "aliases",
+    "alias",
     "plot",
     "DataEngine",
     # sugar functions
@@ -78,7 +66,6 @@ __all__ = (
     "create_market_feed",
     # storage classes
     "DuckDBStorage",
-    "MinioStorage",
     "LocalStorage",
     # data sources
     "YahooFinance", "YF",

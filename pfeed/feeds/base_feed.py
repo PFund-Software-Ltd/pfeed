@@ -26,7 +26,6 @@ import inspect
 from pathlib import Path
 from collections import defaultdict
 from abc import ABC, abstractmethod
-from logging.handlers import QueueHandler, QueueListener
 from pprint import pformat
 
 from pfund import print_warning
@@ -65,7 +64,7 @@ class BaseFeed(ABC):
         '''
         self._data_tool = DataTool[data_tool.lower()]
         self.data_source: BaseSource = self._create_data_source()
-        self.logger = logging.getLogger(self.name.lower() + '_data')
+        self.logger = logging.getLogger(self.name.lower())
         self._engine: DataEngine | None = None
         self._pipeline_mode: bool = pipeline_mode
         self._use_ray: bool = use_ray
@@ -83,6 +82,7 @@ class BaseFeed(ABC):
     def name(self):
         return self.data_source.name
     
+    # TODO: replace with pfund_kits.logging
     def _setup_logging(self, env: tEnvironment):
         from pfund.logging import setup_logging_config
         from pfund.logging.config import LoggingDictConfigurator
@@ -380,10 +380,7 @@ class BaseFeed(ABC):
         self._dataflows.clear()
     
     def _run_batch_dataflows(self, ray_kwargs: dict, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
-        from tqdm import tqdm
-        from pfeed.utils import generate_color
-        
-        color = generate_color(self.name.value)
+        from pfund_kit.utils.progress_bar import track
         
         def _run_dataflow(dataflow: DataFlow, logger: logging.Logger | None=None) -> FlowResult:
             if self._use_prefect:
@@ -399,19 +396,15 @@ class BaseFeed(ABC):
         if self._use_ray:
             import atexit
             import ray
-            from ray.util.queue import Queue
+            from pfeed.logging import setup_logger_in_ray_task, ray_logging_context
+            
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             @ray.remote
             def ray_task(feed_name: str, use_prefect: bool, dataflow: DataFlow) -> tuple[bool, DataFlow]:
                 success = False
                 try:
-                    logger = logging.getLogger(feed_name.lower() + '_data')
-                    if not logger.handlers:
-                        logger.addHandler(QueueHandler(log_queue))
-                        logger.setLevel(logging.DEBUG)
-                        # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
-                        logger.propagate = False
+                    logger = setup_logger_in_ray_task(feed_name.lower(), log_queue)
                     success = _run_dataflow(dataflow, logger=logger)
                 except RuntimeError as err:
                     if use_prefect:
@@ -422,38 +415,35 @@ class BaseFeed(ABC):
                     logger.exception(f'Error in running {dataflow}:')
                 return success, dataflow
             
-            try:
-                self._init_ray(**ray_kwargs)
-                log_queue = Queue()
-                log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
-                log_listener.start()
-                batch_size = ray_kwargs['num_cpus']
-                dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
-                for dataflow_batch in tqdm(dataflow_batches, desc=f'Running {self.name} dataflows', colour=color):
-                    futures = [
-                        ray_task.remote(
-                            feed_name=self.name.value, 
-                            use_prefect=self._use_prefect, 
-                            dataflow=dataflow,
-                        ) for dataflow in dataflow_batch
-                    ]
-                    returns = ray.get(futures)
-                    for success, dataflow in returns:
-                        if not success:
-                            self._failed_dataflows.append(dataflow)
-                        else:
-                            self._completed_dataflows.append(dataflow)
-            except KeyboardInterrupt:
-                print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
-            except Exception:
-                self.logger.exception(f'Error in running {self.name} dataflows:')
-            finally:
-                log_listener.stop()
-                self.logger.debug('shutting down ray...')
-                self._shutdown_ray()
+            self._init_ray(**ray_kwargs)
+            with ray_logging_context(self.logger) as log_queue:
+                try:
+                    batch_size = ray_kwargs['num_cpus']
+                    dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
+                    for dataflow_batch in track(dataflow_batches, description=f'Running {self.name} dataflows'):
+                        futures = [
+                            ray_task.remote(
+                                feed_name=self.name.value, 
+                                use_prefect=self._use_prefect, 
+                                dataflow=dataflow,
+                            ) for dataflow in dataflow_batch
+                        ]
+                        returns = ray.get(futures)
+                        for success, dataflow in returns:
+                            if not success:
+                                self._failed_dataflows.append(dataflow)
+                            else:
+                                self._completed_dataflows.append(dataflow)
+                except KeyboardInterrupt:
+                    print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
+                except Exception:
+                    self.logger.exception(f'Error in running {self.name} dataflows:')
+                finally:
+                    self.logger.debug('shutting down ray...')
+                    self._shutdown_ray()
         else:
             try:
-                for dataflow in tqdm(self._dataflows, desc=f'Running {self.name} dataflows', colour=color):
+                for dataflow in track(self._dataflows, description=f'Running {self.name} dataflows'):
                     success = _run_dataflow(dataflow)
                     if not success:
                         self._failed_dataflows.append(dataflow)
@@ -495,6 +485,7 @@ class BaseFeed(ABC):
             import atexit
             import ray
             from ray.util.queue import Queue
+            from pfeed.logging import setup_logger_in_ray_task, ray_logging_context
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             import zmq
@@ -509,12 +500,7 @@ class BaseFeed(ABC):
                 ports_to_connect: dict[Literal['sender', 'receiver'], list[int]],
                 ready_queue: Queue,
             ):
-                logger = logging.getLogger(feed_name.lower() + '_data')
-                if not logger.handlers:
-                    logger.addHandler(QueueHandler(log_queue))
-                    logger.setLevel(logging.DEBUG)
-                    # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
-                    logger.propagate = False
+                logger = setup_logger_in_ray_task(feed_name.lower(), log_queue)
                 logger.debug(f"Ray {worker_name} started")
 
                 try:
@@ -563,76 +549,72 @@ class BaseFeed(ABC):
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
             
-            try:
-                self._init_ray(**ray_kwargs)
-                log_queue = Queue()
-                log_listener = QueueListener(log_queue, *self.logger.handlers, respect_handler_level=True)
-                log_listener.start()
-                num_workers = min(ray_kwargs['num_cpus'], len(self._dataflows))
-                
-                # Distribute dataflows' transformations across workers
-                def _create_worker_name(worker_num: int) -> str:
-                    return f'worker-{worker_num}'
-                transformations_per_worker: dict[WorkerName, dict[DataFlowName, list[Callable]]] = defaultdict(dict)
-                sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
-                ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], list[int]]] = defaultdict(lambda: defaultdict(list))
-                for i, dataflow in enumerate(self._dataflows):
-                    worker_num: int = i % num_workers
-                    worker_num += 1  # convert to 1-indexed, i.e. starting from 1
-                    worker_name = _create_worker_name(worker_num)
-                    dataflow._setup_messaging(worker_name)
-                    transformations_per_worker[worker_name][dataflow.name] = dataflow._transformations
-                    sinks_per_worker[worker_name][dataflow.name] = dataflow._sink
-                    # get ports in use for dataflow's ZMQ.ROUTER
-                    dataflow_zmq: ZeroMQ = dataflow._msg_queue
-                    ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)
-                    ports_to_connect[worker_name]['receiver'].extend(ports_in_use)
-                    # get ports in use for engine's ZMQ.PULL
-                    if self._engine:
-                        engine_zmq: ZeroMQ = self._engine._msg_queue
-                        ports_in_use: list[int] = engine_zmq.get_ports_in_use(engine_zmq.receiver)
-                        ports_to_connect[worker_name]['sender'].extend(ports_in_use)
+            self._init_ray(**ray_kwargs)
+            with ray_logging_context(self.logger) as log_queue:
+                try:
+                    num_workers = min(ray_kwargs['num_cpus'], len(self._dataflows))
+                    
+                    # Distribute dataflows' transformations across workers
+                    def _create_worker_name(worker_num: int) -> str:
+                        return f'worker-{worker_num}'
+                    transformations_per_worker: dict[WorkerName, dict[DataFlowName, list[Callable]]] = defaultdict(dict)
+                    sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
+                    ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], list[int]]] = defaultdict(lambda: defaultdict(list))
+                    for i, dataflow in enumerate(self._dataflows):
+                        worker_num: int = i % num_workers
+                        worker_num += 1  # convert to 1-indexed, i.e. starting from 1
+                        worker_name = _create_worker_name(worker_num)
+                        dataflow._setup_messaging(worker_name)
+                        transformations_per_worker[worker_name][dataflow.name] = dataflow._transformations
+                        sinks_per_worker[worker_name][dataflow.name] = dataflow._sink
+                        # get ports in use for dataflow's ZMQ.ROUTER
+                        dataflow_zmq: ZeroMQ = dataflow._msg_queue
+                        ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)
+                        ports_to_connect[worker_name]['receiver'].extend(ports_in_use)
+                        # get ports in use for engine's ZMQ.PULL
+                        if self._engine:
+                            engine_zmq: ZeroMQ = self._engine._msg_queue
+                            ports_in_use: list[int] = engine_zmq.get_ports_in_use(engine_zmq.receiver)
+                            ports_to_connect[worker_name]['sender'].extend(ports_in_use)
 
-                worker_names = [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
-                ready_queue = Queue()  # let ray worker notify the main thread that it's ready to receive messages
+                    worker_names = [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
+                    ready_queue = Queue()  # let ray worker notify the main thread that it's ready to receive messages
 
-                # start ray workers
-                futures = [
-                    ray_task.remote(
-                        feed_name=self.name.value,
-                        worker_name=worker_name,
-                        transformations_per_dataflow=transformations_per_worker[worker_name],
-                        sinks_per_dataflow=sinks_per_worker[worker_name],
-                        ports_to_connect=ports_to_connect[worker_name],
-                        ready_queue=ready_queue,
-                    ) for worker_name in worker_names
-                ]
+                    # start ray workers
+                    futures = [
+                        ray_task.remote(
+                            feed_name=self.name.value,
+                            worker_name=worker_name,
+                            transformations_per_dataflow=transformations_per_worker[worker_name],
+                            sinks_per_dataflow=sinks_per_worker[worker_name],
+                            ports_to_connect=ports_to_connect[worker_name],
+                            ready_queue=ready_queue,
+                        ) for worker_name in worker_names
+                    ]
 
-                # wait for ray workers to be ready
-                timeout = 10
-                while timeout:
-                    timeout -= 1
-                    worker_name = ready_queue.get(timeout=5)
-                    worker_names.remove(worker_name)
-                    is_workers_ready = not worker_names
-                    if is_workers_ready:
-                        break
-                else:
-                    raise RuntimeError("Timeout: Not all workers reported ready")
-                
-                # start streaming
-                await _run_dataflows()
-                
-            except KeyboardInterrupt:
-                print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
-            except Exception:
-                self.logger.exception(f'Error in running {self.name} dataflows:')
-            finally:
-                log_listener.stop()
-                self.logger.debug('waiting for ray tasks to finish...')
-                ray.get(futures)
-                self.logger.debug('shutting down ray...')
-                self._shutdown_ray()
+                    # wait for ray workers to be ready
+                    timeout = 10
+                    while timeout:
+                        timeout -= 1
+                        worker_name = ready_queue.get(timeout=5)
+                        worker_names.remove(worker_name)
+                        is_workers_ready = not worker_names
+                        if is_workers_ready:
+                            break
+                    else:
+                        raise RuntimeError("Timeout: Not all workers reported ready")
+                    
+                    # start streaming
+                    await _run_dataflows()
+                except KeyboardInterrupt:
+                    print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
+                except Exception:
+                    self.logger.exception(f'Error in running {self.name} dataflows:')
+                finally:
+                    self.logger.debug('waiting for ray tasks to finish...')
+                    ray.get(futures)
+                    self.logger.debug('shutting down ray...')
+                    self._shutdown_ray()
         else:
             await _run_dataflows()
         self._clear_dataflows_after_run()

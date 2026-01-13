@@ -18,36 +18,33 @@ class DeltaLakeStorageMixin:
     def get_delta_tables(self: BaseStorage | DeltaLakeStorageMixin) -> list[DeltaTable]:
         if not self.use_deltalake:
             raise ValueError(f'{self.use_deltalake=} for this storage')
-        from pfeed.storages.minio_storage import MinioStorage
         delta_tables = []
         storage_options = self._storage_options
-        if isinstance(self, MinioStorage):
-            for obj in self.minio.list_objects(self.BUCKET_NAME, recursive=True):
-                file_path = obj._object_name
-                if '_delta_log' in file_path:
-                    continue
-                file_path_without_filename, filename = file_path.rsplit('/', 1)
-                file_path_without_filename = 's3://' + self.BUCKET_NAME + '/' + file_path_without_filename
-                if DeltaTable.is_deltatable(file_path_without_filename, storage_options=storage_options):
-                    dt = DeltaTable(
-                        file_path_without_filename,
-                        storage_options=storage_options,
-                    )
-                    if dt.table_uri not in [_dt.table_uri for _dt in delta_tables]:
-                        delta_tables.append(dt)
-        # TODO: Azure, GCS, etc.
-        else:
-            for file_dir_or_path in self.data_path.parents[1].rglob("*"):
-                if 'minio' in str(file_dir_or_path) or file_dir_or_path.is_dir() or '_delta_log' in str(file_dir_or_path):
-                    continue
-                file_path_without_filename = file_dir_or_path.parent
-                if DeltaTable.is_deltatable(str(file_path_without_filename), storage_options=storage_options):
-                    dt = DeltaTable(
-                        str(file_path_without_filename),
-                        storage_options=storage_options,
-                    )
-                    if dt.table_uri not in [_dt.table_uri for _dt in delta_tables]:
-                        delta_tables.append(dt)
+        # if isinstance(self, MinioStorage):
+        #     for obj in self.minio.list_objects(self.BUCKET_NAME, recursive=True):
+        #         file_path = obj._object_name
+        #         if '_delta_log' in file_path:
+        #             continue
+        #         file_path_without_filename, filename = file_path.rsplit('/', 1)
+        #         file_path_without_filename = 's3://' + self.BUCKET_NAME + '/' + file_path_without_filename
+        #         if DeltaTable.is_deltatable(file_path_without_filename, storage_options=storage_options):
+        #             dt = DeltaTable(
+        #                 file_path_without_filename,
+        #                 storage_options=storage_options,
+        #             )
+        #             if dt.table_uri not in [_dt.table_uri for _dt in delta_tables]:
+        #                 delta_tables.append(dt)
+        for file_dir_or_path in self.data_path.parents[1].rglob("*"):
+            if file_dir_or_path.is_dir() or '_delta_log' in str(file_dir_or_path):
+                continue
+            file_path_without_filename = file_dir_or_path.parent
+            if DeltaTable.is_deltatable(str(file_path_without_filename), storage_options=storage_options):
+                dt = DeltaTable(
+                    str(file_path_without_filename),
+                    storage_options=storage_options,
+                )
+                if dt.table_uri not in [_dt.table_uri for _dt in delta_tables]:
+                    delta_tables.append(dt)
         return delta_tables
     
     def vacuum_delta_files(

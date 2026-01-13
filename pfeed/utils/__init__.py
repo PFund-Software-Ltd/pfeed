@@ -3,23 +3,6 @@ import re
 import datetime
 
 
-def to_camel_case(snake_case_str: str) -> str:
-    return ''.join(word.capitalize() for word in snake_case_str.lower().split('_'))
-
-
-def to_snake_case(s: str) -> str:
-    """
-    Convert a CamelCase or PascalCase string to snake_case.
-    Example:
-        >>> to_snake_case("YahooFinance")
-        'yahoo_finance'
-    """
-    # Insert underscore before each uppercase letter (that’s not at the start),
-    # then lowercase the whole thing.
-    snake = re.sub(r'(?<!^)(?=[A-Z])', '_', s).lower()
-    return snake
-
-
 def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):
     """
     Determines the nearest integer timestamp unit and scaling factor for a given timestamp value.
@@ -89,16 +72,6 @@ def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):
     scaling_factor = 10 ** (target_unit_multiplier - unit_multiplier)
 
     return target_unit, scaling_factor
-
-
-def generate_color(name: str) -> str:
-    import hashlib
-    # Hash the feed name using MD5 (or any other hashing algorithm)
-    hash_object = hashlib.md5(name.encode())
-    hash_digest = hash_object.hexdigest()
-    # Use the first 6 characters of the hash to create a hex color code
-    color_code = f'#{hash_digest[:6]}'
-    return color_code
 
 
 def lambda_with_name(name: str, lambda_func: Callable):

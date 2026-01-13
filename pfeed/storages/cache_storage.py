@@ -44,7 +44,7 @@ class CacheStorage(LocalStorage):
     def _clear_caches(self):
         '''Clear old caches except the current date'''
         from pfund import print_error
-        from pfund.utils import get_last_modified_time
+        from pfund_kit.utils import get_last_modified_time
         from pfeed.config import get_config
         config = get_config()
         cache_path = config.cache_path

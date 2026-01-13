@@ -7,3 +7,8 @@ class DataProviderType(IntEnum):
     DISTRIBUTOR = 2
     VENDOR = 1  # data is not as raw as data provided from data distributors, e.g. firstrate_data
     AGGREGATOR = 0
+
+    def __str__(self):
+        return self.name
+    
+    __repr__ = __str__

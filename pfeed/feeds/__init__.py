@@ -43,7 +43,7 @@ def create_feed(
     use_deltalake: bool=False,
 ) -> BaseFeed:
     import importlib
-    from pfeed.utils import to_camel_case
+    from pfund_kit.utils.text import to_camel_case
     data_category = DataCategory[data_category.upper()]
     try:
         Feed: type[BaseFeed] = getattr(

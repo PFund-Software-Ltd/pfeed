@@ -5,56 +5,47 @@ incremental: False
 # disable_existing_loggers will be ignored if incremental is True
 disable_existing_loggers: False
 loggers:
-  root:
-    level: 'WARNING'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_path_handler']
+  # NOTE: do NOT add root logger here, otherwise it will conflict with the root logger set in pfund's logging.yml
+  yfinance:  # controls yfinance's logger
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
   pfeed:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  # NOTE: avoid name conflict with pfund, add "_data" suffix to e.g. bybit
-  yahoo_finance_data:
+  pfeed.yahoo_finance:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  yfinance:  # controls yfinance's logger
+  pfeed.bybit:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
-  bybit_data:
-    level: 'DEBUG'
-    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
-    propagate: False
-  databento_data:
+  pfeed.databento:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
 handlers:
-  file_handler:
-    class: 'logging.FileHandler'
-    level: 'DEBUG'
-    formatter: 'file'
   compressed_timed_rotating_file_handler:
-    class: 'pfund.logging.handlers.CompressedTimedRotatingFileHandler'
+    class: 'pfund_kit.logging.handlers.CompressedTimedRotatingFileHandler'
     level: 'DEBUG'
     formatter: 'file'
     kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}
+    filters: ['trimmedpath']
   stream_handler:
     class: 'logging.StreamHandler'
     level: 'INFO'
     formatter: 'console'
-  stream_path_handler:
-    class: 'logging.StreamHandler'
-    level: 'INFO'
-    formatter: 'path'
+    filters: ['trimmedpath']
 formatters:
-  path:
-    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(shortpath)s fn:%(funcName)s ln:%(lineno)d'
-    datefmt: '%Y-%m-%dT%H:%M:%S%z'
   file:
-    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(filename)s fn:%(funcName)s ln:%(lineno)d'
+    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(trimmedpath)s fn:%(funcName)s ln:%(lineno)d'
     datefmt: '%H:%M:%S%z'
   console:
-    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(filename)s fn:%(funcName)s ln:%(lineno)d'
+    (): pfund_kit.logging.formatters.ColoredFormatter
+    format: '%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(message)s | %(trimmedpath)s fn:%(funcName)s ln:%(lineno)d'
     datefmt: '%Y-%m-%dT%H:%M:%S%z'
+filters:
+  trimmedpath:
+    (): pfund_kit.logging.filters.TrimmedPathFilter

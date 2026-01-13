@@ -15,7 +15,6 @@ services:
   #   profiles:
   #     - minio
   timescaledb:
-    container_name: pe-timescaledb
     image: timescale/timescaledb:2.22.0-pg17
     ports:
       - "${TIMESCALEDB_PORT:-5432}:5432"

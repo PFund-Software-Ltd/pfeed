@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pfeed.utils import to_camel_case
+from pfund_kit.utils.text import to_camel_case
 
 
 class DataSource(StrEnum):

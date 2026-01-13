@@ -1,14 +1,13 @@
 import click
 
 import pfeed as pe
+from pfund_kit.cli.utils import cli_args_to_kwargs
 from pfeed.enums import DataSource, DataStorage, DataLayer
-from pfeed.const.aliases import ALIASES
-from pfeed.cli.utils import parse_extra_args
 
 
 # add aliases to supported download data sources
 SUPPORTED_DATA_SOURCES = [data_source.value for data_source in DataSource]
-SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [k for k, v in ALIASES.items() if v in SUPPORTED_DATA_SOURCES]
+SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [pe.alias(ds) for ds in SUPPORTED_DATA_SOURCES if pe.alias(ds)]
 
 
 @click.command(context_settings=dict(
@@ -33,7 +32,7 @@ SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [k for k, v i
 def download(ctx, data_source, product, resolution, rollback_period, start_date, end_date, data_layer, data_domain, to_storage, no_ray, use_prefect, use_deltalake, data_path, debug):
     """Download historical data from a data source"""
     pe.configure(data_path=data_path, debug=debug)
-    data_source = ALIASES.get(data_source, data_source)
+    data_source = pe.alias.resolve(data_source)
     kwargs = {}
     if resolution:
         kwargs['resolution'] = resolution
@@ -43,7 +42,7 @@ def download(ctx, data_source, product, resolution, rollback_period, start_date,
         kwargs['start_date'] = start_date.date().strftime('%Y-%m-%d')
     if end_date:
         kwargs['end_date'] = end_date.date().strftime('%Y-%m-%d')
-    product_specs = parse_extra_args(ctx.args)
+    product_specs = cli_args_to_kwargs(ctx.args)
     for k, v in product_specs.items():
         kwargs[k] = v
     

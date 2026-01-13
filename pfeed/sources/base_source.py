@@ -7,7 +7,7 @@ import os
 from abc import ABC, abstractmethod
 
 from pfeed.enums import DataSource, DataProviderType, DataAccessType, DataCategory
-from pfeed.const.aliases import ALIASES 
+from pfeed.aliases import ALIASES 
 
 
 class BaseSource(ABC):
@@ -29,7 +29,7 @@ class BaseSource(ABC):
         pass
     
     def _get_api_key(self) -> str | None:
-        alias = next((alias for alias, name in ALIASES.items() if name.upper() == self.name), self.name)
+        alias = ALIASES.resolve(self.name)
         api_key_name, api_key_alias = f'{self.name}_API_KEY', f'{alias}_API_KEY'
         api_key: str | None = os.getenv(api_key_name) or os.getenv(api_key_alias)
         is_api_key_required = self.generic_metadata['api_key_required']
@@ -39,11 +39,11 @@ class BaseSource(ABC):
         return api_key
     
     def _load_metadata(self):
-        import os
-        import yaml
-        metadata_file_path = os.path.join(os.path.dirname(__file__), self.name.lower(), 'metadata.yml')
-        with open(metadata_file_path, 'r') as file:
-            metadata_docs = yaml.safe_load_all(file)
-            generic_metadata = next(metadata_docs)
-            specific_metadata = next(metadata_docs, {})
+        from pfund_kit.utils.yaml import load
+        from pfeed import get_config
+        config = get_config()
+        metadata_file_path = config._paths.package_path / 'sources' / self.name.lower() / 'metadata.yml'
+        docs = load(metadata_file_path, multi_document=True)
+        generic_metadata = docs[0] if docs else {}
+        specific_metadata = docs[1] if len(docs) > 1 else {} if docs else {}
         return generic_metadata, specific_metadata

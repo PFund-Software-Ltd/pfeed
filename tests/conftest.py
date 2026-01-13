@@ -28,8 +28,6 @@ def vcr_config():
 
 @pytest.fixture(scope="session", autouse=True)
 def configure_test_env():
-    # Disable tqdm globally
-    os.environ["TQDM_DISABLE"] = "1"
     # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
     os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
     # Silence logs below WARNING and disable file handlers entirely for tests

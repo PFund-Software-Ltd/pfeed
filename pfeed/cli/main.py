@@ -1,33 +1,24 @@
-import click
-from trogon import tui
-
-from pfeed.config import get_config
-from pfeed.cli.commands.docker_compose import docker_compose
-from pfeed.cli.commands.config import config
-from pfeed.cli.commands.download import download
+from pfund_kit.cli import create_cli_group
+from pfund_kit.cli.commands import config, docker_compose, remove
+# TODO
+# from pfund_kit.cli.commands import doc
+# from pfeed.cli.commands.download import download
 # from pfeed.cli.commands.stream import stream
-from pfeed.cli.commands.doc import doc
-from pfeed.cli.commands.deltalake import deltalake
-from pfeed.cli.commands.clear import clear
-from pfeed.cli.commands.data import data
+# from pfeed.cli.commands.deltalake import deltalake
 
 
-@tui(command='tui', help="Open terminal UI")
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
-@click.pass_context
-@click.version_option()
-def pfeed_group(ctx):
-    """PFeed's CLI"""
-    ctx.ensure_object(dict)
+def init_context(ctx):
+    """Initialize pfeed-specific context"""
+    from pfeed.config import get_config
     ctx.obj['config'] = get_config()
 
 
-pfeed_group.add_command(docker_compose)
+pfeed_group = create_cli_group('pfeed', init_context=init_context)
 pfeed_group.add_command(config)
-pfeed_group.add_command(download)
+pfeed_group.add_command(docker_compose)
+pfeed_group.add_command(remove)
+# pfeed_group.add_command(doc)
+# pfeed_group.add_command(download)
 # pfeed_group.add_command(stream)
-pfeed_group.add_command(doc)
-pfeed_group.add_command(clear)
-pfeed_group.add_command(deltalake)
-pfeed_group.add_command(deltalake, name='delta')  # alias for deltalake
-pfeed_group.add_command(data)
+# pfeed_group.add_command(deltalake)
+# pfeed_group.add_command(deltalake, name='delta')  # alias for deltalake

@@ -1,6 +1,6 @@
 import click
 
-from pfund import cprint
+from pfund_kit.style import cprint
 from pfeed.enums import DataStorage
 from pfeed.storages.base_storage import BaseStorage
 

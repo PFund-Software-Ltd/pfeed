@@ -2,15 +2,14 @@ from pathlib import Path
 
 import pyarrow.fs as pa_fs
 
-from pfeed.typing import tDataLayer
-from pfeed.enums import DataStorage
+from pfeed.enums import DataStorage, DataLayer
 from pfeed.storages.base_storage import BaseStorage
 
 
 class LocalStorage(BaseStorage):
     def __init__(
         self,
-        data_layer: tDataLayer,
+        data_layer: DataLayer,
         data_domain: str,
         name: DataStorage=DataStorage.LOCAL,
         base_data_path: Path | None = None,

@@ -10,12 +10,12 @@ if TYPE_CHECKING:
     from pfeed.streaming_settings import StreamingSettings
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tStorage, tDataTool, tDataLayer, GenericData, StreamingData
+    from pfeed.typing import tDataTool, GenericData, StreamingData
     from pfeed.storages.base_storage import BaseStorage
-    from pfeed.flows.dataflow import DataFlow
-    from pfeed.flows.faucet import Faucet
-    from pfeed.flows.sink import Sink
-    from pfeed.flows.result import FlowResult
+    from pfeed.dataflow.dataflow import DataFlow
+    from pfeed.dataflow.faucet import Faucet
+    from pfeed.dataflow.sink import Sink
+    from pfeed.dataflow.result import FlowResult
     GenericDataOrNone = GenericData | None
     GenericDataOrNoneWithMetadata = tuple[GenericDataOrNone, dict[str, Any]]
     
@@ -30,7 +30,7 @@ from pprint import pformat
 
 from pfund import print_warning
 from pfund.enums import Environment
-from pfeed.enums import DataTool, DataStorage, ExtractType, FileFormat, Compression, DataLayer, DataCategory
+from pfeed.enums import DataTool, DataStorage, ExtractType, StorageFormat, Compression, DataLayer, DataCategory
 
 
 __all__ = ["BaseFeed"]
@@ -74,8 +74,8 @@ class BaseFeed(ABC):
         self._subflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
-        self._storage_options: dict[tStorage, dict] = {}
-        self._storage_kwargs: dict[tStorage, dict] = {}
+        self._storage_options: dict[DataStorage, dict] = {}
+        self._storage_kwargs: dict[DataStorage, dict] = {}
         self._streaming_settings: StreamingSettings | None = None
     
     @property
@@ -153,7 +153,7 @@ class BaseFeed(ABC):
     ) -> BaseFeed:
         ...
     
-    def configure_storage(self, storage: tStorage, storage_options: dict, **storage_kwargs) -> BaseFeed:
+    def configure_storage(self, storage: DataStorage, storage_options: dict, **storage_kwargs) -> BaseFeed:
         '''Configure storage kwargs for the given storage
         Args:
             storage_options: A dictionary containing configuration options that are universally applicable across different storage systems. These options typically include settings such as connection parameters, authentication credentials, and other general configurations that are not specific to a particular storage type.
@@ -223,8 +223,8 @@ class BaseFeed(ABC):
         data_path: Path,
         data_model: BaseDataModel, 
         data_domain: str, 
-        data_layer: tDataLayer,
-        from_storage: tStorage,
+        data_layer: DataLayer,
+        from_storage: DataStorage,
         storage_options: dict | None,
     ) -> tuple[pl.LazyFrame | None, StorageMetadata]:
         '''Retrieves data by searching through all local storages, using polars for scanning data'''
@@ -261,7 +261,7 @@ class BaseFeed(ABC):
         raise NotImplementedError(f'{self.name} _eager_run_stream() is not implemented')
     
     def create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
-        from pfeed.flows.dataflow import DataFlow
+        from pfeed.dataflow.dataflow import DataFlow
         dataflow = DataFlow(data_model=data_model, faucet=faucet)
         if self._dataflows:
             existing_dataflow = self._dataflows[0]
@@ -282,7 +282,7 @@ class BaseFeed(ABC):
         Args:
             close_stream: a function that closes the streaming dataflow after running the extract_func
         '''
-        from pfeed.flows.faucet import Faucet
+        from pfeed.dataflow.faucet import Faucet
         return Faucet(
             data_model=data_model,
             extract_func=extract_func, 
@@ -292,7 +292,7 @@ class BaseFeed(ABC):
     
     @staticmethod
     def _create_sink(data_model: BaseDataModel, storage: BaseStorage) -> Sink:
-        from pfeed.flows.sink import Sink
+        from pfeed.dataflow.sink import Sink
         return Sink(data_model, storage)
     
     def _clear_subflows(self):
@@ -326,32 +326,44 @@ class BaseFeed(ABC):
         data_layer: DataLayer | str=DataLayer.CLEANED,
         data_domain: str='',
         storage_options: dict | None=None,
-        file_format: FileFormat | str=FileFormat.PARQUET,
+        storage_format: StorageFormat | str=StorageFormat.PARQUET,
         compression: Compression | str | None=Compression.SNAPPY,
-        **storage_kwargs,
+        **kwargs,
     ) -> BaseFeed:
         '''
         Args:
             data_domain: custom domain of the data, used in data_path/data_layer/data_domain
                 useful for grouping data
+            kwargs: kwargs for the Storage class or the IO class
+                if Storage is S3, kwargs are S3-specific kwargs
+                if IO is LanceDBIO, kwargs are the same as kwargs in lancedb.connect()
         '''
-        file_format = FileFormat[file_format.upper()]
-        if self._use_ray and (file_format == FileFormat.DUCKDB):
+        from pfeed.storages.local_storage import LocalStorage
+        
+        storage_format = StorageFormat[storage_format.upper()]
+        if self._use_ray and (storage_format == StorageFormat.DUCKDB):
             raise RuntimeError('DuckDB is not thread-safe, cannot be used with Ray')
 
         data_layer = DataLayer[data_layer.upper()]
-        if data_layer == DataLayer.RAW and file_format == FileFormat.DELTALAKE:
+        if data_layer == DataLayer.RAW and storage_format == StorageFormat.DELTALAKE:
             raise RuntimeError(f'Delta Lake is not supported for {data_layer=}')
         
         Storage = DataStorage[to_storage.upper()].storage_class
         data_domain = data_domain or self.data_domain
         storage_options = storage_options or self._storage_options.get(to_storage, {})
-        file_format = FileFormat[file_format.upper()]
+        storage_format = StorageFormat[storage_format.upper()]
 
         is_streaming = self._subflows and self._subflows[0].is_streaming()
-        if is_streaming and file_format != FileFormat.DELTALAKE:
-            print_warning(f"Automatically setting file_format={FileFormat.DELTALAKE} for streaming dataflows")
-            file_format = FileFormat.DELTALAKE
+        if is_streaming and storage_format != StorageFormat.DELTALAKE:
+            print_warning(f"Automatically setting storage_format={StorageFormat.DELTALAKE} for streaming dataflows")
+            storage_format = StorageFormat.DELTALAKE
+        
+        is_local_storage = issubclass(Storage, LocalStorage)
+        # if storage is local, kwargs belong to io
+        if is_local_storage:
+            storage_kwargs, io_kwargs = {}, kwargs
+        else:
+            storage_kwargs, io_kwargs = kwargs, {}
 
         for dataflow in self._subflows:
             data_model = dataflow.data_model
@@ -363,9 +375,10 @@ class BaseFeed(ABC):
                 **storage_kwargs,
             )
             storage._create_data_handler(
-                file_format=file_format, 
+                storage_format=storage_format, 
                 compression=compression,
                 streaming_settings=self._streaming_settings if is_streaming else None,
+                **io_kwargs,
             )
             sink: Sink = self._create_sink(data_model, storage)
             dataflow.set_sink(sink)
@@ -396,7 +409,7 @@ class BaseFeed(ABC):
         if self._use_ray:
             import atexit
             import ray
-            from pfeed.logging import setup_logger_in_ray_task, ray_logging_context
+            from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
             
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
@@ -485,7 +498,7 @@ class BaseFeed(ABC):
             import atexit
             import ray
             from ray.util.queue import Queue
-            from pfeed.logging import setup_logger_in_ray_task, ray_logging_context
+            from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             import zmq

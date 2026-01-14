@@ -3,10 +3,11 @@ from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
-    from pfund.typing import FullDataChannel, tEnvironment
+    from pfund.typing import FullDataChannel
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
-    from pfeed.typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
+    from pfeed.typing import GenericFrame, GenericFrameOrNone
+    from pfeed.enums import DataStorage
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
 
 import time
@@ -112,9 +113,9 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         rollback_period: str | Literal["ytd", "max"]='max',
         start_date: str='',
         end_date: str='',
-        data_layer: tDataLayer='CLEANED',
+        data_layer: DataLayer='CLEANED',
         data_origin: str='',
-        to_storage: tStorage | None='LOCAL',
+        to_storage: DataStorage | None='LOCAL',
         storage_options: dict | None=None,
         yfinance_kwargs: dict | None=None,
         **product_specs
@@ -305,10 +306,10 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     #     start_date: str = "",
     #     end_date: str = "",
     #     data_origin: str='',
-    #     data_layer: tDataLayer | None=None,
+    #     data_layer: DataLayer | None=None,
     #     data_domain: str='',
-    #     from_storage: tStorage | None=None,
-    #     to_storage: tStorage | None=None,
+    #     from_storage: DataStorage | None=None,
+    #     to_storage: DataStorage | None=None,
     #     storage_options: dict | None=None,
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,

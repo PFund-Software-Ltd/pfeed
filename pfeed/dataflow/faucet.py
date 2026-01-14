@@ -3,7 +3,7 @@ from typing import Callable, TYPE_CHECKING, Awaitable, TypeAlias, Any
 if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel, BaseFileMetadata
     from pfeed.sources.base_source import BaseSource
-    from pfeed.flows.dataflow import DataFlow
+    from pfeed.dataflow.dataflow import DataFlow
     from pfeed.typing import GenericData
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata

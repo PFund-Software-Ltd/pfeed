@@ -135,6 +135,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         data["day"] = date.day
         return data
 
+    # EXTEND: currently only supports writing for parquet+deltalake (using .arrow for buffering)
     def _write_stream(self, data: StreamingData):
         data = self._standardize_streaming_msg(data)
         self._stream_buffer.write(
@@ -179,12 +180,16 @@ class TimeBasedDataHandler(BaseDataHandler):
                 file_metadata: TimeBasedMetadataModel = data_model_copy.to_metadata()
                 self._io.write(data=data, file_path=file_path, metadata=file_metadata)
         else:
-            # Preprocess table to add year, month, day columns for partitioning
-            df = df.assign(
-                year=df["date"].dt.year,
-                month=df["date"].dt.month,
-                day=df["date"].dt.day,
-            )
+            if self._io.SUPPORTS_PARTITIONING:
+                # Preprocess table to add year, month, day columns for partitioning
+                df = df.assign(
+                    year=df["date"].dt.year,
+                    month=df["date"].dt.month,
+                    day=df["date"].dt.day,
+                )
+                io_kwargs = {"partition_by": self.PARTITION_COLUMNS}
+            else:
+                io_kwargs = {}
             table_path = self._create_file_path()
             metadata: TimeBasedMetadata = self.read_metadata()
             table_metadata: TimeBasedMetadataModel = data_model.to_metadata()
@@ -197,16 +202,16 @@ class TimeBasedDataHandler(BaseDataHandler):
                 table_metadata.dates = list(set(existing_dates + table_metadata.dates))
                 # Replace any overlapping data within the date range
                 start_ts, end_ts = df["date"].min(), df["date"].max()
-                predicate = f"date >= '{start_ts}' AND date <= '{end_ts}'"
+                where = f"date >= '{start_ts}' AND date <= '{end_ts}'"
             else:
-                predicate = None
+                where = None
             data = pa.Table.from_pandas(df, preserve_index=False)
             self._io.write(
                 data=data,
                 file_path=table_path,
                 metadata=table_metadata,
-                predicate=predicate,
-                partition_by=self.PARTITION_COLUMNS,
+                where=where,
+                **io_kwargs,
             )
 
     def read_metadata(self) -> TimeBasedMetadata:

@@ -6,10 +6,10 @@ if TYPE_CHECKING:
     import pandas as pd
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
-    from pfund.typing import FullDataChannel, tEnvironment
+    from pfund.typing import FullDataChannel
     from pfeed.typing import GenericFrameOrNone
     from pfeed.sources.bybit.stream_api import ChannelKey
-    from pfeed.typing import tStorage, tDataLayer
+    from pfeed.enums import DataStorage
 
 from pfund.products.product_bybit import BybitProduct
 from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
@@ -55,8 +55,8 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: tDataLayer='CLEANED',
-        to_storage: tStorage | None='LOCAL',
+        data_layer: DataLayer='CLEANED',
+        to_storage: DataStorage | None='LOCAL',
         storage_options: dict | None=None,
         **product_specs
     ) -> GenericFrameOrNone | dict[datetime.date, GenericFrameOrNone] | BybitMarketFeed:
@@ -157,10 +157,10 @@ class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
     #     start_date: str="",
     #     end_date: str="",
     #     data_origin: str='',
-    #     data_layer: tDataLayer | None=None,
+    #     data_layer: DataLayer | None=None,
     #     data_domain: str='',
-    #     from_storage: tStorage | None=None,
-    #     to_storage: tStorage | None=None,
+    #     from_storage: DataStorage | None=None,
+    #     to_storage: DataStorage | None=None,
     #     storage_options: dict | None=None,
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,

@@ -1,12 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    import pyarrow.fs as pa_fs
     from pfeed.typing import FilePath
     from pfeed.data_models.base_data_model import BaseMetadataModel
 
 import polars as pl
 import pyarrow as pa
+import pyarrow.fs as pa_fs
 
 from pfeed._io.base_io import BaseIO
 from pfeed.enums import Compression
@@ -17,14 +17,16 @@ class ParquetIO(BaseIO):
     
     def __init__(
         self, 
-        filesystem: pa_fs.FileSystem, 
-        storage_options: dict,
+        filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(), 
+        storage_options: dict | None = None,
         compression: Compression | str | None=Compression.SNAPPY, 
+        **kwargs,
     ):
         super().__init__(
             filesystem=filesystem, 
             storage_options=storage_options, 
             compression=compression,
+            **kwargs,
         )
     
     def exists(self, file_path: FilePath) -> bool:

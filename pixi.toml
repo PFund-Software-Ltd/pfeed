@@ -54,7 +54,9 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 [feature.optional.pypi-dependencies]
 # TEMP
 fmp-api-client = { path = "../fmp-api-client", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true }
 # fmp-api-client = ">=0.0.1"
+# pfund-plot = { version = ">=0.0.1.dev3", extras = ["marimo", "jupyter"] }
 yfinance = ">=1.0"
 prefect = ">=3.6.10"
 # polars-cloud = ">=0.4.2"
@@ -68,6 +70,7 @@ lancedb = ">=0.26.1"
 [pypi-options.dependency-overrides]
 pfeed = { path = ".", editable = true }
 pfund = { path = "../pfund", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true }
 pfund-kit = { path = "../pfund-kit", editable = true }
 fmp-api-client = { path = "../fmp-api-client", editable = true }
 

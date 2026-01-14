@@ -5,9 +5,9 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.typing import tEnvironment, FullDataChannel
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed.typing import tStorage, tDataLayer, tDataType, GenericFrameOrNone
+    from pfeed.typing import tDataType, GenericFrameOrNone
     from pfeed.data_models.retrieve_market_data_model import RetrieveMarketDataModel
-    from pfeed.enums import DataSource
+    from pfeed.enums import DataSource, DataStorage
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
     from pfeed.feeds.time_based_feed import GenericFrameOrNoneWithMetadata
 
@@ -105,9 +105,9 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: tDataLayer='CLEANED',
+        data_layer: DataLayer='CLEANED',
         data_origin: str='',
-        to_storage: tStorage | None='LOCAL',
+        to_storage: DataStorage | None='LOCAL',
         storage_options: dict | None=None,
         dataflow_per_date: bool=True,
         include_metadata: bool=False,
@@ -215,9 +215,9 @@ class MarketFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDataLayer='CLEANED',
+        data_layer: DataLayer='CLEANED',
         data_domain: str='',
-        from_storage: tStorage='LOCAL',
+        from_storage: DataStorage='LOCAL',
         storage_options: dict | None=None,
         auto_resample: bool=True,
         dataflow_per_date: bool=False,
@@ -283,9 +283,9 @@ class MarketFeed(TimeBasedFeed):
         self,
         data_path: Path,
         data_model: RetrieveMarketDataModel,
-        data_layer: tDataLayer,
+        data_layer: DataLayer,
         data_domain: str,
-        from_storage: tStorage,
+        from_storage: DataStorage,
         storage_options: dict | None,
     ) -> tuple[GenericFrameOrNone, TimeBasedStorageMetadata]:
         '''Retrieve data from storage. If data is not found, search for higher resolutions.
@@ -352,9 +352,9 @@ class MarketFeed(TimeBasedFeed):
         product: str,
         symbol: str='',
         resolution: Resolution | str | tDataType="quote_L1",
-        data_layer: tDataLayer='CLEANED',
+        data_layer: DataLayer='CLEANED',
         data_origin: str='',
-        to_storage: tStorage | None=None,
+        to_storage: DataStorage | None=None,
         storage_options: dict | None=None,
         callback: Callable[[dict], Awaitable[None] | None] | None=None,
         env: tEnvironment='LIVE',
@@ -479,10 +479,10 @@ class MarketFeed(TimeBasedFeed):
     #     start_date: str='',
     #     end_date: str='',
     #     data_origin: str='',
-    #     data_layer: tDataLayer | None=None,
+    #     data_layer: DataLayer | None=None,
     #     data_domain: str='',
-    #     from_storage: tStorage | None=None,
-    #     to_storage: tStorage | None=None,
+    #     from_storage: DataStorage | None=None,
+    #     to_storage: DataStorage | None=None,
     #     storage_options: dict | None=None,
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,

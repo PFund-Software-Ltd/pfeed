@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING, TypeAlias, Any
 
 if TYPE_CHECKING:
     import json
+    import polars as pl
     from pyarrow.parquet import FileMetaData as PyArrowParquetFileMetaData
     from pfeed.data_models.base_data_model import BaseMetadataModel
-    from pfeed.typing import GenericData
     from pfeed.utils.file_path import FilePath
 
 import time
@@ -26,6 +26,7 @@ MetadataModelAsDict: TypeAlias = dict[str, Any]
 class BaseIO(ABC):
     IS_TABLE_FORMAT: bool = False
     SUPPORTS_STREAMING: bool = False
+    SUPPORTS_PARTITIONING: bool = False
     FILE_EXTENSION: str | None = None
     # when it's empty, it means metadata is stored alongside the data file
     # when it's not empty, it means metadata is stored in a separate file
@@ -33,29 +34,39 @@ class BaseIO(ABC):
 
     def __init__(
         self,
-        filesystem: pa_fs.FileSystem,
-        storage_options: dict,
+        filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(),
+        storage_options: dict | None = None,
         compression: Compression | str | None = None,
+        **kwargs,
     ):
+        '''
+        Args:
+            filesystem: filesystem to use
+            storage_options: storage options to use
+            compression: compression to use
+            kwargs: kwargs for the IO class
+                e.g. for LanceDBIO, it's the same as the kwargs for lancedb.connect()
+        '''
         self._filesystem = filesystem
-        self._storage_options = storage_options
+        self._storage_options: dict = storage_options or {}
         self._compression = Compression[compression.upper()] if compression else None
+        self._kwargs = kwargs
 
     @abstractmethod
-    def write(self, file_path: FilePath, data: GenericData, **kwargs):
+    def write(self, file_path: FilePath, data: pa.Table, *args, **kwargs):
         pass
 
     @abstractmethod
-    def read(self, file_paths: list[FilePath], **kwargs) -> GenericData | None:
+    def read(self, file_paths: list[FilePath], *args, **kwargs) -> pl.LazyFrame | None:
         pass
 
-    def exists(self, file_path: FilePath) -> bool:
+    def exists(self, file_path: FilePath, *args, **kwargs) -> bool:
         """Check if a file exists at this path."""
         file_info = self._filesystem.get_file_info(file_path.schemeless)
         return file_info.type == pa_fs.FileType.File
 
     @abstractmethod
-    def is_empty(self, file_path: FilePath) -> bool:
+    def is_empty(self, file_path: FilePath, *args, **kwargs) -> bool:
         pass
 
     @property
@@ -114,12 +125,6 @@ class BaseIO(ABC):
             Dictionary mapping file paths to their metadata.
         """
         metadata: dict[FilePath, MetadataModelAsDict] = {}
-
-        if self.IS_TABLE_FORMAT:
-            assert len(file_paths) == 1, 'table format should have exactly one file path'
-            table_path = file_paths[0]
-            if table_path.name != self.METADATA_FILENAME:
-                file_paths = [table_path / self.METADATA_FILENAME]
 
         for file_path in file_paths:
             for attempt in range(max_retries):

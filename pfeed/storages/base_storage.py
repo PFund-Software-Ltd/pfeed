@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import tStorage, tDataLayer, GenericData, GenericFrame
+    from pfeed.typing import GenericData, GenericFrame
     from pfeed._io.base_io import BaseIO
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.streaming_settings import StreamingSettings
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pfeed.enums import DataLayer, DataStorage, FileFormat, Compression
+from pfeed.enums import DataLayer, DataStorage, StorageFormat, Compression
 
 
 class BaseStorage(ABC):
@@ -28,8 +28,8 @@ class BaseStorage(ABC):
 
     def __init__(
         self,
-        name: tStorage,
-        data_layer: tDataLayer,
+        name: DataStorage,
+        data_layer: DataLayer,
         data_domain: str,
         base_data_path: Path | None = None,
         storage_options: dict | None = None,
@@ -54,7 +54,7 @@ class BaseStorage(ABC):
     def from_data_model(
         cls,
         data_model: BaseDataModel,
-        data_layer: tDataLayer,
+        data_layer: DataLayer,
         data_domain: str,
         base_data_path: Path | None = None,
         storage_options: dict | None = None,
@@ -114,17 +114,27 @@ class BaseStorage(ABC):
 
     def _create_data_handler(
         self,
-        file_format: FileFormat | str = FileFormat.PARQUET,
+        storage_format: StorageFormat | str = StorageFormat.PARQUET,
         compression: Compression | str | None = Compression.SNAPPY,
         streaming_settings: StreamingSettings | None = None,
+        **io_kwargs,
     ) -> None:
+        '''
+        Args:
+            storage_format: storage format to use
+            compression: compression to use
+            streaming_settings: streaming settings to use
+            io_kwargs: kwargs for the IO class
+                e.g. for LanceDBIO, it's the same as the kwargs for lancedb.connect()
+        '''
         from pfeed.utils.file_path import FilePath
-        file_format = FileFormat[file_format.upper()]
-        IO: type[BaseIO] = file_format.io_class
+        storage_format = StorageFormat[storage_format.upper()]
+        IO: type[BaseIO] = storage_format.io_class
         io = IO(
             filesystem=self.get_filesystem(),
             storage_options=self._storage_options,
             compression=compression,
+            **io_kwargs,
         )
         DataHandler: type[BaseDataHandler] = self.data_model.data_handler_class
         self._data_handler = DataHandler(

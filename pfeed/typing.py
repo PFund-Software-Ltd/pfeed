@@ -31,8 +31,6 @@ StreamingData = dict | StreamingMessage
 
 tDataTool = Literal['pandas', 'polars', 'dask', 'spark']
 tDataSource = Literal['YAHOO_FINANCE', 'BYBIT', 'FINANCIAL_MODELING_PREP']
-tDataLayer = Literal['RAW', 'CLEANED', 'CURATED']
 tDataCategory = Literal['MARKET_DATA', 'NEWS_DATA']
 tDataType = Literal['quote_L3', 'quote_L2', 'quote_L1', 'quote', 'tick', 'second', 'minute', 'hour', 'day']
-tStorage = Literal['CACHE', 'LOCAL', 'MINIO', 'DUCKDB', 'LANCEDB']
 tStreamMode = Literal["SAFE", "FAST"]

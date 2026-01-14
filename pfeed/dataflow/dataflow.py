@@ -3,15 +3,15 @@ from typing import Callable, TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from prefect import Flow as PrefectDataFlow
     from pfeed.typing import GenericData, StreamingData
-    from pfeed.flows.faucet import Faucet
-    from pfeed.flows.sink import Sink
+    from pfeed.dataflow.faucet import Faucet
+    from pfeed.dataflow.sink import Sink
     from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.messaging.zeromq import ZeroMQ
 
 import logging
 
-from pfeed.flows.result import FlowResult
+from pfeed.dataflow.result import FlowResult
 from pfeed.enums import ExtractType, FlowType
 
 

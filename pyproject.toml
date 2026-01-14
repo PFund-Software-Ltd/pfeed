@@ -41,6 +41,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+marimo = ["pfund-plot[marimo]>=0.0.1.dev3"]
+jupyter = ["pfund-plot[jupyter]>=0.0.1.dev3"]
 fmp = ["fmp-api-client>=0.0.1"]
 yfinance = ["yfinance>=1.0"]
 prefect = ["prefect>=3.6.10"]

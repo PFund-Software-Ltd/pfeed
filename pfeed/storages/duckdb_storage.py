@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Literal
 from typing_extensions import TypedDict
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
-    from pfeed.typing import tDataLayer, GenericFrame
+    from pfeed.typing import GenericFrame
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
 
@@ -29,7 +29,7 @@ from pfeed import config
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.base_storage import BaseStorage
-from pfeed.enums import DataTool, DataStorage
+from pfeed.enums import DataTool, DataStorage, DataLayer
 
 
 class DuckDBMetadata(TypedDict):
@@ -42,7 +42,7 @@ class DuckDBMetadata(TypedDict):
 class DuckDBStorage(BaseStorage):
     def __init__(
         self,
-        data_layer: tDataLayer,
+        data_layer: DataLayer,
         data_domain: str,
         base_data_path: Path | None = None,
         storage_options: dict | None=None,
@@ -83,7 +83,7 @@ class DuckDBStorage(BaseStorage):
     def from_data_model(
         cls,
         data_model: BaseDataModel, 
-        data_layer: tDataLayer,
+        data_layer: DataLayer,
         data_domain: str,
         use_deltalake: bool,   # for consistency with other storages only, not used
         base_data_path: Path | None = None,

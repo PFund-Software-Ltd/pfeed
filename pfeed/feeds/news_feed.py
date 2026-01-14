@@ -4,13 +4,13 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.typing import tEnvironment
     from pfeed._io.base_io import StorageMetadata
-    from pfeed.typing import tDataLayer, tStorage, GenericFrameOrNone
+    from pfeed.typing import GenericFrameOrNone
     from pfeed.data_models.news_data_model import NewsDataModel
+    from pfeed.enums import DataStorage
 
 import datetime
 from functools import partial
 
-from pfund import print_warning
 from pfund.enums import Environment
 from pfeed.enums import DataCategory, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
@@ -57,9 +57,9 @@ class NewsFeed(TimeBasedFeed):
         rollback_period: str ='1w',
         start_date: str='',
         end_date: str='',
-        data_layer: tDataLayer='CLEANED',
+        data_layer: DataLayer='CLEANED',
         data_origin: str='',
-        to_storage: tStorage | None='LOCAL',
+        to_storage: DataStorage | None='LOCAL',
         storage_options: dict | None=None,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
@@ -114,9 +114,9 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: tDataLayer='CLEANED',
+        data_layer: DataLayer='CLEANED',
         data_domain: str='',
-        from_storage: tStorage | None=None,
+        from_storage: DataStorage | None=None,
         storage_options: dict | None=None,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
@@ -154,10 +154,10 @@ class NewsFeed(TimeBasedFeed):
     #     start_date: str='',
     #     end_date: str='',
     #     data_origin: str='',
-    #     data_layer: tDataLayer | None=None,
+    #     data_layer: DataLayer | None=None,
     #     data_domain: str='',
-    #     from_storage: tStorage | None=None,
-    #     to_storage: tStorage | None=None,
+    #     from_storage: DataStorage | None=None,
+    #     to_storage: DataStorage | None=None,
     #     storage_options: dict | None=None,
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,

@@ -42,17 +42,17 @@ def convert_to_desired_df(data: GenericData, data_tool: DataTool | tDataTool) ->
     '''
     import io
     from pfeed.enums.compression import Compression
-    from pfeed.enums.file_format import FileFormat
+    from pfeed.enums.storage_format import StorageFormat
 
     if isinstance(data, bytes):
         data = Compression.decompress(data)
-        file_format = FileFormat.detect(data)
-        if file_format == FileFormat.PARQUET:
+        storage_format = StorageFormat.detect(data)
+        if storage_format == StorageFormat.PARQUET:
             df = pd.read_parquet(io.BytesIO(data))
-        elif file_format == FileFormat.CSV:
+        elif storage_format == StorageFormat.CSV:
             df = pd.read_csv(io.BytesIO(data))
         else:
-            raise ValueError(f'{file_format=}')
+            raise ValueError(f'{storage_format=}')
     elif is_dataframe(data):
         df: GenericFrame = data
     else:

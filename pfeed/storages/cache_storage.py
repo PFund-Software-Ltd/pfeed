@@ -2,8 +2,7 @@ import shutil
 import datetime
 from pathlib import Path
 
-from pfeed.enums import DataStorage
-from pfeed.typing import tDataLayer
+from pfeed.enums import DataStorage, DataLayer
 from pfeed.storages.local_storage import LocalStorage
 
 
@@ -13,7 +12,7 @@ class CacheStorage(LocalStorage):
 
     def __init__(
         self,
-        data_layer: tDataLayer,
+        data_layer: DataLayer,
         data_domain: str,
         base_data_path: Path | None = None,
         storage_options: dict | None=None,

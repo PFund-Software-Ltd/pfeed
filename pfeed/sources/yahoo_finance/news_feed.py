@@ -2,7 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import pandas as pd
-    from pfeed.typing import tStorage, tDataLayer, GenericFrameOrNone
+    from pfeed.typing import GenericFrameOrNone
+    from pfeed.enums import DataStorage, DataLayer
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
@@ -49,9 +50,9 @@ class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
         rollback_period: str ='1w',
         start_date: str='',
         end_date: str='',
-        data_layer: tDataLayer='CLEANED',
+        data_layer: DataLayer='CLEANED',
         data_origin: str='',
-        to_storage: tStorage | None='LOCAL',
+        to_storage: DataStorage | None='LOCAL',
         storage_options: dict | None=None,
         num_news: int=10,
         news_type: Literal['news', 'press releases', 'all']='news',

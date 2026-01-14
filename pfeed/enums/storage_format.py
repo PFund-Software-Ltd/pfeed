@@ -33,32 +33,39 @@ def _is_likely_csv(data: bytes, sample_size: int = 4096) -> bool:
         return False
 
 
-class FileFormat(StrEnum):
+class StorageFormat(StrEnum):
     PARQUET = 'parquet'
     CSV = 'csv'
     # REVIEW: see if need to separate this into table format?
     DELTALAKE = 'deltalake'
     DUCKDB = 'duckdb'
+    LANCEDB = 'lancedb'
 
     @property
     def io_class(self) -> type[BaseIO]:
-        from pfeed._io.parquet_io import ParquetIO
-        from pfeed._io.deltalake_io import DeltaLakeIO
-        return {
-            FileFormat.PARQUET: ParquetIO,
-            FileFormat.DELTALAKE: DeltaLakeIO,
-        }[self]
+        if self == StorageFormat.PARQUET:
+            from pfeed._io.parquet_io import ParquetIO
+            return ParquetIO
+        elif self == StorageFormat.DELTALAKE:
+            from pfeed._io.deltalake_io import DeltaLakeIO
+            return DeltaLakeIO
+        elif self == StorageFormat.LANCEDB:
+            # this import will throw ImportError if lancedb is not installed
+            from pfeed._io.lancedb_io import LanceDBIO
+            return LanceDBIO
+        else:
+            raise ValueError(f'{self=} is not supported')
 
     @staticmethod
-    def detect(data: bytes) -> 'FileFormat | None':
-        """Detect file format from data bytes.
+    def detect(data: bytes) -> StorageFormat | None:
+        """Detect storage format from data bytes.
 
-        Returns the detected FileFormat or None if format cannot be determined.
-        Note: Only works for single-file formats (PARQUET, CSV).
-        DELTALAKE and DUCKDB are directory-based and cannot be detected from bytes.
+        Returns the detected StorageFormat or None if format cannot be determined.
+        Only works for single-file formats (PARQUET, CSV).
+        e.g. LANCEDB, DELTALAKE and DUCKDB are directory-based and cannot be detected from bytes.
         """
         if _is_parquet(data):
-            return FileFormat.PARQUET
+            return StorageFormat.PARQUET
         elif _is_likely_csv(data):
-            return FileFormat.CSV
+            return StorageFormat.CSV
         return None

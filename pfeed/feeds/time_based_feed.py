@@ -4,10 +4,10 @@ if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
-    from pfeed.typing import tStorage, tDataLayer, GenericFrame, GenericFrameOrNone
-    from pfeed.flows.dataflow import DataFlow, FlowResult
-    from pfeed.flows.faucet import Faucet
-    from pfeed.enums import StreamMode
+    from pfeed.typing import GenericFrame, GenericFrameOrNone
+    from pfeed.dataflow.dataflow import DataFlow, FlowResult
+    from pfeed.dataflow.faucet import Faucet
+    from pfeed.enums import StreamMode, DataStorage, DataLayer
     class TimeBasedFeedMetadata(TypedDict, total=True):
         missing_dates: list[datetime.date]
     GenericFrameOrNoneWithMetadata = tuple[GenericFrameOrNone, TimeBasedFeedMetadata]
@@ -110,9 +110,9 @@ class TimeBasedFeed(BaseFeed):
         partial_faucet_data_model: Callable,
         start_date: datetime.date,
         end_date: datetime.date,
-        data_layer: tDataLayer,
+        data_layer: DataLayer,
         data_domain: str,
-        from_storage: tStorage,
+        from_storage: DataStorage,
         storage_options: dict | None,
         add_default_transformations: Callable,
         dataflow_per_date: bool,
@@ -280,10 +280,10 @@ class TimeBasedFeed(BaseFeed):
     #     start_date: str,
     #     end_date: str,
     #     data_origin: str,
-    #     data_layer: tDataLayer | None,
+    #     data_layer: DataLayer | None,
     #     data_domain: str,
-    #     from_storage: tStorage | None,
-    #     to_storage: tStorage | None,
+    #     from_storage: DataStorage | None,
+    #     to_storage: DataStorage | None,
     #     storage_options: dict | None,
     #     force_download: bool,
     #     retrieve_per_date: bool,

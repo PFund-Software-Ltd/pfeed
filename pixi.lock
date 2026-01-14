@@ -9036,7 +9036,7 @@ packages:
 - pypi: ./
   name: pfeed
   version: 0.0.5
-  sha256: 64a2c93812c4879c37fb161a463a146c8c7f2890b4b344191ebe8f559e71b793
+  sha256: c74fc18536007244dc977954117e295aee1397074abebd4f38b5177c32d20463
   requires_dist:
   - pfund @ file:///Users/stephenyau/pfund.ai/pfund
   - pandas>=2.3.3
@@ -9052,6 +9052,8 @@ packages:
   - ray>=2.53.0
   - pyzmq>=27.1.0
   - deltalake>=1.3.1
+  - pfund-plot[marimo]>=0.0.1.dev3 ; extra == 'marimo'
+  - pfund-plot[jupyter]>=0.0.1.dev3 ; extra == 'jupyter'
   - fmp-api-client @ file:///Users/stephenyau/pfund.ai/fmp-api-client ; extra == 'fmp'
   - yfinance>=1.0 ; extra == 'yfinance'
   - prefect>=3.6.10 ; extra == 'prefect'

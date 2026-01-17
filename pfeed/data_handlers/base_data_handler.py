@@ -1,28 +1,33 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 if TYPE_CHECKING:
-    from pfeed.typing import GenericData, FilePath
+    from pfeed.typing import GenericData
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed._io.base_io import BaseIO, MetadataModelAsDict
+    from pfeed.utils.file_path import FilePath
+    from pfeed._io.table_io import TablePath
+    from pfeed._io.database_io import DBPath
+    SourcePath: TypeAlias = FilePath | TablePath | DBPath
 
-from abc import ABC, abstractmethod
 from pathlib import Path
+from abc import ABC, abstractmethod
 from pydantic import BaseModel
 
-from pfeed.enums import DataTool
+from pfeed.enums import DataTool, DataLayer
 from pfeed.data_models.base_data_model import BaseMetadataModel
 
 
 class BaseMetadata(BaseModel):
-    file_metadatas: dict[FilePath, BaseMetadataModel]
+    source_metadata: dict[FilePath, BaseMetadataModel]
     missing_file_paths: list[FilePath]
 
 
 class BaseDataHandler(ABC):
-    def __init__(self, data_model: BaseDataModel, data_path: FilePath, io: BaseIO):
-        self._data_model = data_model
+    def __init__(self, data_path: Path, data_layer: DataLayer, data_model: BaseDataModel, io: BaseIO):
         self._data_path = data_path
+        self._data_layer = data_layer
+        self._data_model = data_model
         self._io: BaseIO = io
 
     @abstractmethod
@@ -40,42 +45,63 @@ class BaseDataHandler(ABC):
         pass
 
     @abstractmethod
-    def _create_filename(self, *args, **kwargs) -> str:
-        pass
-
-    @abstractmethod
-    def _create_storage_path(self, *args, **kwargs) -> Path:
-        pass
-    
-    @abstractmethod
     def _create_file_path(self, *args, **kwargs) -> FilePath:
         pass
 
     @abstractmethod
-    def create_file_paths(self) -> list[FilePath]:
+    def _create_table_path(self, *args, **kwargs) -> TablePath:
         pass
 
-    def _read_file_metadatas(self, file_paths: list[FilePath]) -> dict[FilePath, BaseMetadataModel]:
-        metadata_dict: dict[FilePath, MetadataModelAsDict] = self._io.read_metadata(file_paths=file_paths)
+    @abstractmethod
+    def _create_db_path(self, *args, **kwargs) -> DBPath:
+        pass
+    
+    def get_source_path(self, *args, **kwargs) -> FilePath | TablePath | DBPath:
+        if self._is_file_io():
+            return self._create_file_path(*args, **kwargs)
+        elif self._is_table_io():
+            return self._create_table_path(*args, **kwargs)
+        elif self._is_database_io():
+            return self._create_db_path(*args, **kwargs)
+        else:
+            raise ValueError(f"Unsupported IO format: {self._io.name}")
+
+    def _read_source_metadata(self, file_paths: list[FilePath]) -> dict[SourcePath, BaseMetadataModel]:
+        if self._is_file_io():
+            source_metadata_dict: dict[FilePath, MetadataModelAsDict] = self._io.read_metadata(file_paths=file_paths)
+        elif self._is_table_io():
+            pass
+        elif self._is_database_io():
+            pass
+        else:
+            raise ValueError(f'Unsupported IO format: {self._io.name}')
         MetadataModel: type[BaseMetadataModel] = self._data_model.metadata_class
-        file_metadatas = {
-            file_path: MetadataModel.from_dict(file_metadata)
-            for file_path, file_metadata in metadata_dict.items()
+        return {
+            source: MetadataModel.from_dict(metadata)
+            for source, metadata in source_metadata_dict.items()
         }
-        return file_metadatas
 
     def read_metadata(self) -> BaseMetadata:
         file_paths = self.create_file_paths()
         return BaseMetadata(
-            file_metadatas=self._read_file_metadatas(file_paths=file_paths),
+            source_metadata=self._read_source_metadata(file_paths=file_paths),
             missing_file_paths=[fp for fp in file_paths if not self._io.exists(fp)],
         )
 
-    def _is_using_streaming_io(self) -> bool:
+    def _is_streaming_io(self) -> bool:
         return self._io.SUPPORTS_STREAMING
 
-    def _is_using_table_format(self) -> bool:
-        return self._io.IS_TABLE_FORMAT
+    def _is_file_io(self) -> bool:
+        from pfeed._io.file_io import FileIO
+        return isinstance(self._io, FileIO) and not self._is_table_io()
+    
+    def _is_table_io(self) -> bool:
+        from pfeed._io.table_io import TableIO
+        return isinstance(self._io, TableIO)
+
+    def _is_database_io(self) -> bool:
+        from pfeed._io.database_io import DatabaseIO
+        return isinstance(self._io, DatabaseIO)
 
     def _get_file_extension(self) -> str:
         if self._io.FILE_EXTENSION is None:

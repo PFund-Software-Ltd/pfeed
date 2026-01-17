@@ -11,10 +11,19 @@ class LocalDataStorage(StrEnum):
     LOCAL = 'LOCAL'
     # MINIO = 'MINIO'
 
+
+class DatabaseStorage(StrEnum):
+    DUCKDB = 'DUCKDB'
+    LANCEDB = 'LANCEDB'
+    POSTGRESQL = 'POSTGRESQL'
+
     
 class DataStorage(StrEnum):
     CACHE = LocalDataStorage.CACHE
     LOCAL = LocalDataStorage.LOCAL
+    DUCKDB = DatabaseStorage.DUCKDB
+    LANCEDB = DatabaseStorage.LANCEDB
+    POSTGRESQL = DatabaseStorage.POSTGRESQL
     # TODO:
     # MINIO = LocalDataStorage.MINIO
     # HUGGINGFACE = HF = 'HUGGINGFACE'
@@ -24,9 +33,20 @@ class DataStorage(StrEnum):
 
     @property
     def storage_class(self) -> type[BaseStorage]:
-        from pfeed.storages.local_storage import LocalStorage
-        from pfeed.storages.cache_storage import CacheStorage
-        return {
-            DataStorage.LOCAL: LocalStorage,
-            DataStorage.CACHE: CacheStorage,
-        }[self]
+        if self == DataStorage.LOCAL:
+            from pfeed.storages.local_storage import LocalStorage
+            return LocalStorage
+        elif self == DataStorage.CACHE:
+            from pfeed.storages.cache_storage import CacheStorage
+            return CacheStorage
+        elif self == DataStorage.DUCKDB:
+            from pfeed.storages.duckdb_storage import DuckDBStorage
+            return DuckDBStorage
+        elif self == DataStorage.LANCEDB:
+            from pfeed.storages.lancedb_storage import LanceDBStorage
+            return LanceDBStorage
+        # elif self == DataStorage.POSTGRESQL:
+        #     from pfeed.storages.postgresql_storage import PostgreSQLStorage
+        #     return PostgreSQLStorage
+        else:
+            raise ValueError(f'{self=} is not supported')

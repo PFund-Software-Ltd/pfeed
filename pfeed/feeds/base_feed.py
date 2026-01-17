@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, overload, Literal, TypeAlias, AsyncGenerator, Coroutine, ClassVar
+from typing import TYPE_CHECKING, Callable, Any, Literal, TypeAlias, AsyncGenerator, Coroutine, ClassVar
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -30,7 +30,7 @@ from pprint import pformat
 
 from pfund import print_warning
 from pfund.enums import Environment
-from pfeed.enums import DataTool, DataStorage, ExtractType, StorageFormat, Compression, DataLayer, DataCategory
+from pfeed.enums import DataTool, DataStorage, ExtractType, IOFormat, Compression, DataLayer
 
 
 __all__ = ["BaseFeed"]
@@ -45,7 +45,6 @@ def clear_subflows(func):
     
 class BaseFeed(ABC):
     data_model_class: ClassVar[type[BaseDataModel]]
-    data_domain: ClassVar[DataCategory | str]
     
     def __init__(
         self, 
@@ -75,7 +74,7 @@ class BaseFeed(ABC):
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
         self._storage_options: dict[DataStorage, dict] = {}
-        self._storage_kwargs: dict[DataStorage, dict] = {}
+        self._io_options: dict[IOFormat, dict] = {}
         self._streaming_settings: StreamingSettings | None = None
     
     @property
@@ -144,23 +143,16 @@ class BaseFeed(ABC):
     def _create_batch_dataflows(self, *args, **kwargs) -> list[DataFlow]:
         pass
     
-    @overload
-    def configure_storage(
-        self, 
-        storage: Literal['minio'],
-        storage_options: dict, 
-        enable_bucket_versioning: bool=False,
-    ) -> BaseFeed:
-        ...
+    def configure_io(self, io_format: IOFormat, **io_options) -> BaseFeed:
+        self._io_options[io_format] = io_options
+        return self
     
-    def configure_storage(self, storage: DataStorage, storage_options: dict, **storage_kwargs) -> BaseFeed:
+    def configure_storage(self, storage: DataStorage, storage_options: dict) -> BaseFeed:
         '''Configure storage kwargs for the given storage
         Args:
             storage_options: A dictionary containing configuration options that are universally applicable across different storage systems. These options typically include settings such as connection parameters, authentication credentials, and other general configurations that are not specific to a particular storage type.
-            storage_kwargs: Storage-specific kwargs, e.g., if storage is 'minio', kwargs are Minio-specific kwargs.
         '''
         self._storage_options[storage] = storage_options
-        self._storage_kwargs[storage] = storage_kwargs
         return self
 
     def is_pipeline(self) -> bool:
@@ -222,23 +214,29 @@ class BaseFeed(ABC):
         self,
         data_path: Path,
         data_model: BaseDataModel, 
-        data_domain: str, 
         data_layer: DataLayer,
         from_storage: DataStorage,
-        storage_options: dict | None,
+        io_format: IOFormat,
     ) -> tuple[pl.LazyFrame | None, StorageMetadata]:
         '''Retrieves data by searching through all local storages, using polars for scanning data'''
         data_storage = DataStorage[from_storage.upper()]
-        storage_options = storage_options or self._storage_options.get(data_storage, {})
+        io_format = IOFormat[io_format.upper()]
+        storage_options = self._storage_options.get(data_storage, {})
+        io_options = self._io_options.get(io_format, {})
         self.logger.debug(f'searching for data {data_model} in {data_storage} ({data_layer=})...')
+        Storage = data_storage.storage_class
         try:
-            Storage = data_storage.storage_class
-            storage: BaseStorage = Storage.from_data_model(
-                base_data_path=data_path,
-                data_model=data_model,
-                data_layer=data_layer, 
-                data_domain=data_domain,
-                storage_options=storage_options,
+            storage = (
+                Storage(
+                    data_path=data_path,
+                    data_layer=data_layer,
+                    storage_options=storage_options,
+                )
+                .with_data_model(data_model)
+                .with_io(
+                    io_format, 
+                    io_options=io_options,
+                )
             )
             data, metadata = storage.read_data()
             if data is not None:
@@ -324,62 +322,42 @@ class BaseFeed(ABC):
         self, 
         to_storage: DataStorage | str,
         data_layer: DataLayer | str=DataLayer.CLEANED,
-        data_domain: str='',
-        storage_options: dict | None=None,
-        storage_format: StorageFormat | str=StorageFormat.PARQUET,
-        compression: Compression | str | None=Compression.SNAPPY,
-        **kwargs,
+        io_format: IOFormat | str=IOFormat.PARQUET,
     ) -> BaseFeed:
-        '''
-        Args:
-            data_domain: custom domain of the data, used in data_path/data_layer/data_domain
-                useful for grouping data
-            kwargs: kwargs for the Storage class or the IO class
-                if Storage is S3, kwargs are S3-specific kwargs
-                if IO is LanceDBIO, kwargs are the same as kwargs in lancedb.connect()
-        '''
-        from pfeed.storages.local_storage import LocalStorage
-        
-        storage_format = StorageFormat[storage_format.upper()]
-        if self._use_ray and (storage_format == StorageFormat.DUCKDB):
+        io_format = IOFormat[io_format.upper()]
+        if self._use_ray and (io_format == IOFormat.DUCKDB):
             raise RuntimeError('DuckDB is not thread-safe, cannot be used with Ray')
 
         data_layer = DataLayer[data_layer.upper()]
-        if data_layer == DataLayer.RAW and storage_format == StorageFormat.DELTALAKE:
+        if data_layer == DataLayer.RAW and io_format == IOFormat.DELTALAKE:
             raise RuntimeError(f'Delta Lake is not supported for {data_layer=}')
         
-        Storage = DataStorage[to_storage.upper()].storage_class
-        data_domain = data_domain or self.data_domain
-        storage_options = storage_options or self._storage_options.get(to_storage, {})
-        storage_format = StorageFormat[storage_format.upper()]
+        data_storage = DataStorage[to_storage.upper()]
+        storage_options = self._storage_options.get(data_storage, {})
+        io_options = self._io_options.get(io_format, {})
+        Storage = data_storage.storage_class
+        io_format = IOFormat[io_format.upper()]
 
         is_streaming = self._subflows and self._subflows[0].is_streaming()
-        if is_streaming and storage_format != StorageFormat.DELTALAKE:
-            print_warning(f"Automatically setting storage_format={StorageFormat.DELTALAKE} for streaming dataflows")
-            storage_format = StorageFormat.DELTALAKE
+        if is_streaming and io_format == IOFormat.PARQUET:
+            self.logger.warning(f"Automatically setting io_format={IOFormat.DELTALAKE} for streaming dataflows (previous: {io_format})")
+            io_format = IOFormat.DELTALAKE
         
-        is_local_storage = issubclass(Storage, LocalStorage)
-        # if storage is local, kwargs belong to io
-        if is_local_storage:
-            storage_kwargs, io_kwargs = {}, kwargs
-        else:
-            storage_kwargs, io_kwargs = kwargs, {}
-
         for dataflow in self._subflows:
             data_model = dataflow.data_model
-            storage = Storage.from_data_model(
-                data_model=data_model,
-                data_layer=data_layer,
-                data_domain=data_domain,
-                storage_options=storage_options,
-                **storage_kwargs,
+            storage = (
+                Storage(
+                    data_layer=data_layer,
+                    storage_options=storage_options,
+                )
+                .with_data_model(data_model)
+                .with_io(
+                    io_format, 
+                    io_options=io_options,
+                )
             )
-            storage._create_data_handler(
-                storage_format=storage_format, 
-                compression=compression,
-                streaming_settings=self._streaming_settings if is_streaming else None,
-                **io_kwargs,
-            )
+            if self._streaming_settings:
+                storage.data_handler.create_stream_buffer(self._streaming_settings)
             sink: Sink = self._create_sink(data_model, storage)
             dataflow.set_sink(sink)
         return self

@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
-    from pfeed.storages.local_storage import LocalStorage
     from pfeed.aliases import ALIASES as alias
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
@@ -34,9 +33,6 @@ def __getattr__(name: str):
     elif name == 'DataEngine':
         from pfeed.engine import DataEngine
         return DataEngine
-    elif name == 'LocalStorage':
-        from pfeed.storages.local_storage import LocalStorage
-        return LocalStorage
     elif name in ('YahooFinance', 'YF'):
         from pfeed.sources.yahoo_finance import YahooFinance
         return YahooFinance
@@ -64,9 +60,6 @@ __all__ = (
     "create_storage",
     "create_feed",
     "create_market_feed",
-    # storage classes
-    "DuckDBStorage",
-    "LocalStorage",
     # data sources
     "YahooFinance", "YF",
     "Bybit",

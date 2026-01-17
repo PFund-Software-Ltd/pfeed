@@ -8,12 +8,11 @@ if TYPE_CHECKING:
 from pfeed.enums import DataStorage, DataLayer
 
 
+# FIXME
 def create_storage(
     storage: DataStorage,
     data_model: BaseDataModel,
     data_layer: DataLayer,
-    data_domain: str,
-    use_deltalake: bool=False,
     storage_options: dict | None=None,
     stream_mode: tStreamMode='FAST',
     delta_flush_interval: int=100,
@@ -23,8 +22,6 @@ def create_storage(
     return Storage.from_data_model(
         data_model=data_model,
         data_layer=data_layer,
-        data_domain=data_domain,
-        use_deltalake=use_deltalake,
         storage_options=storage_options,
         stream_mode=StreamMode[stream_mode.upper()],
         delta_flush_interval=delta_flush_interval,

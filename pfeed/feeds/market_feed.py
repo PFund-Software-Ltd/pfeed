@@ -19,14 +19,13 @@ from functools import partial
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
 from pfeed.messaging import BarMessage, TickMessage
-from pfeed.enums import DataCategory, MarketDataType, DataLayer, DataTool, StreamMode
+from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 
 
 class MarketFeed(TimeBasedFeed):
     data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
-    data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
 
     SUPPORTED_LOWEST_RESOLUTION = Resolution('1d')
     
@@ -151,7 +150,7 @@ class MarketFeed(TimeBasedFeed):
         unit_resolution: Resolution = resolution.to_unit()
         data_resolution: Resolution = max(unit_resolution, lowest_resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
+        data_layer = DataLayer[data_layer.upper()]
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
             partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, resolution=data_resolution, data_origin=data_origin),
@@ -160,7 +159,7 @@ class MarketFeed(TimeBasedFeed):
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
             add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, data_resolution, resolution, product),
-            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer, storage_options)) if to_storage else None,
         )
     
     def _add_default_transformations_to_download(
@@ -216,7 +215,6 @@ class MarketFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         data_layer: DataLayer='CLEANED',
-        data_domain: str='',
         from_storage: DataStorage='LOCAL',
         storage_options: dict | None=None,
         auto_resample: bool=True,
@@ -239,7 +237,6 @@ class MarketFeed(TimeBasedFeed):
                     Otherwise, use rollback_period to determine the start date.
             end_date: End date.
                 If not specified, use today's date as the end date.
-            data_domain: The domain of the data. e.g. 'market_data'. Can be a custom domain.
             from_storage: try to load data from this storage.
                 If not specified, will search through all storages, e.g. local, minio, cache.
                 If no data is found, will try to download the missing data from the data source.
@@ -264,14 +261,12 @@ class MarketFeed(TimeBasedFeed):
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer = DataLayer[data_layer.upper()]
-        data_domain = data_domain or self.data_domain.value
         return self._run_retrieve(
             partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
             partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,
-            data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
             add_default_transformations=lambda: self._add_default_transformations_to_retrieve(resolution, auto_resample),
@@ -284,7 +279,6 @@ class MarketFeed(TimeBasedFeed):
         data_path: Path,
         data_model: RetrieveMarketDataModel,
         data_layer: DataLayer,
-        data_domain: str,
         from_storage: DataStorage,
         storage_options: dict | None,
     ) -> tuple[GenericFrameOrNone, TimeBasedStorageMetadata]:
@@ -311,7 +305,6 @@ class MarketFeed(TimeBasedFeed):
             df, metadata = super()._retrieve_impl(
                 data_path=data_path,
                 data_model=data_model_copy,
-                data_domain=data_domain,
                 data_layer=data_layer,
                 from_storage=from_storage,
                 storage_options=storage_options,
@@ -380,7 +373,7 @@ class MarketFeed(TimeBasedFeed):
         assert env != Environment.BACKTEST, 'streaming is not supported in env BACKTEST'
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution: Resolution = self._create_resolution(resolution)
-        data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
+        data_layer = DataLayer[data_layer.upper()]
         data_model: MarketDataModel = self.create_data_model(
             env=env,
             product=product,
@@ -393,7 +386,7 @@ class MarketFeed(TimeBasedFeed):
         return self._run_stream(
             data_model=data_model,
             add_default_transformations=lambda: self._add_default_transformations_to_stream(data_layer, product, resolution),
-            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer, storage_options)) if to_storage else None,
             callback=callback,
         )
     

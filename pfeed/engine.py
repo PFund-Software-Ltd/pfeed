@@ -103,7 +103,7 @@ class DataEngine:
         if data_source:
             filtered_feeds = [f for f in filtered_feeds if f.data_source.name == DataSource[data_source.upper()]]
         if data_category:
-            filtered_feeds = [f for f in filtered_feeds if f.data_domain == DataCategory[data_category.upper()]]
+            filtered_feeds = [f for f in filtered_feeds if f.data_model_class.data_category == DataCategory[data_category.upper()]]
         return filtered_feeds
     
     def _is_streaming_feeds(self) -> bool:

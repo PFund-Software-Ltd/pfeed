@@ -5,8 +5,10 @@ if TYPE_CHECKING:
     from pfeed.data_models.market_data_model import MarketDataModel
     
 import datetime
-from pathlib import Path
 
+from pfeed.utils.file_path import FilePath
+from pfeed._io.table_io import TablePath
+from pfeed._io.database_io import DBPath
 from pfund.datas.resolution import Resolution
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
@@ -27,32 +29,53 @@ class MarketDataHandler(TimeBasedDataHandler):
         else:
             schema = MarketDataSchema
         return schema.validate(df)
-
-    def _create_filename(self, date: datetime.date) -> str:
-        product = self._data_model.product
-        filename = '_'.join([product.symbol, str(date)])
-        file_extension = self._get_file_extension()
-        return filename + file_extension
-
-    def _create_storage_path(self, date: datetime.date | None=None) -> Path:
+    
+    def _create_file_path(self, date: datetime.date) -> FilePath:
         data_model: MarketDataModel = self._data_model
         product = data_model.product
-        path = (
-            Path(f'env={data_model.env.value}')
+        filename = '_'.join([product.symbol, str(date)])
+        file_extension = self._get_file_extension()
+        year, month, day = str(date).split('-')
+        table_path = self._create_table_path()
+        return FilePath(
+            table_path
+            / f'year={year}'
+            / f'month={month}'
+            / f'day={day}'
+            / filename + file_extension
+        )
+    
+    def _create_table_path(self) -> TablePath:
+        data_model: MarketDataModel = self._data_model
+        product = data_model.product
+        return TablePath(
+            self._data_path
+            / f"env={data_model.env}"
+            / f"data_layer={self._data_layer}"
             / f'data_source={data_model.data_source.name}'
             / f'data_origin={data_model.data_origin}'
+            / f'data_category={data_model.data_category}'
             / f'asset_type={str(product.asset_type)}'
-            / f'symbol={product.symbol}'
             / f'resolution={repr(data_model.resolution)}'
         )
-        if self._is_using_table_format():
-            return path
+
+    def _create_db_path(self):
+        data_model = self._data_model
+        product = data_model.product
+        db_name = data_model.env
+        schema_name = "_".join([
+            f"{self._data_layer}"
+            f"{data_model.data_source.name}"
+            f"{data_model.data_origin}"
+            f"{data_model.data_category}"
+        ]).lower()
+        table_name = '_'.join([
+            str(product.asset_type), 
+            str(data_model.resolution)
+        ]).lower()
+        # NOTE: special case (e.g. duckdb) where its file io and database io at the same time, need to also pass in data_path
+        if self._is_file_io():
+            db_uri = self._io.create_uri(data_path=self._data_path, db_name=db_name)
         else:
-            assert date is not None, 'date is required for non-table format'
-            year, month, day = str(date).split('-')
-            return (
-                path 
-                / f'year={year}' 
-                / f'month={month}' 
-                / f'day={day}'
-            )
+            db_uri = self._io.create_uri(db_name=db_name)
+        return DBPath(db_uri=db_uri, db_name=db_name, schema_name=schema_name, table_name=table_name)

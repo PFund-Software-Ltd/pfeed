@@ -33,9 +33,9 @@ def _is_likely_csv(data: bytes, sample_size: int = 4096) -> bool:
         return False
 
 
-class StorageFormat(StrEnum):
+class IOFormat(StrEnum):
+    # CSV = 'csv'
     PARQUET = 'parquet'
-    CSV = 'csv'
     # REVIEW: see if need to separate this into table format?
     DELTALAKE = 'deltalake'
     DUCKDB = 'duckdb'
@@ -43,13 +43,17 @@ class StorageFormat(StrEnum):
 
     @property
     def io_class(self) -> type[BaseIO]:
-        if self == StorageFormat.PARQUET:
+        if self == IOFormat.PARQUET:
             from pfeed._io.parquet_io import ParquetIO
             return ParquetIO
-        elif self == StorageFormat.DELTALAKE:
+        elif self == IOFormat.DELTALAKE:
             from pfeed._io.deltalake_io import DeltaLakeIO
             return DeltaLakeIO
-        elif self == StorageFormat.LANCEDB:
+        elif self == IOFormat.DUCKDB:
+            # this import will throw ImportError if duckdb is not installed
+            from pfeed._io.duckdb_io import DuckDBIO
+            return DuckDBIO
+        elif self == IOFormat.LANCEDB:
             # this import will throw ImportError if lancedb is not installed
             from pfeed._io.lancedb_io import LanceDBIO
             return LanceDBIO
@@ -57,15 +61,15 @@ class StorageFormat(StrEnum):
             raise ValueError(f'{self=} is not supported')
 
     @staticmethod
-    def detect(data: bytes) -> StorageFormat | None:
+    def detect(data: bytes) -> IOFormat | None:
         """Detect storage format from data bytes.
 
-        Returns the detected StorageFormat or None if format cannot be determined.
+        Returns the detected IOFormat or None if format cannot be determined.
         Only works for single-file formats (PARQUET, CSV).
         e.g. LANCEDB, DELTALAKE and DUCKDB are directory-based and cannot be detected from bytes.
         """
         if _is_parquet(data):
-            return StorageFormat.PARQUET
+            return IOFormat.PARQUET
         elif _is_likely_csv(data):
-            return StorageFormat.CSV
+            return IOFormat.CSV
         return None

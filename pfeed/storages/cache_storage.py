@@ -7,21 +7,19 @@ from pfeed.storages.local_storage import LocalStorage
 
 
 class CacheStorage(LocalStorage):
+    name = DataStorage.CACHE
     # FIXME: move to init?
     NUM_RETAINED_DAYS = 7
 
     def __init__(
         self,
         data_layer: DataLayer,
-        data_domain: str,
-        base_data_path: Path | None = None,
+        data_path: Path | None = None,
         storage_options: dict | None=None,
     ):
         super().__init__(
-            name=DataStorage.CACHE,
             data_layer=data_layer,
-            data_domain=data_domain,
-            base_data_path=base_data_path,
+            data_path=data_path,
             storage_options=storage_options,
         )
         self._clear_caches()
@@ -30,16 +28,6 @@ class CacheStorage(LocalStorage):
     def _get_today() -> datetime.date:
         return datetime.datetime.now(tz=datetime.timezone.utc).date()
     
-    @property
-    def data_path(self) -> Path:
-        from pfeed.config import get_config
-        config = get_config()
-        return (
-            Path(config.cache_path)
-            / f'data_layer={self.data_layer}'
-            / f'data_domain={self.data_domain}'
-        )
-
     def _clear_caches(self):
         '''Clear old caches except the current date'''
         from pfund import print_error

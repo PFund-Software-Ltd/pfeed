@@ -3,14 +3,14 @@ import pandera.pandas as pa
 from pandera.typing import Series
 
 from pfeed.schemas.time_based_data_schema import TimeBasedDataSchema
+from pfeed.enums import MarketDataType
+from pfund.datas.resolution import Resolution
 
 
 class MarketDataSchema(TimeBasedDataSchema):
-    resolution: Series[str] = pa.Field(isin=[
-        '1q_L1', '1q_L2', '1q_L3', '1t',
-        '1s', '1m', '1h', '1d',
-        '1w', '1M', '1y',
-    ])
+    resolution: Series[str] = pa.Field(isin=
+        set(repr(Resolution('1'+dtype)) for dtype in MarketDataType.__members__.keys())
+    )
     symbol: Series[str] | None
 
     @pa.dataframe_check

@@ -7,22 +7,21 @@ from abc import ABC
 
 from pydantic import BaseModel, ConfigDict
 
-from pfund.enums import Environment, DataSource
 from pfeed.sources.base_source import BaseSource
+from pfeed.enums import DataCategory, DataSource
 
 
 class BaseMetadataModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    env: Environment
     data_source: DataSource
     data_origin: str
+    data_category: DataCategory
 
 
 class BaseDataModel(BaseModel, ABC):
     """
     Args:
-        env: trading environment, e.g. 'PAPER' | 'LIVE'.
         source: The source of the data.
         data_origin:
             A unique identifier for the data.
@@ -36,12 +35,13 @@ class BaseDataModel(BaseModel, ABC):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
+    
     data_handler_class: ClassVar[type[BaseDataHandler]]
-    metadata_class: ClassVar[type[BaseMetadataModel]] = BaseMetadataModel
+    metadata_class: ClassVar[type[BaseMetadataModel]]
 
-    env: Environment
     data_source: BaseSource
     data_origin: str = ""
+    data_category: DataCategory
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
@@ -55,13 +55,12 @@ class BaseDataModel(BaseModel, ABC):
 
     def __str__(self):
         if self.is_data_origin_effective():
-            return f"{self.env.value}:{self.data_source.name.value}:{self.data_origin}"
+            return f"{self.data_source.name.value}:{self.data_origin}"
         else:
-            return f"{self.env.value}:{self.data_source.name.value}"
+            return f"{self.data_source.name.value}"
 
     def to_metadata(self) -> BaseMetadataModel:
         return BaseMetadataModel(
-            env=self.env,
             data_source=self.data_source,
             data_origin=self.data_origin,
         )

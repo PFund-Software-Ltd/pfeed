@@ -1,77 +1,53 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    import pyarrow.fs as pa_fs
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import GenericData, GenericFrame
     from pfeed._io.base_io import BaseIO
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed.streaming_settings import StreamingSettings
 
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pfeed.enums import DataLayer, DataStorage, StorageFormat, Compression
+from pfeed.config import get_config
+from pfeed.enums import DataLayer, DataStorage
+
+
+config = get_config()
 
 
 class BaseStorage(ABC):
-    def __new__(cls, *args, use_deltalake: bool = False, **kwargs):
-        if use_deltalake:
-            # Create a new class that inherits from both BaseStorage and DeltaLakeStorageMixin
-            from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
-
-            new_cls = type(f"DeltaLake{cls.__name__}", (cls, DeltaLakeStorageMixin), {})
-            return super(BaseStorage, new_cls).__new__(new_cls)
-        return super().__new__(cls)
-
+    name: ClassVar[DataStorage]
+    
     def __init__(
         self,
-        name: DataStorage,
         data_layer: DataLayer,
-        data_domain: str,
-        base_data_path: Path | None = None,
+        data_path: Path | None = None,
         storage_options: dict | None = None,
-        **storage_kwargs,
     ):
-        from pfeed.config import get_config
-
-        self.name = DataStorage[name.upper()]
-        self.base_data_path = base_data_path or get_config().data_path
-        self.data_layer = (
-            DataLayer[data_layer.upper()]
-            if not isinstance(data_layer, DataLayer)
-            else data_layer
-        )
-        self.data_domain = data_domain.upper()
+        self.data_path = data_path or config.data_path
+        self.data_layer = DataLayer[str(data_layer).upper()]
+        self.storage_options = storage_options or {}
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
-        self._storage_options = storage_options or {}
-        self._storage_kwargs = storage_kwargs
-
-    @classmethod
-    def from_data_model(
-        cls,
-        data_model: BaseDataModel,
-        data_layer: DataLayer,
-        data_domain: str,
-        base_data_path: Path | None = None,
-        storage_options: dict | None = None,
-        **storage_kwargs,
-    ) -> BaseStorage:
-        instance = cls(
-            data_layer=data_layer,
-            data_domain=data_domain,
-            base_data_path=base_data_path,
-            storage_options=storage_options,
-            **storage_kwargs,
-        )
-        instance.set_data_model(data_model)
-        return instance
+        self._io: BaseIO | None = None
+        self._is_data_handler_stale: bool = False
+    
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if 'name' not in cls.__dict__:
+            raise TypeError(f"{cls.__name__} must define 'name' class attribute, e.g. name = DataStorage.LOCAL")
 
     @abstractmethod
-    def get_filesystem(self) -> pa_fs.FileSystem:
+    def _create_io(
+        self,
+        *args,
+        storage_options: dict | None = None,
+        io_options: dict | None = None,
+        **kwargs,
+    ):
         pass
 
     @property
@@ -82,18 +58,21 @@ class BaseStorage(ABC):
 
     @property
     def data_handler(self) -> BaseDataHandler:
+        # re-initialize data handler if data model or io has changed
+        if self._is_data_handler_stale:
+            self._initialize_data_handler()
+            self._is_data_handler_stale = False
         if not self._data_handler:
-            # if not exists, create a data handler using default kwargs
-            self._create_data_handler()
+            raise AttributeError(
+                f"No data handler has been set for storage: {self.name}"
+            )
         return self._data_handler
 
     @property
-    def data_path(self) -> Path:
-        return (
-            Path(self.base_data_path)
-            / f"data_layer={self.data_layer}"
-            / f"data_domain={self.data_domain}"
-        )
+    def io(self) -> BaseIO:
+        if not self._io:
+            raise AttributeError(f"No IO has been set for storage: {self.name}")
+        return self._io
 
     def __str__(self):
         if self._data_model:
@@ -101,69 +80,55 @@ class BaseStorage(ABC):
         else:
             return f"{self.name}"
 
-    def set_data_model(self, data_model: BaseDataModel) -> None:
-        """
-        Set the data model for the storage.
-
-        Args:
-            data_model: data model is a detailed description of the data stored.
-                if not provided, storage is just an empty vessel with basic properties, e.g. data_path,
-                since it is not pointing to any data.
-        """
+    def with_data_model(self, data_model: BaseDataModel) -> BaseStorage:
         self._data_model = data_model
+        self._is_data_handler_stale = True
+        return self
 
-    def _create_data_handler(
-        self,
-        storage_format: StorageFormat | str = StorageFormat.PARQUET,
-        compression: Compression | str | None = Compression.SNAPPY,
-        streaming_settings: StreamingSettings | None = None,
-        **io_kwargs,
-    ) -> None:
-        '''
-        Args:
-            storage_format: storage format to use
-            compression: compression to use
-            streaming_settings: streaming settings to use
-            io_kwargs: kwargs for the IO class
-                e.g. for LanceDBIO, it's the same as the kwargs for lancedb.connect()
-        '''
-        from pfeed.utils.file_path import FilePath
-        storage_format = StorageFormat[storage_format.upper()]
-        IO: type[BaseIO] = storage_format.io_class
-        io = IO(
-            filesystem=self.get_filesystem(),
-            storage_options=self._storage_options,
-            compression=compression,
-            **io_kwargs,
+    def with_io(self, *args, io_options: dict | None = None, **kwargs) -> BaseStorage:
+        self._io = self._create_io(
+            *args,
+            storage_options=self.storage_options,
+            io_options=io_options,
+            **kwargs,
         )
+        self._is_data_handler_stale = True
+        return self
+
+    def _initialize_data_handler(self) -> None:
         DataHandler: type[BaseDataHandler] = self.data_model.data_handler_class
         self._data_handler = DataHandler(
+            data_path=self.data_path,
+            data_layer=self.data_layer,
             data_model=self.data_model,
-            data_path=FilePath(self.data_path),
-            io=io,
-            streaming_settings=streaming_settings,
+            io=self.io,
         )
 
-    def write_data(self, data: GenericData | StreamingMessage, streaming: bool = False):
+    def write_data(
+        self, data: GenericData | StreamingMessage, streaming: bool = False, **io_kwargs
+    ):
         self.data_handler.write(
-            data, streaming=streaming, validate=self.data_layer != DataLayer.RAW
+            data=data,
+            streaming=streaming,
+            validate=self.data_layer != DataLayer.RAW,
+            **io_kwargs,
         )
 
     def read_data(self, **io_kwargs) -> tuple[GenericFrame | None, BaseMetadata]:
         """Read data from storage.
-    
+
         Args:
             **io_kwargs: Format-specific read options passed to the underlying IO implementation.
-            
+
                 For DeltaLake IO, for example, there are options like:
-                    version (int | str | datetime | None): Delta table version to read. 
+                    version (int | str | datetime | None): Delta table version to read.
                         If None, reads the latest version.
                     storage_options (dict): Additional options passed to delta-rs.
                         See delta-rs documentation for available options.
-                
+
                 For Parquet IO:
                     No additional options currently supported.
-        
+
         Returns:
             Tuple of (data, metadata)
         """

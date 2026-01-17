@@ -35,14 +35,14 @@ class NewsDataHandler(TimeBasedDataHandler):
         asset_type = 'NONE' if product is None else str(product.asset_type)
         symbol = 'NONE' if product is None else product.symbol
         path = (
-            Path(f'env={data_model.env.value}')
-            / f'data_source={data_model.data_source.name}'
-            / f'data_origin={data_model.data_origin}'
+            Path()
             / f'asset_type={asset_type}'
             / f'symbol={symbol}'   
         )
-        if self._is_using_table_format():
+        if self._is_table_io():
             return path
+        elif self._is_database_io():
+            return Path()
         else:
             assert date is not None, 'date is required for non-table format'
             year, month, day = str(date).split('-')
@@ -53,8 +53,8 @@ class NewsDataHandler(TimeBasedDataHandler):
                 / f'day={day}'
             )
 
-    def read(self, **io_kwargs) -> tuple[pl.LazyFrame | None, dict[str, Any]]:
-        df, metadata = super().read(**io_kwargs)
+    def read(self, **io_options) -> tuple[pl.LazyFrame | None, dict[str, Any]]:
+        df, metadata = super().read(**io_options)
         if df is not None:
             # NOTE: fill null with empty string, otherwise concat will fail when column A in df1 is of type String and column A in df2 is of type null
             nullable_columns = ['product', 'author', 'exchange', 'symbol']

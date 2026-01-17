@@ -1,4 +1,5 @@
 from pfund.products.product_base import BaseProduct
+from pfund.enums import TradingVenue
 from pfeed.sources.base_source import BaseSource
 
 
@@ -6,12 +7,12 @@ class TradFiSource(BaseSource):
     def create_product(self, basis: str, symbol='', **specs) -> BaseProduct:
         from pfund.products import ProductFactory
         # HACK: use 'IB' as trading venue to work around pydantic model's validation
-        trading_venue = 'IB'
+        trading_venue = TradingVenue.IBKR
         Product = ProductFactory(trading_venue=trading_venue, basis=basis)
         product = Product(
             trading_venue=trading_venue,
             broker=trading_venue,
-            # avoid missing "exchange" error in IBProduct, since in real trading, exchange must be provided for some asset types, e.g. futures
+            # avoid missing "exchange" error in IBKRProduct, since in real trading, exchange must be provided for some asset types, e.g. futures
             exchange='SMART',
             basis=basis,
             specs=specs,

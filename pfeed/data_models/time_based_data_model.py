@@ -1,12 +1,13 @@
 from __future__ import annotations
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
 import datetime
 
 from pydantic import field_validator, Field, ValidationInfo
 
 from pfeed.data_models.base_data_model import BaseDataModel, BaseMetadataModel
-from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
 
 class TimeBasedMetadataModel(BaseMetadataModel):
@@ -14,8 +15,8 @@ class TimeBasedMetadataModel(BaseMetadataModel):
 
 
 class TimeBasedDataModel(BaseDataModel):
-    data_handler_class: ClassVar[type[TimeBasedDataHandler]] = TimeBasedDataHandler
-    metadata_class: ClassVar[type[TimeBasedMetadataModel]] = TimeBasedMetadataModel
+    data_handler_class: ClassVar[type[TimeBasedDataHandler]]
+    metadata_class: ClassVar[type[TimeBasedMetadataModel]]
 
     start_date: datetime.date = Field(description="Start of the date range.")
     end_date: datetime.date = Field(description="End of the date range. Must be greater than or equal to start date.")

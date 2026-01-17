@@ -12,7 +12,7 @@ import datetime
 from functools import partial
 
 from pfund.enums import Environment
-from pfeed.enums import DataCategory, DataLayer
+from pfeed.enums import DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.utils import lambda_with_name
 
@@ -26,7 +26,6 @@ how to handle this? handled by metadata?
 '''
 class NewsFeed(TimeBasedFeed):
     data_model_class: ClassVar[type[NewsDataModel]] = NewsDataModel
-    data_domain: ClassVar[DataCategory] = DataCategory.NEWS_DATA
 
     def create_data_model(
         self,
@@ -76,7 +75,7 @@ class NewsFeed(TimeBasedFeed):
         else:
             product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_layer, data_domain = DataLayer[data_layer.upper()], self.data_domain.value
+        data_layer = DataLayer[data_layer.upper()]
         return self._run_download(
             partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, data_origin=data_origin),
             partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, data_origin=data_origin),
@@ -85,7 +84,7 @@ class NewsFeed(TimeBasedFeed):
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
             add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, product=product),
-            load_to_storage=(lambda: self.load(to_storage, data_layer, data_domain, storage_options)) if to_storage else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer, storage_options)) if to_storage else None,
         )
     
     def _add_default_transformations_to_download(self, data_layer: DataLayer, product: BaseProduct | None=None):
@@ -115,7 +114,6 @@ class NewsFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         data_layer: DataLayer='CLEANED',
-        data_domain: str='',
         from_storage: DataStorage | None=None,
         storage_options: dict | None=None,
         dataflow_per_date: bool=False,
@@ -125,7 +123,6 @@ class NewsFeed(TimeBasedFeed):
     ) -> GenericFrameOrNone | tuple[GenericFrameOrNone, StorageMetadata] | NewsFeed:
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_domain = data_domain or self.data_domain.value
         env = Environment[env.upper()]
         return self._run_retrieve(
             partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, data_origin=data_origin),
@@ -133,7 +130,6 @@ class NewsFeed(TimeBasedFeed):
             start_date=start_date,
             end_date=end_date,
             data_layer=data_layer,
-            data_domain=data_domain,
             from_storage=from_storage,
             storage_options=storage_options,
             add_default_transformations=lambda: self._add_default_transformations_to_retrieve(),

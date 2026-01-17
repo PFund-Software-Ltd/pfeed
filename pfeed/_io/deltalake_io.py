@@ -17,15 +17,15 @@ class DeltaLakeIO(TableIO):
     SUPPORTS_PARTITIONING: bool = True
     METADATA_FILENAME: str = "deltalake_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
     
-    def exists(self, file_path: FilePath) -> bool:
+    def exists(self, table_path: FilePath) -> bool:
         """Check if a Delta Lake table exists at this path."""
-        return DeltaTable.is_deltatable(str(file_path), storage_options=self._storage_options)
+        return DeltaTable.is_deltatable(str(table_path), storage_options=self._storage_options)
     
-    def is_empty(self, file_path: FilePath, partition_filters: FilterConjunctionType | None = None) -> bool:
+    def is_empty(self, table_path: FilePath, partition_filters: FilterConjunctionType | None = None) -> bool:
         """Check if a Delta Lake table or partition is empty.
     
         Args:
-            file_path: Path to the Delta Lake table.
+            table_path: Path to the Delta Lake table.
             partition_filters: Optional partition filters to check a specific partition.
                 Example: [("year", "=", 2024), ("month", "=", 1), ("day", "=", 15)]
         
@@ -37,21 +37,22 @@ class DeltaLakeIO(TableIO):
             2. Check if specific partition is empty: is_empty(table_path, partition_filters=[...])
             This is useful for checking if data exists for a specific date.
         """
-        dt = self.get_table(file_path)
+        dt = self.get_table(table_path)
         return len(dt.file_uris(partition_filters=partition_filters)) == 0
     
-    def get_table(self, file_path: FilePath, **io_kwargs) -> DeltaTable:
-        return DeltaTable(str(file_path), storage_options=self._storage_options, **io_kwargs)
+    def get_table(self, table_path: FilePath, **io_kwargs) -> DeltaTable:
+        return DeltaTable(str(table_path), storage_options=self._storage_options, **io_kwargs)
 
     def write(
         self,
         data: pa.Table,
-        file_path: FilePath,
+        table_path: FilePath,
         metadata: BaseMetadataModel | None=None,
         where: str | None = None,
         partition_by: list[str] | None=None,
         max_retries: int=5,
         base_delay: float=0.1,
+        **io_kwargs,
     ):
         """Write data to Delta Lake with retry logic for concurrent write conflicts.
 
@@ -61,7 +62,7 @@ class DeltaLakeIO(TableIO):
 
         Args:
             data: PyArrow table to write.
-            file_path: Path to the Delta Lake table.
+            table_path: Path to the Delta Lake table.
             metadata: Optional metadata to store alongside the data.
             where: Optional filter to replace only matching rows (triggers overwrite mode).
                 If None, data is appended (creates table if needed). If provided, only rows
@@ -79,12 +80,13 @@ class DeltaLakeIO(TableIO):
         for attempt in range(max_retries):
             try:
                 write_deltalake(
-                    str(file_path),
+                    str(table_path),
                     data,
                     mode='overwrite' if where else 'append',
                     storage_options=self._storage_options,
                     partition_by=partition_by,
                     predicate=where,
+                    **io_kwargs,
                 )
                 break
             except Exception as e:
@@ -103,13 +105,13 @@ class DeltaLakeIO(TableIO):
             raise last_exception
 
         if metadata:
-            self.write_metadata(file_path, metadata)
+            self.write_metadata(table_path, metadata)
     
-    def read(self, file_paths: FilePath | list[FilePath], **io_kwargs) -> pl.LazyFrame | None:
+    def read(self, table_path: FilePath, **io_kwargs) -> pl.LazyFrame | None:
         """Read data from a Delta Lake table.
 
         Args:
-            file_paths: List containing single path to Delta Lake table.
+            table_path: Path to the Delta Lake table.
             **io_kwargs: Delta table options passed to DeltaTable constructor.
                 Common options:
                     version (int | str | datetime | None): Read a specific table version.
@@ -121,11 +123,6 @@ class DeltaLakeIO(TableIO):
         Returns:
             LazyFrame with table data, or None if table doesn't exist.
         """
-        if isinstance(file_paths, list):
-            assert len(file_paths) == 1, 'deltalake table should have exactly one file path'
-            table_path = file_paths[0]
-        else:
-            table_path = file_paths
         lf: pl.LazyFrame | None = None
         if self.exists(table_path):
             dt = self.get_table(table_path, **io_kwargs)

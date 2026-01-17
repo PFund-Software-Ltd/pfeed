@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 name = "pfeed"
 platforms = ["osx-arm64", "linux-64"]
 # updating this needs to also update the version in the ci.yml and templates/ci-workflow-template.yml files
-requires-pixi = ">=0.62.2"  # command: pixi workspace requires-pixi set ">=0.62.2"
+requires-pixi = ">=0.63.1"  # command: pixi workspace requires-pixi set ">=0.63.1"
 
 [tasks]
 
@@ -17,8 +17,9 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.9.24"
-openjdk = "21.*"
+uv = ">=0.9.26"
+openjdk = "21.*"  # for spark
+libpq = ">=18.1"  # for postgresql
 
 [pypi-dependencies]
 # TEMP
@@ -38,7 +39,7 @@ beautifulsoup4 = ">=4.14.3"
 cloudpathlib = { version = ">=0.23.0", extras = ["s3", "gs", "azure"] }
 ray = ">=2.53.0"
 pyzmq = ">=27.1.0"
-deltalake = ">=1.3.1"
+deltalake = ">=1.3.2"
 
 [environments]
 default = ["py311", "dev", "optional"]
@@ -58,13 +59,14 @@ pfund-plot = { path = "../pfund-plot", editable = true }
 # fmp-api-client = ">=0.0.1"
 # pfund-plot = { version = ">=0.0.1.dev3", extras = ["marimo", "jupyter"] }
 yfinance = ">=1.0"
-prefect = ">=3.6.10"
+prefect = ">=3.6.11"
 # polars-cloud = ">=0.4.2"
-dask = { version = ">=2025.12.0", extras = ["complete", "dataframe"] }
-coiled = ">=1.130.1"
+dask = { version = ">=2026.1.1", extras = ["complete", "dataframe"] }
+coiled = ">=1.130.2"
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
 duckdb = ">=1.4.3"
 lancedb = ">=0.26.1"
+psycopg = { version = ">=3.3.2", extras = ["binary", "pool"] }
 
 # TEMP
 [pypi-options.dependency-overrides]

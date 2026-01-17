@@ -1,44 +1,90 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NewType, TypeAlias
 if TYPE_CHECKING:
-    from pfeed.enums import Compression
+    import polars as pl
+    from deltalake import DeltaTable
+    from lancedb.table import LanceTable
     from pfeed.utils.file_path import FilePath
     from pfeed.data_models.base_data_model import BaseMetadataModel
+    
+    Table: TypeAlias = DeltaTable | LanceTable
+
+import time
+import random
+from abc import abstractmethod
 
 import pyarrow as pa
-import pyarrow.fs as pa_fs
 
-from pfeed._io.base_io import BaseIO, MetadataModelAsDict
+from pfeed._io.file_io import FileIO, MetadataModelAsDict
 
 
-class TableIO(BaseIO):
-    IS_TABLE_FORMAT: bool = True
+TablePath = NewType('TablePath', FilePath)
 
-    def __init__(
-        self,
-        filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(),
-        storage_options: dict | None = None,
-        compression: Compression | str | None=None, 
-        **kwargs,
-    ):
-        super().__init__(filesystem=filesystem, storage_options=storage_options, compression=None, **kwargs)
+
+
+class TableIO(FileIO):
+    @abstractmethod
+    def exists(self, table_path: FilePath, *args, **kwargs) -> bool:
+        pass
+
+    @abstractmethod
+    def is_empty(self, table_path: FilePath, *args, **kwargs) -> bool:
+        pass
+
+    @abstractmethod
+    def get_table(self, table_path: FilePath, *args, **kwargs) -> Table:
+        pass
     
-    # HACK: delta-rs, lancedb doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
-    def write_metadata(self, file_path: FilePath, metadata: BaseMetadataModel):
+    @abstractmethod
+    def write(self, table_path: FilePath, data: pa.Table, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def read(self, table_path: FilePath, *args, **kwargs) -> pl.LazyFrame | None:
+        pass
+    
+    # NOTE: delta-rs, lancedb doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
+    def write_metadata(self, table_path: FilePath, metadata: BaseMetadataModel):
         import pandas as pd
         empty_df_with_metadata = pd.DataFrame()
         table = pa.Table.from_pandas(empty_df_with_metadata, preserve_index=False)
-        metadata_file_path = file_path / self.METADATA_FILENAME
-        self._write_pyarrow_table_with_metadata(table, metadata_file_path, metadata=metadata)
+        table_with_metadata = super().write_metadata(table, metadata)
+        metadata_file_path = table_path / self.METADATA_FILENAME
+        self._write_pyarrow_table(table_with_metadata, metadata_file_path)
     
-    def read_metadata(self, file_paths: FilePath | list[FilePath]) -> dict[FilePath, MetadataModelAsDict]:
-        if isinstance(file_paths, list):
-            assert len(file_paths) == 1, 'table format should have exactly one file path'
-            table_path = file_paths[0]
-        else:
-            table_path = file_paths
-        if table_path.name != self.METADATA_FILENAME:
-            file_paths = [table_path / self.METADATA_FILENAME]
-        else:
-            file_paths = [table_path]
-        return super().read_metadata(file_paths=file_paths)
+    def read_metadata(
+        self, 
+        table_path: FilePath,
+        max_retries: int=5,
+        base_delay: float=0.1,
+    ) -> dict[FilePath, MetadataModelAsDict]:
+        """Read custom application metadata embedded in parquet schema.
+
+        Handles race condition for table formats where metadata files may not exist immediately
+        after table creation. This occurs when concurrent writers race:
+        - Writer A creates the table structure
+        - Writer B sees the table exists and tries to read metadata
+        - Writer A hasn't finished writing the metadata file yet → FileNotFoundError
+
+        Solution: Retry with exponential backoff, waiting for the write to complete.
+
+        Args:
+            table_path: Path to the table.
+            max_retries: Maximum number of retry attempts for each file.
+            base_delay: Initial delay in seconds, doubles with each retry (exponential backoff).
+
+        Returns:
+            Dictionary mapping file paths to their metadata.
+        """
+        metadata_file_path = table_path / self.METADATA_FILENAME
+        for attempt in range(max_retries):
+            try:
+                return super().read_metadata(file_paths=[metadata_file_path])
+            except FileNotFoundError as e:
+                if attempt < max_retries - 1:
+                    # Exponential backoff with jitter
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, base_delay)
+                    time.sleep(delay)
+                else:
+                    # After all retries, re-raise the exception
+                    raise e

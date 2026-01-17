@@ -1,4 +1,5 @@
-from pfund_kit import AliasRegistry
+from pfund_kit.aliase import AliasRegistry
+
 
 ALIASES = AliasRegistry({
     'YF': 'YAHOO_FINANCE',

@@ -1,5 +1,5 @@
 from pfeed.enums.data_source import DataSource
-from pfeed.enums.data_storage import DataStorage, LocalDataStorage
+from pfeed.enums.data_storage import DataStorage
 from pfeed.enums.data_tool import DataTool
 from pfeed.enums.data_layer import DataLayer
 from pfeed.enums.data_type import DataType, MarketDataType
@@ -9,13 +9,14 @@ from pfeed.enums.extract_type import ExtractType
 from pfeed.enums.flow_type import FlowType
 from pfeed.enums.data_category import DataCategory
 from pfeed.enums.stream_mode import StreamMode
-from pfeed.enums.storage_format import StorageFormat
+from pfeed.enums.io_format import IOFormat
 from pfeed.enums.compression import Compression
+from pfeed.enums.timestamp_precision import TimestampPrecision
+
 
 __all__ = [
     'DataSource',
     'DataStorage',
-    'LocalDataStorage',
     'DataTool',
     'DataLayer',
     'DataType',
@@ -26,6 +27,7 @@ __all__ = [
     'FlowType',
     'DataCategory',
     'StreamMode',
-    'StorageFormat',
+    'IOFormat',
     'Compression',
+    'TimestampPrecision',
 ]

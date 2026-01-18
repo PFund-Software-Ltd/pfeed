@@ -47,7 +47,6 @@ class DeltaLakeIO(TableIO):
         self,
         data: pa.Table,
         table_path: FilePath,
-        metadata: BaseMetadataModel | None=None,
         where: str | None = None,
         partition_by: list[str] | None=None,
         max_retries: int=5,
@@ -63,7 +62,6 @@ class DeltaLakeIO(TableIO):
         Args:
             data: PyArrow table to write.
             table_path: Path to the Delta Lake table.
-            metadata: Optional metadata to store alongside the data.
             where: Optional filter to replace only matching rows (triggers overwrite mode).
                 If None, data is appended (creates table if needed). If provided, only rows
                 matching the clause are replaced (e.g., "date = '2024-01-15'" or
@@ -104,9 +102,6 @@ class DeltaLakeIO(TableIO):
             # All retries exhausted
             raise last_exception
 
-        if metadata:
-            self.write_metadata(table_path, metadata)
-    
     def read(self, table_path: FilePath, **io_kwargs) -> pl.LazyFrame | None:
         """Read data from a Delta Lake table.
 

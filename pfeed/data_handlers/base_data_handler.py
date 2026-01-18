@@ -19,8 +19,8 @@ from pfeed.data_models.base_data_model import BaseMetadataModel
 
 
 class BaseMetadata(BaseModel):
-    source_metadata: dict[FilePath, BaseMetadataModel]
-    missing_file_paths: list[FilePath]
+    source_metadata: dict[SourcePath, BaseMetadataModel]
+    missing_source_paths: list[SourcePath]
 
 
 class BaseDataHandler(ABC):
@@ -29,7 +29,10 @@ class BaseDataHandler(ABC):
         self._data_layer = data_layer
         self._data_model = data_model
         self._io: BaseIO = io
-
+        self._file_paths: list[FilePath] = []
+        self._table_path: TablePath | None = self._create_table_path() if self._is_table_io() else None
+        self._db_path: DBPath | None = self._create_db_path() if self._is_database_io() else None
+    
     @abstractmethod
     def write(self, data: GenericData, *args, **kwargs):
         pass
@@ -44,64 +47,76 @@ class BaseDataHandler(ABC):
     def _validate_schema(self, data: GenericData) -> GenericData:
         pass
 
-    @abstractmethod
     def _create_file_path(self, *args, **kwargs) -> FilePath:
-        pass
+        raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
 
-    @abstractmethod
     def _create_table_path(self, *args, **kwargs) -> TablePath:
-        pass
+        raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
 
-    @abstractmethod
     def _create_db_path(self, *args, **kwargs) -> DBPath:
-        pass
+        raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
     
-    def get_source_path(self, *args, **kwargs) -> FilePath | TablePath | DBPath:
+    def read_metadata(self) -> BaseMetadata:
         if self._is_file_io():
-            return self._create_file_path(*args, **kwargs)
+            source_metadata_dict: dict[FilePath, MetadataModelAsDict] = self._io.read_metadata(file_paths=self._file_paths)
+            missing_source_paths=[fp for fp in self._file_paths if not self._io.exists(fp)]
         elif self._is_table_io():
-            return self._create_table_path(*args, **kwargs)
+            source_metadata_dict: dict[TablePath, MetadataModelAsDict] = self._io.read_metadata(table_path=self._table_path)
+            missing_source_paths = [self._table_path] if not self._io.exists(self._table_path) else []
         elif self._is_database_io():
-            return self._create_db_path(*args, **kwargs)
-        else:
-            raise ValueError(f"Unsupported IO format: {self._io.name}")
-
-    def _read_source_metadata(self, file_paths: list[FilePath]) -> dict[SourcePath, BaseMetadataModel]:
-        if self._is_file_io():
-            source_metadata_dict: dict[FilePath, MetadataModelAsDict] = self._io.read_metadata(file_paths=file_paths)
-        elif self._is_table_io():
-            pass
-        elif self._is_database_io():
-            pass
+            source_metadata_dict: dict[DBPath, MetadataModelAsDict] = self._io.read_metadata(db_path=self._db_path)
+            missing_source_paths = [self._db_path] if not self._io.exists(self._db_path) else []
         else:
             raise ValueError(f'Unsupported IO format: {self._io.name}')
         MetadataModel: type[BaseMetadataModel] = self._data_model.metadata_class
-        return {
-            source: MetadataModel.from_dict(metadata)
-            for source, metadata in source_metadata_dict.items()
+        source_metadata: dict[SourcePath, BaseMetadataModel] = {
+            source_path: MetadataModel.from_dict(metadata_model_as_dict)
+            for source_path, metadata_model_as_dict in source_metadata_dict.items()
         }
-
-    def read_metadata(self) -> BaseMetadata:
-        file_paths = self.create_file_paths()
-        return BaseMetadata(
-            source_metadata=self._read_source_metadata(file_paths=file_paths),
-            missing_file_paths=[fp for fp in file_paths if not self._io.exists(fp)],
-        )
+        return BaseMetadata(source_metadata=source_metadata, missing_source_paths=missing_source_paths)
 
     def _is_streaming_io(self) -> bool:
         return self._io.SUPPORTS_STREAMING
 
-    def _is_file_io(self) -> bool:
-        from pfeed._io.file_io import FileIO
-        return isinstance(self._io, FileIO) and not self._is_table_io()
-    
-    def _is_table_io(self) -> bool:
-        from pfeed._io.table_io import TableIO
-        return isinstance(self._io, TableIO)
+    def _is_file_io(self, strict: bool = True) -> bool:
+        """Check if the IO is a FileIO.
 
-    def _is_database_io(self) -> bool:
+        Args:
+            strict: If True, only returns True if FileIO is the first parent class.
+                If False, returns True if FileIO is anywhere in the inheritance chain.
+                e.g. DuckDBIO(DatabaseIO, FileIO) -> strict=True returns False, strict=False returns True.
+        """
+        from pfeed._io.file_io import FileIO
+        if strict:
+            return type(self._io).__bases__[0] is FileIO
+        else:
+            return isinstance(self._io, FileIO)
+
+    def _is_table_io(self, strict: bool = True) -> bool:
+        """Check if the IO is a TableIO.
+
+        Args:
+            strict: If True, only returns True if TableIO is the first parent class.
+                If False, returns True if TableIO is anywhere in the inheritance chain.
+        """
+        from pfeed._io.table_io import TableIO
+        if strict:
+            return type(self._io).__bases__[0] is TableIO
+        else:
+            return isinstance(self._io, TableIO)
+
+    def _is_database_io(self, strict: bool = True) -> bool:
+        """Check if the IO is a DatabaseIO.
+
+        Args:
+            strict: If True, only returns True if DatabaseIO is the first parent class.
+                If False, returns True if DatabaseIO is anywhere in the inheritance chain.
+        """
         from pfeed._io.database_io import DatabaseIO
-        return isinstance(self._io, DatabaseIO)
+        if strict:
+            return type(self._io).__bases__[0] is DatabaseIO
+        else:
+            return isinstance(self._io, DatabaseIO)
 
     def _get_file_extension(self) -> str:
         if self._io.FILE_EXTENSION is None:

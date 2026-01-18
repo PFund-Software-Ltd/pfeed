@@ -5,6 +5,8 @@ if TYPE_CHECKING:
 
 from enum import StrEnum
 
+from pfeed.enums import IOFormat
+
 
 class LocalDataStorage(StrEnum):
     CACHE = 'CACHE'
@@ -48,5 +50,20 @@ class DataStorage(StrEnum):
         # elif self == DataStorage.POSTGRESQL:
         #     from pfeed.storages.postgresql_storage import PostgreSQLStorage
         #     return PostgreSQLStorage
+        else:
+            raise ValueError(f'{self=} is not supported')
+
+    @property
+    def default_io_format(self) -> IOFormat:
+        if self == DataStorage.CACHE:
+            return IOFormat.PARQUET
+        elif self == DataStorage.LOCAL:
+            return IOFormat.DELTALAKE
+        elif self == DataStorage.DUCKDB:
+            return IOFormat.DUCKDB
+        elif self == DataStorage.LANCEDB:
+            return IOFormat.LANCEDB
+        elif self == DataStorage.POSTGRESQL:
+            return IOFormat.POSTGRESQL
         else:
             raise ValueError(f'{self=} is not supported')

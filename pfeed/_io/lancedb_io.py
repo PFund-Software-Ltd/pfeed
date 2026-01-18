@@ -1,20 +1,18 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     import pyarrow as pa
     from lancedb import LanceDBConnection
     from lancedb.pydantic import LanceModel
     from lancedb.table import LanceTable
-    from pfeed.utils.file_path import FilePath
-    from pfeed.data_models.base_data_model import BaseMetadataModel
 
 import polars as pl
 import pyarrow.fs as pa_fs
 import lancedb
 
-from pfeed._io.table_io import TableIO
-from pfeed._io.database_io import DatabaseIO
+from pfeed.enums import TimestampPrecision
+from pfeed._io.table_io import TableIO, TablePath
+from pfeed._io.database_io import DatabaseIO, DBPath
 
 
 class LanceDBIO(DatabaseIO, TableIO):
@@ -22,6 +20,7 @@ class LanceDBIO(DatabaseIO, TableIO):
     # SUPPORTS_STREAMING: bool = True
     FILE_EXTENSION = ".lancedb"
     METADATA_FILENAME: str = "lancedb_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
+    TIMESTAMP_PRECISION = TimestampPrecision.NANOSECOND
 
     def __init__(
         self,
@@ -32,38 +31,35 @@ class LanceDBIO(DatabaseIO, TableIO):
         DatabaseIO.__init__(self, storage_options=storage_options, io_options=io_options)
         TableIO.__init__(self, filesystem=filesystem, storage_options=storage_options, io_options=io_options)
 
-    # no URI for lancedb, just use the table path
-    def _create_uri(self, *args, **kwargs) -> str:
-        pass
+    def _create_uri(self, table_path: TablePath) -> str:
+        return str(table_path)
 
-    def _open_connection(self, table_path: FilePath):
-        self._conn_uri = str(table_path)
+    def _open_connection(self, uri: str):
+        self._conn_uri = uri
         self._conn: LanceDBConnection = lancedb.connect(
-            self._conn_uri, storage_options=self._storage_options, **self._io_options
+            uri, storage_options=self._storage_options, **self._io_options
         )
     
     def _close_connection(self):
         self._conn.close()
 
-    def exists(self, table_path: FilePath, table_name: str) -> bool:
-        conn = self._connect(table_path)
-        return table_name in conn
+    def exists(self, db_path: DBPath) -> bool:
+        conn: LanceDBConnection = self._connect(db_path.db_uri)
+        return db_path.table_name in conn
 
-    def is_empty(self, table_path: FilePath, table_name: str) -> bool:
-        table = self.get_table(table_path, table_name)
+    def is_empty(self, db_path: DBPath) -> bool:
+        table = self.get_table(db_path)
         return table.count_rows() == 0
 
     # FIXME: remove io_kwargs and pass in args from lancedb explicitly
-    def get_table(self, table_path: FilePath, table_name: str) -> LanceTable:
-        conn = self._connect(table_path)
-        return conn.open_table(table_name, storage_options=self._storage_options)
+    def get_table(self, db_path: DBPath) -> LanceTable:
+        conn: LanceDBConnection = self._connect(db_path.db_uri)
+        return conn.open_table(db_path.table_name, storage_options=self._storage_options)
 
     def write(
         self,
         data: list[dict] | pa.Table,
-        table_path: FilePath,
-        table_name: str,
-        metadata: BaseMetadataModel | None = None,
+        db_path: DBPath,
         where: str | None = None,
         schema: pa.Schema | LanceModel | None = None,
         **io_kwargs,
@@ -72,31 +68,27 @@ class LanceDBIO(DatabaseIO, TableIO):
 
         Args:
             data: Data to write as list of dicts or PyArrow table.
-            table_path: Path to the LanceDB database.
-            table_name: Name of the table to write to.
-            metadata: Optional metadata to store alongside the data.
+            db_path: Path to the LanceDB database.
             where: Optional filter to replace only matching rows.
                 If None, data is appended. If provided, matching rows are deleted
                 before new data is inserted (e.g., "date >= '2024-01-15' AND date <= '2024-01-20'").
             schema: Optional schema for table creation.
         """
-        conn = self._connect(table_path)
-        if not self.exists(table_path, table_name):
-            table = conn.create_table(table_name, data, schema=schema, mode="overwrite", **io_kwargs)
+        conn: LanceDBConnection = self._connect(db_path.db_uri)
+        if not self.exists(db_path):
+            table = conn.create_table(db_path.table_name, data, schema=schema, mode="overwrite", **io_kwargs)
         else:
-            table = self.get_table(table_path, table_name)
+            table = self.get_table(db_path)
             # Delete matching rows, then add new data
             if where:
                 table.delete(where=where)
             table.add(data)
-        if metadata:
-            self.write_metadata(table_path, metadata)
 
     def read(
-        self, table_path: FilePath, table_name: str
+        self, db_path: DBPath
     ) -> pl.LazyFrame | None:
         lf: pl.LazyFrame | None = None
-        if self.exists(table_path, table_name):
-            table = self.get_table(table_path, table_name)
+        if self.exists(db_path):
+            table = self.get_table(db_path)
             lf = table.to_polars()
         return lf

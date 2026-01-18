@@ -10,8 +10,6 @@ if TYPE_CHECKING:
     from pfeed.streaming_settings import StreamingSettings
     from pfeed._io.base_io import BaseIO
     from pfeed.utils.file_path import FilePath
-    from pfeed._io.table_io import TablePath
-    from pfeed._io.database_io import DBPath
     from pfeed.data_handlers.base_data_handler import SourcePath
 
 import datetime
@@ -19,6 +17,7 @@ from pathlib import Path
 from abc import abstractmethod
 
 import pandas as pd
+from pandas.api.types import is_datetime64_ns_dtype
 import polars as pl
 import pyarrow as pa
 from pydantic import Field
@@ -32,12 +31,12 @@ from pfeed.stream_buffer import StreamBuffer
 
 class TimeBasedMetadata(BaseMetadata):
     source_metadata: dict[SourcePath, TimeBasedMetadataModel]
-    missing_dates_at_source: list[datetime.date] = Field(
-        description="Dates within the requested data period where no data exists at the source (e.g. non-trading days, holidays)."
-    )
     missing_dates_in_storage: list[datetime.date] = Field(
         description="Dates within the requested data period that have data at the source but do not exist in local storage."
     )
+    # missing_dates_at_source: list[datetime.date] = Field(
+    #     description="Dates within the requested data period where no data exists at the source (e.g. non-trading days, holidays)."
+    # )
 
 
 class TimeBasedDataHandler(BaseDataHandler):
@@ -52,20 +51,20 @@ class TimeBasedDataHandler(BaseDataHandler):
     ):
         super().__init__(data_path=data_path, data_layer=data_layer, data_model=data_model, io=io)
         self._stream_buffer: StreamBuffer | None = None
+        self._file_paths_per_date = {
+            date: self._create_file_path(date=date) for date in data_model.dates
+        } if self._is_file_io() else {}
+        self._file_paths: list[FilePath] = list(self._file_paths_per_date.values())
 
     @abstractmethod
     def _create_file_path(self, date: datetime.date) -> FilePath:
         pass
 
-    def get_source_path(self, date: datetime.date | None = None) -> SourcePath:
-        if self._is_file_io():
-            assert date is not None, f"date is required for file format {self._io.name}"
-        return super().get_source_path(date=date)
-
     def create_stream_buffer(self, streaming_settings: StreamingSettings):
         if self._is_streaming_io():
-            if not self._is_database_io():
-                buffer_path: FilePath | TablePath = self.get_source_path()
+            # EXTEND: only support deltalake_io for now
+            if self._is_table_io():
+                buffer_path = self._table_path
                 self._stream_buffer = StreamBuffer(
                     self._io, buffer_path, streaming_settings
                 )
@@ -80,7 +79,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         data: GenericFrame | StreamingData,
         streaming: bool = False,
         validate: bool = True,
-        **io_kwargs,  # NOTE: not in use yet
+        **io_kwargs,
     ):
         if streaming:
             self._write_stream(data)
@@ -151,7 +150,7 @@ class TimeBasedDataHandler(BaseDataHandler):
                 # make date range (start_date, end_date) to (date, date), since storage is per date
                 data_model_copy.update_start_date(date)
                 data_model_copy.update_end_date(date)
-                file_path = self.get_source_path(date=date)
+                file_path = self._file_paths_per_date[date]
                 if "index" in df_chunk.columns:
                     df_chunk.drop(columns=["index"], inplace=True)
                 table = pa.Table.from_pandas(df_chunk, preserve_index=False)
@@ -159,17 +158,30 @@ class TimeBasedDataHandler(BaseDataHandler):
                 # NOTE: this only writes metadata to the table schema, not to the file.
                 table_with_metadata = self._io.write_metadata(table, file_metadata)
                 self._io.write(data=table_with_metadata, file_path=file_path, **io_kwargs)
-        elif self._is_table_io():
-            if self._io.SUPPORTS_PARTITIONING:
-                io_kwargs["partition_by"] = self.PARTITION_COLUMNS
-            table_path = self.get_source_path()
-            metadata: TimeBasedMetadata = self.read_metadata()
-            table_metadata: TimeBasedMetadataModel = data_model.to_metadata()
-            existing_table_metadata: TimeBasedMetadataModel | None = metadata.source_metadata.get(table_path, None)
-            if existing_table_metadata:
-                existing_dates = existing_table_metadata.dates
+        elif self._is_table_io() or self._is_database_io():
+            if self._is_table_io():
+                source_path = self._table_path
+                if self._io.SUPPORTS_PARTITIONING:
+                    io_kwargs["partition_by"] = self.PARTITION_COLUMNS
+            elif self._is_database_io():
+                source_path = self._db_path
+                if df.empty:
+                    cprint(f'Empty DataFrame (db_path={source_path})', style=str(TextStyle.BOLD + RichColor.RED))
+                    return
+                # convert datetime64[ns] to lower precision if db doesn't support nanosecond precision
+                if self._io.TIMESTAMP_PRECISION < TimestampPrecision.NANOSECOND and is_datetime64_ns_dtype(df['date'].dtype):
+                    df['date'] = df['date'].astype('datetime64[us]')
+                    cprint(f"Converting 'date' column from NANOSECOND precision to {self._io.TIMESTAMP_PRECISION} for compatibility in {self._io.name}")
+            
+            source_metadata: TimeBasedMetadataModel = data_model.to_metadata()
+            existing_metadata: TimeBasedMetadata = self.read_metadata()
+            existing_source_metadata: TimeBasedMetadataModel | None = existing_metadata.source_metadata.get(
+                source_path, None
+            )
+            if existing_source_metadata:
+                existing_dates = existing_source_metadata.dates
                 # merge the current data model's metadata "dates" with the existing table metadata "dates"
-                table_metadata.dates = list(set(existing_dates + table_metadata.dates))
+                source_metadata.dates = list(set(existing_dates + source_metadata.dates))
                 # Replace any overlapping data within the date range
                 start_ts, end_ts = df["date"].min(), df["date"].max()
                 where = f"date >= '{start_ts}' AND date <= '{end_ts}'"
@@ -177,55 +189,12 @@ class TimeBasedDataHandler(BaseDataHandler):
                 where = None
             data = pa.Table.from_pandas(df, preserve_index=False)
             self._io.write(
-                data=data,
-                table_path=table_path,
+                data,
+                source_path,
                 where=where,
                 **io_kwargs,
             )
-            self._io.write_metadata(table_path, table_metadata)
-        elif self._is_database_io():
-            from pandas.api.types import is_datetime64_ns_dtype
-            db_path = self._create_db_path()
-
-            if df.empty:
-                cprint(f'Empty DataFrame ({db_path=})', style=str(TextStyle.BOLD + RichColor.RED))
-                return
-            
-            # convert datetime64[ns] to lower precision if db doesn't support nanosecond precision
-            if is_datetime64_ns_dtype(df['date'].dtype) and self._io.TIMESTAMP_PRECISION < TimestampPrecision.NANOSECOND:
-                df['date'] = df['date'].astype('datetime64[us]')
-                cprint(f"Converting 'date' column from NANOSECOND precision to {self._io.TIMESTAMP_PRECISION} for compatibility in {self._io.name}")
-                
-            # Replace any overlapping data within the date range
-            start_ts, end_ts = df["date"].min(), df["date"].max()
-            where = f"date >= '{start_ts}' AND date <= '{end_ts}'"
-
-            self._io.write(
-                data=df,
-                db_path=db_path,
-                where=where,
-                **io_kwargs,
-            )
-            # FIXME
-            metadata: TimeBasedMetadata = self.read_metadata()
-            table_metadata: TimeBasedMetadataModel = data_model.to_metadata()
-            existing_table_metadata: TimeBasedMetadataModel | None = metadata.source_metadata.get(table_path, None)
-            if existing_table_metadata:
-                existing_dates = existing_table_metadata.dates
-                # merge the current data model's metadata "dates" with the existing table metadata "dates"
-                table_metadata.dates = list(set(existing_dates + table_metadata.dates))
-                # Replace any overlapping data within the date range
-                start_ts, end_ts = df["date"].min(), df["date"].max()
-                where = f"date >= '{start_ts}' AND date <= '{end_ts}'"
-            else:
-                where = None
-            # TODO
-            # duckdb_metadata: DuckDBMetadata = self.read_metadata()
-            # existing_dates = duckdb_metadata.get('dates', [])
-            # total_dates = list(set(self.data_model.dates + existing_dates))
-            # metadata: DuckDBMetadata = {'table_name': table_name, 'dates': total_dates}
-            # self.write_metadata(metadata)
-            self._io.write_metadata(schema_name, table_name, table_metadata)
+            self._io.write_metadata(source_path, source_metadata)
         else:
             raise ValueError(f"Unsupported IO format: {self._io.name}")
 
@@ -238,44 +207,16 @@ class TimeBasedDataHandler(BaseDataHandler):
                 for file_metadata in metadata.source_metadata.values()
                 for date in file_metadata.dates 
             ]
-            # placeholder files that exist but are empty, as an indicator for successful download, there is just no data on that date (e.g. weekends, holidays, etc.)
-            missing_dates_at_source = [
-                date
-                for date in self._data_model.dates
-                if date in existing_dates 
-                and self._io.is_empty(self.get_source_path(date=date))
-            ]
-        elif self._is_table_io():
-            table_path = self.get_source_path()
-            table_metadata: TimeBasedMetadataModel | None = metadata.source_metadata.get(
-                table_path, None
+        elif self._is_table_io() or self._is_database_io():
+            source_path = self._table_path if self._is_table_io() else self._db_path
+            source_metadata: TimeBasedMetadataModel | None = metadata.source_metadata.get(
+                source_path, None
             )
-            existing_dates = table_metadata.dates if table_metadata else []
-            missing_dates_at_source = [
-                date
-                for date in self._data_model.dates
-                # if exists in table metadata but is empty = no data on that date (e.g. weekends, holidays, etc.)
-                if date in existing_dates
-                and self._io.is_empty(
-                    table_path,
-                    partition_filters=[
-                        ("date", "=", date),
-                    ],
-                )
-            ]
-        elif self._is_database_io():
-            schema_name = self._create_db_schema_name()
-            table_name = self._create_db_table_name()
-            schema_qualified_table_name = f"{schema_name}.{table_name}"
-            db_metadata: TimeBasedMetadataModel | None = metadata.source_metadata.get(
-                schema_qualified_table_name, None
-            )
-            existing_dates = db_metadata.dates if db_metadata else []
+            existing_dates = source_metadata.dates if source_metadata else []
         else:
             raise ValueError(f"Unsupported IO format: {self._io.name}")
         return TimeBasedMetadata(
             **metadata.model_dump(),
-            missing_dates_at_source=missing_dates_at_source,
             missing_dates_in_storage=[
                 date for date in self._data_model.dates if date not in existing_dates
             ],
@@ -283,15 +224,10 @@ class TimeBasedDataHandler(BaseDataHandler):
 
     def read(self, **io_kwargs) -> pl.LazyFrame | None:
         if self._is_file_io():
-            file_paths = [
-                self.get_source_path(date=date) for date in self._data_model.dates
-            ]
-            lf: pl.LazyFrame | None = self._io.read(file_paths=file_paths, **io_kwargs)
+            return self._io.read(file_paths=self._file_paths, **io_kwargs)
         elif self._is_table_io():
-            table_path = self.get_source_path()
-            lf: pl.LazyFrame | None = self._io.read(table_path=table_path, **io_kwargs)
+            return self._io.read(table_path=self._table_path, **io_kwargs)
         elif self._is_database_io():
-            return self._io.read(**io_kwargs)
+            return self._io.read(db_path=self._db_path, **io_kwargs)
         else:
             raise ValueError(f"Unsupported IO format: {self._io.name}")
-        return lf

@@ -91,10 +91,7 @@ class FileIO(BaseIO):
         with self._filesystem.open_output_stream(file_path.schemeless) as f:
             pq.write_table(table, f, compression=self._compression, **io_options)
 
-    def read_metadata(
-        self,
-        file_paths: list[FilePath],
-    ) -> dict[FilePath, MetadataModelAsDict]:
+    def read_metadata(self, file_paths: list[FilePath]) -> dict[FilePath, MetadataModelAsDict]:
         """Read custom application metadata embedded in parquet schema."""
         metadata: dict[FilePath, MetadataModelAsDict] = {}
         for file_path in file_paths:

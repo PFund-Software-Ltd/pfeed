@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, Literal, TypeAlias, AsyncGenerator, Coroutine, ClassVar
+from typing import TYPE_CHECKING, Callable, Any, Literal, TypeAlias, AsyncGenerator, Coroutine, ClassVar, overload
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -8,14 +8,15 @@ if TYPE_CHECKING:
     from pfeed.sources.base_source import BaseSource
     from pfeed.engine import DataEngine
     from pfeed.streaming_settings import StreamingSettings
-    from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.storages.duckdb_storage import DuckDBStorage
     from pfeed.typing import tDataTool, GenericData, StreamingData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.sink import Sink
     from pfeed.dataflow.result import FlowResult
+    from pfeed.data_handlers.base_data_handler import BaseMetadata
     GenericDataOrNone = GenericData | None
     GenericDataOrNoneWithMetadata = tuple[GenericDataOrNone, dict[str, Any]]
     
@@ -217,7 +218,7 @@ class BaseFeed(ABC):
         data_layer: DataLayer,
         from_storage: DataStorage,
         io_format: IOFormat,
-    ) -> tuple[pl.LazyFrame | None, StorageMetadata]:
+    ) -> tuple[pl.LazyFrame | None, BaseMetadata]:
         '''Retrieves data by searching through all local storages, using polars for scanning data'''
         data_storage = DataStorage[from_storage.upper()]
         io_format = IOFormat[io_format.upper()]
@@ -318,31 +319,78 @@ class BaseFeed(ABC):
             dataflow.add_transformations(*funcs)
         return self
     
+    @overload
     def load(
         self, 
-        to_storage: DataStorage | str,
-        data_layer: DataLayer | str=DataLayer.CLEANED,
-        io_format: IOFormat | str=IOFormat.PARQUET,
+        to_storage: DataStorage = DataStorage.LOCAL,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        io_format: IOFormat = IOFormat.PARQUET,
+        compression: Compression = Compression.SNAPPY,
     ) -> BaseFeed:
-        io_format = IOFormat[io_format.upper()]
-        if self._use_ray and (io_format == IOFormat.DUCKDB):
-            raise RuntimeError('DuckDB is not thread-safe, cannot be used with Ray')
+        ...
+        
+    @overload
+    def load(
+        self, 
+        to_storage: DataStorage = DataStorage.LOCAL,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        io_format: IOFormat = IOFormat.DELTALAKE,
+    ) -> BaseFeed:
+        ...
+        
+    @overload
+    def load(
+        self, 
+        to_storage: DataStorage = DataStorage.DUCKDB,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        io_format: Literal[IOFormat.DUCKDB] = IOFormat.DUCKDB,
+        in_memory: bool=DuckDBStorage.DEFAULT_IN_MEMORY,
+        memory_limit: str=DuckDBStorage.DEFAULT_MEMORY_LIMIT,
+    ) -> BaseFeed:
+        ...
+        
+    @overload
+    def load(
+        self, 
+        to_storage: DataStorage = DataStorage.LANCEDB,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        io_format: Literal[IOFormat.LANCEDB] = IOFormat.LANCEDB,
+    ) -> BaseFeed:
+        ...
 
-        data_layer = DataLayer[data_layer.upper()]
-        if data_layer == DataLayer.RAW and io_format == IOFormat.DELTALAKE:
-            raise RuntimeError(f'Delta Lake is not supported for {data_layer=}')
+    def load(
+        self, 
+        to_storage: DataStorage,
+        data_layer: DataLayer=DataLayer.CLEANED,
+        io_format: IOFormat | None=None,
+        compression: Compression | None=None,
+        **io_kwargs,
+    ) -> BaseFeed:
+        '''
+        Args:
+            **io_kwargs: specific io options for the given storage
+                e.g. in_memory, memory_limit, for DuckDBStorage
+        '''
+        from pfeed.storages.file_based_storage import FileBasedStorage
         
         data_storage = DataStorage[to_storage.upper()]
+        data_layer = DataLayer[str(data_layer).upper()]
+        io_format = IOFormat[io_format.upper()] if io_format is not None else data_storage.default_io_format
         storage_options = self._storage_options.get(data_storage, {})
         io_options = self._io_options.get(io_format, {})
+        # FIXME:
+        # if data_layer == DataLayer.RAW and io_format == IOFormat.DELTALAKE:
+        #     raise RuntimeError(f'Delta Lake is not supported for {data_layer=}')
+        if compression is not None:
+            compression = Compression[compression.upper()]
         Storage = data_storage.storage_class
-        io_format = IOFormat[io_format.upper()]
+        if issubclass(Storage, FileBasedStorage):
+            io_kwargs['io_format'] = io_format
+            io_kwargs['compression'] = compression
 
-        is_streaming = self._subflows and self._subflows[0].is_streaming()
-        if is_streaming and io_format == IOFormat.PARQUET:
-            self.logger.warning(f"Automatically setting io_format={IOFormat.DELTALAKE} for streaming dataflows (previous: {io_format})")
-            io_format = IOFormat.DELTALAKE
-        
+        if self._use_ray and (data_storage == DataStorage.DUCKDB):
+            raise RuntimeError('DuckDB is not thread-safe, cannot be used with Ray')
+
         for dataflow in self._subflows:
             data_model = dataflow.data_model
             storage = (
@@ -352,8 +400,8 @@ class BaseFeed(ABC):
                 )
                 .with_data_model(data_model)
                 .with_io(
-                    io_format, 
                     io_options=io_options,
+                    **io_kwargs
                 )
             )
             if self._streaming_settings:

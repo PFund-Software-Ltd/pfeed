@@ -28,9 +28,9 @@ class PostgreSQLIO(DatabaseIO):
         return f"{self.SCHEME}://{self.user}:{self.password}@{self.host}:{self.port}/{db_name}"
     
     # TODO: handle async connection
-    def _open_connection(self, db_name: str='') -> PostgresConnection | AsyncPostgresConnection:
-        db_uri = self._create_uri(db_name)
-        self._conn: PostgresConnection | AsyncPostgresConnection = psycopg.connect(db_uri, **self._io_options)
+    def _open_connection(self, uri: str) -> PostgresConnection | AsyncPostgresConnection:
+        self._conn_uri = uri
+        self._conn: PostgresConnection | AsyncPostgresConnection = psycopg.connect(uri, **self._io_options)
         return self._conn
     
     def _close_connection(self):

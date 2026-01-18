@@ -49,23 +49,6 @@ class DatabaseIO(BaseIO):
                 self._open_connection(uri)
         return self._conn
     
-    def create_db_path(self, db_uri: str, db_name: str, table_name: str, schema_name: str | None = None) -> DBPath:
-        '''
-        Create a DBPath object from the given parameters.
-        Args:
-            db_uri: the URI of the database
-                e.g. for postgresql, it is "postgresql://user:password@localhost:5432"
-                for duckdb, it is the data path to the .duckdb file
-            db_name: the name of the database
-                e.g. for postgresql, it could be "my_db"
-                for duckdb, it is the name of the .duckdb file without the extension
-            schema_name: the name of the schema
-            table_name: the name of the table
-        Returns:
-            DBPath: the DBPath object
-        '''
-        return DBPath(db_uri=db_uri, db_name=db_name, schema_name=schema_name, table_name=table_name)
-        
     @abstractmethod
     def write(self, db_path: DBPath, data: GenericFrame) -> bool:
         pass
@@ -73,9 +56,17 @@ class DatabaseIO(BaseIO):
     @abstractmethod
     def read(self, db_path: DBPath) -> pl.LazyFrame:
         pass
+
+    @abstractmethod
+    def exists(self, db_path: DBPath) -> bool:
+        pass
+
+    @abstractmethod
+    def is_empty(self, db_path: DBPath) -> bool:
+        pass
     
     @abstractmethod
-    def _open_connection(self) -> DBConnection:
+    def _open_connection(self, uri: str) -> DBConnection:
         pass
 
     @abstractmethod

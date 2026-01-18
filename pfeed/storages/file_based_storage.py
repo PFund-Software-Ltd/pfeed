@@ -29,7 +29,7 @@ class FileBasedStorage(BaseStorage):
     def with_io(
         self,
         io_format: IOFormat=IOFormat.PARQUET,
-        compression: Compression | str | None=Compression.SNAPPY,
+        compression: Compression | None=Compression.SNAPPY,
         io_options: dict | None = None,
     ) -> FileIO:
         return super().with_io(io_format, compression, io_options=io_options)
@@ -37,7 +37,7 @@ class FileBasedStorage(BaseStorage):
     def _create_io(
         self,
         io_format: IOFormat,
-        compression: Compression | str | None,
+        compression: Compression | None,
         storage_options: dict | None = None,
         io_options: dict | None = None,
     ) -> FileIO:

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
     from pathlib import Path
@@ -41,9 +41,9 @@ class DuckDBIO(DatabaseIO, FileIO):
     def _create_uri(self, data_path: Path | str, db_name: str) -> str:
         return ':memory:' if self._in_memory else f'{data_path}/{db_name}{self.FILE_EXTENSION}'
     
-    def _open_connection(self, file_path: Path | Literal[':memory:']):
-        self._conn_uri = str(file_path)
-        self._conn: DuckDBPyConnection = duckdb.connect(self._conn_uri, **self._io_options)
+    def _open_connection(self, uri: str):
+        self._conn_uri = uri
+        self._conn: DuckDBPyConnection = duckdb.connect(uri, **self._io_options)
         if self._in_memory:
             self._conn.execute(f"SET memory_limit = '{self._memory_limit}'")
     
@@ -103,7 +103,9 @@ class DuckDBIO(DatabaseIO, FileIO):
                 f'Failed to write data (type={type(data)}) ({db_path=}): {exc}'
             ) from exc
     
-    def write_metadata(self, schema_name: str, table_name: str, metadata: BaseMetadataModel) -> None:
+    def write_metadata(self, db_path: DBPath, metadata: BaseMetadataModel) -> None:
+        schema_name = db_path.schema_name
+        table_name = db_path.table_name
         schema_qualified_table_name = f"{schema_name}.{self.METADATA_TABLE_NAME}"
         self._conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
         # NOTE: 'updated_at' is an extra field added to the metadata

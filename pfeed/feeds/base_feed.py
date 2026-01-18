@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Callable, Any, Literal, TypeAlias, AsyncGenera
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
-    from pfund.typing import tEnvironment
     from pfund.products.product_base import BaseProduct
     from pfeed.sources.base_source import BaseSource
     from pfeed.engine import DataEngine
@@ -30,7 +29,7 @@ from abc import ABC, abstractmethod
 from pprint import pformat
 
 from pfund import print_warning
-from pfund.enums import Environment
+from pfeed.config import setup_logging
 from pfeed.enums import DataTool, DataStorage, ExtractType, IOFormat, Compression, DataLayer
 
 
@@ -55,13 +54,6 @@ class BaseFeed(ABC):
         use_prefect: bool=False,
         use_deltalake: bool=False,
     ):
-        '''
-        Args:
-            env: The trading environment, such as 'LIVE' or 'BACKTEST'.
-                Certain functions like `download()` and `get_historical_data()` will automatically use 'BACKTEST' as the environment.
-                Other functions, such as `stream()` and `retrieve()`, will utilize the environment specified here.
-            storage_options: storage specific kwargs, e.g. if storage is 'minio', kwargs are minio specific kwargs
-        '''
         self._data_tool = DataTool[data_tool.lower()]
         self.data_source: BaseSource = self._create_data_source()
         self.logger = logging.getLogger(self.name.lower())
@@ -77,26 +69,12 @@ class BaseFeed(ABC):
         self._storage_options: dict[DataStorage, dict] = {}
         self._io_options: dict[IOFormat, dict] = {}
         self._streaming_settings: StreamingSettings | None = None
+        setup_logging()
     
     @property
     def name(self):
         return self.data_source.name
     
-    # TODO: replace with pfund_kits.logging
-    def _setup_logging(self, env: tEnvironment):
-        from pfund.logging import setup_logging_config
-        from pfund.logging.config import LoggingDictConfigurator
-        from pfeed.config import get_config
-        env = Environment[env.upper()]
-        config = get_config()
-        log_path = f'{config.log_path}/{env}'
-        user_logging_config = config.logging_config
-        logging_config_file_path = config.logging_config_file_path
-        logging_config = setup_logging_config(log_path, logging_config_file_path, user_logging_config=user_logging_config)
-        # ≈ logging.config.dictConfig(logging_config) with a custom configurator
-        logging_configurator = LoggingDictConfigurator(logging_config)
-        logging_configurator.configure()
-
     def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
         if not hasattr(self.data_source, 'create_product'):
             raise NotImplementedError(f'{self.data_source.name} does not support creating products')
@@ -133,7 +111,7 @@ class BaseFeed(ABC):
     
     @staticmethod
     @abstractmethod
-    def _create_data_source(env: Environment, *args, **kwargs) -> BaseSource:
+    def _create_data_source(*args, **kwargs) -> BaseSource:
         pass
 
     @abstractmethod
@@ -664,11 +642,6 @@ class BaseFeed(ABC):
         if self._use_ray:
             if 'num_cpus' not in ray_kwargs:
                 ray_kwargs['num_cpus'] = os.cpu_count()
-        envs = set(dataflow.data_model.env for dataflow in self._dataflows)
-        if len(envs) > 1:
-            raise ValueError(f'{self.name} dataflows have different environments: {envs}')
-        env = envs.pop()
-        self._setup_logging(env)
         if not self.streaming_dataflows:
             return self._eager_run_batch(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
         else:

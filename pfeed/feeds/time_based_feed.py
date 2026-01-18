@@ -226,7 +226,7 @@ class TimeBasedFeed(BaseFeed):
         else:
             return self
     
-    def _create_streaming_settings(self, mode: StreamMode | str, flush_interval: int):
+    def _create_streaming_settings(self, mode: StreamMode, flush_interval: int):
         self._streaming_settings = StreamingSettings(mode=mode, flush_interval=flush_interval)
   
     def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata:

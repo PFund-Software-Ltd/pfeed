@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
-    from pfund.typing import tEnvironment
     from pfeed._io.base_io import StorageMetadata
     from pfeed.typing import GenericFrameOrNone
     from pfeed.data_models.news_data_model import NewsDataModel
@@ -12,6 +11,7 @@ import datetime
 from functools import partial
 
 from pfund.enums import Environment
+from pfeed.config import setup_logging
 from pfeed.enums import DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.utils import lambda_with_name
@@ -29,7 +29,7 @@ class NewsFeed(TimeBasedFeed):
 
     def create_data_model(
         self,
-        env: tEnvironment,
+        env: Environment,
         start_date: str | datetime.date,
         end_date: str | datetime.date | None = None,
         product: str | BaseProduct | None = None,
@@ -39,6 +39,10 @@ class NewsFeed(TimeBasedFeed):
         from pfeed.data_models.news_data_model import NewsDataModel
         if isinstance(product, str) and product:
             product = self.create_product(product, **product_specs)
+        if len(self._dataflows) > 0:
+            existing_env = self._dataflows[0].data_model.env
+            if existing_env != env:
+                raise ValueError(f'{self.name} dataflows have different environments: {existing_env} and {env}')
         return NewsDataModel(
             env=env,
             data_source=self.data_source,
@@ -56,10 +60,9 @@ class NewsFeed(TimeBasedFeed):
         rollback_period: str ='1w',
         start_date: str='',
         end_date: str='',
-        data_layer: DataLayer='CLEANED',
+        data_layer: DataLayer=DataLayer.CLEANED,
         data_origin: str='',
-        to_storage: DataStorage | None='LOCAL',
-        storage_options: dict | None=None,
+        to_storage: DataStorage=DataStorage.LOCAL,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
         **product_specs
@@ -69,6 +72,7 @@ class NewsFeed(TimeBasedFeed):
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
         '''
         env = Environment.BACKTEST
+        setup_logging(env=env)
         if not product:
             assert not symbol, 'symbol should not be provided if product is not provided'
             product = None
@@ -84,7 +88,7 @@ class NewsFeed(TimeBasedFeed):
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
             add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, product=product),
-            load_to_storage=(lambda: self.load(to_storage, data_layer, storage_options)) if to_storage else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer)) if to_storage else None,
         )
     
     def _add_default_transformations_to_download(self, data_layer: DataLayer, product: BaseProduct | None=None):
@@ -113,14 +117,15 @@ class NewsFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: DataLayer='CLEANED',
-        from_storage: DataStorage | None=None,
-        storage_options: dict | None=None,
+        data_layer: DataLayer=DataLayer.CLEANED,
+        from_storage: DataStorage=DataStorage.LOCAL,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
-        env: tEnvironment='BACKTEST',
+        env: Environment=Environment.BACKTEST,
         **product_specs
     ) -> GenericFrameOrNone | tuple[GenericFrameOrNone, StorageMetadata] | NewsFeed:
+        env = Environment[env.upper()]
+        setup_logging(env=env)
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         env = Environment[env.upper()]
@@ -131,7 +136,6 @@ class NewsFeed(TimeBasedFeed):
             end_date=end_date,
             data_layer=data_layer,
             from_storage=from_storage,
-            storage_options=storage_options,
             add_default_transformations=lambda: self._add_default_transformations_to_retrieve(),
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,

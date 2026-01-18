@@ -3,9 +3,9 @@ from typing import Literal, TYPE_CHECKING, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
-    from pfund.typing import tEnvironment, FullDataChannel
+    from pfund.typing import FullDataChannel
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed.typing import tDataType, GenericFrameOrNone
+    from pfeed.typing import GenericFrameOrNone
     from pfeed.data_models.retrieve_market_data_model import RetrieveMarketDataModel
     from pfeed.enums import DataSource, DataStorage
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
@@ -18,6 +18,7 @@ from functools import partial
 
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
+from pfeed.config import setup_logging
 from pfeed.messaging import BarMessage, TickMessage
 from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode
 from pfeed.feeds.time_based_feed import TimeBasedFeed
@@ -70,7 +71,7 @@ class MarketFeed(TimeBasedFeed):
     
     def create_data_model(
         self,
-        env: tEnvironment,
+        env: Environment,
         product: str | BaseProduct,
         resolution: str | Resolution,
         start_date: str | datetime.date,
@@ -80,6 +81,10 @@ class MarketFeed(TimeBasedFeed):
     ) -> MarketDataModel:
         if isinstance(product, str) and product:
             product = self.data_source.create_product(product, **product_specs)
+        if len(self._dataflows) > 0:
+            existing_env = self._dataflows[0].data_model.env
+            if existing_env != env:
+                raise ValueError(f'{self.name} dataflows have different environments: {existing_env} and {env}')
         # TODO: move the type conversions to MarketDataModel, but how to handle product_specs?
         # if isinstance(start_date, str) and start_date:
         #     start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -100,14 +105,13 @@ class MarketFeed(TimeBasedFeed):
         self,
         product: str,
         symbol: str='',
-        resolution: Resolution | str | tDataType | Literal['max']='max',
+        resolution: Resolution | MarketDataType | Literal['max']='max',
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: DataLayer='CLEANED',
+        data_layer: DataLayer=DataLayer.CLEANED,
         data_origin: str='',
-        to_storage: DataStorage | None='LOCAL',
-        storage_options: dict | None=None,
+        to_storage: DataStorage=DataStorage.LOCAL,
         dataflow_per_date: bool=True,
         include_metadata: bool=False,
         **product_specs
@@ -138,6 +142,7 @@ class MarketFeed(TimeBasedFeed):
                 If False, a single dataflow will be created for the entire date range.
         '''
         env = Environment.BACKTEST
+        setup_logging(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         highest_resolution: Resolution = self.get_highest_resolution()
         lowest_resolution: Resolution = self.get_lowest_resolution()
@@ -159,7 +164,7 @@ class MarketFeed(TimeBasedFeed):
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
             add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, data_resolution, resolution, product),
-            load_to_storage=(lambda: self.load(to_storage, data_layer, storage_options)) if to_storage else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer)) if to_storage else None,
         )
     
     def _add_default_transformations_to_download(
@@ -209,18 +214,17 @@ class MarketFeed(TimeBasedFeed):
     def retrieve(
         self,
         product: str,
-        resolution: Resolution | str | tDataType,
+        resolution: Resolution | MarketDataType,
         rollback_period: str="1w",
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        data_layer: DataLayer='CLEANED',
-        from_storage: DataStorage='LOCAL',
-        storage_options: dict | None=None,
+        data_layer: DataLayer=DataLayer.CLEANED,
+        from_storage: DataStorage=DataStorage.LOCAL,
         auto_resample: bool=True,
         dataflow_per_date: bool=False,
         include_metadata: bool=False,
-        env: tEnvironment='BACKTEST',
+        env: Environment=Environment.BACKTEST,
         **product_specs
     ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | MarketFeed:
         '''Retrieve data from storage.
@@ -256,6 +260,7 @@ class MarketFeed(TimeBasedFeed):
             env: Environment to retrieve data from.
         '''
         env = Environment[env.upper()]
+        setup_logging(env=env)
         product: BaseProduct = self.create_product(product, **product_specs)
         resolution: Resolution = self._create_resolution(resolution)
         assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
@@ -268,7 +273,6 @@ class MarketFeed(TimeBasedFeed):
             end_date=end_date,
             data_layer=data_layer,
             from_storage=from_storage,
-            storage_options=storage_options,
             add_default_transformations=lambda: self._add_default_transformations_to_retrieve(resolution, auto_resample),
             dataflow_per_date=dataflow_per_date,
             include_metadata=include_metadata,
@@ -344,14 +348,13 @@ class MarketFeed(TimeBasedFeed):
         self,
         product: str,
         symbol: str='',
-        resolution: Resolution | str | tDataType="quote_L1",
-        data_layer: DataLayer='CLEANED',
+        resolution: Resolution | MarketDataType=MarketDataType.TICK,
+        data_layer: DataLayer=DataLayer.CLEANED,
         data_origin: str='',
-        to_storage: DataStorage | None=None,
-        storage_options: dict | None=None,
+        to_storage: DataStorage=DataStorage.LOCAL,
         callback: Callable[[dict], Awaitable[None] | None] | None=None,
-        env: tEnvironment='LIVE',
-        mode: StreamMode | str=StreamMode.FAST,
+        env: Environment=Environment.LIVE,
+        mode: StreamMode=StreamMode.FAST,
         flush_interval: int=100,  # in seconds
         **product_specs
     ) -> MarketFeed:
@@ -371,6 +374,7 @@ class MarketFeed(TimeBasedFeed):
         '''
         env = Environment[env.upper()]
         assert env != Environment.BACKTEST, 'streaming is not supported in env BACKTEST'
+        setup_logging(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution: Resolution = self._create_resolution(resolution)
         data_layer = DataLayer[data_layer.upper()]
@@ -386,7 +390,7 @@ class MarketFeed(TimeBasedFeed):
         return self._run_stream(
             data_model=data_model,
             add_default_transformations=lambda: self._add_default_transformations_to_stream(data_layer, product, resolution),
-            load_to_storage=(lambda: self.load(to_storage, data_layer, storage_options)) if to_storage else None,
+            load_to_storage=(lambda: self.load(to_storage, data_layer)) if to_storage else None,
             callback=callback,
         )
     
@@ -461,6 +465,7 @@ class MarketFeed(TimeBasedFeed):
     # TODO: General-purpose data fetching/LLM call? without storage overhead
     def fetch(self) -> GenericFrameOrNone | MarketFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
+    
     
     # DEPRECATED
     # def get_historical_data(

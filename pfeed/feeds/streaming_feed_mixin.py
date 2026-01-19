@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, AsyncGenerator, TypeAlias, Callable, Literal, Coroutine, Awaitable
+from typing import TYPE_CHECKING, AsyncGenerator, TypeAlias, Callable, Literal, Awaitable
 if TYPE_CHECKING:
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.dataflow.faucet import Faucet
@@ -11,10 +11,10 @@ if TYPE_CHECKING:
     from pfeed.enums import StreamMode, ExtractType
 
 import asyncio
-import inspect
 from abc import abstractmethod
 from collections import defaultdict
 
+from pfund_kit.style import cprint, TextStyle, RichColor
 from pfeed.streaming_settings import StreamingSettings
 from pfeed.feeds.base_feed import clear_subflows
 
@@ -38,6 +38,10 @@ class StreamingFeedMixin:
     @abstractmethod
     def _add_default_transformations_to_stream(self, *args, **kwargs):
         pass
+
+    @property
+    def streaming_dataflows(self) -> list[DataFlow]:
+        return [dataflow for dataflow in self._dataflows if dataflow.is_streaming()]
     
     def _create_streaming_settings(self, mode: StreamMode, flush_interval: int):
         self._streaming_settings = StreamingSettings(mode=mode, flush_interval=flush_interval)
@@ -62,9 +66,6 @@ class StreamingFeedMixin:
                     yield msg
                 await producer
         return _iter()
-    
-    async def _eager_run_stream(self):
-        return await self._run_stream_dataflows()
     
     @clear_subflows
     def _run_stream(
@@ -114,12 +115,10 @@ class StreamingFeedMixin:
         DataFlowName: TypeAlias = str
 
         self._clear_dataflows_before_run()
-        if self._use_ray:
-            import atexit
+        if self._ray_kwargs:
             import ray
             from ray.util.queue import Queue
             from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
-            atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             import zmq
             from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel, ZeroMQSignal
@@ -182,7 +181,6 @@ class StreamingFeedMixin:
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
             
-            self._init_ray(**self._ray_kwargs)
             with ray_logging_context(self.logger) as log_queue:
                 try:
                     num_workers = min(self._ray_kwargs['num_cpus'], len(self._dataflows))
@@ -251,10 +249,27 @@ class StreamingFeedMixin:
         else:
             await _run_dataflows()
         self._clear_dataflows_after_run()
+    
+    def run(self, prefect_kwargs: dict | None=None) -> GenericData | None:
+        if self.streaming_dataflows:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:  # if no running loop, asyncio.get_running_loop() will raise RuntimeError
+                # No running event loop, safe to use asyncio.run()
+                pass
+            else:
+                cprint(
+                    "Cannot call feed.run() from within a running event loop.\n"
+                    "Did you mean to call feed.run_async() or forget to set 'pipeline_mode=True'?",
+                    style=str(TextStyle.BOLD + RichColor.RED),
+                )
+                return
+            return asyncio.run(self._run_stream_dataflows())
+        else:
+            return super().run(prefect_kwargs=prefect_kwargs)
 
     async def run_async(self, prefect_kwargs: dict | None=None) -> GenericData | None:
-        result: GenericData | None | Coroutine = self._eager_run(prefect_kwargs=prefect_kwargs)
-        if inspect.iscoroutine(result):
-            return await result
+        if self.streaming_dataflows:
+            return await self._run_stream_dataflows()
         else:
-            return result
+            return super().run(prefect_kwargs=prefect_kwargs)

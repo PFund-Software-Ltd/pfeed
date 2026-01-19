@@ -164,7 +164,7 @@ class TimeBasedFeed(BaseFeed):
         else:
             return self
     
-    def _eager_run_batch(self, prefect_kwargs: dict) -> GenericFrame | None:
+    def run(self, prefect_kwargs: dict | None=None) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
         

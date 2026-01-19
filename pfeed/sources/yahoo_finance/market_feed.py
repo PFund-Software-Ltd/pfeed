@@ -237,7 +237,8 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     def _add_default_transformations_to_stream(self, data_layer: DataLayer, product: BaseProduct, resolution: Resolution):
         from pfeed.utils import lambda_with_name
         # since Ray can't serialize the "self" in self._parse_message, disable it for now
-        assert self._use_ray is False, "Transformations in Yahoo Finance streaming data is not supported with Ray, please set use_ray=False"
+        # REVIEW
+        assert not self._ray_kwargs, "Transformations in Yahoo Finance streaming data is not supported with Ray"
         if data_layer != DataLayer.RAW:
             self.transform(
                 lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),

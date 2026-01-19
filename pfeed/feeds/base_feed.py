@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, Literal, Coroutine, ClassVar, overload
+from typing import TYPE_CHECKING, Callable, Any, Literal, ClassVar, overload
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -16,18 +16,14 @@ if TYPE_CHECKING:
     from pfeed.dataflow.result import FlowResult
     from pfeed.data_handlers.base_data_handler import BaseMetadata
     
-import asyncio
 import logging
-import inspect
 from pathlib import Path
 from abc import ABC, abstractmethod
 from pprint import pformat
 
-from pfund import print_warning
 from pfeed.config import setup_logging, get_config
 from pfund_kit.style import cprint, TextStyle
 from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType
-from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
 
 
 __all__ = ["BaseFeed"]
@@ -58,13 +54,14 @@ class BaseFeed(ABC):
         self._storage_options: dict[DataStorage, dict] = {}
         self._io_options: dict[IOFormat, dict] = {}
         self._ray_kwargs: dict = ray_kwargs
-        if not ray_kwargs:
+        if not self._ray_kwargs:
             cprint(
                 f'{self.name} is NOT using Ray, consider passing in e.g. Feed(num_cpus=1) to enable Ray', 
                 style=TextStyle.BOLD
             )
         else:
-            assert 'num_cpus' in ray_kwargs, 'num_cpus is required when using Ray'
+            assert 'num_cpus' in self._ray_kwargs, 'num_cpus is required when using Ray'
+            self._init_ray()
         setup_logging()
     
     @property
@@ -108,10 +105,12 @@ class BaseFeed(ABC):
     def is_pipeline(self) -> bool:
         return self._pipeline_mode
 
-    def _init_ray(self, **kwargs):
+    def _init_ray(self):
         import ray
+        import atexit
         if not ray.is_initialized():
-            ray.init(**kwargs)
+            ray.init(**self._ray_kwargs)
+            atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
 
     def _shutdown_ray(self):
         import ray
@@ -119,9 +118,6 @@ class BaseFeed(ABC):
             ray.shutdown()
     
     def _set_engine(self, engine: DataEngine) -> None:
-        from pfeed.engine import DataEngine
-        if not isinstance(engine, DataEngine):
-            raise TypeError("engine must be a DataEngine instance")
         self._engine = engine
 
     @abstractmethod
@@ -190,7 +186,7 @@ class BaseFeed(ABC):
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     @abstractmethod
-    def _eager_run_batch(self, prefect_kwargs: dict) -> GenericData | None:
+    def run(self, prefect_kwargs: dict | None=None) -> GenericData | None:
         pass
     
     def _create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
@@ -296,6 +292,7 @@ class BaseFeed(ABC):
                 e.g. in_memory, memory_limit, for DuckDBStorage
         '''
         from pfeed.storages.file_based_storage import FileBasedStorage
+        from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
         
         data_storage = DataStorage[to_storage.upper()]
         data_layer = DataLayer[str(data_layer).upper()]
@@ -356,11 +353,9 @@ class BaseFeed(ABC):
         
         self._clear_dataflows_before_run()
         if self._ray_kwargs:
-            import atexit
             import ray
             from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
             
-            atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             @ray.remote
             def ray_task(logger_name: str, dataflow: DataFlow) -> tuple[bool, DataFlow]:
@@ -377,7 +372,6 @@ class BaseFeed(ABC):
                     logger.exception(f'Error in running {dataflow}:')
                 return success, dataflow
             
-            self._init_ray(**self._ray_kwargs)
             with ray_logging_context(self.logger) as log_queue:
                 try:
                     batch_size = self._ray_kwargs['num_cpus']
@@ -430,41 +424,9 @@ class BaseFeed(ABC):
         self._clear_dataflows_after_run()
         return self._completed_dataflows, self._failed_dataflows
     
-    def _eager_run(self, prefect_kwargs: dict | None) -> GenericData | None | Coroutine:
-        prefect_kwargs = prefect_kwargs or {}
-        if not self.streaming_dataflows:
-            return self._eager_run_batch(prefect_kwargs=prefect_kwargs)
-        else:
-            return self._eager_run_stream()
-    
-    def run(self, prefect_kwargs: dict | None=None) -> GenericData | None:
-        result: GenericData | None | Coroutine = self._eager_run(prefect_kwargs=prefect_kwargs)
-        if inspect.iscoroutine(result): 
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:  # if no running loop, asyncio.get_running_loop() will raise RuntimeError
-                # No running event loop, safe to use asyncio.run()
-                pass
-            else:
-                print_warning(
-                    "Cannot call feed.run() from within a running event loop.\n"
-                    "Did you mean to call feed.run_async() or forget to set 'pipeline_mode=True'?"
-                )
-                # We're in a running event loop, can't use asyncio.run()
-                # Close the coroutine to prevent RuntimeWarning about unawaited coroutine
-                result.close()
-                return
-            return asyncio.run(result)
-        else:
-            return result
-    
     @property
     def dataflows(self) -> list[DataFlow]:
         return self._dataflows
-
-    @property
-    def streaming_dataflows(self) -> list[DataFlow]:
-        return [dataflow for dataflow in self._dataflows if dataflow.is_streaming()]
     
     @property 
     def failed_dataflows(self) -> list[DataFlow]:

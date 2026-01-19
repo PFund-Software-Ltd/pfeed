@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfeed.engine import DataEngine
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.duckdb_storage import DuckDBStorage
-    from pfeed.typing import tDataTool, GenericData
+    from pfeed.typing import GenericData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from pfeed.dataflow.result import FlowResult
     from pfeed.data_handlers.base_data_handler import BaseMetadata
     
-import os
 import asyncio
 import logging
 import inspect
@@ -25,12 +24,16 @@ from abc import ABC, abstractmethod
 from pprint import pformat
 
 from pfund import print_warning
-from pfeed.config import setup_logging
-from pfeed.enums import DataTool, DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType
+from pfeed.config import setup_logging, get_config
+from pfund_kit.style import cprint, TextStyle
+from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType
 from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
 
 
 __all__ = ["BaseFeed"]
+
+
+config = get_config()
 
 
 def clear_subflows(func):
@@ -43,28 +46,25 @@ def clear_subflows(func):
 class BaseFeed(ABC):
     data_model_class: ClassVar[type[BaseDataModel]]
     
-    def __init__(
-        self, 
-        data_tool: tDataTool='polars', 
-        pipeline_mode: bool=False,
-        use_ray: bool=True,
-        use_prefect: bool=False,
-        use_deltalake: bool=False,
-    ):
-        self._data_tool = DataTool[data_tool.lower()]
+    def __init__(self, pipeline_mode: bool=False, **ray_kwargs):
         self.data_source: BaseSource = self._create_data_source()
         self.logger = logging.getLogger(self.name.lower())
         self._engine: DataEngine | None = None
         self._pipeline_mode: bool = pipeline_mode
-        self._use_ray: bool = use_ray
-        self._use_prefect: bool = use_prefect
-        self._use_deltalake: bool = use_deltalake
         self._dataflows: list[DataFlow] = []
         self._subflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
         self._storage_options: dict[DataStorage, dict] = {}
         self._io_options: dict[IOFormat, dict] = {}
+        self._ray_kwargs: dict = ray_kwargs
+        if not ray_kwargs:
+            cprint(
+                f'{self.name} is NOT using Ray, consider passing in e.g. Feed(num_cpus=1) to enable Ray', 
+                style=TextStyle.BOLD
+            )
+        else:
+            assert 'num_cpus' in ray_kwargs, 'num_cpus is required when using Ray'
         setup_logging()
     
     @property
@@ -190,7 +190,7 @@ class BaseFeed(ABC):
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     @abstractmethod
-    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict) -> GenericData | None:
+    def _eager_run_batch(self, prefect_kwargs: dict) -> GenericData | None:
         pass
     
     def _create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
@@ -309,7 +309,7 @@ class BaseFeed(ABC):
         if issubclass(Storage, FileBasedStorage):
             io_kwargs['io_format'] = io_format
 
-        if self._use_ray and (data_storage == DataStorage.DUCKDB):
+        if self._ray_kwargs and (data_storage == DataStorage.DUCKDB):
             raise RuntimeError('DuckDB is not thread-safe, cannot be used with Ray')
 
         for dataflow in self._subflows:
@@ -339,11 +339,13 @@ class BaseFeed(ABC):
         self._subflows.clear()
         self._dataflows.clear()
     
-    def _run_batch_dataflows(self, ray_kwargs: dict, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
+    def _run_batch_dataflows(self, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track
         
+        use_prefect = prefect_kwargs is not None
+        
         def _run_dataflow(dataflow: DataFlow, logger: logging.Logger | None=None) -> FlowResult:
-            if self._use_prefect:
+            if use_prefect:
                 flow_type = FlowType.prefect
             else:
                 flow_type = FlowType.native
@@ -353,7 +355,7 @@ class BaseFeed(ABC):
             return success
         
         self._clear_dataflows_before_run()
-        if self._use_ray:
+        if self._ray_kwargs:
             import atexit
             import ray
             from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
@@ -361,10 +363,10 @@ class BaseFeed(ABC):
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
             
             @ray.remote
-            def ray_task(feed_name: str, use_prefect: bool, dataflow: DataFlow) -> tuple[bool, DataFlow]:
+            def ray_task(logger_name: str, dataflow: DataFlow) -> tuple[bool, DataFlow]:
                 success = False
                 try:
-                    logger = setup_logger_in_ray_task(feed_name.lower(), log_queue)
+                    logger = setup_logger_in_ray_task(logger_name, log_queue)
                     success = _run_dataflow(dataflow, logger=logger)
                 except RuntimeError as err:
                     if use_prefect:
@@ -375,16 +377,15 @@ class BaseFeed(ABC):
                     logger.exception(f'Error in running {dataflow}:')
                 return success, dataflow
             
-            self._init_ray(**ray_kwargs)
+            self._init_ray(**self._ray_kwargs)
             with ray_logging_context(self.logger) as log_queue:
                 try:
-                    batch_size = ray_kwargs['num_cpus']
+                    batch_size = self._ray_kwargs['num_cpus']
                     dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
                     for dataflow_batch in track(dataflow_batches, description=f'Running {self.name} dataflows'):
                         futures = [
                             ray_task.remote(
-                                feed_name=self.name.value, 
-                                use_prefect=self._use_prefect, 
+                                logger_name=self.name.lower(), 
                                 dataflow=dataflow,
                             ) for dataflow in dataflow_batch
                         ]
@@ -410,7 +411,7 @@ class BaseFeed(ABC):
                     else:
                         self._completed_dataflows.append(dataflow)
             except RuntimeError as err:
-                if self._use_prefect:
+                if use_prefect:
                     self.logger.exception(f'Error in running prefect {dataflow}:')
                 else:
                     raise err
@@ -429,19 +430,15 @@ class BaseFeed(ABC):
         self._clear_dataflows_after_run()
         return self._completed_dataflows, self._failed_dataflows
     
-    def _eager_run(self, ray_kwargs: dict | None=None, prefect_kwargs: dict | None=None) -> GenericData | None | Coroutine:
-        ray_kwargs = ray_kwargs or {}
+    def _eager_run(self, prefect_kwargs: dict | None) -> GenericData | None | Coroutine:
         prefect_kwargs = prefect_kwargs or {}
-        if self._use_ray:
-            if 'num_cpus' not in ray_kwargs:
-                ray_kwargs['num_cpus'] = os.cpu_count()
         if not self.streaming_dataflows:
-            return self._eager_run_batch(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
+            return self._eager_run_batch(prefect_kwargs=prefect_kwargs)
         else:
-            return self._eager_run_stream(ray_kwargs=ray_kwargs)
+            return self._eager_run_stream()
     
-    def run(self, prefect_kwargs: dict | None=None, **ray_kwargs) -> GenericData | None:
-        result: GenericData | None | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
+    def run(self, prefect_kwargs: dict | None=None) -> GenericData | None:
+        result: GenericData | None | Coroutine = self._eager_run(prefect_kwargs=prefect_kwargs)
         if inspect.iscoroutine(result): 
             try:
                 asyncio.get_running_loop()

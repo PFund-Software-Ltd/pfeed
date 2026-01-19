@@ -16,8 +16,6 @@ from pfund import cprint
 class DeltaLakeStorageMixin:
     
     def get_delta_tables(self: BaseStorage | DeltaLakeStorageMixin) -> list[DeltaTable]:
-        if not self.use_deltalake:
-            raise ValueError(f'{self.use_deltalake=} for this storage')
         delta_tables = []
         storage_options = self._storage_options
         # if isinstance(self, MinioStorage):

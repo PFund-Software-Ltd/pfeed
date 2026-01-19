@@ -11,10 +11,13 @@ import datetime
 from functools import partial
 
 from pfund.enums import Environment
-from pfeed.config import setup_logging
+from pfeed.config import setup_logging, get_config
 from pfeed.enums import DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.utils import lambda_with_name
+
+
+config = get_config()
 
 
 '''
@@ -50,7 +53,6 @@ class NewsFeed(TimeBasedFeed):
             product=product,
             start_date=start_date,
             end_date=end_date or start_date,
-            use_deltalake=self._use_deltalake
         )
     
     def download(
@@ -104,7 +106,7 @@ class NewsFeed(TimeBasedFeed):
         self.transform(
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_desired_df(df, self._data_tool)
+                lambda df: convert_to_desired_df(df, config.data_tool)
             )
         )
         

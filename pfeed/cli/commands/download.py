@@ -24,12 +24,9 @@ SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [pe.alias(ds)
 @click.option('--data-layer', '--layer', default='CLEANED', type=click.Choice([level.name for level in DataLayer], case_sensitive=False), help='Data layer, e.g. "RAW", "CLEANED", or "CURATED"')
 @click.option('--data-domain', '--domain', default='', type=str, help='Custom domain name to categorize data')
 @click.option('--to-storage', '--storage', '--destination', default='LOCAL', type=click.Choice(DataStorage, case_sensitive=False), help='Storage destination')
-@click.option('--no-ray', is_flag=True, help='if enabled, Ray will not be used')
-@click.option('--use-prefect', is_flag=True, help='if enabled, Prefect will be used')
-@click.option('--use-deltalake', is_flag=True, help='if enabled, Delta Lake will be used')
 @click.option('--data-path', type=click.Path(exists=False), help='Path to store downloaded data')
 @click.option('--debug', is_flag=True, help='if enabled, debug mode will be enabled where logs at DEBUG level will be printed')
-def download(ctx, data_source, product, resolution, rollback_period, start_date, end_date, data_layer, data_domain, to_storage, no_ray, use_prefect, use_deltalake, data_path, debug):
+def download(ctx, data_source, product, resolution, rollback_period, start_date, end_date, data_layer, data_domain, to_storage, data_path, debug):
     """Download historical data from a data source"""
     pe.configure(data_path=data_path, debug=debug)
     data_source = pe.alias.resolve(data_source)
@@ -48,11 +45,7 @@ def download(ctx, data_source, product, resolution, rollback_period, start_date,
     
     # FIXME: feed class is removed and should add sth like "feed_type" in params
     Feed = DataSource[data_source.upper()].feed_class
-    feed = Feed(
-        use_ray=not no_ray, 
-        use_prefect=use_prefect,
-        use_deltalake=use_deltalake,
-    )
+    feed = Feed()
     feed.download(
         product=product,
         data_layer=data_layer,

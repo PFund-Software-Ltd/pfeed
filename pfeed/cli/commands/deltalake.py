@@ -50,7 +50,7 @@ def vacuum(storage: DataStorage, no_dry_run: bool, retention_hours: int = None, 
     if not no_dry_run:
         cprint('This is a dry run. NO files will actually be deleted. To turn it off, use the --no-dry-run/-n flag.', style='bold yellow')
     Storage = storage.storage_class
-    storage: BaseStorage = Storage(use_deltalake=True)
+    storage: BaseStorage = Storage()
     dry_run = not no_dry_run
     enforce_retention_duration = not no_enforce_retention_duration
     storage.vacuum_delta_files(
@@ -98,7 +98,7 @@ def optimize(storage: DataStorage, partition_filter: tuple, target_size: int = N
     - Set `--min-commit-interval` (seconds) for long-running operations
     '''
     Storage = storage.storage_class
-    storage: BaseStorage = Storage(use_deltalake=True)
+    storage: BaseStorage = Storage()
     
     # Parse partition filters if provided
     partition_filters = None

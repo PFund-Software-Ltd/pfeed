@@ -16,8 +16,12 @@ import datetime
 
 from pfeed.utils.dataframe import is_empty_dataframe
 from pfeed.enums import ExtractType
+from pfeed.config import get_config
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+
+
+config = get_config()
 
 
 __all__ = ["TimeBasedFeed"]
@@ -140,7 +144,7 @@ class TimeBasedFeed(BaseFeed):
         self.transform(
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_desired_df(df, self._data_tool)
+                lambda df: convert_to_desired_df(df, config.data_tool)
             )
         )
         
@@ -160,11 +164,11 @@ class TimeBasedFeed(BaseFeed):
         else:
             return self
     
-    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict) -> GenericFrame | None:
+    def _eager_run_batch(self, prefect_kwargs: dict) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
         
-        completed_dataflows, failed_dataflows = self._run_batch_dataflows(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
+        completed_dataflows, failed_dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
 
         dfs: list[GenericFrame | None] = []
         metadata: TimeBasedFeedMetadata = {'missing_dates': []}

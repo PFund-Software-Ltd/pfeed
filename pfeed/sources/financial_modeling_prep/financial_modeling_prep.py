@@ -38,11 +38,7 @@ class FinancialModelingPrep:
         self, 
         api_key: str | None=None,
         fmp_plan: Literal['basic', 'starter', 'premium', 'ultimate']='',
-        data_tool: tDataTool='polars', 
         pipeline_mode: bool=False,
-        use_ray: bool=False,
-        use_prefect: bool=False,
-        use_deltalake: bool=False,
     ):
         params = {k: v for k, v in locals().items() if k not in ['self', 'api_key', 'fmp_plan']}
         params['data_source'] = FinancialModelingPrepSource(api_key=api_key, fmp_plan=fmp_plan)

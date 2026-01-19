@@ -12,40 +12,24 @@ from threading import Thread
 from pfund import print_warning
 import pfeed as pe
 from pfeed.enums import DataSource, DataCategory
+from pfeed.config import get_config
 
 
 logger = logging.getLogger('pfeed')
+config = get_config()
 
 
 # NOTE: only data engine has the ability to run background tasks in pfeed
 class DataEngine:
     STREAMING_QUEUE_MAXSIZE = 1000
 
-    def __init__(
-        self,
-        data_tool: tDataTool='polars',
-        use_ray: bool=True,
-        use_prefect: bool=False,
-        use_deltalake: bool=False,
-        # TODO
-        # backfill: bool=True,
-    ):
-        '''
-        Args:
-            backfill: Whether to backfill the data during streaming.
-                only matters to streaming dataflows (i.e. feed.stream())
-        '''
+    def __init__(self):
         self._params = {k: v for k, v in locals().items() if k not in ['self', 'backfill']}
-        # NOTE: pipeline_mode must be turned on for the engine to work so that users can add tasks to the feed
-        self._params['pipeline_mode'] = True
         self._feeds: list[BaseFeed] = []
         self._is_running: bool = False
         self._msg_queue: ZeroMQ | None = None
         self._zmq_thread: Thread | None = None
-        # TODO
-        # self._backfill: bool = backfill
-        if use_ray:
-            self._setup_messaging()
+        self._is_using_ray: bool = False
     
     def is_running(self) -> bool:
         return self._is_running
@@ -84,15 +68,19 @@ class DataEngine:
     def backfill(self):
         raise NotImplementedError('Backfill is not implemented yet')
     
-    def add_feed(self, data_source: tDataSource, data_category: tDataCategory, **kwargs) -> BaseFeed:
+    def add_feed(self, data_source: tDataSource, data_category: tDataCategory, **ray_kwargs) -> BaseFeed:
         '''
         Args:
             kwargs: kwargs for the data client to override the default params in the engine
         '''
-        assert 'pipeline_mode' not in kwargs, 'pipeline_mode is True by default and cannot be overridden'
-        params = self._params.copy()
-        params.update(kwargs)
-        feed: BaseFeed = pe.create_feed(data_source=data_source, data_category=data_category, **params)
+        if ray_kwargs:
+            self._is_using_ray = True
+        feed: BaseFeed = pe.create_feed(
+            data_source=data_source, 
+            data_category=data_category, 
+            pipeline_mode=True,
+            **ray_kwargs
+        )
         feed._set_engine(self)
         self._feeds.append(feed)
         return feed
@@ -112,29 +100,27 @@ class DataEngine:
             assert all(feed.streaming_dataflows for feed in self._feeds), 'All feeds must be streaming feeds if any feed is streaming'
         return is_streaming_feeds
     
-    def _eager_run(
-        self, 
-        ray_kwargs: dict | None=None, 
-        prefect_kwargs: dict | None=None, 
-    ) -> dict[BaseFeed, GenericData] | list[Coroutine]:
+    def _eager_run(self, prefect_kwargs: dict | None=None) -> dict[BaseFeed, GenericData] | list[Coroutine]:
         if self.is_running():
             raise RuntimeError('Data Engine is already running, cannot run again')
         self._is_running = True
         if not self._is_streaming_feeds():
             result: dict[BaseFeed, GenericData] = {}
             for feed in self._feeds:
-                data = feed.run(prefect_kwargs=prefect_kwargs, **ray_kwargs)
+                data = feed.run(prefect_kwargs=prefect_kwargs)
                 result[feed] = data
         else:
             result: list[Coroutine] = []
             for feed in self._feeds:
-                coro: Coroutine = feed.run_async(prefect_kwargs=prefect_kwargs, **ray_kwargs)
+                coro: Coroutine = feed.run_async(prefect_kwargs=prefect_kwargs)
                 result.append(coro)
         return result
     
-    def run(self, prefect_kwargs: dict | None=None, **ray_kwargs) -> dict[BaseFeed, GenericData] | None:
+    def run(self, prefect_kwargs: dict | None=None) -> dict[BaseFeed, GenericData] | None:
+        if self._is_using_ray:
+            self._setup_messaging()
         if not self._is_streaming_feeds():
-            result: dict[BaseFeed, GenericData] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
+            result: dict[BaseFeed, GenericData] = self._eager_run(prefect_kwargs=prefect_kwargs)
             return result
         else:
             try:
@@ -147,10 +133,10 @@ class DataEngine:
                 return
             return asyncio.run(self.run_async())
     
-    async def run_async(self, prefect_kwargs: dict | None=None, **ray_kwargs) -> None:
+    async def run_async(self, prefect_kwargs: dict | None=None) -> None:
         assert self._is_streaming_feeds(), 'Only streaming feeds can be run asynchronously'
-        result: list[Coroutine] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
-        if self._params['use_ray']:
+        result: list[Coroutine] = self._eager_run(prefect_kwargs=prefect_kwargs)
+        if self._is_using_ray:
             self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
             self._zmq_thread.start()
         try:

@@ -63,8 +63,8 @@ class StreamingFeedMixin:
                 await producer
         return _iter()
     
-    async def _eager_run_stream(self, ray_kwargs: dict):
-        return await self._run_stream_dataflows(ray_kwargs=ray_kwargs)
+    async def _eager_run_stream(self):
+        return await self._run_stream_dataflows()
     
     @clear_subflows
     def _run_stream(
@@ -102,7 +102,7 @@ class StreamingFeedMixin:
         else:
             return self
 
-    async def _run_stream_dataflows(self, ray_kwargs: dict):
+    async def _run_stream_dataflows(self):
         async def _run_dataflows():
             try:
                 await asyncio.gather(*[dataflow.run_stream(flow_type='native') for dataflow in self._dataflows])
@@ -182,10 +182,10 @@ class StreamingFeedMixin:
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
             
-            self._init_ray(**ray_kwargs)
+            self._init_ray(**self._ray_kwargs)
             with ray_logging_context(self.logger) as log_queue:
                 try:
-                    num_workers = min(ray_kwargs['num_cpus'], len(self._dataflows))
+                    num_workers = min(self._ray_kwargs['num_cpus'], len(self._dataflows))
                     
                     # Distribute dataflows' transformations across workers
                     def _create_worker_name(worker_num: int) -> str:
@@ -252,8 +252,8 @@ class StreamingFeedMixin:
             await _run_dataflows()
         self._clear_dataflows_after_run()
 
-    async def run_async(self, prefect_kwargs: dict | None=None, **ray_kwargs) -> GenericData | None:
-        result: GenericData | None | Coroutine = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
+    async def run_async(self, prefect_kwargs: dict | None=None) -> GenericData | None:
+        result: GenericData | None | Coroutine = self._eager_run(prefect_kwargs=prefect_kwargs)
         if inspect.iscoroutine(result):
             return await result
         else:

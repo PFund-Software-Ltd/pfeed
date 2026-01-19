@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
-    from pfeed.typing import tDataTool
     from pfeed.sources.pfund.batch_api import BatchAPI
     from pfeed.sources.pfund.stream_api import StreamAPI
 
@@ -20,11 +19,7 @@ class PFund:
         env: tEnvironment,
         # TODO
         # channels: PFundChannels | None=None,
-        data_tool: tDataTool='polars', 
         pipeline_mode: bool=False,
-        use_ray: bool=True,
-        use_prefect: bool=False,
-        use_deltalake: bool=False,
     ):
         params = {k: v for k, v in locals().items() if k not in ['self', 'env']}
         self.env = Environment[env.upper()]

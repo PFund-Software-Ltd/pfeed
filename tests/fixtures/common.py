@@ -5,6 +5,7 @@ from pfeed.enums import DataTool
 # ============================================================================
 # SHARED TEST PARAMETERS: Used across all data source fixtures
 # ============================================================================
+# FIXME: use_ray, use_deltalake have been moved to config and io_format respectively
 COMBOS = [
     # (param, id)
     ({'use_ray': False, 'use_deltalake': False}, "ray(F)delta(F)"),

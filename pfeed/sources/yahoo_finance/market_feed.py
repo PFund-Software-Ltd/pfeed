@@ -14,12 +14,16 @@ import time
 import datetime
 
 from pfeed.feeds.market_feed import MarketFeed
+from pfeed.config import get_config
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 from pfeed.enums import DataLayer
 
 
 __all__ = ["YahooFinanceMarketFeed"]
+
+
+config = get_config()
 
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
@@ -384,5 +388,5 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             df = option_chain.puts
         else:
             raise ValueError(f"Invalid option type: {option_type}")
-        return convert_to_desired_df(df, self._data_tool)
+        return convert_to_desired_df(df, config.data_tool)
     

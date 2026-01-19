@@ -1,14 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tDataTool, tDataCategory
+    from pfeed.typing import tDataCategory
     from pfeed.enums import DataCategory
     from pfeed.sources.base_source import BaseSource
     from pfeed.feeds.base_feed import BaseFeed
 
 from abc import ABC, abstractmethod
 
-from pfeed.enums import DataTool
 from pfeed.feeds import create_feed
 
 
@@ -16,11 +15,7 @@ class DataClient(ABC):
     def __init__(
         self,
         # NOTE: these params should be the same as the ones in BaseFeed
-        data_tool: tDataTool='polars',
         pipeline_mode: bool=False,
-        use_ray: bool=True,
-        use_prefect: bool=False,
-        use_deltalake: bool=False,
         **kwargs,
     ):
         '''
@@ -31,12 +26,7 @@ class DataClient(ABC):
         params = {k: v for k, v in locals().items() if k not in ['self', 'kwargs']}
         params.update(kwargs)
         
-        self._data_tool = DataTool[data_tool.lower()]
         self._pipeline_mode: bool = pipeline_mode
-        self._use_ray: bool = use_ray
-        self._use_prefect: bool = use_prefect
-        self._use_deltalake: bool = use_deltalake
-
         self.data_source = self._create_data_source()
 
         # initialize data feeds

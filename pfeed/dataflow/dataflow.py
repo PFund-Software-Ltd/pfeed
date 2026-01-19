@@ -139,10 +139,7 @@ class DataFlow:
     
     async def run_stream(self, flow_type: Literal['native']='native'):
         self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
-        if self.sink:
-            assert self.sink.storage.use_deltalake, \
-                'writing streaming data is only supported when using deltalake, please set use_deltalake=True'
-        else:
+        if not self.sink:
             self._logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
         self._flow_type = FlowType[flow_type.lower()]
         await self.faucet.open_stream()  # this will trigger _run_stream_etl()

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pfund.enums import Environment
+from pfeed.enums import DataTool
 from pfund_kit.config import Configuration
 
 
@@ -68,6 +69,7 @@ def configure(
     data_path: str | None = None,
     log_path: str | None = None,
     cache_path: str | None = None,
+    data_tool: DataTool | None = None,
     persist: bool = False,
 ) -> PFeedConfig:
     '''
@@ -91,6 +93,8 @@ def configure(
         if v is not None:
             if '_path' in k:
                 v = Path(v)
+            elif k == 'data_tool':
+                v = DataTool[v.lower()]
             setattr(config, k, v)
     
     config.ensure_dirs()
@@ -141,9 +145,11 @@ class PFeedConfig(Configuration):
         load_env_file(verbose=False)
         super().__init__(project_name=project_name, source_file=__file__)
     
-    # TODO: when compose.yml is in use
+    def to_dict(self) -> dict:
+        config_dict = super().to_dict()
+        config_dict['data_tool'] = DataTool.polars
+        return config_dict
+    
     def prepare_docker_context(self):
+        '''Prepare docker context (e.g. env variables) before running compose.yml'''
         pass
-        # import os
-        # os.environ['MINIO_DATA_PATH'] = str(self.data_path / 'minio')
-        # os.environ['TIMESCALEDB_DATA_PATH'] = str(self.data_path / 'timescaledb')

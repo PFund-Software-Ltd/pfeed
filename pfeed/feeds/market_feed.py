@@ -19,12 +19,15 @@ from functools import partial
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
 from pfund_kit.style import cprint, RichColor, TextStyle
-from pfeed.config import setup_logging
+from pfeed.config import setup_logging, get_config
 from pfeed.messaging import BarMessage, TickMessage
 from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, ExtractType
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.requests import MarketFeedDownloadRequest
+
+
+config = get_config()
 
 
 # FIXME: integrate with StreamingFeedMixin
@@ -225,7 +228,7 @@ class MarketFeed(TimeBasedFeed):
         self.transform(
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_desired_df(df, self._data_tool)
+                lambda df: convert_to_desired_df(df, config.data_tool)
             )
         )
 
@@ -356,7 +359,7 @@ class MarketFeed(TimeBasedFeed):
         self.transform(
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_desired_df(df, self._data_tool)
+                lambda df: convert_to_desired_df(df, config.data_tool)
             )
         )
     

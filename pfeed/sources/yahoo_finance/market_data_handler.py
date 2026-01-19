@@ -1,11 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import pandas as pd
     from pfeed.typing import GenericFrame
 
-import datetime
-
-import pandas as pd
 
 from pfeed.data_handlers.market_data_handler import MarketDataHandler
 from pfeed.enums import DataTool

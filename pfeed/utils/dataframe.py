@@ -1,9 +1,24 @@
 from narwhals.typing import IntoFrame, Frame
-from pfeed.typing import dd, ps, SparkDataFrame
 
 import pandas as pd
 import polars as pl
 import narwhals as nw
+
+try:
+    import dask.dataframe as dd
+except ImportError:
+    class dd:
+        class DataFrame:
+            pass
+try:
+    import pyspark.pandas as ps
+    from pyspark.sql import DataFrame as SparkDataFrame
+except ImportError:
+    class ps:
+        class DataFrame:
+            pass
+    class SparkDataFrame:
+        pass
 
 
 def is_dataframe(df: IntoFrame, eagerframe_only=False, include_narwhals=True) -> bool:

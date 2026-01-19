@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from pfeed.sources.base_source import BaseSource
     from pfeed.engine import DataEngine
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.storages.duckdb_storage import DuckDBStorage
     from pfeed.typing import GenericData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.dataflow.dataflow import DataFlow
@@ -22,7 +21,7 @@ from abc import ABC, abstractmethod
 from pprint import pformat
 
 from pfeed.config import setup_logging, get_config
-from pfund_kit.style import cprint, TextStyle
+from pfund_kit.style import cprint
 from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType
 
 
@@ -57,7 +56,6 @@ class BaseFeed(ABC):
         if not self._ray_kwargs:
             cprint(
                 f'{self.name} is NOT using Ray, consider passing in e.g. Feed(num_cpus=1) to enable Ray', 
-                style=TextStyle.BOLD
             )
         else:
             assert 'num_cpus' in self._ray_kwargs, 'num_cpus is required when using Ray'
@@ -265,8 +263,8 @@ class BaseFeed(ABC):
         to_storage: DataStorage = DataStorage.DUCKDB,
         data_layer: DataLayer = DataLayer.CLEANED,
         io_format: Literal[IOFormat.DUCKDB] = IOFormat.DUCKDB,
-        in_memory: bool=DuckDBStorage.DEFAULT_IN_MEMORY,
-        memory_limit: str=DuckDBStorage.DEFAULT_MEMORY_LIMIT,
+        in_memory: bool=True,
+        memory_limit: str='4GB',
     ) -> BaseFeed:
         ...
         

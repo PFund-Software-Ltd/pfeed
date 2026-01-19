@@ -1,12 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
+    import pandas as pd
     from pfeed.data_models.news_data_model import NewsDataModel
 
 import datetime
 from pathlib import Path
 
-import pandas as pd
 import polars as pl
 
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler

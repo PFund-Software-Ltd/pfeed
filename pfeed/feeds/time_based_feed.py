@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 import datetime
 
-from pfeed.utils.dataframe import is_empty_dataframe
 from pfeed.enums import ExtractType
 from pfeed.config import get_config
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
@@ -167,6 +166,7 @@ class TimeBasedFeed(BaseFeed):
     def run(self, prefect_kwargs: dict | None=None) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
+        from pfeed.utils.dataframe import is_empty_dataframe
         
         completed_dataflows, failed_dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
 

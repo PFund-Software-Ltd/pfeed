@@ -15,12 +15,13 @@ from pfund.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
 from pfeed.enums import DataLayer
+from pfeed.feeds.market_feed import MarketFeed
 
 
 __all__ = ['BybitMarketFeed']
 
 
-class BybitMarketFeed(BybitMixin):
+class BybitMarketFeed(BybitMixin, MarketFeed):
     data_model_class: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
     
     @staticmethod

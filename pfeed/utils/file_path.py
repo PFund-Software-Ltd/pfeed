@@ -1,7 +1,10 @@
+from __future__ import annotations
+from typing import Union, TYPE_CHECKING
+if TYPE_CHECKING:
+    from cloudpathlib import CloudPath
+
 from pathlib import Path
-from typing import Union
 from urllib.parse import urlparse
-from cloudpathlib import CloudPath
 
 
 class FilePath:
@@ -19,6 +22,8 @@ class FilePath:
 
     def __init__(self, path: Union[str, Path, CloudPath, "FilePath"]):
         """Initialize with automatic backend detection."""
+        from cloudpathlib import CloudPath
+        
         if isinstance(path, FilePath):
             self._path = path._path
         elif isinstance(path, (Path, CloudPath)):
@@ -41,6 +46,7 @@ class FilePath:
     @property
     def is_cloud(self) -> bool:
         """Check if this is a cloud path."""
+        from cloudpathlib import CloudPath
         return isinstance(self._path, CloudPath)
 
     @property

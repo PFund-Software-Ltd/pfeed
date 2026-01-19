@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow as pa
     from pfeed.utils.file_path import FilePath
-    from pfeed.data_models.base_data_model import BaseMetadataModel
     from deltalake.table import FilterConjunctionType
 
 import polars as pl

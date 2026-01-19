@@ -25,7 +25,7 @@ class DataClient(ABC):
 
         params = {k: v for k, v in locals().items() if k not in ['self', 'kwargs']}
         params.update(kwargs)
-        
+
         self._pipeline_mode: bool = pipeline_mode
         self.data_source = self._create_data_source()
 

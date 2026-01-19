@@ -4,8 +4,8 @@ if TYPE_CHECKING:
     import polars as pl
     from deltalake import DeltaTable
     from lancedb.table import LanceTable
-    from pfeed.utils.file_path import FilePath
     from pfeed.data_models.base_data_model import BaseMetadataModel
+    from pfeed._io.file_io import MetadataModelAsDict
     
     Table: TypeAlias = DeltaTable | LanceTable
 
@@ -15,7 +15,8 @@ from abc import abstractmethod
 
 import pyarrow as pa
 
-from pfeed._io.file_io import FileIO, MetadataModelAsDict
+from pfeed.utils.file_path import FilePath
+from pfeed._io.file_io import FileIO
 
 
 TablePath = NewType('TablePath', FilePath)

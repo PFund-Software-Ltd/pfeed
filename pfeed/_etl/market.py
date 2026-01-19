@@ -4,9 +4,9 @@ ETL for market data.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import pandas as pd
     from pfund.products.product_base import BaseProduct
 
-import pandas as pd
 
 from pfund.datas.resolution import Resolution
 

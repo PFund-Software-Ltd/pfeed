@@ -1,12 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    import pandas as pd
     from fmp_api_client.news import News
     from pfeed.data_models.news_data_model import NewsDataModel
     
 import asyncio
 
-import pandas as pd
 from fmp_api_client import FMPPlan
 
 from pfeed.feeds.news_feed import NewsFeed
@@ -19,6 +19,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
         return self.data_source.api.news
     
     def _normalize_raw_data(self, datas: dict[str, list[list[dict]]]) -> pd.DataFrame:
+        import pandas as pd
         dfs = []
         for func, data in datas.items():
             if func == 'FMP_articles':
@@ -48,6 +49,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
         return pd.concat(dfs, ignore_index=True)
     
     def _normalize_raw_data_from_FMP_articles(self, data: list[list[dict]]) -> pd.DataFrame:
+        import pandas as pd
         if not data:
             return pd.DataFrame()
         df = pd.DataFrame(data)
@@ -56,6 +58,7 @@ class FinancialModelingPrepNewsFeed(NewsFeed):
         return df
     
     def _normalize_raw_data_from_search(self, data: list[list[dict]]) -> pd.DataFrame:
+        import pandas as pd
         if not data:
             return pd.DataFrame()
         df = pd.DataFrame(data)

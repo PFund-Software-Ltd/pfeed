@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from pfeed.enums import Compression
     from pfeed.utils.file_path import FilePath
     from pfeed.data_models.base_data_model import BaseMetadataModel
+    from pfeed._io.base_io import MetadataModelAsDict
 
 import json
 from abc import abstractmethod
@@ -15,7 +16,7 @@ import pyarrow.fs as pa_fs
 import pyarrow.parquet as pq
 
 from pfeed.enums import Compression
-from pfeed._io.base_io import BaseIO, MetadataModelAsDict
+from pfeed._io.base_io import BaseIO
 
 
 class FileIO(BaseIO):

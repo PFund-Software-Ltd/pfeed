@@ -6,23 +6,6 @@ from pfeed.messaging.streaming_message import StreamingMessage
 class DataFrameLike(Protocol):
     def __dataframe__(self, *args: Any, **kwargs: Any) -> Any: ...
 
-try:
-    import dask.dataframe as dd
-except ImportError:
-    class dd:
-        class DataFrame:
-            pass
-try:
-    import pyspark.pandas as ps
-    from pyspark.sql import DataFrame as SparkDataFrame
-except ImportError:
-    class ps:
-        class DataFrame:
-            pass
-    class SparkDataFrame:
-        pass
-
- 
 GenericFrame: TypeAlias = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
 GenericSeries = Series[Any]
 GenericData = GenericFrame | bytes

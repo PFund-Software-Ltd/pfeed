@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from pfeed.enums import DataStorage
 
 from pfund.products.product_bybit import BybitProduct
-from pfeed.feeds.crypto_market_feed import CryptoMarketFeed
 from pfeed.sources.bybit.mixin import BybitMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
 from pfeed.enums import DataLayer
@@ -21,7 +20,7 @@ from pfeed.enums import DataLayer
 __all__ = ['BybitMarketFeed']
 
 
-class BybitMarketFeed(BybitMixin, CryptoMarketFeed):
+class BybitMarketFeed(BybitMixin):
     data_model_class: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
     
     @staticmethod

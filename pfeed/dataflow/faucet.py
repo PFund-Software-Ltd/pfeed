@@ -46,7 +46,7 @@ class Faucet:
         self._streaming_queue: asyncio.Queue | None = None
         self._user_streaming_callback: Callable[[dict], Awaitable[None] | None] | None = None
         self._streaming_bindings: dict[DataModelStr, DataFlow] = {}
-        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
+        self._logger: logging.Logger = logging.getLogger(self.data_source.name.lower())
     
     def __str__(self):
         return f'{self.data_source.name}.{self._extract_type}'

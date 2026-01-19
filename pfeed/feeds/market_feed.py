@@ -5,11 +5,11 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.typing import FullDataChannel
     from pfeed.messaging.streaming_message import StreamingMessage
-    from pfeed.typing import GenericFrameOrNone
     from pfeed.data_models.retrieve_market_data_model import RetrieveMarketDataModel
     from pfeed.enums import DataSource, DataStorage
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
-    from pfeed.feeds.time_based_feed import GenericFrameOrNoneWithMetadata
+    from pfeed.dataflow.dataflow import DataFlow
+    from pfeed.typing import GenericFrame
 
 import datetime
 from pathlib import Path
@@ -18,56 +18,52 @@ from functools import partial
 
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
+from pfund_kit.style import cprint, RichColor, TextStyle
 from pfeed.config import setup_logging
 from pfeed.messaging import BarMessage, TickMessage
-from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode
+from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, ExtractType
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
+from pfeed.requests import MarketFeedDownloadRequest
 
 
+# FIXME: integrate with StreamingFeedMixin
 class MarketFeed(TimeBasedFeed):
     data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
 
     SUPPORTED_LOWEST_RESOLUTION = Resolution('1d')
     
+    def get_supported_resolutions(self) -> list[Resolution]:
+        market_data_types_or_resolutions: list[str] = self.data_source.generic_metadata['data_categories']['market_data']
+        return [Resolution(dtype_or_resol) for dtype_or_resol in market_data_types_or_resolutions]
+    
     def get_highest_resolution(self) -> Resolution:
-        '''
-        Args:
-            Gets the highest resolution of historical data supported by the data source.
-            Note that it is NOT related to the resolution of the streaming data.
-            e.g. Bybit supports 'tick' resolution for historical data, but for streaming data, it is 'quote_L2'.
-        '''
-        market_data_types = self.data_source.generic_metadata['data_categories']['market_data']
-        data_types = [MarketDataType[data_type.upper()] for data_type in market_data_types]
-        resolutions = sorted([Resolution(data_type) for data_type in data_types], reverse=True)
-        return resolutions[0]
+        return sorted(self.get_supported_resolutions(), reverse=True)[0]
     
     def get_lowest_resolution(self) -> Resolution:
-        '''
-        Args:
-            If data_source is not provided, use the default lowest resolution.
-            else, use the lowest officially supported resolution of the data source.
-            Note that we can use a higher resolution to create a lower resolution data, 
-            e.g. bybit only supports '1tick' resolution (officially highest/lowest resolution), but we can use it to create '1d' data.
-        '''
-        market_data_types = self.data_source.generic_metadata['data_categories']['market_data']
-        data_types = [MarketDataType[data_type.upper()] for data_type in market_data_types]
-        resolutions = sorted([Resolution(data_type) for data_type in data_types], reverse=False)
-        return resolutions[0]
+        return max(
+            sorted(self.get_supported_resolutions(), reverse=False)[0], 
+            self.SUPPORTED_LOWEST_RESOLUTION
+        )
         
-    @property
-    def supported_asset_types(self) -> list[str]:
+    def get_supported_asset_types(self) -> list[str]:
         from pfund.products.product_basis import ProductAssetType
-        market_data_types = self.data_source.generic_metadata['data_categories']['market_data']
+        market_data_types_or_resolutions: list[str] = self.data_source.generic_metadata['data_categories']['market_data']
         return list(set(
             str(ProductAssetType(as_string=asset_type.upper()))
-            for data_type in market_data_types
-            for asset_type in market_data_types[data_type]
+            for dtype_or_resol in market_data_types_or_resolutions
+            for asset_type in market_data_types_or_resolutions[dtype_or_resol]
         ))
     
     @staticmethod
-    def _create_resolution(resolution: str | Resolution) -> Resolution:
+    def create_resolution(resolution: str | Resolution) -> Resolution:
         return Resolution(resolution) if isinstance(resolution, str) else resolution
+            
+    def _validate_resolution_bounds(self, resolution: Resolution):
+        highest_resolution: Resolution = self.get_highest_resolution()
+        lowest_resolution: Resolution = self.get_lowest_resolution()
+        assert highest_resolution >= resolution >= lowest_resolution, \
+            f'resolution must be >= {lowest_resolution} and <= {highest_resolution}'
     
     def create_data_model(
         self,
@@ -75,7 +71,7 @@ class MarketFeed(TimeBasedFeed):
         product: str | BaseProduct,
         resolution: str | Resolution,
         start_date: str | datetime.date,
-        end_date: str | datetime.date | None=None,
+        end_date: str | datetime.date,
         data_origin: str='',
         **product_specs
     ) -> MarketDataModel:
@@ -100,12 +96,31 @@ class MarketFeed(TimeBasedFeed):
             start_date=start_date,
             end_date=end_date or start_date,
         )
+    
+    def _create_data_model_from_request(self, request: MarketFeedDownloadRequest) -> MarketDataModel:
+        return self.create_data_model(
+            **request.model_dump(exclude={'data_resolution', 'target_resolution'}),
+            resolution=request.target_resolution,
+        )
+    
+    def _create_batch_dataflows(
+        self, 
+        request: MarketFeedDownloadRequest,
+        extract_func: Callable,
+        extract_type: ExtractType,
+    ) -> list[DataFlow]:
+        dataflows: list[DataFlow] = super()._create_batch_dataflows(request=request, extract_func=extract_func, extract_type=extract_type)
+        # HACK: update the data model in faucet to the data resolution
+        # because data model in dataflow uses the target resolution, but the faucet uses the data resolution
+        for dataflow in dataflows:
+            faucet_data_model: MarketDataModel = dataflow.faucet.data_model 
+            faucet_data_model.update_resolution(request.data_resolution)
         
     def download(
         self,
         product: str,
+        resolution: Resolution | MarketDataType,
         symbol: str='',
-        resolution: Resolution | MarketDataType | Literal['max']='max',
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
@@ -113,9 +128,8 @@ class MarketFeed(TimeBasedFeed):
         data_origin: str='',
         to_storage: DataStorage=DataStorage.LOCAL,
         dataflow_per_date: bool=True,
-        include_metadata: bool=False,
         **product_specs
-    ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | MarketFeed:
+    ) -> GenericFrame | None | MarketFeed:
         '''
         Download historical data from data source.
         
@@ -144,36 +158,40 @@ class MarketFeed(TimeBasedFeed):
         env = Environment.BACKTEST
         setup_logging(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
-        highest_resolution: Resolution = self.get_highest_resolution()
-        lowest_resolution: Resolution = self.get_lowest_resolution()
-        if resolution == 'max':
-            resolution: Resolution = highest_resolution
-        else:
-            resolution: Resolution = self._create_resolution(resolution)
-        assert highest_resolution >= resolution >= self.SUPPORTED_LOWEST_RESOLUTION, \
-            f'resolution must be >= {self.SUPPORTED_LOWEST_RESOLUTION} and <= {highest_resolution}'
-        unit_resolution: Resolution = resolution.to_unit()
-        data_resolution: Resolution = max(unit_resolution, lowest_resolution)
+        resolution: Resolution = self.create_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
-        data_layer = DataLayer[data_layer.upper()]
-        return self._run_download(
-            partial_dataflow_data_model=partial(self.create_data_model, env=env, product=product, resolution=resolution, data_origin=data_origin),
-            partial_faucet_data_model=partial(self.create_data_model, env=env, product=product, resolution=data_resolution, data_origin=data_origin),
-            start_date=start_date, 
+
+        # Normalize resolution: use unit resolution as fallback if requested resolution is not supported
+        supported_resolutions: list[Resolution] = self.get_supported_resolutions()
+        if resolution not in supported_resolutions:
+            unit_resolution: Resolution = resolution.to_unit()
+            if unit_resolution in supported_resolutions:
+                data_resolution: Resolution = unit_resolution
+                cprint(
+                    f'{resolution} is not supported, using {data_resolution} instead', 
+                    style=str(TextStyle.BOLD + RichColor.YELLOW)
+                )
+            else:
+                raise ValueError(f'{resolution} is not supported')
+        else:
+            data_resolution: Resolution = resolution
+        self._validate_resolution_bounds(data_resolution)
+        
+        request = MarketFeedDownloadRequest(
+            env=env,
+            product=product,
+            target_resolution=resolution,
+            data_resolution=data_resolution,
+            start_date=start_date,
             end_date=end_date,
+            to_storage=to_storage,
+            data_layer=data_layer,
+            data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
-            include_metadata=include_metadata,
-            add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, data_resolution, resolution, product),
-            load_to_storage=(lambda: self.load(to_storage, data_layer)) if to_storage else None,
         )
+        return self._run_download(request=request)
     
-    def _add_default_transformations_to_download(
-        self,
-        data_layer: DataLayer,
-        data_resolution: Resolution,
-        target_resolution: Resolution,
-        product: BaseProduct,
-    ):
+    def _add_default_transformations_to_download(self, request: MarketFeedDownloadRequest):
         '''
         Args:
             data_resolution: The resolution of the downloaded data.
@@ -183,7 +201,7 @@ class MarketFeed(TimeBasedFeed):
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
 
-        if data_layer != DataLayer.RAW:
+        if request.data_layer != DataLayer.RAW:
             # default transformations to normalize data:
             self.transform(
                 lambda_with_name(
@@ -193,11 +211,11 @@ class MarketFeed(TimeBasedFeed):
                 self._normalize_raw_data,
                 lambda_with_name(
                     'standardize_columns',
-                    lambda df: etl.standardize_columns(df, product, data_resolution),
+                    lambda df: etl.standardize_columns(df, request.product, request.data_resolution),
                 ),
                 lambda_with_name(
                     'resample_data_if_necessary', 
-                    lambda df: etl.resample_data(df, target_resolution, product=product)
+                    lambda df: etl.resample_data(df, request.target_resolution, product=request.product)
                 ),
                 # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
                 # otherwise, polars will not be able to collect correctly
@@ -223,10 +241,9 @@ class MarketFeed(TimeBasedFeed):
         from_storage: DataStorage=DataStorage.LOCAL,
         auto_resample: bool=True,
         dataflow_per_date: bool=False,
-        include_metadata: bool=False,
         env: Environment=Environment.BACKTEST,
         **product_specs
-    ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | MarketFeed:
+    ) -> GenericFrame | None | MarketFeed:
         '''Retrieve data from storage.
         Args:
             product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
@@ -262,8 +279,8 @@ class MarketFeed(TimeBasedFeed):
         env = Environment[env.upper()]
         setup_logging(env=env)
         product: BaseProduct = self.create_product(product, **product_specs)
-        resolution: Resolution = self._create_resolution(resolution)
-        assert resolution >= self.SUPPORTED_LOWEST_RESOLUTION, f'resolution must be >= minimum resolution {self.SUPPORTED_LOWEST_RESOLUTION}'
+        resolution: Resolution = self.create_resolution(resolution)
+        self._validate_resolution_bounds(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer = DataLayer[data_layer.upper()]
         return self._run_retrieve(
@@ -275,7 +292,6 @@ class MarketFeed(TimeBasedFeed):
             from_storage=from_storage,
             add_default_transformations=lambda: self._add_default_transformations_to_retrieve(resolution, auto_resample),
             dataflow_per_date=dataflow_per_date,
-            include_metadata=include_metadata,
         )
     
     def _retrieve_impl(
@@ -285,7 +301,7 @@ class MarketFeed(TimeBasedFeed):
         data_layer: DataLayer,
         from_storage: DataStorage,
         storage_options: dict | None,
-    ) -> tuple[GenericFrameOrNone, TimeBasedStorageMetadata]:
+    ) -> tuple[GenericFrame | None, TimeBasedStorageMetadata]:
         '''Retrieve data from storage. If data is not found, search for higher resolutions.
         
         Args:
@@ -301,7 +317,7 @@ class MarketFeed(TimeBasedFeed):
                 # remove resolutions that are not supported by the data source
                 if resolution <= highest_resolution
             ]
-        df: GenericFrameOrNone = None
+        df: GenericFrame | None = None
         metadata: TimeBasedStorageMetadata = {}
         for search_resolution in search_resolutions:
             data_model_copy = data_model.model_copy(deep=False)
@@ -376,7 +392,7 @@ class MarketFeed(TimeBasedFeed):
         assert env != Environment.BACKTEST, 'streaming is not supported in env BACKTEST'
         setup_logging(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
-        resolution: Resolution = self._create_resolution(resolution)
+        resolution: Resolution = self.create_resolution(resolution)
         data_layer = DataLayer[data_layer.upper()]
         data_model: MarketDataModel = self.create_data_model(
             env=env,
@@ -463,7 +479,7 @@ class MarketFeed(TimeBasedFeed):
         pass
         
     # TODO: General-purpose data fetching/LLM call? without storage overhead
-    def fetch(self) -> GenericFrameOrNone | MarketFeed:
+    def fetch(self) -> GenericFrame | None | MarketFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
     
     
@@ -485,15 +501,15 @@ class MarketFeed(TimeBasedFeed):
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,
     #     **product_specs
-    # ) -> GenericFrameOrNone:
+    # ) -> GenericFrame | None:
     #     from pfeed._etl import market as etl
     #     from pfeed._etl.base import convert_to_pandas_df, convert_to_desired_df
 
-    #     resolution: Resolution = self._create_resolution(resolution)
+    #     resolution: Resolution = self.create_resolution(resolution)
     #     # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
     #     data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
     #     data_domain = data_domain or self.data_domain.value
-    #     df: GenericFrameOrNone = self._get_historical_data_impl(
+    #     df: GenericFrame | None = self._get_historical_data_impl(
     #         product=product,
     #         symbol=symbol,
     #         rollback_period=rollback_period,

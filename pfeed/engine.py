@@ -116,7 +116,6 @@ class DataEngine:
         self, 
         ray_kwargs: dict | None=None, 
         prefect_kwargs: dict | None=None, 
-        include_metadata: bool=False
     ) -> dict[BaseFeed, GenericData] | list[Coroutine]:
         if self.is_running():
             raise RuntimeError('Data Engine is already running, cannot run again')
@@ -124,18 +123,18 @@ class DataEngine:
         if not self._is_streaming_feeds():
             result: dict[BaseFeed, GenericData] = {}
             for feed in self._feeds:
-                data = feed.run(prefect_kwargs=prefect_kwargs, include_metadata=include_metadata, **ray_kwargs)
+                data = feed.run(prefect_kwargs=prefect_kwargs, **ray_kwargs)
                 result[feed] = data
         else:
             result: list[Coroutine] = []
             for feed in self._feeds:
-                coro: Coroutine = feed.run_async(prefect_kwargs=prefect_kwargs, include_metadata=include_metadata, **ray_kwargs)
+                coro: Coroutine = feed.run_async(prefect_kwargs=prefect_kwargs, **ray_kwargs)
                 result.append(coro)
         return result
     
-    def run(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> dict[BaseFeed, GenericData] | None:
+    def run(self, prefect_kwargs: dict | None=None, **ray_kwargs) -> dict[BaseFeed, GenericData] | None:
         if not self._is_streaming_feeds():
-            result: dict[BaseFeed, GenericData] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+            result: dict[BaseFeed, GenericData] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
             return result
         else:
             try:
@@ -148,9 +147,9 @@ class DataEngine:
                 return
             return asyncio.run(self.run_async())
     
-    async def run_async(self, prefect_kwargs: dict | None=None, include_metadata: bool=False, **ray_kwargs) -> None:
+    async def run_async(self, prefect_kwargs: dict | None=None, **ray_kwargs) -> None:
         assert self._is_streaming_feeds(), 'Only streaming feeds can be run asynchronously'
-        result: list[Coroutine] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs, include_metadata=include_metadata)
+        result: list[Coroutine] = self._eager_run(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
         if self._params['use_ray']:
             self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
             self._zmq_thread.start()

@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfund.typing import FullDataChannel
     from pfund.datas.resolution import Resolution
     from pfund.products.product_base import BaseProduct
-    from pfeed.typing import GenericFrame, GenericFrameOrNone
+    from pfeed.typing import GenericFrame
     from pfeed.enums import DataStorage
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
 
@@ -109,7 +109,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         self,
         product: str,
         symbol: str='',
-        resolution: Resolution | str | Literal['minute', 'hour', 'day', 'max']='day',
+        resolution: Resolution | str | Literal['minute', 'hour', 'day']='day',
         rollback_period: str | Literal["ytd", "max"]='max',
         start_date: str='',
         end_date: str='',
@@ -119,7 +119,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         storage_options: dict | None=None,
         yfinance_kwargs: dict | None=None,
         **product_specs
-    ) -> GenericFrameOrNone | YahooFinanceMarketFeed:
+    ) -> GenericFrame | None | YahooFinanceMarketFeed:
         '''
         Download historical data from Yahoo Finance.
         Be reminded that if you include today's data, it can be incomplete, this especially applies to the usage of rollback_period.
@@ -156,7 +156,6 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             to_storage=to_storage,
             storage_options=storage_options,
             dataflow_per_date=False,
-            include_metadata=False,
             **product_specs
         )
     
@@ -293,7 +292,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         raise NotImplementedError(f'{self.name} add_channel() is not implemented')
     
     # TODO: use data_source.batch_api
-    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args, **kwargs) -> GenericFrameOrNone:
+    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args, **kwargs) -> GenericFrame | None:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
 
     # DEPRECATED
@@ -315,7 +314,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     #     retrieve_per_date: bool=False,
     #     yfinance_kwargs: dict | None=None,
     #     **product_specs,
-    # ) -> GenericFrameOrNone:
+    # ) -> GenericFrame | None:
     #     """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
     #     Args:
     #         product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP

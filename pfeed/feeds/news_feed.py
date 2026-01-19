@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed._io.base_io import StorageMetadata
-    from pfeed.typing import GenericFrameOrNone
     from pfeed.data_models.news_data_model import NewsDataModel
+    from pfeed.typing import GenericFrame
     from pfeed.enums import DataStorage
 
 import datetime
@@ -64,9 +64,8 @@ class NewsFeed(TimeBasedFeed):
         data_origin: str='',
         to_storage: DataStorage=DataStorage.LOCAL,
         dataflow_per_date: bool=False,
-        include_metadata: bool=False,
         **product_specs
-    ) -> GenericFrameOrNone | tuple[GenericFrameOrNone, StorageMetadata] | NewsFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
         '''
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
@@ -86,7 +85,6 @@ class NewsFeed(TimeBasedFeed):
             start_date=start_date,
             end_date=end_date,
             dataflow_per_date=dataflow_per_date,
-            include_metadata=include_metadata,
             add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, product=product),
             load_to_storage=(lambda: self.load(to_storage, data_layer)) if to_storage else None,
         )
@@ -120,10 +118,9 @@ class NewsFeed(TimeBasedFeed):
         data_layer: DataLayer=DataLayer.CLEANED,
         from_storage: DataStorage=DataStorage.LOCAL,
         dataflow_per_date: bool=False,
-        include_metadata: bool=False,
         env: Environment=Environment.BACKTEST,
         **product_specs
-    ) -> GenericFrameOrNone | tuple[GenericFrameOrNone, StorageMetadata] | NewsFeed:
+    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
         env = Environment[env.upper()]
         setup_logging(env=env)
         product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
@@ -138,11 +135,10 @@ class NewsFeed(TimeBasedFeed):
             from_storage=from_storage,
             add_default_transformations=lambda: self._add_default_transformations_to_retrieve(),
             dataflow_per_date=dataflow_per_date,
-            include_metadata=include_metadata,
         )
 
     # TODO:
-    def fetch(self) -> GenericFrameOrNone | NewsFeed:
+    def fetch(self) -> GenericFrame | None | NewsFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
 
     # DEPRECATED
@@ -162,7 +158,7 @@ class NewsFeed(TimeBasedFeed):
     #     force_download: bool=False,
     #     retrieve_per_date: bool=False,
     #     **product_specs
-    # ) -> GenericFrameOrNone:
+    # ) -> GenericFrame | None:
     #     '''
     #     Get news data from data source.
     #     Data will be stored in cache by default.

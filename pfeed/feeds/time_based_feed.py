@@ -1,25 +1,22 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypedDict, Literal, Callable, Awaitable, Any, ClassVar
+from typing import TYPE_CHECKING, TypedDict, Literal, Callable, Any, ClassVar
 if TYPE_CHECKING:
     from narwhals.typing import Frame
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
-    from pfeed.typing import GenericFrame, GenericFrameOrNone
+    from pfeed.typing import GenericFrame
     from pfeed.dataflow.dataflow import DataFlow, FlowResult
     from pfeed.dataflow.faucet import Faucet
-    from pfeed.enums import StreamMode, DataStorage, DataLayer
+    from pfeed.enums import DataStorage, DataLayer
+    from pfeed.requests.time_based_feed_download import TimeBasedFeedDownloadRequest
     class TimeBasedFeedMetadata(TypedDict, total=True):
         missing_dates: list[datetime.date]
-    GenericFrameOrNoneWithMetadata = tuple[GenericFrameOrNone, TimeBasedFeedMetadata]
 
 import datetime
-from pprint import pformat
 
-from pfund import print_warning
 from pfeed.utils.dataframe import is_empty_dataframe
 from pfeed.enums import ExtractType
 from pfeed.feeds.base_feed import BaseFeed, clear_subflows
-from pfeed.streaming_settings import StreamingSettings
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 
@@ -57,6 +54,7 @@ class TimeBasedFeed(BaseFeed):
         start_date, end_date = self._parse_date_range(start_date, end_date, rollback_period)
         return start_date, end_date
         
+    # FIXME: move to utils
     @staticmethod
     def _parse_date_range(start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd']) -> tuple[datetime.date, datetime.date]:
         from pfeed.utils import rollback_date_range
@@ -77,30 +75,27 @@ class TimeBasedFeed(BaseFeed):
   
     def _create_batch_dataflows(
         self, 
+        request: TimeBasedFeedDownloadRequest,
         extract_func: Callable,
-        partial_dataflow_data_model: Callable,
-        partial_faucet_data_model: Callable,
-        dataflow_per_date: bool, 
-        start_date: datetime.date, 
-        end_date: datetime.date,
         extract_type: ExtractType,
     ) -> list[DataFlow]:
-        from pandas import date_range
         dataflows: list[DataFlow] = []
-        def _add_dataflow(data_model_start_date: datetime.date, data_model_end_date: datetime.date):
-            dataflow_data_model = partial_dataflow_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
-            faucet_data_model = partial_faucet_data_model(start_date=data_model_start_date, end_date=data_model_end_date)
-            faucet: Faucet = self._create_faucet(data_model=faucet_data_model, extract_func=extract_func, extract_type=extract_type)
-            dataflow: DataFlow = self.create_dataflow(dataflow_data_model, faucet)
-            dataflows.append(dataflow)
-        
-        if dataflow_per_date:
+        data_model: TimeBasedDataModel = self._create_data_model_from_request(request)
+        if request.dataflow_per_date:
             # one dataflow per date
-            for date in date_range(start_date, end_date).date:
-                _add_dataflow(date, date)
+            for date in data_model.dates:
+                # NOTE: update data_model to a single date since it is one dataflow per date
+                data_model_copy = data_model.model_copy(deep=False)
+                data_model_copy.update_start_date(date)
+                data_model_copy.update_end_date(date)
+                faucet: Faucet = self._create_faucet(data_model=data_model_copy, extract_func=extract_func, extract_type=extract_type)
+                dataflow: DataFlow = self._create_dataflow(data_model_copy, faucet)
+                dataflows.append(dataflow)
         else:
             # one dataflow for the entire date range
-            _add_dataflow(start_date, end_date)
+            faucet: Faucet = self._create_faucet(data_model=data_model, extract_func=extract_func, extract_type=extract_type)
+            dataflow: DataFlow = self._create_dataflow(data_model, faucet)
+            dataflows.append(dataflow)
         return dataflows
     
     @clear_subflows
@@ -115,8 +110,7 @@ class TimeBasedFeed(BaseFeed):
         storage_options: dict | None,
         add_default_transformations: Callable,
         dataflow_per_date: bool,
-        include_metadata: bool,
-    ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | TimeBasedFeed:
+    ) -> GenericFrame | None | TimeBasedFeed:
         from pfeed.config import get_config
         config = get_config()
         self._create_batch_dataflows(
@@ -136,7 +130,7 @@ class TimeBasedFeed(BaseFeed):
         )
         add_default_transformations()
         if not self._pipeline_mode:
-            return self.run(include_metadata=include_metadata)
+            return self.run()
         else:
             return self
     
@@ -151,97 +145,34 @@ class TimeBasedFeed(BaseFeed):
         )
         
     @clear_subflows
-    def _run_download(
-        self,
-        partial_dataflow_data_model: Callable,
-        partial_faucet_data_model: Callable,
-        start_date: datetime.date, 
-        end_date: datetime.date,
-        dataflow_per_date: bool, 
-        include_metadata: bool,
-        add_default_transformations: Callable,
-        load_to_storage: Callable | None,
-    ) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata | TimeBasedFeed:
+    def _run_download(self, request: TimeBasedFeedDownloadRequest) -> GenericFrame | None | TimeBasedFeed:
         self._create_batch_dataflows(
+            request=request,
             extract_func=lambda data_model: self._download_impl(data_model),
-            partial_dataflow_data_model=partial_dataflow_data_model,
-            partial_faucet_data_model=partial_faucet_data_model,
-            dataflow_per_date=dataflow_per_date, 
-            start_date=start_date, 
-            end_date=end_date,
             extract_type=ExtractType.download,
         )
-        add_default_transformations()
-        if load_to_storage:
-            if not self._pipeline_mode:
-                load_to_storage()
-            else:
-                print_warning('"to_storage" in download() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
+        self._add_default_transformations_to_download(request)
+        if request.to_storage:
+            self.load(to_storage=request.to_storage, data_layer=request.data_layer)
                 
-        if not self._pipeline_mode:
-            metadata: TimeBasedFeedMetadata
-            df, metadata = self.run(include_metadata=True)
-            if missing_dates := metadata.get('missing_dates', []):
-                self.logger.warning(
-                    f'[INCOMPLETE] Download, missing dates:\n'
-                    f'{pformat([str(date) for date in missing_dates])}'
-                )
-            return df if not include_metadata else (df, metadata)
-        else:
-            return self
-    
-    @clear_subflows
-    def _run_stream(
-        self,
-        data_model: TimeBasedDataModel,
-        add_default_transformations: Callable,
-        load_to_storage: Callable | None,
-        callback: Callable[[dict], Awaitable[None] | None] | None,
-    ) -> None | TimeBasedFeed:
-        # reuse existing faucet for streaming dataflows since they share the same extract_func
-        if self.streaming_dataflows:
-            existing_dataflow = self.streaming_dataflows[0]
-            assert existing_dataflow.data_model.env == data_model.env, \
-                f'env mismatch in streaming: {existing_dataflow.data_model.env} != {data_model.env}'
-            faucet: Faucet = existing_dataflow.faucet
-        else:
-            faucet: Faucet = self._create_faucet(
-                data_model=data_model,
-                extract_func=self._stream_impl,
-                extract_type=ExtractType.stream,
-                close_stream=self._close_stream,
-            )
-        if callback:
-            faucet.set_streaming_callback(callback)
-        dataflow: DataFlow = self.create_dataflow(data_model=data_model, faucet=faucet)
-        faucet.bind_data_model_to_dataflow(data_model, dataflow)
-        add_default_transformations()
-        if load_to_storage:
-            if not self._pipeline_mode:
-                load_to_storage()
-            else:
-                print_warning('"to_storage" in stream() is ignored in pipeline mode, please use .load(to_storage=...) instead, same for "storage_options"')
         if not self._pipeline_mode:
             return self.run()
         else:
             return self
     
-    def _create_streaming_settings(self, mode: StreamMode, flush_interval: int):
-        self._streaming_settings = StreamingSettings(mode=mode, flush_interval=flush_interval)
-  
-    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict, include_metadata: bool=False) -> GenericFrameOrNone | GenericFrameOrNoneWithMetadata:
+    def _eager_run_batch(self, ray_kwargs: dict, prefect_kwargs: dict) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
         
         completed_dataflows, failed_dataflows = self._run_batch_dataflows(ray_kwargs=ray_kwargs, prefect_kwargs=prefect_kwargs)
 
-        dfs: list[GenericFrameOrNone] = []
+        dfs: list[GenericFrame | None] = []
         metadata: TimeBasedFeedMetadata = {'missing_dates': []}
         
         for dataflow in completed_dataflows + failed_dataflows:
             data_model: TimeBasedDataModel = dataflow.data_model
             result: FlowResult = dataflow.result
-            _df: GenericFrameOrNone = result.data
+            _df: GenericFrame | None = result.data
             _metadata: dict[str, Any] | StorageMetadata | TimeBasedStorageMetadata = result.metadata
 
             dfs.append(_df)
@@ -264,10 +195,7 @@ class TimeBasedFeed(BaseFeed):
         else:
             df = None
 
-        return df if not include_metadata else (df, metadata)
-    
-    async def _eager_run_stream(self, ray_kwargs: dict):
-        return await self._run_stream_dataflows(ray_kwargs=ray_kwargs)
+        return df
     
     # DEPRECATED: trying to do too much, let users handle it
     # def _get_historical_data_impl(
@@ -287,7 +215,7 @@ class TimeBasedFeed(BaseFeed):
     #     retrieve_per_date: bool,
     #     product_specs: dict | None,
     #     **feed_kwargs
-    # ) -> GenericFrameOrNone:
+    # ) -> GenericFrame | None:
     #     '''
     #     """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
     #     Args:

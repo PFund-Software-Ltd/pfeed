@@ -1,4 +1,4 @@
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TypeAlias
 from narwhals.series import Series
 from narwhals.dataframe import DataFrame, LazyFrame
 from pfeed.messaging.streaming_message import StreamingMessage
@@ -23,8 +23,7 @@ except ImportError:
         pass
 
  
-GenericFrame = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
-GenericFrameOrNone = GenericFrame | None
+GenericFrame: TypeAlias = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
 GenericSeries = Series[Any]
 GenericData = GenericFrame | bytes
 StreamingData = dict | StreamingMessage

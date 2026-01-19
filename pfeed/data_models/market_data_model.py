@@ -49,6 +49,11 @@ class MarketDataModel(TimeBasedDataModel):
         data['resolution'] = resolution
         return data
     
+    def update_resolution(self, resolution: Resolution | str) -> None:
+        if isinstance(resolution, str):
+            resolution = Resolution(resolution)
+        self.resolution = resolution
+    
     def to_metadata(self) -> MarketMetadataModel:
         return MarketMetadataModel(
             **super().to_metadata().model_dump(),

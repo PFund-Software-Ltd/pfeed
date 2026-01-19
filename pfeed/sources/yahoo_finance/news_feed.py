@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     import pandas as pd
-    from pfeed.typing import GenericFrameOrNone
+    from pfeed.typing import GenericFrame
     from pfeed.enums import DataStorage, DataLayer
     from pfeed.data_models.news_data_model import NewsDataModel
 
@@ -57,7 +57,7 @@ class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
         num_news: int=10,
         news_type: Literal['news', 'press releases', 'all']='news',
         **product_specs
-    ) -> GenericFrameOrNone | NewsFeed:
+    ) -> GenericFrame | None | NewsFeed:
         '''
         Args: 
             num_news: number of news to fetch, it is equivalent to the argument 'count' in yfinance.get_news()
@@ -78,7 +78,6 @@ class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
             to_storage=to_storage,
             storage_options=storage_options,
             dataflow_per_date=False,
-            include_metadata=False,
             **product_specs
         )
         

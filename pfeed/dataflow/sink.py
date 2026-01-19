@@ -18,7 +18,7 @@ class Sink:
     ):
         self._data_model = data_model
         self._storage: BaseStorage = storage
-        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
+        self._logger: logging.Logger = logging.getLogger(self.data_source.name.lower())
     
     @property
     def data_source(self) -> BaseSource:

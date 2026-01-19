@@ -18,7 +18,7 @@ from pfeed.enums import ExtractType, FlowType
 class DataFlow:
     def __init__(self, data_model: BaseDataModel, faucet: Faucet):
         self._data_model: BaseDataModel = data_model
-        self._logger: logging.Logger = logging.getLogger(f"{self.data_source.name.lower()}_data")
+        self._logger: logging.Logger = logging.getLogger(self.data_source.name.lower())
         self._is_streaming = faucet._extract_type == ExtractType.stream
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
@@ -93,7 +93,7 @@ class DataFlow:
             self._load(data)
         return data
     
-    def run_batch(self, flow_type: Literal['native', 'prefect']='native', prefect_kwargs: dict | None=None) -> FlowResult:
+    def run_batch(self, flow_type: FlowType=FlowType.native, prefect_kwargs: dict | None=None) -> FlowResult:
         self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
         self._flow_type = FlowType[flow_type.lower()]
         if self._flow_type == FlowType.prefect:

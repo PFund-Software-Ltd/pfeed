@@ -11,7 +11,7 @@ from pfeed.enums import DataCategory
 
 
 class BaseMetadataModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     data_category: DataCategory
 

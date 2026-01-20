@@ -2,13 +2,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pyarrow as pa
-    from pfeed.utils.file_path import FilePath
     from deltalake.table import FilterConjunctionType
 
 import polars as pl
 from deltalake import DeltaTable, write_deltalake
 
-from pfeed._io.table_io import TableIO
+from pfeed._io.table_io import TableIO, TablePath
 
 
 class DeltaLakeIO(TableIO):
@@ -16,11 +15,15 @@ class DeltaLakeIO(TableIO):
     SUPPORTS_PARTITIONING: bool = True
     METADATA_FILENAME: str = "deltalake_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
     
-    def exists(self, table_path: FilePath) -> bool:
+    def exists(self, table_path: TablePath) -> bool:
         """Check if a Delta Lake table exists at this path."""
+        if not super().exists(table_path):
+            return False
+        # NOTE: this DeltaTable.is_deltatable will somehow automatically create the directory if it doesn't exist
+        # so we need to check if the directory exists to avoid creating a new dir as much as possible
         return DeltaTable.is_deltatable(str(table_path), storage_options=self._storage_options)
     
-    def is_empty(self, table_path: FilePath, partition_filters: FilterConjunctionType | None = None) -> bool:
+    def is_empty(self, table_path: TablePath, partition_filters: FilterConjunctionType | None = None) -> bool:
         """Check if a Delta Lake table or partition is empty.
     
         Args:
@@ -39,13 +42,13 @@ class DeltaLakeIO(TableIO):
         dt = self.get_table(table_path)
         return len(dt.file_uris(partition_filters=partition_filters)) == 0
     
-    def get_table(self, table_path: FilePath, **io_kwargs) -> DeltaTable:
+    def get_table(self, table_path: TablePath, **io_kwargs) -> DeltaTable:
         return DeltaTable(str(table_path), storage_options=self._storage_options, **io_kwargs)
 
     def write(
         self,
         data: pa.Table,
-        table_path: FilePath,
+        table_path: TablePath,
         where: str | None = None,
         partition_by: list[str] | None=None,
         max_retries: int=5,
@@ -101,7 +104,7 @@ class DeltaLakeIO(TableIO):
             # All retries exhausted
             raise last_exception
 
-    def read(self, table_path: FilePath, **io_kwargs) -> pl.LazyFrame | None:
+    def read(self, table_path: TablePath, **io_kwargs) -> pl.LazyFrame | None:
         """Read data from a Delta Lake table.
 
         Args:

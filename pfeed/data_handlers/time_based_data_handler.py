@@ -108,6 +108,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         data["date"] = date
 
         # add year, month, day columns for delta table partitioning
+        # FIXME: handle cases when its not using deltalake_io, or at least check self._io.SUPPORTS_PARTITIONING
         data["year"] = date.year
         data["month"] = date.month
         data["day"] = date.day
@@ -166,6 +167,12 @@ class TimeBasedDataHandler(BaseDataHandler):
             if self._is_table_io():
                 source_path = self._table_path
                 if self._io.SUPPORTS_PARTITIONING:
+                    # Preprocess table to add year, month, day columns for partitioning
+                    df = df.assign(
+                        year=df["date"].dt.year,
+                        month=df["date"].dt.month,
+                        day=df["date"].dt.day,
+                    )
                     io_kwargs["partition_by"] = self.PARTITION_COLUMNS
             elif self._is_database_io():
                 source_path = self._db_path
@@ -220,7 +227,8 @@ class TimeBasedDataHandler(BaseDataHandler):
         else:
             raise ValueError(f"Unsupported IO format: {self._io.name}")
         return TimeBasedMetadata(
-            **metadata.model_dump(),
+            source_metadata=metadata.source_metadata,
+            missing_source_paths=metadata.missing_source_paths,
             missing_dates_in_storage=[
                 date for date in self._data_model.dates if date not in existing_dates
             ],

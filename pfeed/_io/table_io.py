@@ -14,6 +14,7 @@ import random
 from abc import abstractmethod
 
 import pyarrow as pa
+import pyarrow.fs as pa_fs
 
 from pfeed.utils.file_path import FilePath
 from pfeed._io.file_io import FileIO
@@ -24,28 +25,28 @@ class TablePath(FilePath):
 
 
 class TableIO(FileIO):
+    def exists(self, table_path: TablePath, *args, **kwargs) -> bool:
+        file_info = self._filesystem.get_file_info(table_path.schemeless)
+        return file_info.type == pa_fs.FileType.Directory
+
     @abstractmethod
-    def exists(self, table_path: FilePath, *args, **kwargs) -> bool:
+    def is_empty(self, table_path: TablePath, *args, **kwargs) -> bool:
         pass
 
     @abstractmethod
-    def is_empty(self, table_path: FilePath, *args, **kwargs) -> bool:
-        pass
-
-    @abstractmethod
-    def get_table(self, table_path: FilePath, *args, **kwargs) -> Table:
+    def get_table(self, table_path: TablePath, *args, **kwargs) -> Table:
         pass
     
     @abstractmethod
-    def write(self, table_path: FilePath, data: pa.Table, *args, **kwargs):
+    def write(self, table_path: TablePath, data: pa.Table, *args, **kwargs):
         pass
 
     @abstractmethod
-    def read(self, table_path: FilePath, *args, **kwargs) -> pl.LazyFrame | None:
+    def read(self, table_path: TablePath, *args, **kwargs) -> pl.LazyFrame | None:
         pass
     
     # NOTE: delta-rs, lancedb doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
-    def write_metadata(self, table_path: FilePath, metadata: BaseMetadataModel):
+    def write_metadata(self, table_path: TablePath, metadata: BaseMetadataModel):
         import pandas as pd
         empty_df_with_metadata = pd.DataFrame()
         table = pa.Table.from_pandas(empty_df_with_metadata, preserve_index=False)
@@ -55,10 +56,10 @@ class TableIO(FileIO):
     
     def read_metadata(
         self, 
-        table_path: FilePath,
+        table_path: TablePath,
         max_retries: int=5,
         base_delay: float=0.1,
-    ) -> dict[FilePath, MetadataModelAsDict]:
+    ) -> dict[TablePath, MetadataModelAsDict]:
         """Read custom application metadata embedded in parquet schema.
 
         Handles race condition for table formats where metadata files may not exist immediately
@@ -80,7 +81,12 @@ class TableIO(FileIO):
         metadata_file_path = table_path / self.METADATA_FILENAME
         for attempt in range(max_retries):
             try:
-                return super().read_metadata(file_paths=[metadata_file_path])
+                file_metadata = super().read_metadata(file_paths=[metadata_file_path])
+                if not file_metadata:
+                    return {}
+                else:
+                    # use table_path as dict key
+                    return { table_path: file_metadata[metadata_file_path] }
             except FileNotFoundError as e:
                 if attempt < max_retries - 1:
                     # Exponential backoff with jitter

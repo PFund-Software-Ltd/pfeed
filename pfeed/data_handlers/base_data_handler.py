@@ -20,7 +20,7 @@ SourcePath: TypeAlias = FilePath | TablePath | DBPath
 
 
 class BaseMetadata(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     source_metadata: dict[SourcePath, BaseMetadataModel]
     missing_source_paths: list[SourcePath]
@@ -73,7 +73,7 @@ class BaseDataHandler(ABC):
             raise ValueError(f'Unsupported IO format: {self._io.name}')
         MetadataModel: type[BaseMetadataModel] = self._data_model.metadata_class
         source_metadata: dict[SourcePath, BaseMetadataModel] = {
-            source_path: MetadataModel.from_dict(metadata_model_as_dict)
+            source_path: MetadataModel(**metadata_model_as_dict)
             for source_path, metadata_model_as_dict in source_metadata_dict.items()
         }
         return BaseMetadata(source_metadata=source_metadata, missing_source_paths=missing_source_paths)

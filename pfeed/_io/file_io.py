@@ -95,8 +95,9 @@ class FileIO(BaseIO):
     def read_metadata(self, file_paths: list[FilePath]) -> dict[FilePath, MetadataModelAsDict]:
         """Read custom application metadata embedded in parquet schema."""
         metadata: dict[FilePath, MetadataModelAsDict] = {}
+        
         for file_path in file_paths:
-            if not self.exists(file_path):
+            if not FileIO.exists(self, file_path):
                 continue
             with self._filesystem.open_input_file(file_path.schemeless) as f:
                 parquet_file = pq.ParquetFile(f)
@@ -104,4 +105,5 @@ class FileIO(BaseIO):
                 if b"metadata_json" in parquet_file_metadata:
                     metadata_json = parquet_file_metadata[b"metadata_json"]
                     metadata[file_path] = json.loads(metadata_json)
+                    
         return metadata

@@ -9304,9 +9304,10 @@ packages:
 - pypi: ../pfund-kit
   name: pfund-kit
   version: 0.0.1.dev1
-  sha256: a78b8547701682db579aa1a0d978cb4af4f0041299bdb6cd472c74cdb90ed47e
+  sha256: 9baeb3055758540b24f45044c19894b6fa71740b40ca3f53ab602e35d8d428af
   requires_dist:
   - rich>=14.2.0
+  - tqdm>=4.67.1
   - click>=8.1.8
   - trogon>=0.6.0
   - pyyaml>=6.0.3

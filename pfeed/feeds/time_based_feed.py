@@ -50,7 +50,7 @@ class TimeBasedFeed(BaseFeed):
             ValueError: If rollback_period='max' but data source has no start_date attribute
         '''
         if rollback_period == 'max' and not start_date:
-            if self.data_source.start_date:
+            if hasattr(self.data_source, 'start_date') and self.data_source.start_date:
                 start_date = self.data_source.start_date
             else:
                 raise ValueError(f'{self.name} {rollback_period=} is not supported')        

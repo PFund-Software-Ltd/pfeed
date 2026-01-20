@@ -14,6 +14,14 @@ loggers:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
     propagate: False
+  pfeed.alphafund:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
+  pfeed.pfund:
+    level: 'DEBUG'
+    handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']
+    propagate: False
   pfeed.yahoo_finance:
     level: 'DEBUG'
     handlers: ['compressed_timed_rotating_file_handler', 'stream_handler']

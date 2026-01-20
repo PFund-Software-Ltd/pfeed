@@ -236,7 +236,7 @@ class MarketFeed(TimeBasedFeed):
         self,
         product: str,
         resolution: Resolution | MarketDataType,
-        rollback_period: str="1w",
+        rollback_period: str |  Literal['ytd', 'max']="1w",
         start_date: str='',
         end_date: str='',
         data_origin: str='',

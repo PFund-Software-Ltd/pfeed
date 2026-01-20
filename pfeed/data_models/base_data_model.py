@@ -13,29 +13,15 @@ from pfeed.enums import DataCategory
 class BaseMetadataModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
-    data_origin: str
     data_category: DataCategory
 
 
 class BaseDataModel(BaseModel, ABC):
-    """
-    Args:
-        source: The source of the data.
-        data_origin:
-            A unique identifier for the data.
-            If specified, it will be used to differentiate where the data is actually from.
-                For example,
-                    for Databento, Publisher (comprised of dataset and trading venue, e.g. DATASET_VENUE) is used to be the unique identifier.
-                    This is because a product can be traded on multiple venues.
-            If None, it means the data source is already a unique identifier.
-            Default is None.
-    """
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
     
     data_handler_class: ClassVar[type[BaseDataHandler]]
     metadata_class: ClassVar[type[BaseMetadataModel]]
 
-    data_origin: str = ""
     data_category: DataCategory
 
     def to_metadata(self, **fields) -> BaseMetadataModel:
@@ -51,7 +37,6 @@ class BaseDataModel(BaseModel, ABC):
         """
         MetadataModel = self.metadata_class
         return MetadataModel(
-            data_origin=self.data_origin,
             data_category=self.data_category,
             **fields,
         )

@@ -8,6 +8,7 @@ from pfeed.data_models.base_data_model import BaseMetadataModel
 
 class DataProviderMetadataModelMixin:
     data_source: DataSource
+    data_origin: str = ""
 
 
 # for typing only
@@ -17,6 +18,17 @@ class DataProviderMetadataModel(DataProviderMetadataModelMixin, BaseMetadataMode
 
 class DataProviderModelMixin:
     """Mixin for data models that source data from external data providers.
+
+    Args:
+        data_source: The source of the data, e.g. Bybit, Databento, Yahoo Finance.
+        data_origin:
+            A unique identifier for the data.
+            If specified, it will be used to differentiate where the data is actually from.
+                For example,
+                    for Databento, Publisher (comprised of dataset and trading venue, e.g. DATASET_VENUE) is used to be the unique identifier.
+                    This is because a product can be traded on multiple venues.
+            If None, it means the data source is already a unique identifier.
+            Default is None.
     
     This mixin adds data provider-specific functionality to data models, including:
     - BaseSource integration for accessing provider APIs (batch/stream)
@@ -38,6 +50,7 @@ class DataProviderModelMixin:
         Must be inherited before BaseDataModel to ensure proper MRO.
     """
     data_source: BaseSource
+    data_origin: str
 
     def model_post_init(self: DataProviderMetadataModel, __context: Any) -> None:
         super().model_post_init(__context)
@@ -59,5 +72,6 @@ class DataProviderModelMixin:
     def to_metadata(self: DataProviderMetadataModel, **fields) -> DataProviderMetadataModel:
         return super().to_metadata(
             data_source=self.data_source.name,
+            data_origin=self.data_origin,
             **fields,
         )

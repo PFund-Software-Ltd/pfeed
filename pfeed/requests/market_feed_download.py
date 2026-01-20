@@ -6,7 +6,7 @@ from pfeed.requests.time_based_feed_download import TimeBasedFeedDownloadRequest
 
 
 class MarketFeedDownloadRequest(TimeBasedFeedDownloadRequest):
-    product: BaseProduct | None = None
+    product: BaseProduct
     target_resolution: Resolution = Field(description='The resolution of the data to be stored')
     data_resolution: Resolution = Field(description='The resolution of the downloaded data')
     

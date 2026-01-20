@@ -45,22 +45,23 @@ class BaseDataModel(BaseModel, ABC):
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
-            self.data_origin = self.data_source.name.value
+            self.data_origin = self.data_source.name
 
     def is_data_origin_effective(self) -> bool:
         """
         A data_origin is not effective if it is the same as the source name.
         """
-        return self.data_origin != self.data_source.name.value
+        return self.data_origin != self.data_source.name
 
     def __str__(self):
         if self.is_data_origin_effective():
-            return f"{self.data_source.name.value}:{self.data_origin}"
+            return f"{self.data_source.name}:{self.data_origin}"
         else:
-            return f"{self.data_source.name.value}"
+            return f"{self.data_source.name}"
 
     def to_metadata(self) -> BaseMetadataModel:
         return BaseMetadataModel(
-            data_source=self.data_source,
+            data_source=self.data_source.name,
             data_origin=self.data_origin,
+            data_category=self.data_category,
         )

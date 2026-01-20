@@ -17,7 +17,6 @@ import datetime
 from pathlib import Path
 from abc import abstractmethod
 
-from pandas.api.types import is_datetime64_ns_dtype
 import polars as pl
 import pyarrow as pa
 from pydantic import Field
@@ -123,6 +122,7 @@ class TimeBasedDataHandler(BaseDataHandler):
 
     def _write_batch(self, df: GenericFrame, validate: bool = True, **io_kwargs):
         import pandas as pd
+        from pandas.api.types import is_datetime64_ns_dtype
         from pfeed._etl.base import convert_to_desired_df
 
         df: pd.DataFrame = convert_to_desired_df(df, DataTool.pandas)

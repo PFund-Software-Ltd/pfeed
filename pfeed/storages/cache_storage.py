@@ -2,12 +2,11 @@ import shutil
 import datetime
 from pathlib import Path
 
-from pfeed.enums import DataStorage, DataLayer
+from pfeed.enums import DataLayer
 from pfeed.storages.local_storage import LocalStorage
 
 
 class CacheStorage(LocalStorage):
-    name = DataStorage.CACHE
     # FIXME: move to init?
     NUM_RETAINED_DAYS = 7
 

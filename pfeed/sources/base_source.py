@@ -23,6 +23,10 @@ class BaseSource(ABC):
         self.rate_limits = self.generic_metadata['rate_limits']
         self.docs_url = self.generic_metadata['docs_url']
         self.data_categories: list[DataCategory] = [DataCategory[category.upper()] for category in self.generic_metadata['data_categories'].keys()]
+    
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        assert hasattr(cls, 'name'), f'{cls.__name__} must have a name attribute'
         
     @abstractmethod
     def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:

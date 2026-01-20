@@ -84,11 +84,6 @@ class MarketFeed(TimeBasedFeed):
             existing_env = self._dataflows[0].data_model.env
             if existing_env != env:
                 raise ValueError(f'{self.name} dataflows have different environments: {existing_env} and {env}')
-        # TODO: move the type conversions to MarketDataModel, but how to handle product_specs?
-        # if isinstance(start_date, str) and start_date:
-        #     start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-        # if isinstance(end_date, str) and end_date:
-        #     end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         DataModel = self.data_model_class
         return DataModel(
             env=env,
@@ -102,7 +97,8 @@ class MarketFeed(TimeBasedFeed):
     
     def _create_data_model_from_request(self, request: MarketFeedDownloadRequest) -> MarketDataModel:
         return self.create_data_model(
-            **request.model_dump(exclude={'data_resolution', 'target_resolution'}),
+            **request.model_dump(exclude={'product', 'data_resolution', 'target_resolution'}),
+            product=request.product,
             resolution=request.target_resolution,
         )
     

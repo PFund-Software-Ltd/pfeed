@@ -11,11 +11,7 @@ import logging
 
 
 class Sink:
-    def __init__(
-        self, 
-        data_model: BaseDataModel,
-        storage: BaseStorage,
-    ):
+    def __init__(self, data_model: BaseDataModel, storage: BaseStorage):
         self._data_model = data_model
         self._storage: BaseStorage = storage
         self._logger: logging.Logger = logging.getLogger(self.data_source.name.lower())
@@ -34,15 +30,15 @@ class Sink:
     
     def __str__(self):
         if self._storage is None:
-            return 'Sink(no storage)'
+            return 'Sink (no storage)'
         else:
-            return f'{self.storage.name} (data_layer={self.storage.data_layer.name}/data_domain={self.storage.data_domain})'
+            return f'Sink (storage={self.storage})'
 
     # OPTIMIZE: use a thread pool for data writing (I/O bound)? not sure how much IO bound is writing to a delta lake
     def flush(self, data: GenericData | StreamingMessage, streaming: bool=False):
         try:
             log_level = logging.DEBUG if streaming else logging.INFO
             self.storage.write_data(data, streaming=streaming)
-            self._logger.log(log_level, f'loaded {self.data_model} data to {self}')
+            self._logger.log(log_level, f'loaded {self.data_model} data to {self.storage}')
         except Exception:
-            self._logger.exception(f'failed to load {self.data_model} data (type={type(data)}) to {self}:')
+            self._logger.exception(f'failed to load {self.data_model} data to {self.storage}:')

@@ -1,11 +1,8 @@
-from pfeed.enums import DataStorage
 from pfeed.storages.database_storage import DatabaseStorage
 from pfeed._io.lancedb_io import LanceDBIO
 
 
 class LanceDBStorage(DatabaseStorage):
-    name = DataStorage.LANCEDB
-    
     # TODO: add __new__ to determine if inherit from LocalStorage or S3Storage?
     def __new__(cls, *args, **kwargs):
         pass

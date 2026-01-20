@@ -166,7 +166,7 @@ class Compression(StrEnum):
             return Compression.decompress(decompressed)
         else:
             # No compression detected, return as-is
-            raise ValueError("Unknown compression type")
+            return data
 
     @staticmethod
     def detect(data: bytes) -> 'Compression | None':

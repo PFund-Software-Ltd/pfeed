@@ -22,11 +22,10 @@ SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [pe.alias(ds)
 @click.option('--start-date', '-s', type=click.DateTime(formats=["%Y-%m-%d"]), help='Start date in YYYY-MM-DD format')
 @click.option('--end-date', '-e', type=click.DateTime(formats=["%Y-%m-%d"]), help='End date in YYYY-MM-DD format')
 @click.option('--data-layer', '--layer', default='CLEANED', type=click.Choice([level.name for level in DataLayer], case_sensitive=False), help='Data layer, e.g. "RAW", "CLEANED", or "CURATED"')
-@click.option('--data-domain', '--domain', default='', type=str, help='Custom domain name to categorize data')
 @click.option('--to-storage', '--storage', '--destination', default='LOCAL', type=click.Choice(DataStorage, case_sensitive=False), help='Storage destination')
 @click.option('--data-path', type=click.Path(exists=False), help='Path to store downloaded data')
 @click.option('--debug', is_flag=True, help='if enabled, debug mode will be enabled where logs at DEBUG level will be printed')
-def download(ctx, data_source, product, resolution, rollback_period, start_date, end_date, data_layer, data_domain, to_storage, data_path, debug):
+def download(ctx, data_source, product, resolution, rollback_period, start_date, end_date, data_layer, to_storage, data_path, debug):
     """Download historical data from a data source"""
     pe.configure(data_path=data_path, debug=debug)
     data_source = pe.alias.resolve(data_source)
@@ -49,7 +48,6 @@ def download(ctx, data_source, product, resolution, rollback_period, start_date,
     feed.download(
         product=product,
         data_layer=data_layer,
-        data_domain=data_domain,
         to_storage=to_storage,
         **kwargs,
     )

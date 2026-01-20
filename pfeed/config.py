@@ -144,11 +144,13 @@ class PFeedConfig(Configuration):
         from pfund_kit.utils import load_env_file
         load_env_file(verbose=False)
         super().__init__(project_name=project_name, source_file=__file__)
+        self.data_tool = self._data.get('data_tool', DataTool.polars)
     
     def to_dict(self) -> dict:
-        config_dict = super().to_dict()
-        config_dict['data_tool'] = DataTool.polars
-        return config_dict
+        return {
+            **super().to_dict(),
+            'data_tool': self.data_tool,
+        }
     
     def prepare_docker_context(self):
         '''Prepare docker context (e.g. env variables) before running compose.yml'''

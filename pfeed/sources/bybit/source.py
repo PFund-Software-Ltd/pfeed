@@ -4,7 +4,6 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment
     from pfund.products.product_bybit import BybitProduct
 
-from pfund.exchanges import Bybit
 from pfeed.sources.base_source import BaseSource
 from pfeed.enums import DataSource
 from pfeed.sources.bybit.batch_api import BatchAPI
@@ -18,6 +17,7 @@ class BybitSource(BaseSource):
     name = DataSource.BYBIT
 
     def __init__(self):
+        from pfund.exchanges import Bybit
         super().__init__()
         self._exchange = Bybit(env='LIVE')
         self.batch_api: BatchAPI = self.create_batch_api(env='BACKTEST')

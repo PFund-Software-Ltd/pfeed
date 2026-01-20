@@ -61,10 +61,6 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     #     "M": [1, 3],
     # }
     
-    @property
-    def data_model_class(self) -> type[YahooFinanceMarketDataModel]:
-        return YahooFinanceMarketDataModel
-    
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         # convert to UTC and reset index

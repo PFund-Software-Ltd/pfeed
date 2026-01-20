@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
@@ -12,15 +12,13 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from pfeed.config import get_config
-from pfeed.enums import DataLayer, DataStorage
+from pfeed.enums import DataLayer
 
 
 config = get_config()
 
 
 class BaseStorage(ABC):
-    name: ClassVar[DataStorage]
-    
     def __init__(
         self,
         data_layer: DataLayer,
@@ -35,11 +33,6 @@ class BaseStorage(ABC):
         self._io: BaseIO | None = None
         self._is_data_handler_stale: bool = False
     
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if 'name' not in cls.__dict__:
-            raise TypeError(f"{cls.__name__} must define 'name' class attribute, e.g. name = DataStorage.LOCAL")
-
     @abstractmethod
     def _create_io(
         self,
@@ -49,6 +42,9 @@ class BaseStorage(ABC):
         **kwargs,
     ):
         pass
+
+    def __str__(self) -> str:
+        return f'{self.__class__.__name__} (data_layer={self.data_layer})'
 
     @property
     def data_model(self) -> BaseDataModel:
@@ -73,12 +69,6 @@ class BaseStorage(ABC):
         if not self._io:
             raise AttributeError(f"No IO has been set for storage: {self.name}")
         return self._io
-
-    def __str__(self):
-        if self._data_model:
-            return f"{self.name}:{self._data_model}"
-        else:
-            return f"{self.name}"
 
     def with_data_model(self, data_model: BaseDataModel) -> BaseStorage:
         self._data_model = data_model

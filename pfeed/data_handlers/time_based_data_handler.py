@@ -37,7 +37,7 @@ class TimeBasedMetadata(BaseMetadata):
 
 
 class TimeBasedDataHandler(BaseDataHandler):
-    PARTITION_COLUMNS = ["date"]  # used by e.g. Delta Lake for partitioning
+    PARTITION_COLUMNS = ["year", "month", "day"]  # used by e.g. Delta Lake for partitioning
 
     def __init__(
         self,
@@ -106,6 +106,11 @@ class TimeBasedDataHandler(BaseDataHandler):
             data["ts"], tz=datetime.timezone.utc
         ).replace(tzinfo=None)
         data["date"] = date
+
+        # add year, month, day columns for delta table partitioning
+        data["year"] = date.year
+        data["month"] = date.month
+        data["day"] = date.day
 
         return data
 
@@ -222,11 +227,16 @@ class TimeBasedDataHandler(BaseDataHandler):
         )
 
     def read(self, **io_kwargs) -> pl.LazyFrame | None:
+        lf: pl.LazyFrame | None = None
         if self._is_file_io():
-            return self._io.read(file_paths=self._file_paths, **io_kwargs)
+            lf = self._io.read(file_paths=self._file_paths, **io_kwargs)
         elif self._is_table_io():
-            return self._io.read(table_path=self._table_path, **io_kwargs)
+            lf = self._io.read(table_path=self._table_path, **io_kwargs)
         elif self._is_database_io():
-            return self._io.read(db_path=self._db_path, **io_kwargs)
+            lf = self._io.read(db_path=self._db_path, **io_kwargs)
         else:
             raise ValueError(f"Unsupported IO format: {self._io.name}")
+        # drop e.g. year, month, day columns which are only used for partitioning
+        if lf is not None and self._io.SUPPORTS_PARTITIONING:
+            lf: pl.LazyFrame = lf.drop(self.PARTITION_COLUMNS, strict=False)
+        return lf

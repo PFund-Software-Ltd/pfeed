@@ -9318,7 +9318,7 @@ packages:
 - pypi: ../pfund-plot
   name: pfund-plot
   version: 0.0.1.dev3
-  sha256: 8f3b02201aec88f3ae7aa9abd6d84dddac57aa1597e9d5f06d13f8132605a7ba
+  sha256: 9610708fce0195d079b2ee6bb1715be9b48069ebddc4b8c8520138ccc6411682
   requires_dist:
   - pfeed @ file:///Users/stephenyau/pfund.ai/pfeed
   - panel>=1.8.4
@@ -9327,7 +9327,7 @@ packages:
   - ipywidgets-bokeh>=1.6.0
   - pywebview>=6.1
   - datashader>=0.18.2
-  - marimo[recommended,lsp]>=0.19.2 ; extra == 'marimo'
+  - marimo[recommended,lsp]>=0.19.4 ; extra == 'marimo'
   - basedpyright>=1.36.1 ; extra == 'marimo'
   - jupyter-bokeh>=4.0.5 ; extra == 'jupyter'
   - notebook>=7.5.0 ; extra == 'jupyter'

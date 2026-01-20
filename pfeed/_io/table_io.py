@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, NewType, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 if TYPE_CHECKING:
     import polars as pl
     from deltalake import DeltaTable
@@ -19,8 +19,8 @@ from pfeed.utils.file_path import FilePath
 from pfeed._io.file_io import FileIO
 
 
-TablePath = NewType('TablePath', FilePath)
-
+class TablePath(FilePath):
+    pass
 
 
 class TableIO(FileIO):

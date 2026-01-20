@@ -156,7 +156,12 @@ class TimeBasedFeed(BaseFeed):
         )
         self._add_default_transformations_to_download(request)
         if request.to_storage:
-            self.load(to_storage=request.to_storage, data_layer=request.data_layer)
+            self.load(
+                to_storage=request.to_storage, 
+                data_layer=request.data_layer,
+                io_format=request.io_format,
+                compression=request.compression,
+            )
                 
         if not self._pipeline_mode:
             return self.run()

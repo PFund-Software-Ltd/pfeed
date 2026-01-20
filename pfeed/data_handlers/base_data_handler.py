@@ -5,20 +5,23 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericData
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed._io.base_io import BaseIO, MetadataModelAsDict
-    from pfeed.utils.file_path import FilePath
-    from pfeed._io.table_io import TablePath
-    from pfeed._io.database_io import DBPath
-    SourcePath: TypeAlias = FilePath | TablePath | DBPath
 
 from pathlib import Path
 from abc import ABC, abstractmethod
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from pfeed.enums import DataTool, DataLayer
 from pfeed.data_models.base_data_model import BaseMetadataModel
 
+from pfeed.utils.file_path import FilePath
+from pfeed._io.table_io import TablePath
+from pfeed._io.database_io import DBPath
+SourcePath: TypeAlias = FilePath | TablePath | DBPath
+
 
 class BaseMetadata(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
     source_metadata: dict[SourcePath, BaseMetadataModel]
     missing_source_paths: list[SourcePath]
 

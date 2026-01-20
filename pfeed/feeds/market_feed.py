@@ -21,7 +21,7 @@ from pfund.datas.resolution import Resolution
 from pfund_kit.style import cprint, RichColor, TextStyle
 from pfeed.config import setup_logging, get_config
 from pfeed.messaging import BarMessage, TickMessage
-from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, ExtractType, DataStorage
+from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, ExtractType, DataStorage, IOFormat, Compression
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.requests import MarketFeedDownloadRequest
@@ -123,10 +123,12 @@ class MarketFeed(TimeBasedFeed):
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: DataLayer=DataLayer.CLEANED,
         data_origin: str='',
-        to_storage: DataStorage=DataStorage.LOCAL,
         dataflow_per_date: bool=True,
+        to_storage: DataStorage=DataStorage.LOCAL,
+        data_layer: DataLayer=DataLayer.CLEANED,
+        io_format: IOFormat=IOFormat.PARQUET,
+        compression: Compression=Compression.SNAPPY,
         **product_specs
     ) -> GenericFrame | None | MarketFeed:
         '''
@@ -183,10 +185,12 @@ class MarketFeed(TimeBasedFeed):
             data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
-            to_storage=to_storage,
-            data_layer=data_layer,
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
+            to_storage=to_storage,
+            data_layer=data_layer,
+            io_format=io_format,
+            compression=compression,
         )
         return self._run_download(request=request)
     

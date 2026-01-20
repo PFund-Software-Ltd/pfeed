@@ -42,7 +42,7 @@ class MarketDataHandler(TimeBasedDataHandler):
             / f'year={year}'
             / f'month={month}'
             / f'day={day}'
-            / filename + file_extension
+            / (filename + file_extension)
         )
     
     def _create_table_path(self) -> TablePath:

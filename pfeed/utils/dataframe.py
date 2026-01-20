@@ -1,9 +1,7 @@
-from narwhals.typing import IntoFrame, Frame
-
 import pandas as pd
 import polars as pl
 import narwhals as nw
-
+from narwhals.typing import IntoFrame, Frame
 try:
     import dask.dataframe as dd
 except ImportError:

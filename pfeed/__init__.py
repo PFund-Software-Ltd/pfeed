@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 import os
 from importlib.metadata import version
 
-from pfeed.config import configure, get_config
+from pfeed.config import configure, get_config, configure_logging
 from pfeed.storages import create_storage
 from pfeed.feeds import create_feed, create_market_feed
 
@@ -53,6 +53,7 @@ __all__ = (
     "__version__",
     "configure",
     'get_config',
+    'configure_logging',
     "alias",
     "plot",
     "DataEngine",

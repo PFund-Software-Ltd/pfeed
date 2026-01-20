@@ -250,19 +250,8 @@ class BaseFeed(ABC):
     @overload
     def load(
         self, 
-        to_storage: DataStorage = DataStorage.LOCAL,
-        data_layer: DataLayer = DataLayer.CLEANED,
-        io_format: IOFormat = IOFormat.PARQUET,
-        compression: Compression = Compression.SNAPPY,
-    ) -> BaseFeed:
-        ...
-        
-    @overload
-    def load(
-        self, 
         to_storage: DataStorage = DataStorage.DUCKDB,
         data_layer: DataLayer = DataLayer.CLEANED,
-        io_format: Literal[IOFormat.DUCKDB] = IOFormat.DUCKDB,
         in_memory: bool=True,
         memory_limit: str='4GB',
     ) -> BaseFeed:
@@ -273,15 +262,24 @@ class BaseFeed(ABC):
         self, 
         to_storage: DataStorage = DataStorage.LANCEDB,
         data_layer: DataLayer = DataLayer.CLEANED,
-        io_format: Literal[IOFormat.LANCEDB] = IOFormat.LANCEDB,
+    ) -> BaseFeed:
+        ...
+        
+    @overload
+    def load(
+        self, 
+        to_storage: DataStorage = DataStorage.LOCAL,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        io_format: IOFormat=IOFormat.DELTALAKE,
     ) -> BaseFeed:
         ...
 
     def load(
         self, 
-        to_storage: DataStorage,
-        data_layer: DataLayer=DataLayer.CLEANED,
-        io_format: IOFormat=IOFormat.DELTALAKE,
+        to_storage: DataStorage = DataStorage.LOCAL,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        io_format: IOFormat = IOFormat.PARQUET,
+        compression: Compression = Compression.SNAPPY,
         **io_kwargs,
     ) -> BaseFeed:
         '''
@@ -303,6 +301,7 @@ class BaseFeed(ABC):
         Storage = data_storage.storage_class
         if issubclass(Storage, FileBasedStorage):
             io_kwargs['io_format'] = io_format
+            io_kwargs['compression'] = compression
 
         if self._ray_kwargs and (data_storage == DataStorage.DUCKDB):
             raise RuntimeError('DuckDB is not thread-safe, cannot be used with Ray')

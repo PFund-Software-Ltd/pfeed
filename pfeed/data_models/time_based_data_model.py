@@ -53,9 +53,10 @@ class TimeBasedDataModel(BaseDataModel):
             return ':'.join([super().__str__(), str(self.start_date)])
         else:
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
-
-    def to_metadata(self) -> TimeBasedMetadataModel:
-        return TimeBasedMetadataModel(
-            **super().to_metadata().model_dump(),
+    
+    
+    def to_metadata(self, **fields) -> TimeBasedMetadataModel:
+        return super().to_metadata(
             dates=self.dates,
+            **fields,
         )

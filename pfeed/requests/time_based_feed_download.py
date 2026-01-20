@@ -3,7 +3,7 @@ import datetime
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from pfund.enums import Environment
-from pfeed.enums import DataStorage, DataLayer
+from pfeed.enums import DataStorage, DataLayer, IOFormat, Compression
 
 
 class TimeBasedFeedDownloadRequest(BaseModel):
@@ -12,10 +12,12 @@ class TimeBasedFeedDownloadRequest(BaseModel):
     env: Environment
     start_date: datetime.date
     end_date: datetime.date
-    to_storage: DataStorage
-    data_layer: DataLayer
     data_origin: str
     dataflow_per_date: bool
+    to_storage: DataStorage
+    data_layer: DataLayer
+    io_format: IOFormat
+    compression: Compression
     
     @field_validator('env', mode='before')
     @classmethod

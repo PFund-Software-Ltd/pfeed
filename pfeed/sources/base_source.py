@@ -11,6 +11,7 @@ from pfeed.aliases import ALIASES
 
 
 class BaseSource(ABC):
+    '''Abstraction of Data Provider'''
     name: ClassVar[DataSource]
     
     def __init__(self, api_key: str | None=None):

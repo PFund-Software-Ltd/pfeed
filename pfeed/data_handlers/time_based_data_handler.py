@@ -4,14 +4,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
     from pfeed.typing import GenericFrame, StreamingData
-    from pfeed.data_models.time_based_data_model import (
-        TimeBasedDataModel,
-        TimeBasedMetadataModel,
-    )
+    from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.streaming_settings import StreamingSettings
     from pfeed._io.base_io import BaseIO
     from pfeed.utils.file_path import FilePath
-    from pfeed.data_handlers.base_data_handler import SourcePath
 
 import datetime
 from pathlib import Path
@@ -26,6 +22,8 @@ from pfeed.enums import DataTool, DataLayer, TimestampPrecision
 from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
 from pfeed.messaging.streaming_message import StreamingMessage
 from pfeed.stream_buffer import StreamBuffer
+from pfeed.data_handlers.base_data_handler import SourcePath
+from pfeed.data_models.time_based_data_model import TimeBasedMetadataModel
 
 
 class TimeBasedMetadata(BaseMetadata):

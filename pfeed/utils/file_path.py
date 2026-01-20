@@ -20,7 +20,7 @@ class FilePath:
         >>> FilePath("gs://bucket/file.csv")   # Uses CloudPath
     """
 
-    def __init__(self, path: Union[str, Path, CloudPath, "FilePath"]):
+    def __init__(self, path: Union[str, Path, CloudPath, FilePath]):
         """Initialize with automatic backend detection."""
         from cloudpathlib import CloudPath
         

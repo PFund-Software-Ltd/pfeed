@@ -82,8 +82,8 @@ class FileIO(BaseIO):
         '''This only writes metadata to the table schema, not to the file.
         You must call _write_pyarrow_table to actually write the metadata to the file.
         '''
-        metadata = metadata.model_dump() if metadata else {}
-        metadata_json = json.encode(metadata)
+        metadata = metadata.model_dump(mode='json') if metadata else {}
+        metadata_json = json.dumps(metadata)
         schema = table.schema.with_metadata({b"metadata_json": metadata_json})
         return table.replace_schema_metadata(schema.metadata)
     
@@ -96,10 +96,12 @@ class FileIO(BaseIO):
         """Read custom application metadata embedded in parquet schema."""
         metadata: dict[FilePath, MetadataModelAsDict] = {}
         for file_path in file_paths:
+            if not self.exists(file_path):
+                continue
             with self._filesystem.open_input_file(file_path.schemeless) as f:
                 parquet_file = pq.ParquetFile(f)
                 parquet_file_metadata = parquet_file.schema.to_arrow_schema().metadata
                 if b"metadata_json" in parquet_file_metadata:
                     metadata_json = parquet_file_metadata[b"metadata_json"]
-                    metadata[file_path] = json.decode(metadata_json)
+                    metadata[file_path] = json.loads(metadata_json)
         return metadata

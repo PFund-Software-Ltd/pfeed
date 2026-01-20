@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 from pfund.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
-from pfeed.enums import DataLayer, DataStorage
+from pfeed.enums import DataLayer, DataStorage, IOFormat, Compression
 from pfeed.feeds.market_feed import MarketFeed
 
 
@@ -54,8 +54,10 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         rollback_period: Resolution | str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        data_layer: DataLayer | str = DataLayer.CLEANED,
         to_storage: DataStorage | str =DataStorage.LOCAL,
+        data_layer: DataLayer | str =DataLayer.CLEANED,
+        io_format: IOFormat = IOFormat.PARQUET,
+        compression: Compression = Compression.SNAPPY,
         **product_specs
     ) -> GenericFrame | None | dict[datetime.date, GenericFrame | None] | BybitMarketFeed:
         '''
@@ -76,9 +78,11 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            data_layer=data_layer,
-            to_storage=to_storage,
             dataflow_per_date=True,
+            to_storage=to_storage,
+            data_layer=data_layer,
+            io_format=io_format,
+            compression=compression,
             **product_specs
         )
 

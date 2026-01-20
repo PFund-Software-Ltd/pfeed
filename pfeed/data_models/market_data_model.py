@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import ClassVar, Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, field_serializer
 
 from pfund.enums import TradingVenue, Environment
 from pfund.datas.resolution import Resolution
@@ -17,7 +17,7 @@ class MarketMetadataModel(DataProviderMetadataModelMixin, TimeBasedMetadataModel
     product_name: str
     product_basis: str
     symbol: str
-    resolution: Resolution
+    resolution: str
     asset_type: str
     
 
@@ -39,6 +39,10 @@ class MarketDataModel(DataProviderModelMixin, TimeBasedDataModel):
         if isinstance(v, str):
             return Resolution(v)
         return v
+    
+    @field_serializer('resolution')
+    def serialize_resolution(self, value: Resolution):
+        return repr(value)
 
     def update_resolution(self, resolution: Resolution | str) -> None:
         if isinstance(resolution, str):
@@ -52,7 +56,7 @@ class MarketDataModel(DataProviderModelMixin, TimeBasedDataModel):
             product_name=self.product.name,
             product_basis=str(self.product.basis),
             symbol=self.product.symbol,
-            resolution=self.resolution,
+            resolution=repr(self.resolution),
             asset_type=str(self.product.asset_type),
             **fields,
         )

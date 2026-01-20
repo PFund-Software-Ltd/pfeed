@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Coroutine, AsyncGenerator
 if TYPE_CHECKING:
-    from pfeed.typing import tDataTool, tDataSource, tDataCategory, GenericData
+    from pfeed.typing import tDataSource, tDataCategory, GenericData
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.messaging.zeromq import ZeroMQ
 

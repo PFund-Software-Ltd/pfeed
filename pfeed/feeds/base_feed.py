@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, Literal, ClassVar, overload
+from typing import TYPE_CHECKING, Callable, Any, ClassVar, overload
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -21,7 +21,6 @@ from abc import ABC, abstractmethod
 from pprint import pformat
 
 from pfeed.config import setup_logging, get_config
-from pfund_kit.style import cprint
 from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType
 
 
@@ -42,8 +41,9 @@ class BaseFeed(ABC):
     data_model_class: ClassVar[type[BaseDataModel]]
     
     def __init__(self, pipeline_mode: bool=False, **ray_kwargs):
+        setup_logging()
         self.data_source: BaseSource = self._create_data_source()
-        self.logger = logging.getLogger(self.name.lower())
+        self.logger = logging.getLogger(f'pfeed.{self.name.lower()}')
         self._engine: DataEngine | None = None
         self._pipeline_mode: bool = pipeline_mode
         self._dataflows: list[DataFlow] = []
@@ -53,14 +53,9 @@ class BaseFeed(ABC):
         self._storage_options: dict[DataStorage, dict] = {}
         self._io_options: dict[IOFormat, dict] = {}
         self._ray_kwargs: dict = ray_kwargs
-        if not self._ray_kwargs:
-            cprint(
-                f'{self.name} is NOT using Ray, consider passing in e.g. Feed(num_cpus=1) to enable Ray', 
-            )
-        else:
+        if self._ray_kwargs:
             assert 'num_cpus' in self._ray_kwargs, 'num_cpus is required when using Ray'
             self._init_ray()
-        setup_logging()
     
     @property
     def name(self):

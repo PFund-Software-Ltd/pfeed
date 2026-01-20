@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.data_models.retrieve_market_data_model import RetrieveMarketDataModel
     from pfeed.enums import DataSource
-    from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
+    from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.typing import GenericFrame
 
@@ -304,7 +304,7 @@ class MarketFeed(TimeBasedFeed):
         data_layer: DataLayer,
         from_storage: DataStorage,
         storage_options: dict | None,
-    ) -> tuple[GenericFrame | None, TimeBasedStorageMetadata]:
+    ) -> tuple[GenericFrame | None, TimeBasedMetadata]:
         '''Retrieve data from storage. If data is not found, search for higher resolutions.
         
         Args:
@@ -321,7 +321,7 @@ class MarketFeed(TimeBasedFeed):
                 if resolution <= highest_resolution
             ]
         df: GenericFrame | None = None
-        metadata: TimeBasedStorageMetadata = {}
+        metadata: TimeBasedMetadata = {}
         for search_resolution in search_resolutions:
             data_model_copy = data_model.model_copy(deep=False)
             data_model_copy.update_resolution(search_resolution)

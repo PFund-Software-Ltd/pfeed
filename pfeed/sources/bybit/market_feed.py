@@ -2,7 +2,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
-    import datetime
     import pandas as pd
     from pfund.exchanges.bybit.exchange import tProductCategory
     from pfund.datas.resolution import Resolution
@@ -59,7 +58,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         io_format: IOFormat = IOFormat.PARQUET,
         compression: Compression = Compression.SNAPPY,
         **product_specs
-    ) -> GenericFrame | None | dict[datetime.date, GenericFrame | None] | BybitMarketFeed:
+    ) -> GenericFrame | None | BybitMarketFeed:
         '''
         Args:
             product_specs: The specifications for the product.

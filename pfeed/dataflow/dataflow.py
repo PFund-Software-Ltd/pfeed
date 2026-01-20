@@ -18,7 +18,7 @@ from pfeed.enums import ExtractType, FlowType
 class DataFlow:
     def __init__(self, data_model: BaseDataModel, faucet: Faucet):
         self._data_model: BaseDataModel = data_model
-        self._logger: logging.Logger = logging.getLogger(self.data_source.name.lower())
+        self._logger: logging.Logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
         self._is_streaming = faucet._extract_type == ExtractType.stream
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None

@@ -14,7 +14,7 @@ class Sink:
     def __init__(self, data_model: BaseDataModel, storage: BaseStorage):
         self._data_model = data_model
         self._storage: BaseStorage = storage
-        self._logger: logging.Logger = logging.getLogger(self.data_source.name.lower())
+        self._logger: logging.Logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
     
     @property
     def data_source(self) -> BaseSource:

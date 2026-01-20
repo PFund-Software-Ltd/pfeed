@@ -28,9 +28,8 @@ class BaseSource(ABC):
         super().__init_subclass__(**kwargs)
         assert hasattr(cls, 'name'), f'{cls.__name__} must have a name attribute'
         
-    @abstractmethod
     def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
-        pass
+        raise NotImplementedError(f'{self.name} does not support creating products')
     
     def _get_api_key(self) -> str | None:
         alias = ALIASES.resolve(self.name)

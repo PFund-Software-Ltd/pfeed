@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import ClassVar, Literal
 
-from pydantic import model_validator
+from pydantic import field_validator
 
 from pfund.enums import TradingVenue, Environment
 from pfund.datas.resolution import Resolution
@@ -9,9 +9,9 @@ from pfund.products.product_base import BaseProduct
 from pfeed.enums import DataCategory
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel, TimeBasedMetadataModel
 from pfeed.data_handlers.market_data_handler import MarketDataHandler
+from pfeed.data_models.data_provider_model_mixin import DataProviderModelMixin, DataProviderMetadataModelMixin
 
-
-class MarketMetadataModel(TimeBasedMetadataModel):
+class MarketMetadataModel(DataProviderMetadataModelMixin, TimeBasedMetadataModel):
     trading_venue: TradingVenue
     exchange: str
     product_name: str
@@ -21,8 +21,7 @@ class MarketMetadataModel(TimeBasedMetadataModel):
     asset_type: str
     
 
-class MarketDataModel(TimeBasedDataModel):
-
+class MarketDataModel(DataProviderModelMixin, TimeBasedDataModel):
     data_handler_class: ClassVar[type[MarketDataHandler]] = MarketDataHandler
     metadata_class: ClassVar[type[MarketMetadataModel]] = MarketMetadataModel
 
@@ -34,27 +33,20 @@ class MarketDataModel(TimeBasedDataModel):
     def __str__(self):
         return ':'.join([self.env, super().__str__(), str(self.product.asset_type), self.product.symbol, repr(self.resolution)])
     
-    # FIXME: this is not needed anymore?
-    @model_validator(mode='before')
+    @field_validator('resolution', mode='before')
     @classmethod
-    def check_and_convert(cls, data: dict) -> dict:
-        product = data['product']
-        assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
-        # convert resolution to Resolution object if it is a string
-        resolution = data['resolution']
-        if isinstance(resolution, str):
-            resolution = Resolution(resolution)
-        data['resolution'] = resolution
-        return data
-    
+    def create_resolution(cls, v):
+        if isinstance(v, str):
+            return Resolution(v)
+        return v
+
     def update_resolution(self, resolution: Resolution | str) -> None:
         if isinstance(resolution, str):
             resolution = Resolution(resolution)
         self.resolution = resolution
     
-    def to_metadata(self) -> MarketMetadataModel:
-        return MarketMetadataModel(
-            **super().to_metadata().model_dump(),
+    def to_metadata(self, **fields) -> MarketMetadataModel:
+        return super().to_metadata(
             trading_venue=self.product.trading_venue,
             exchange=self.product.exchange,
             product_name=self.product.name,
@@ -62,4 +54,5 @@ class MarketDataModel(TimeBasedDataModel):
             symbol=self.product.symbol,
             resolution=self.resolution,
             asset_type=str(self.product.asset_type),
+            **fields,
         )

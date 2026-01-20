@@ -1,25 +1,22 @@
 from __future__ import annotations
 from typing import Literal, ClassVar
 
-from pydantic import model_validator
-
 from pfund.products.product_base import BaseProduct
 from pfund.enums import Environment
 from pfeed.enums import DataCategory
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel, TimeBasedMetadataModel
 from pfeed.data_handlers.news_data_handler import NewsDataHandler
+from pfeed.data_models.data_provider_model_mixin import DataProviderModelMixin, DataProviderMetadataModelMixin
 
 
-class NewsMetadataModel(TimeBasedMetadataModel):
-    env: Environment
+class NewsMetadataModel(DataProviderMetadataModelMixin, TimeBasedMetadataModel):
     product_name: str | None
     product_basis: str | None
-    product_specs: dict | None
     symbol: str | None
     asset_type: str | None
 
 
-class NewsDataModel(TimeBasedDataModel):
+class NewsDataModel(DataProviderModelMixin, TimeBasedDataModel):
     data_handler_class: ClassVar[type[NewsDataHandler]] = NewsDataHandler
     metadata_class: ClassVar[type[NewsMetadataModel]] = NewsMetadataModel
 
@@ -30,21 +27,11 @@ class NewsDataModel(TimeBasedDataModel):
     def __str__(self):
         return ':'.join([self.env, super().__str__(), repr(self.product) if self.product else 'GENERAL', 'NEWS'])
     
-    @model_validator(mode='before')
-    @classmethod
-    def check_and_convert(cls, data: dict) -> dict:
-        if 'product' in data:
-            product = data['product']
-            assert isinstance(product, BaseProduct), f'product must be a Product object, got {type(product)}'
-        return data
-    
-    def to_metadata(self) -> NewsMetadataModel:
-        return NewsMetadataModel(
-            **super().to_metadata().model_dump(),
-            env=self.env,
+    def to_metadata(self, **fields) -> NewsMetadataModel:
+        return super().to_metadata(
             product_name=self.product.name if self.product else None,
             product_basis=str(self.product.basis) if self.product else None,
-            product_specs=self.product.specs if self.product else None,
             symbol=self.product.symbol if self.product else None,
             asset_type=str(self.product.asset_type) if self.product else None,
+            **fields,
         )

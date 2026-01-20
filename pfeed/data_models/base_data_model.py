@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
 
@@ -7,14 +7,12 @@ from abc import ABC
 
 from pydantic import BaseModel, ConfigDict
 
-from pfeed.sources.base_source import BaseSource
-from pfeed.enums import DataCategory, DataSource
+from pfeed.enums import DataCategory
 
 
 class BaseMetadataModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    data_source: DataSource
     data_origin: str
     data_category: DataCategory
 
@@ -32,36 +30,28 @@ class BaseDataModel(BaseModel, ABC):
             If None, it means the data source is already a unique identifier.
             Default is None.
     """
-
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
-
     
     data_handler_class: ClassVar[type[BaseDataHandler]]
     metadata_class: ClassVar[type[BaseMetadataModel]]
 
-    data_source: BaseSource
     data_origin: str = ""
     data_category: DataCategory
 
-    def model_post_init(self, __context: Any) -> None:
-        if not self.data_origin:
-            self.data_origin = self.data_source.name
+    def to_metadata(self, **fields) -> BaseMetadataModel:
+        """Convert the data model to a metadata model.
 
-    def is_data_origin_effective(self) -> bool:
+        Args:
+            **fields: Internal use only. Used to pass metadata fields up the 
+                inheritance chain. Do not pass arguments directly when calling 
+                this method.
+        
+        Returns:
+            A metadata model instance containing the relevant metadata fields.
         """
-        A data_origin is not effective if it is the same as the source name.
-        """
-        return self.data_origin != self.data_source.name
-
-    def __str__(self):
-        if self.is_data_origin_effective():
-            return f"{self.data_source.name}:{self.data_origin}"
-        else:
-            return f"{self.data_source.name}"
-
-    def to_metadata(self) -> BaseMetadataModel:
-        return BaseMetadataModel(
-            data_source=self.data_source.name,
+        MetadataModel = self.metadata_class
+        return MetadataModel(
             data_origin=self.data_origin,
             data_category=self.data_category,
+            **fields,
         )

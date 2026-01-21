@@ -27,7 +27,7 @@ pfeed = { path = ".", editable = true }
 pfund = { path = "../pfund", editable = true }
 pfund-kit = { path = "../pfund-kit", editable = true }
 # pfund = ">=0.0.2"
-pandas = ">=2.3.3"
+pandas = ">=3.0.0"
 polars = ">=1.37.1"
 pyarrow = ">=22.0.0"
 pandera = ">=0.28.1"
@@ -78,7 +78,7 @@ fmp-api-client = { path = "../fmp-api-client", editable = true }
 
 [feature.dev.pypi-dependencies]
 afterpython = ">=0.1.1"
-pandas-stubs = ">=2.3.3.251219"
+pandas-stubs = ">=2.3.3.260113"
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"

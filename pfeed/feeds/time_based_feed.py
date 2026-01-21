@@ -8,15 +8,16 @@ if TYPE_CHECKING:
     from pfeed.dataflow.dataflow import DataFlow, FlowResult
     from pfeed.dataflow.faucet import Faucet
     from pfeed.enums import DataStorage, DataLayer
-    from pfeed.requests.time_based_feed_download import TimeBasedFeedDownloadRequest
+    from pfeed.requests.time_based_feed_download_request import TimeBasedFeedDownloadRequest
     class TimeBasedFeedMetadata(TypedDict, total=True):
         missing_dates: list[datetime.date]
 
 import datetime
+from abc import abstractmethod
 
 from pfeed.enums import ExtractType
 from pfeed.config import get_config
-from pfeed.feeds.base_feed import BaseFeed, clear_subflows
+from pfeed.feeds.base_feed import BaseFeed
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 
@@ -28,6 +29,10 @@ __all__ = ["TimeBasedFeed"]
 
 class TimeBasedFeed(BaseFeed):
     data_model_class: ClassVar[type[TimeBasedDataModel]]
+
+    @abstractmethod
+    def _standardize_date_column(data: Any) -> Any:
+        pass
     
     def _standardize_dates(self, start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.
@@ -76,12 +81,9 @@ class TimeBasedFeed(BaseFeed):
         assert start_date <= end_date, f"start_date must be before end_date: {start_date} <= {end_date}"
         return start_date, end_date    
   
-    def _create_batch_dataflows(
-        self, 
-        request: TimeBasedFeedDownloadRequest,
-        extract_func: Callable,
-        extract_type: ExtractType,
-    ) -> list[DataFlow]:
+    def _create_batch_dataflows(self, extract_func: Callable, extract_type: ExtractType) -> list[DataFlow]:
+        self._clear_dataflows()
+        request: TimeBasedFeedDownloadRequest = self._current_request
         dataflows: list[DataFlow] = []
         data_model: TimeBasedDataModel = self._create_data_model_from_request(request)
         if request.dataflow_per_date:
@@ -101,7 +103,6 @@ class TimeBasedFeed(BaseFeed):
             dataflows.append(dataflow)
         return dataflows
     
-    @clear_subflows
     def _run_retrieve(
         self,
         partial_dataflow_data_model: Callable,
@@ -142,31 +143,10 @@ class TimeBasedFeed(BaseFeed):
         from pfeed._etl.base import convert_to_desired_df
         self.transform(
             lambda_with_name(
-                'convert_to_user_df',
+                '__convert_to_user_df',
                 lambda df: convert_to_desired_df(df, config.data_tool)
             )
         )
-        
-    @clear_subflows
-    def _run_download(self, request: TimeBasedFeedDownloadRequest) -> GenericFrame | None | TimeBasedFeed:
-        self._create_batch_dataflows(
-            request=request,
-            extract_func=lambda data_model: self._download_impl(data_model),
-            extract_type=ExtractType.download,
-        )
-        self._add_default_transformations_to_download(request)
-        if request.to_storage:
-            self.load(
-                to_storage=request.to_storage, 
-                data_layer=request.data_layer,
-                io_format=request.io_format,
-                compression=request.compression,
-            )
-                
-        if not self._pipeline_mode:
-            return self.run()
-        else:
-            return self
     
     def run(self, prefect_kwargs: dict | None=None) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''

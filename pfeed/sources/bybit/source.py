@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from pfund.typing import tEnvironment
     from pfund.products.product_bybit import BybitProduct
 
-from pfeed.sources.base_source import BaseSource
+from pfeed.sources.data_provider_source import DataProviderSource
 from pfeed.enums import DataSource
 from pfeed.sources.bybit.batch_api import BatchAPI
 from pfeed.sources.bybit.stream_api import StreamAPI
@@ -13,7 +13,7 @@ from pfeed.sources.bybit.stream_api import StreamAPI
 __all__ = ["BybitSource"]
 
 
-class BybitSource(BaseSource):
+class BybitSource(DataProviderSource):
     name = DataSource.BYBIT
 
     def __init__(self):

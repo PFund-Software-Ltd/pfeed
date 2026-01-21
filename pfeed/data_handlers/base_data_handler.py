@@ -27,9 +27,10 @@ class BaseMetadata(BaseModel):
 
 
 class BaseDataHandler(ABC):
-    def __init__(self, data_path: Path, data_layer: DataLayer, data_model: BaseDataModel, io: BaseIO):
+    def __init__(self, data_path: Path, data_layer: DataLayer, data_domain: str, data_model: BaseDataModel, io: BaseIO):
         self._data_path = data_path
         self._data_layer = data_layer
+        self._data_domain = data_domain
         self._data_model = data_model
         self._io: BaseIO = io
         self._file_paths: list[FilePath] = []

@@ -43,9 +43,11 @@ class TimeBasedDataModel(BaseDataModel):
         return self.start_date != self.end_date
 
     def update_start_date(self, start_date: datetime.date) -> None:
+        assert isinstance(start_date, datetime.date), f'start_date must be a datetime.date, but got {type(start_date)}'
         self.start_date = start_date
         
     def update_end_date(self, end_date: datetime.date) -> None:
+        assert isinstance(end_date, datetime.date), f'end_date must be a datetime.date, but got {type(end_date)}'
         self.end_date = end_date
     
     def __str__(self):
@@ -53,7 +55,6 @@ class TimeBasedDataModel(BaseDataModel):
             return ':'.join([super().__str__(), str(self.start_date)])
         else:
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
-    
     
     def to_metadata(self, **fields) -> TimeBasedMetadataModel:
         return super().to_metadata(

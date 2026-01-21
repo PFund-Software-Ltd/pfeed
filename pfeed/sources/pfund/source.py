@@ -8,7 +8,7 @@ from enum import StrEnum
 from pfeed.sources.base_source import BaseSource
 
 
-# FIXME: only need to create a source object with "name" attribute, no need to inherit from BaseSource
+# FIXME: only need to create a source object with "name" attribute, no need to inherit from DataProviderSource
 class PFundSource(BaseSource):
     name = StrEnum('PFundSource', ['PFund']).PFund
     
@@ -18,7 +18,3 @@ class PFundSource(BaseSource):
         super().__init__()
         self.batch_api = BatchAPI()
         self.stream_api = StreamAPI(env=env)
-
-    # HACK: only to satisfy the BaseSource requirement
-    def create_product(self, basis: str, symbol: str='', **specs):
-        pass

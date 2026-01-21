@@ -237,7 +237,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         assert not self._ray_kwargs, "Transformations in Yahoo Finance streaming data is not supported with Ray"
         if data_layer != DataLayer.RAW:
             self.transform(
-                lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),
+                lambda_with_name('__parse_message', lambda msg: self._parse_message(product, msg)),
             )
         super()._add_default_transformations_to_stream(data_layer, product, resolution)
     

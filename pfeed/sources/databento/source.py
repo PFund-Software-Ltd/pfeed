@@ -11,7 +11,7 @@ import databento
 from databento.common.publishers import Dataset, Publisher
 from databento.common.dbnstore import DBNStore
 
-from pfeed.sources.tradfi_source import TradFiSource
+from pfeed.sources.tradfi_data_provider_source import TradFiDataProviderSource
 from pfeed.sources.databento.const import DATASETS
 
 
@@ -26,7 +26,7 @@ tDATASET = Literal[
 
 
 # NOTE: 2024-10-26, best free llm for deriving databento dataset and start date is 'mistral'
-class DatabentoSource(TradFiSource):
+class DatabentoSource(TradFiDataProviderSource):
     # TODO: add api_key to params
     def __init__(self):
         super().__init__('DATABENTO')

@@ -12,7 +12,7 @@ from functools import partial
 
 from pfund.enums import Environment
 from pfeed.config import setup_logging, get_config
-from pfeed.enums import DataLayer
+from pfeed.enums import DataLayer, DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.utils import lambda_with_name
 
@@ -29,6 +29,7 @@ how to handle this? handled by metadata?
 '''
 class NewsFeed(TimeBasedFeed):
     data_model_class: ClassVar[type[NewsDataModel]] = NewsDataModel
+    data_domain: ClassVar[DataCategory] = DataCategory.NEWS_DATA
 
     def create_data_model(
         self,
@@ -96,16 +97,22 @@ class NewsFeed(TimeBasedFeed):
         from pfeed._etl.base import convert_to_desired_df
         if data_layer != DataLayer.RAW:
             self.transform(
-                self._normalize_raw_data,
                 lambda_with_name(
-                    'standardize_columns',
+                    '__normalize_raw_data',
+                    lambda df: self._normalize_raw_data(df)
+                ),
+                lambda_with_name(
+                    '__standardize_columns',
                     lambda df: etl.standardize_columns(df, product=product),
                 ),
-                etl.organize_columns,
+                lambda_with_name(
+                    '__organize_columns',
+                    lambda df: etl.organize_columns(df)
+                ),
             )
         self.transform(
             lambda_with_name(
-                'convert_to_user_df',
+                '__convert_to_user_df',
                 lambda df: convert_to_desired_df(df, config.data_tool)
             )
         )

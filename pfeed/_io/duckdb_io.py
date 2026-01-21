@@ -22,6 +22,7 @@ from pfeed.storages.duckdb_storage import DuckDBStorage
 
 
 class DuckDBIO(DatabaseIO, FileIO):
+    SUPPORTS_PARALLEL_WRITES: bool = False
     FILE_EXTENSION = ".duckdb"
     TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
 

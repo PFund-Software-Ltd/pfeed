@@ -52,9 +52,9 @@ class MarketDataHandler(TimeBasedDataHandler):
             self._data_path
             / f"env={data_model.env}"
             / f"data_layer={self._data_layer}"
+            / f'data_domain={self._data_domain}'
             / f'data_source={data_model.data_source.name}'
             / f'data_origin={data_model.data_origin}'
-            / f'data_category={data_model.data_category}'
             / f'asset_type={str(product.asset_type)}'
             / f'resolution={repr(data_model.resolution)}'
         )
@@ -65,9 +65,9 @@ class MarketDataHandler(TimeBasedDataHandler):
         db_name = data_model.env
         schema_name = "_".join([
             f"{self._data_layer}"
+            f"{self._data_domain}"
             f"{data_model.data_source.name}"
             f"{data_model.data_origin}"
-            f"{data_model.data_category}"
         ]).lower()
         table_name = '_'.join([
             str(product.asset_type), 

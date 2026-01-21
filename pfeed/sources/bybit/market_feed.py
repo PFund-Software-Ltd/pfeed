@@ -23,6 +23,14 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
     data_model_class: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
     
     @staticmethod
+    def _standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
+        '''Ensure date column is standardized, "date" column is mandatory for storing data'''
+        from pfeed._etl.base import standardize_date_column
+        df['date'] = df['timestamp']
+        df = standardize_date_column(df)
+        return df
+    
+    @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
         """Normalize raw data from Bybit API into standardized format.
 
@@ -53,8 +61,9 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         rollback_period: Resolution | str | Literal['ytd', 'max']='1d',
         start_date: str='',
         end_date: str='',
-        to_storage: DataStorage | str =DataStorage.LOCAL,
+        to_storage: DataStorage | str | None=DataStorage.LOCAL,
         data_layer: DataLayer | str =DataLayer.CLEANED,
+        data_domain: str = '',
         io_format: IOFormat = IOFormat.PARQUET,
         compression: Compression = Compression.SNAPPY,
         **product_specs
@@ -80,6 +89,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
             dataflow_per_date=True,
             to_storage=to_storage,
             data_layer=data_layer,
+            data_domain=data_domain,
             io_format=io_format,
             compression=compression,
             **product_specs
@@ -112,7 +122,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         from pfeed.utils import lambda_with_name
         if data_layer != DataLayer.RAW:
             self.transform(
-                lambda_with_name('parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
+                lambda_with_name('__parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
             )
         super()._add_default_transformations_to_stream(data_layer, product, resolution)
         

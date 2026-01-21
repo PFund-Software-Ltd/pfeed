@@ -43,10 +43,11 @@ class TimeBasedDataHandler(BaseDataHandler):
         self,
         data_path: Path,
         data_layer: DataLayer,
+        data_domain: str,
         data_model: TimeBasedDataModel,
         io: BaseIO,
     ):
-        super().__init__(data_path=data_path, data_layer=data_layer, data_model=data_model, io=io)
+        super().__init__(data_path=data_path, data_layer=data_layer, data_domain=data_domain, data_model=data_model, io=io)
         self._stream_buffer: StreamBuffer | None = None
         self._file_paths_per_date = {
             date: self._create_file_path(date=date) for date in data_model.dates

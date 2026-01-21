@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 
 class BaseIO(ABC):
     SUPPORTS_STREAMING: bool = False
+    SUPPORTS_PARALLEL_WRITES: bool = False
 
     def __init__(self, storage_options: dict | None = None, io_options: dict | None = None):
         """

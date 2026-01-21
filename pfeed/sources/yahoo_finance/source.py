@@ -6,14 +6,14 @@ if TYPE_CHECKING:
 import yfinance
 
 from pfeed.enums import DataSource
-from pfeed.sources.tradfi_source import TradFiSource
+from pfeed.sources.tradfi_data_provider_source import TradFiDataProviderSource
 from pfeed.sources.yahoo_finance.stream_api import StreamAPI
 
 
 __all__ = ["YahooFinanceSource"]
 
 
-class YahooFinanceSource(TradFiSource):
+class YahooFinanceSource(TradFiDataProviderSource):
     name = DataSource.YAHOO_FINANCE
     # hard-coded mappings for convenience
     MAPPINGS = {

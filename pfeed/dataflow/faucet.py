@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Awaitable, TypeAlias, Any
 if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel, BaseFileMetadata
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.typing import GenericData
     from pfeed._io.base_io import StorageMetadata
@@ -52,7 +52,7 @@ class Faucet:
         return f'{self.data_source.name}.{self._extract_type}'
     
     @property
-    def data_source(self) -> BaseSource:
+    def data_source(self) -> DataProviderSource:
         return self._data_model.data_source
     
     @property

@@ -13,6 +13,7 @@ from pfeed.enums import TimestampPrecision
 
 
 class PostgreSQLIO(DatabaseIO):
+    SUPPORTS_PARALLEL_WRITES: bool = True
     SCHEME: str = "postgresql"
     TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
 

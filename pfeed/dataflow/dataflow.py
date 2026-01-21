@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericData, StreamingData
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.sink import Sink
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.messaging.zeromq import ZeroMQ
 
@@ -34,7 +34,7 @@ class DataFlow:
         return f'{self.data_source.name}_DataFlow'
     
     @property
-    def data_source(self) -> BaseSource:
+    def data_source(self) -> DataProviderSource:
         return self._data_model.data_source
     
     @property
@@ -58,6 +58,16 @@ class DataFlow:
         return self._result
     
     def add_transformations(self, *funcs: tuple[Callable, ...]):
+        if self.is_sealed():
+            raise RuntimeError(
+                f'{self} is sealed, cannot add transformations. i.e. this pattern is currently not allowed:\n'
+                '''
+                .transform(...)
+                .load(...)
+                .transform(...)
+                .load(...)
+                '''
+            )
         self._transformations.extend(funcs)
     
     def set_sink(self, sink: Sink):

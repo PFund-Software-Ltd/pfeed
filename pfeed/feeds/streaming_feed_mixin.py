@@ -16,7 +16,6 @@ from collections import defaultdict
 
 from pfund_kit.style import cprint, TextStyle, RichColor
 from pfeed.streaming_settings import StreamingSettings
-from pfeed.feeds.base_feed import clear_subflows
 
 
 class StreamingFeedMixin:
@@ -67,7 +66,6 @@ class StreamingFeedMixin:
                 await producer
         return _iter()
     
-    @clear_subflows
     def _run_stream(
         self,
         data_model: BaseDataModel,
@@ -77,7 +75,7 @@ class StreamingFeedMixin:
     ) -> None | BaseFeed:
         
         
-        # FIXME: move this to _create_stream_dataflow()
+        # FIXME: move this to _create_stream_dataflow(), refer to _create_batch_dataflows()
         # reuse existing faucet for streaming dataflows since they share the same extract_func
         if self.streaming_dataflows:
             existing_dataflow = self.streaming_dataflows[0]
@@ -114,7 +112,8 @@ class StreamingFeedMixin:
         WorkerName: TypeAlias = str
         DataFlowName: TypeAlias = str
 
-        self._clear_dataflows_before_run()
+        self._auto_load()
+
         if self._ray_kwargs:
             import ray
             from ray.util.queue import Queue
@@ -248,7 +247,6 @@ class StreamingFeedMixin:
                     self._shutdown_ray()
         else:
             await _run_dataflows()
-        self._clear_dataflows_after_run()
     
     def run(self, prefect_kwargs: dict | None=None) -> GenericData | None:
         if self.streaming_dataflows:

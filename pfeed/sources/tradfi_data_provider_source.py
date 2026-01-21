@@ -1,9 +1,9 @@
 from pfund.products.product_base import BaseProduct
 from pfund.enums import TradingVenue
-from pfeed.sources.base_source import BaseSource
+from pfeed.sources.data_provider_source import DataProviderSource
 
 
-class TradFiSource(BaseSource):
+class TradFiDataProviderSource(DataProviderSource):
     def create_product(self, basis: str, symbol='', **specs) -> BaseProduct:
         from pfund.products import ProductFactory
         # HACK: use 'IB' as trading venue to work around pydantic model's validation

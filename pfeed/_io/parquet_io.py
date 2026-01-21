@@ -12,6 +12,7 @@ from pfeed.enums import Compression
 
 
 class ParquetIO(FileIO):
+    SUPPORTS_PARALLEL_WRITES: bool = False
     FILE_EXTENSION: str = '.parquet'
     
     def __init__(

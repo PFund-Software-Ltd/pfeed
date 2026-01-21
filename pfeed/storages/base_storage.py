@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
@@ -12,21 +12,25 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from pfeed.config import get_config
-from pfeed.enums import DataLayer
+from pfeed.enums import DataLayer, IOFormat
 
 
 config = get_config()
 
 
 class BaseStorage(ABC):
+    SUPPORTED_IO_FORMATS: ClassVar[list[IOFormat]] = []
+    
     def __init__(
         self,
         data_layer: DataLayer,
+        data_domain: str,
         data_path: Path | None = None,
         storage_options: dict | None = None,
     ):
         self.data_path = data_path or config.data_path
         self.data_layer = DataLayer[str(data_layer).upper()]
+        self.data_domain = data_domain.upper()
         self.storage_options = storage_options or {}
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
@@ -90,6 +94,7 @@ class BaseStorage(ABC):
         self._data_handler = DataHandler(
             data_path=self.data_path,
             data_layer=self.data_layer,
+            data_domain=self.data_domain,
             data_model=self.data_model,
             io=self.io,
         )

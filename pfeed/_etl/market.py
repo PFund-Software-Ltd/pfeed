@@ -15,11 +15,9 @@ def standardize_columns(df: pd.DataFrame, product: BaseProduct, resolution: Reso
     """Standardizes the columns of a DataFrame.
     Adds columns 'product', 'resolution', 'symbol', and convert 'date' to datetime
     """
-    from pfeed._etl.base import standardize_date_column
     df['product'] = product.name
     df['resolution'] = repr(resolution)
     df['symbol'] = product.symbol
-    df = standardize_date_column(df)
     return df
 
 

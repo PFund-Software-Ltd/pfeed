@@ -12,6 +12,7 @@ from pfeed._io.table_io import TableIO, TablePath
 
 class DeltaLakeIO(TableIO):
     SUPPORTS_STREAMING: bool = True
+    SUPPORTS_PARALLEL_WRITES: bool = True
     SUPPORTS_PARTITIONING: bool = True
     METADATA_FILENAME: str = "deltalake_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
     

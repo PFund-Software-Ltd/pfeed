@@ -4,13 +4,13 @@ import os
 
 from fmp_api_client import FMPClient, FMPPlan
 
-from pfeed.sources.tradfi_source import TradFiSource
+from pfeed.sources.tradfi_data_provider_source import TradFiDataProviderSource
 
 
 __all__ = ["FinancialModelingPrepSource"]
 
 
-class FinancialModelingPrepSource(TradFiSource):
+class FinancialModelingPrepSource(TradFiDataProviderSource):
     def __init__(
         self, 
         api_key: str | None=None, 

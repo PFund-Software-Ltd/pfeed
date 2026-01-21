@@ -4,10 +4,11 @@ if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
     from pfund.products.product_base import BaseProduct
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.engine import DataEngine
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import GenericData
+    from pfeed.requests.base_request import BaseRequest
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
@@ -21,7 +22,8 @@ from abc import ABC, abstractmethod
 from pprint import pformat
 
 from pfeed.config import setup_logging, get_config
-from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType
+from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType, DataCategory
+from pfeed.requests.load_request import LoadRequest
 
 
 __all__ = ["BaseFeed"]
@@ -30,33 +32,29 @@ __all__ = ["BaseFeed"]
 config = get_config()
 
 
-def clear_subflows(func):
-    def wrapper(feed: BaseFeed, *args, **kwargs):
-        feed._clear_subflows()
-        return func(feed, *args, **kwargs)
-    return wrapper
-    
-    
 class BaseFeed(ABC):
     data_model_class: ClassVar[type[BaseDataModel]]
+    data_domain: ClassVar[DataCategory]
     
     def __init__(self, pipeline_mode: bool=False, **ray_kwargs):
         setup_logging()
-        self.data_source: BaseSource = self._create_data_source()
+        self.data_source: DataProviderSource = self._create_data_source()
         self.logger = logging.getLogger(f'pfeed.{self.name.lower()}')
         self._engine: DataEngine | None = None
         self._pipeline_mode: bool = pipeline_mode
         self._dataflows: list[DataFlow] = []
-        self._subflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
+        self._pending_transformations: list[Callable] = []
+        self._current_request: BaseRequest | None = None
+        self._load_request: LoadRequest | None = None
         self._storage_options: dict[DataStorage, dict] = {}
         self._io_options: dict[IOFormat, dict] = {}
         self._ray_kwargs: dict = ray_kwargs
         if self._ray_kwargs:
             assert 'num_cpus' in self._ray_kwargs, 'num_cpus is required when using Ray'
             self._init_ray()
-    
+            
     @property
     def name(self):
         return self.data_source.name
@@ -72,9 +70,13 @@ class BaseFeed(ABC):
     
     @staticmethod
     @abstractmethod
-    def _create_data_source(*args, **kwargs) -> BaseSource:
+    def _create_data_source(*args, **kwargs) -> DataProviderSource:
         pass
 
+    @abstractmethod
+    def _create_data_model_from_request(self, request: BaseRequest) -> BaseDataModel:
+        pass
+    
     @abstractmethod
     def create_data_model(self, *args, **kwargs) -> BaseDataModel:
         pass
@@ -142,6 +144,7 @@ class BaseFeed(ABC):
         data_path: Path,
         data_model: BaseDataModel, 
         data_layer: DataLayer,
+        data_domain: str,
         from_storage: DataStorage,
         io_format: IOFormat,
     ) -> tuple[pl.LazyFrame | None, BaseMetadata]:
@@ -157,6 +160,7 @@ class BaseFeed(ABC):
                 Storage(
                     data_path=data_path,
                     data_layer=data_layer,
+                    data_domain=data_domain,
                     storage_options=storage_options,
                 )
                 .with_data_model(data_model)
@@ -189,7 +193,6 @@ class BaseFeed(ABC):
             existing_dataflow = self._dataflows[0]
             assert existing_dataflow.is_streaming() == dataflow.is_streaming(), \
                 'Cannot mix streaming and non-streaming dataflows in the same feed'
-        self._subflows.append(dataflow)
         self._dataflows.append(dataflow)
         return dataflow
     
@@ -217,62 +220,62 @@ class BaseFeed(ABC):
         from pfeed.dataflow.sink import Sink
         return Sink(data_model, storage)
     
-    def _clear_subflows(self):
-        '''Clear subflows
-        This is necessary to achieve the following behaviour:
-        download(...).transform(...).load(...).stream(...).transform(...).load(...)
-        1. subflows: download(...).transform(...).load(...)
-        2. clear subflows so that the operations of the next batch of dataflows are independent of the previous batch
-        3. subflows: stream(...).transform(...).load(...)
-        '''
-        self._subflows.clear()
-    
     def transform(self, *funcs) -> BaseFeed:
-        for dataflow in self._subflows:
-            if dataflow.is_sealed():
-                raise RuntimeError(
-                    f'{dataflow} is sealed, cannot add transformations. i.e. this pattern is currently not allowed:\n'
-                    '''
-                    .transform(...)
-                    .load(...)
-                    .transform(...)
-                    .load(...)
-                    '''
-                )
-            dataflow.add_transformations(*funcs)
+        is_default_transformations = all(func.__name__.startswith('__') for func in funcs)
+        if is_default_transformations:
+            for dataflow in self._dataflows:
+                dataflow.add_transformations(*funcs)
+        else:
+            self._pending_transformations.extend(funcs)
         return self
     
+    def _add_default_transformations(self):
+        if self._current_request.request_type == ExtractType.download:
+            self._add_default_transformations_to_download()
+        elif self._current_request.request_type == ExtractType.stream:
+            self._add_default_transformations_to_stream()
+        elif self._current_request.request_type == ExtractType.retrieve:
+            self._add_default_transformations_to_retrieve()
+        elif self._current_request.request_type == ExtractType.fetch:
+            self._add_default_transformations_to_fetch()
+        else:
+            raise ValueError(f'Unknown request type: {self._current_request.request_type}')
+    
+    def _flush_pending_transformations(self):
+        if self._pending_transformations and self._load_request.data_layer != DataLayer.CURATED:
+            raise RuntimeError(
+                'Custom transformations are only allowed when data layer is CURATED'
+            )
+        for dataflow in self._dataflows:
+            dataflow.add_transformations(*self._pending_transformations)
+        self._pending_transformations.clear()
+
+    # REVIEW: 
+    def _check_if_io_supports_parallel_writes(self, io_format: IOFormat) -> bool:
+        from pfeed._io.file_io import FileIO
+        IO = io_format.io_class
+        # check if not supports parallel writes and not a file io
+        # assume that if it's a file io, it supports parallel writes to multiple files
+        # e.g. ParquetIO doesn't support parallel writes to a single file but supports parallel writes to multiple files
+        if not IO.SUPPORTS_PARALLEL_WRITES and IO.__bases__[0] is not FileIO:
+            raise RuntimeError(f'{IO.__name__} does not support parallel writes, cannot be used with Ray')
+
     @overload
     def load(
         self, 
         to_storage: DataStorage = DataStorage.DUCKDB,
         data_layer: DataLayer = DataLayer.CLEANED,
+        data_domain: str = '',
         in_memory: bool=True,
         memory_limit: str='4GB',
     ) -> BaseFeed:
         ...
         
-    @overload
-    def load(
-        self, 
-        to_storage: DataStorage = DataStorage.LANCEDB,
-        data_layer: DataLayer = DataLayer.CLEANED,
-    ) -> BaseFeed:
-        ...
-        
-    @overload
     def load(
         self, 
         to_storage: DataStorage = DataStorage.LOCAL,
         data_layer: DataLayer = DataLayer.CLEANED,
-        io_format: IOFormat=IOFormat.DELTALAKE,
-    ) -> BaseFeed:
-        ...
-
-    def load(
-        self, 
-        to_storage: DataStorage = DataStorage.LOCAL,
-        data_layer: DataLayer = DataLayer.CLEANED,
+        data_domain: str = '',
         io_format: IOFormat = IOFormat.PARQUET,
         compression: Compression = Compression.SNAPPY,
         **io_kwargs,
@@ -282,35 +285,33 @@ class BaseFeed(ABC):
             **io_kwargs: specific io options for the given storage
                 e.g. in_memory, memory_limit, for DuckDBStorage
         '''
-        from pfeed.storages.file_based_storage import FileBasedStorage
         from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
         
-        data_storage = DataStorage[to_storage.upper()]
-        data_layer = DataLayer[str(data_layer).upper()]
-        io_format = IOFormat[io_format.upper()] if io_format is not None else data_storage.default_io_format
-        storage_options = self._storage_options.get(data_storage, {})
-        io_options = self._io_options.get(io_format, {})
-        # FIXME:
-        # if data_layer == DataLayer.RAW and io_format == IOFormat.DELTALAKE:
-        #     raise RuntimeError(f'Delta Lake is not supported for {data_layer=}')
-        Storage = data_storage.storage_class
-        if issubclass(Storage, FileBasedStorage):
-            io_kwargs['io_format'] = io_format
-            io_kwargs['compression'] = compression
-
-        if self._ray_kwargs and (data_storage == DataStorage.DUCKDB):
-            raise RuntimeError('DuckDB is not thread-safe, cannot be used with Ray')
-
-        for dataflow in self._subflows:
+        self._load_request = LoadRequest(
+            to_storage=to_storage,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            io_format=io_format,
+            compression=compression,
+        )
+        self._add_default_transformations()
+        self._flush_pending_transformations()
+        if self._ray_kwargs:
+            self._check_if_io_supports_parallel_writes(self._load_request.io_format)
+        Storage = self._load_request.to_storage.storage_class
+        for dataflow in self._dataflows:
             data_model = dataflow.data_model
             storage = (
                 Storage(
-                    data_layer=data_layer,
-                    storage_options=storage_options,
+                    data_layer=self._load_request.data_layer,
+                    data_domain=self._load_request.data_domain or self.data_domain.value,
+                    storage_options=self._storage_options.get(self._load_request.to_storage, {}),
                 )
                 .with_data_model(data_model)
                 .with_io(
-                    io_options=io_options,
+                    io_options=self._io_options.get(self._load_request.io_format, {}),
+                    io_format=self._load_request.io_format,
+                    compression=self._load_request.compression,
                     **io_kwargs
                 )
             )
@@ -318,22 +319,38 @@ class BaseFeed(ABC):
                 storage.data_handler.create_stream_buffer(self._streaming_settings)
             sink: Sink = self._create_sink(data_model, storage)
             dataflow.set_sink(sink)
+        self._load_request = None
         return self
     
-    def _clear_dataflows_before_run(self):
+    def _auto_load(self):
+        '''
+        Automatically call load() if it hasn't been called yet
+        '''
+        has_sink = any(dataflow.sink is not None for dataflow in self._dataflows)
+        if not has_sink:
+            if self._load_request.to_storage is not None:
+                self.load(
+                    to_storage=self._load_request.to_storage,
+                    data_layer=self._load_request.data_layer,
+                    data_domain=self._load_request.data_domain,
+                    io_format=self._load_request.io_format,
+                    compression=self._load_request.compression,
+                )
+            else:
+                self._flush_pending_transformations()
+    
+    def _clear_dataflows(self):
         self._completed_dataflows.clear()
         self._failed_dataflows.clear()
-    
-    def _clear_dataflows_after_run(self):
-        self._subflows.clear()
         self._dataflows.clear()
     
     def _run_batch_dataflows(self, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track
         
         use_prefect = prefect_kwargs is not None
+        self._auto_load()
         
-        def _run_dataflow(dataflow: DataFlow, logger: logging.Logger | None=None) -> FlowResult:
+        def _run_dataflow(dataflow: DataFlow) -> FlowResult:
             if use_prefect:
                 flow_type = FlowType.prefect
             else:
@@ -343,18 +360,16 @@ class BaseFeed(ABC):
             success = result.data is not None
             return success
         
-        self._clear_dataflows_before_run()
         if self._ray_kwargs:
             import ray
             from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
-            
             
             @ray.remote
             def ray_task(logger_name: str, dataflow: DataFlow) -> tuple[bool, DataFlow]:
                 success = False
                 try:
                     logger = setup_logger_in_ray_task(logger_name, log_queue)
-                    success = _run_dataflow(dataflow, logger=logger)
+                    success = _run_dataflow(dataflow)
                 except RuntimeError as err:
                     if use_prefect:
                         logger.exception(f'Error in running prefect {dataflow}:')
@@ -413,7 +428,6 @@ class BaseFeed(ABC):
                     f'{pformat([str(dataflow) for dataflow in non_retrieve_dataflows])}\n'
                     f'check {self.logger.name}.log for details'
                 )
-        self._clear_dataflows_after_run()
         return self._completed_dataflows, self._failed_dataflows
     
     @property

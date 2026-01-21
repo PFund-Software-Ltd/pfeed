@@ -12,6 +12,9 @@ from pfeed.storages.base_storage import BaseStorage
 
 
 class FileBasedStorage(BaseStorage):
+    # EXTEND: add more file-based formats, iceberg, etc.
+    SUPPORTED_IO_FORMATS = [IOFormat.PARQUET, IOFormat.DELTALAKE]
+    
     # FIXME: can't use it with DuckDBStorage, attach it based on io? with_io()?
     def __new__(cls, *args, use_deltalake: bool = False, **kwargs):
         if use_deltalake:
@@ -31,6 +34,7 @@ class FileBasedStorage(BaseStorage):
         io_format: IOFormat=IOFormat.PARQUET,
         compression: Compression | None=Compression.SNAPPY,
         io_options: dict | None = None,
+        **kwargs,  # Unused parameters accepted for compatibility with other storage backends
     ) -> FileIO:
         return super().with_io(io_format, compression, io_options=io_options)
 
@@ -41,9 +45,8 @@ class FileBasedStorage(BaseStorage):
         storage_options: dict | None = None,
         io_options: dict | None = None,
     ) -> FileIO:
-        # EXTEND: add more file-based formats, iceberg, etc.
-        assert io_format in [IOFormat.PARQUET, IOFormat.DELTALAKE], (
-            f"File-based storage only supports {IOFormat.PARQUET} and {IOFormat.DELTALAKE} formats"
+        assert io_format in self.SUPPORTED_IO_FORMATS, (
+            f"File-based storage only supports IO formats: {self.SUPPORTED_IO_FORMATS}"
         )
         io_format = IOFormat[io_format.upper()]
         IO: type[FileIO] = io_format.io_class

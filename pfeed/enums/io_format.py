@@ -36,7 +36,6 @@ def _is_likely_csv(data: bytes, sample_size: int = 4096) -> bool:
 class IOFormat(StrEnum):
     CSV = 'csv'
     PARQUET = 'parquet'
-    # REVIEW: see if need to separate this into table format?
     DELTALAKE = 'deltalake'
     DUCKDB = 'duckdb'
     LANCEDB = 'lancedb'

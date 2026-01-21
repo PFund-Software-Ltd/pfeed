@@ -52,19 +52,3 @@ class DataStorage(StrEnum):
         #     return PostgreSQLStorage
         else:
             raise ValueError(f'{self=} is not supported')
-
-    @property
-    def default_io_format(self) -> IOFormat:
-        from pfeed.enums import IOFormat
-        if self == DataStorage.CACHE:
-            return IOFormat.PARQUET
-        elif self == DataStorage.LOCAL:
-            return IOFormat.DELTALAKE
-        elif self == DataStorage.DUCKDB:
-            return IOFormat.DUCKDB
-        elif self == DataStorage.LANCEDB:
-            return IOFormat.LANCEDB
-        elif self == DataStorage.POSTGRESQL:
-            return IOFormat.POSTGRESQL
-        else:
-            raise ValueError(f'{self=} is not supported')

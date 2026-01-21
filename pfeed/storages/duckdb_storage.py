@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from pfeed import get_config
+from pfeed.enums import IOFormat
 from pfeed.storages.database_storage import DatabaseStorage
 from pfeed._io.duckdb_io import DuckDBIO
 
@@ -12,6 +13,7 @@ config = get_config()
 
 
 class DuckDBStorage(DatabaseStorage):
+    SUPPORTED_IO_FORMATS = [IOFormat.DUCKDB]
     DEFAULT_IN_MEMORY = True
     DEFAULT_MEMORY_LIMIT = '4GB'
     
@@ -23,7 +25,8 @@ class DuckDBStorage(DatabaseStorage):
         self, 
         in_memory: bool=DEFAULT_IN_MEMORY,
         memory_limit: str=DEFAULT_MEMORY_LIMIT,
-        io_options: dict | None = None
+        io_options: dict | None = None,
+        **kwargs,  # Unused parameters accepted for compatibility with other storage backends
     ) -> DuckDBIO:
         return super().with_io(in_memory=in_memory, memory_limit=memory_limit, io_options=io_options)
     

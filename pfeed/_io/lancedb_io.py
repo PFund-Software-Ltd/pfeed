@@ -18,6 +18,7 @@ from pfeed._io.database_io import DatabaseIO, DBPath
 class LanceDBIO(DatabaseIO, TableIO):
     # TODO: support streaming
     # SUPPORTS_STREAMING: bool = True
+    SUPPORTS_PARALLEL_WRITES: bool = True
     FILE_EXTENSION = ".lancedb"
     METADATA_FILENAME: str = "lancedb_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
     TIMESTAMP_PRECISION = TimestampPrecision.NANOSECOND

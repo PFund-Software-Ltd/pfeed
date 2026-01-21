@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.messaging.streaming_message import StreamingMessage
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.typing import GenericData
 
@@ -17,7 +17,7 @@ class Sink:
         self._logger: logging.Logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
     
     @property
-    def data_source(self) -> BaseSource:
+    def data_source(self) -> DataProviderSource:
         return self._data_model.data_source
     
     @property

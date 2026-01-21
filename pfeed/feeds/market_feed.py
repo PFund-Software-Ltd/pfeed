@@ -21,10 +21,10 @@ from pfund.datas.resolution import Resolution
 from pfund_kit.style import cprint, RichColor, TextStyle
 from pfeed.config import setup_logging, get_config
 from pfeed.messaging import BarMessage, TickMessage
-from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, ExtractType, DataStorage, IOFormat, Compression
+from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, ExtractType, DataStorage, IOFormat, Compression, DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
-from pfeed.requests import MarketFeedDownloadRequest
+from pfeed.requests import MarketFeedDownloadRequest, LoadRequest
 
 
 config = get_config()
@@ -33,6 +33,7 @@ config = get_config()
 # FIXME: integrate with StreamingFeedMixin
 class MarketFeed(TimeBasedFeed):
     data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
+    data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
 
     SUPPORTED_LOWEST_RESOLUTION = Resolution('1d')
     
@@ -102,18 +103,13 @@ class MarketFeed(TimeBasedFeed):
             resolution=request.target_resolution,
         )
     
-    def _create_batch_dataflows(
-        self, 
-        request: MarketFeedDownloadRequest,
-        extract_func: Callable,
-        extract_type: ExtractType,
-    ) -> list[DataFlow]:
-        dataflows: list[DataFlow] = super()._create_batch_dataflows(request=request, extract_func=extract_func, extract_type=extract_type)
+    def _create_batch_dataflows(self, extract_func: Callable, extract_type: ExtractType) -> list[DataFlow]:
+        dataflows: list[DataFlow] = super()._create_batch_dataflows(extract_func=extract_func, extract_type=extract_type)
         # HACK: update the data model in faucet to the data resolution
         # because data model in dataflow uses the target resolution, but the faucet uses the data resolution
         for dataflow in dataflows:
             faucet_data_model: MarketDataModel = dataflow.faucet.data_model 
-            faucet_data_model.update_resolution(request.data_resolution)
+            faucet_data_model.update_resolution(self._current_request.data_resolution)
         
     def download(
         self,
@@ -125,8 +121,9 @@ class MarketFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         dataflow_per_date: bool=True,
-        to_storage: DataStorage=DataStorage.LOCAL,
+        to_storage: DataStorage | None=DataStorage.LOCAL,
         data_layer: DataLayer=DataLayer.CLEANED,
+        data_domain: str = '',
         io_format: IOFormat=IOFormat.PARQUET,
         compression: Compression=Compression.SNAPPY,
         **product_specs
@@ -178,7 +175,7 @@ class MarketFeed(TimeBasedFeed):
             data_resolution: Resolution = resolution
         self._validate_resolution_bounds(data_resolution)
         
-        request = MarketFeedDownloadRequest(
+        self._current_request = MarketFeedDownloadRequest(
             env=env,
             product=product,
             target_resolution=resolution,
@@ -187,14 +184,21 @@ class MarketFeed(TimeBasedFeed):
             end_date=end_date,
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
+        )
+        self._load_request = LoadRequest(
             to_storage=to_storage,
             data_layer=data_layer,
+            data_domain=data_domain,
             io_format=io_format,
             compression=compression,
         )
-        return self._run_download(request=request)
+        self._create_batch_dataflows(
+            extract_func=lambda data_model: self._download_impl(data_model),
+            extract_type=ExtractType.download,
+        )
+        return self.run() if not self._pipeline_mode else self
     
-    def _add_default_transformations_to_download(self, request: MarketFeedDownloadRequest):
+    def _add_default_transformations_to_download(self):
         '''
         Args:
             data_resolution: The resolution of the downloaded data.
@@ -203,31 +207,46 @@ class MarketFeed(TimeBasedFeed):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
+        
+        request: MarketFeedDownloadRequest = self._current_request
 
-        if request.data_layer != DataLayer.RAW:
+        self.transform(
+            lambda_with_name(
+                '__convert_to_pandas_df',
+                lambda data: convert_to_desired_df(data, DataTool.pandas)
+            ),
+            lambda_with_name(
+                '__standardize_date_column',
+                lambda df: self._standardize_date_column(df)
+            ),
+        )
+        # NOTE: use double underscore to denote default transformations
+        if self._load_request.data_layer != DataLayer.RAW:
             # default transformations to normalize data:
             self.transform(
                 lambda_with_name(
-                    'convert_to_pandas_df',
-                    lambda data: convert_to_desired_df(data, DataTool.pandas)
+                    '__normalize_raw_data',
+                    lambda df: self._normalize_raw_data(df)
                 ),
-                self._normalize_raw_data,
                 lambda_with_name(
-                    'standardize_columns',
+                    '__standardize_columns',
                     lambda df: etl.standardize_columns(df, request.product, request.data_resolution),
                 ),
                 lambda_with_name(
-                    'resample_data_if_necessary', 
+                    '__resample_data_if_necessary', 
                     lambda df: etl.resample_data(df, request.target_resolution, product=request.product)
                 ),
                 # after resampling, the columns order is not guaranteed to be the same as the original, so need to organize them
                 # otherwise, polars will not be able to collect correctly
                 # resampled_df = organize_columns(resampled_df)
-                etl.organize_columns,
+                lambda_with_name(
+                    '__organize_columns',
+                    lambda df: etl.organize_columns(df)
+                ),
             )
         self.transform(
             lambda_with_name(
-                'convert_to_user_df',
+                '__convert_to_user_df',
                 lambda df: convert_to_desired_df(df, config.data_tool)
             )
         )
@@ -241,6 +260,7 @@ class MarketFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         data_layer: DataLayer=DataLayer.CLEANED,
+        data_domain: str = '',  # TODO
         from_storage: DataStorage=DataStorage.LOCAL,
         auto_resample: bool=True,
         dataflow_per_date: bool=False,
@@ -347,18 +367,21 @@ class MarketFeed(TimeBasedFeed):
         if auto_resample:
             self.transform(
                 lambda_with_name(
-                    'convert_to_pandas_df',
+                    '__convert_to_pandas_df',
                     lambda df: convert_to_desired_df(df, DataTool.pandas)
                 ),
                 lambda_with_name(
-                    'resample_data_if_necessary', 
+                    '__resample_data_if_necessary', 
                     lambda df: etl.resample_data(df, target_resolution)
                 ),
-                etl.organize_columns,
+                lambda_with_name(
+                    '__organize_columns',
+                    lambda df: etl.organize_columns(df)
+                ),
             )
         self.transform(
             lambda_with_name(
-                'convert_to_user_df',
+                '__convert_to_user_df',
                 lambda df: convert_to_desired_df(df, config.data_tool)
             )
         )
@@ -420,7 +443,7 @@ class MarketFeed(TimeBasedFeed):
             # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
             data_source: DataSource = self.data_source.name
             self.transform(
-                lambda_with_name('standardize_message', lambda msg: MarketFeed._standardize_message(data_source, product, resolution, msg)),
+                lambda_with_name('__standardize_message', lambda msg: MarketFeed._standardize_message(data_source, product, resolution, msg)),
             )
     
     @staticmethod

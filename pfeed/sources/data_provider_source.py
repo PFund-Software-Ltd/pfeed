@@ -12,6 +12,7 @@ from pfeed.enums import DataProviderType, DataAccessType, DataCategory
 class DataProviderSource(ABC):
     def __init__(self, api_key: str | None=None):
         self.generic_metadata, self.specific_metadata = self._load_metadata()
+        super().__init__(data_categories=[DataCategory[category.upper()] for category in self.generic_metadata['data_categories'].keys()])
         self._api_key: str | None = api_key or self._get_api_key()
         self.start_date: str | None = self.specific_metadata.get('start_date', None)
         self.access_type = DataAccessType[self.generic_metadata['access_type'].upper()]
@@ -19,7 +20,6 @@ class DataProviderSource(ABC):
         self.data_origin = self.generic_metadata['data_origin']
         self.rate_limits = self.generic_metadata['rate_limits']
         self.docs_url = self.generic_metadata['docs_url']
-        self.data_categories: list[DataCategory] = [DataCategory[category.upper()] for category in self.generic_metadata['data_categories'].keys()]
         
     def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
         raise NotImplementedError(f'{self.name} does not support creating products')

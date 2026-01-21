@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.typing import tDataCategory
     from pfeed.enums import DataCategory
-    from pfeed.sources.data_provider_source import DataProviderSource
+    from pfeed.sources.base_source import BaseSource
     from pfeed.feeds.base_feed import BaseFeed
 
 from abc import ABC, abstractmethod
@@ -27,7 +27,7 @@ class DataClient(ABC):
         params.update(kwargs)
 
         self._pipeline_mode: bool = pipeline_mode
-        self.data_source = self._create_data_source()
+        self.data_source: BaseSource = self._create_data_source()
 
         # initialize data feeds
         for data_category in self.data_categories:
@@ -44,7 +44,7 @@ class DataClient(ABC):
     
     @staticmethod
     @abstractmethod
-    def _create_data_source(*args, **kwargs) -> DataProviderSource:
+    def _create_data_source(*args, **kwargs) -> BaseSource:
         pass
 
     @property

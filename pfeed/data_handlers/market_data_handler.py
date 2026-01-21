@@ -6,10 +6,10 @@ if TYPE_CHECKING:
     
 import datetime
 
+from pfund.datas.resolution import Resolution
 from pfeed.utils.file_path import FilePath
 from pfeed._io.table_io import TablePath
 from pfeed._io.database_io import DBPath
-from pfund.datas.resolution import Resolution
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
 

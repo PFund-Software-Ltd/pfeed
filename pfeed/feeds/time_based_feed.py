@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict, Literal, Callable, Any, ClassVar
 if TYPE_CHECKING:
+    import pandas as pd
     from narwhals.typing import Frame
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
@@ -13,7 +14,6 @@ if TYPE_CHECKING:
         missing_dates: list[datetime.date]
 
 import datetime
-from abc import abstractmethod
 
 from pfeed.enums import ExtractType
 from pfeed.config import get_config
@@ -29,10 +29,23 @@ __all__ = ["TimeBasedFeed"]
 
 class TimeBasedFeed(BaseFeed):
     data_model_class: ClassVar[type[TimeBasedDataModel]]
+    date_column_in_raw_data: ClassVar[str]
+    original_date_column_in_raw_data: ClassVar[str] = 'original_date'
 
-    @abstractmethod
-    def _standardize_date_column(data: Any) -> Any:
-        pass
+    def _standardize_date_column(self, df: pd.DataFrame, is_raw_data: bool) -> pd.DataFrame:
+        '''Ensure date column is standardized, "date" column is mandatory for storing data'''
+        from pfeed._etl.base import standardize_date_column
+        if not is_raw_data:
+            df = df.rename(columns={self.date_column_in_raw_data: 'date'})
+        else:
+            if self.date_column_in_raw_data != 'date':
+                df['date'] = df[self.date_column_in_raw_data]
+            else:
+                # NOTE: if raw data also uses "date" column, copy it to "original_date" column, 
+                # which will be renamed back to "date" before writing to storage
+                df[self.original_date_column_in_raw_data] = df['date']
+        df = standardize_date_column(df)
+        return df
     
     def _standardize_dates(self, start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.

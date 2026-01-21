@@ -21,14 +21,7 @@ __all__ = ['BybitMarketFeed']
 
 class BybitMarketFeed(BybitMixin, MarketFeed):
     data_model_class: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
-    
-    @staticmethod
-    def _standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
-        '''Ensure date column is standardized, "date" column is mandatory for storing data'''
-        from pfeed._etl.base import standardize_date_column
-        df['date'] = df['timestamp']
-        df = standardize_date_column(df)
-        return df
+    date_column_in_raw_data: ClassVar[str] = 'timestamp'
     
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -47,7 +40,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         """
         df['side'] = df['side'].str.lower()  # some products use "Buy"/"Sell" while some use "buy"/"sell"
         MAPPING_COLS = {'buy': 1, 'sell': -1}
-        RENAMING_COLS = {'timestamp': 'date', 'size': 'volume'}
+        RENAMING_COLS = {'size': 'volume'}
         df = df.rename(columns=RENAMING_COLS)
         df['side'] = df['side'].map(MAPPING_COLS)
         # Convert volume column to float64 to pass pandera schema validation, since inverse products have int volume

@@ -7134,7 +7134,7 @@ packages:
 - pypi: ../mtflow
   name: mtflow
   version: 0.0.1.dev2
-  sha256: dc8f05b6581a1b4c52f296e5221f7118993b142cc0cdde842072234a3a507532
+  sha256: f6f406b520e9a2eab9be188e80201ee0a6e5286a50b7bde0992cd6dc556e5ba5
   requires_dist:
   - joblib>=1.5.3
   - optuna>=4.6.0
@@ -8441,7 +8441,7 @@ packages:
 - pypi: ./
   name: pfeed
   version: 0.0.5
-  sha256: 38522b08853653d9c4300dd38cc6f185a0407bc3cb0e05ff460e99a8b3a729cf
+  sha256: 598ab1c3af961f054da547203c290e7723f8a5e513ef983272f7e2a99a10e979
   requires_dist:
   - pfund @ file:///Users/stephenyau/pfund.ai/pfund
   - pandas>=3.0.0
@@ -8461,7 +8461,7 @@ packages:
   - pfund-plot[jupyter]>=0.0.1.dev3 ; extra == 'jupyter'
   - fmp-api-client @ file:///Users/stephenyau/pfund.ai/fmp-api-client ; extra == 'fmp'
   - yfinance>=1.0 ; extra == 'yfinance'
-  - prefect>=3.6.11 ; extra == 'prefect'
+  - prefect>=3.6.12 ; extra == 'prefect'
   - dask[complete,dataframe]>=2026.1.1 ; extra == 'dask'
   - coiled>=1.130.2 ; extra == 'coiled'
   - pyspark[connect,pandas-on-spark,sql]>=4.1.1 ; extra == 'spark'

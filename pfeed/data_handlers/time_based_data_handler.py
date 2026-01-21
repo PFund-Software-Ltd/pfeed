@@ -72,17 +72,11 @@ class TimeBasedDataHandler(BaseDataHandler):
         else:
             raise ValueError(f"Streaming is not supported for {self._io.name}")
 
-    def write(
-        self,
-        data: GenericFrame | StreamingData,
-        streaming: bool = False,
-        validate: bool = True,
-        **io_kwargs,
-    ):
+    def write(self, data: GenericFrame | StreamingData, streaming: bool = False, **io_kwargs):
         if streaming:
             self._write_stream(data)
         else:
-            self._write_batch(data, validate=validate, **io_kwargs)
+            self._write_batch(data, **io_kwargs)
 
     # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same columns in write_batch (env=BACKTEST)
     def _standardize_streaming_msg(self, msg: StreamingMessage) -> dict:
@@ -109,12 +103,24 @@ class TimeBasedDataHandler(BaseDataHandler):
         data["date"] = date
 
         # add year, month, day columns for delta table partitioning
-        # FIXME: handle cases when its not using deltalake_io, or at least check self._io.SUPPORTS_PARTITIONING
-        data["year"] = date.year
-        data["month"] = date.month
-        data["day"] = date.day
+        if self._io.SUPPORTS_PARTITIONING:
+            data["year"] = date.year
+            data["month"] = date.month
+            data["day"] = date.day
 
         return data
+    
+    def _drop_temporary_date_column_in_raw_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        '''Clean up temporary date column in raw data'''
+        from pfeed.feeds.time_based_feed import TimeBasedFeed
+        if self._data_layer == DataLayer.RAW:
+            original_date_column = TimeBasedFeed.original_date_column_in_raw_data
+            if original_date_column in df.columns:
+                df['date'] = df[original_date_column]
+                df.drop(columns=[original_date_column], inplace=True)
+            else:
+                df.drop(columns=['date'], inplace=True)
+        return df
 
     # EXTEND: currently only supports writing for parquet+deltalake (using .arrow for buffering)
     def _write_stream(self, data: StreamingData):
@@ -125,16 +131,15 @@ class TimeBasedDataHandler(BaseDataHandler):
             partition_by=self.PARTITION_COLUMNS,
         )
 
-    def _write_batch(self, df: GenericFrame, validate: bool = True, **io_kwargs):
+    def _write_batch(self, df: GenericFrame, **io_kwargs):
         import pandas as pd
         from pandas.api.types import is_datetime64_ns_dtype
         from pfeed._etl.base import convert_to_desired_df
 
         df: pd.DataFrame = convert_to_desired_df(df, DataTool.pandas)
         # validate before writing data
-        if validate:
+        if self._data_layer != DataLayer.RAW:
             df = self._validate_schema(df)
-
         data_model: TimeBasedDataModel = self._data_model
 
         # split data with a date range into chunks per date
@@ -159,6 +164,7 @@ class TimeBasedDataHandler(BaseDataHandler):
                 file_path = self._file_paths_per_date[date]
                 if "index" in df_chunk.columns:
                     df_chunk.drop(columns=["index"], inplace=True)
+                df_chunk = self._drop_temporary_date_column_in_raw_data(df_chunk)
                 table = pa.Table.from_pandas(df_chunk, preserve_index=False)
                 file_metadata: TimeBasedMetadataModel = data_model_copy.to_metadata()
                 # NOTE: this only writes metadata to the table schema, not to the file.
@@ -199,6 +205,7 @@ class TimeBasedDataHandler(BaseDataHandler):
                 where = f"date >= '{start_ts}' AND date <= '{end_ts}'"
             else:
                 where = None
+            df = self._drop_temporary_date_column_in_raw_data(df)
             data = pa.Table.from_pandas(df, preserve_index=False)
             self._io.write(
                 data,

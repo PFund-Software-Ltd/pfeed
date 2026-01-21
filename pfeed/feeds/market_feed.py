@@ -209,6 +209,7 @@ class MarketFeed(TimeBasedFeed):
         from pfeed.utils import lambda_with_name
         
         request: MarketFeedDownloadRequest = self._current_request
+        is_raw_data = self._load_request.data_layer == DataLayer.RAW
 
         self.transform(
             lambda_with_name(
@@ -217,11 +218,11 @@ class MarketFeed(TimeBasedFeed):
             ),
             lambda_with_name(
                 '__standardize_date_column',
-                lambda df: self._standardize_date_column(df)
+                lambda df: self._standardize_date_column(df, is_raw_data)
             ),
         )
         # NOTE: use double underscore to denote default transformations
-        if self._load_request.data_layer != DataLayer.RAW:
+        if not is_raw_data:
             # default transformations to normalize data:
             self.transform(
                 lambda_with_name(

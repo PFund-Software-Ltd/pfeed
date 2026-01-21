@@ -102,12 +102,7 @@ class BaseStorage(ABC):
     def write_data(
         self, data: GenericData | StreamingMessage, streaming: bool = False, **io_kwargs
     ):
-        self.data_handler.write(
-            data=data,
-            streaming=streaming,
-            validate=self.data_layer != DataLayer.RAW,
-            **io_kwargs,
-        )
+        self.data_handler.write(data=data, streaming=streaming, **io_kwargs)
 
     def read_data(self, **io_kwargs) -> tuple[GenericFrame | None, BaseMetadata]:
         """Read data from storage.

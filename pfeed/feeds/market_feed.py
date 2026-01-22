@@ -103,11 +103,11 @@ class MarketFeed(TimeBasedFeed):
             resolution=request.target_resolution,
         )
     
-    def _create_batch_dataflows(self, extract_func: Callable, extract_type: ExtractType) -> list[DataFlow]:
-        dataflows: list[DataFlow] = super()._create_batch_dataflows(extract_func=extract_func, extract_type=extract_type)
+    def _create_batch_dataflows(self, extract_func: Callable, extract_type: ExtractType):
+        super()._create_batch_dataflows(extract_func=extract_func, extract_type=extract_type)
         # HACK: update the data model in faucet to the data resolution
         # because data model in dataflow uses the target resolution, but the faucet uses the data resolution
-        for dataflow in dataflows:
+        for dataflow in self._dataflows:
             faucet_data_model: MarketDataModel = dataflow.faucet.data_model 
             faucet_data_model.update_resolution(self._current_request.data_resolution)
         
@@ -506,6 +506,7 @@ class MarketFeed(TimeBasedFeed):
         pass
         
     # TODO: General-purpose data fetching/LLM call? without storage overhead
+    # NOTE: integrate it well with prefect's serve()
     def fetch(self) -> GenericFrame | None | MarketFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
     

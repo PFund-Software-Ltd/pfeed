@@ -18,11 +18,6 @@ __all__ = [
 project_name = 'pfeed'
 _config: PFeedConfig | None = None
 _logging_config: dict | None = None
-CONFIGURABLE_KEYS: set[str] = {
-    'data_path',
-    'log_path',
-    'cache_path',
-}
 
 
 def setup_logging(env: Environment | None=None, reset: bool=False):
@@ -83,12 +78,9 @@ def configure(
     config = get_config()
     config_dict = config.to_dict()
     config_dict.pop('__version__')
-    config_dict_keys = set(config_dict.keys())
-    assert config_dict_keys == CONFIGURABLE_KEYS, \
-        f"Config keys are not the same as CONFIGURABLE_KEYS: {config_dict_keys} != {CONFIGURABLE_KEYS}"
     
     # Apply updates for non-None values
-    for k in CONFIGURABLE_KEYS:
+    for k in config_dict:
         v = locals().get(k)
         if v is not None:
             if '_path' in k:
@@ -140,10 +132,15 @@ def configure_logging(logging_config: dict | None=None, debug: bool=False) -> di
     
 
 class PFeedConfig(Configuration):
+    __version__ = '0.1.0'
+    
     def __init__(self):
         from pfund_kit.utils import load_env_file
         load_env_file(verbose=False)
         super().__init__(project_name=project_name, source_file=__file__)
+
+    def _initialize_from_data(self):
+        """Initialize PFeedConfig-specific attributes from config data."""
         self.data_tool = self._data.get('data_tool', DataTool.polars)
     
     def to_dict(self) -> dict:

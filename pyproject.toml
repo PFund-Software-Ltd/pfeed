@@ -25,7 +25,8 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pfund>=0.0.2",
-    "pandas>=3.0.0",
+    # TODO: upgrade to pandas 3.0.0 when other libraries support it (currently it breaks pandera etc.)
+    "pandas>=2.3.3,<3.0.0",
     "polars>=1.37.1",
     "pyarrow>=23.0.0",
     "pandera>=0.28.1",

@@ -4,12 +4,12 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
 
 import os
-from abc import ABC
 
 from pfeed.enums import DataProviderType, DataAccessType, DataCategory
+from pfeed.sources.base_source import BaseSource
 
 
-class DataProviderSource(ABC):
+class DataProviderSource(BaseSource):
     def __init__(self, api_key: str | None=None):
         self.generic_metadata, self.specific_metadata = self._load_metadata()
         super().__init__(data_categories=[DataCategory[category.upper()] for category in self.generic_metadata['data_categories'].keys()])

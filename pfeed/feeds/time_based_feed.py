@@ -94,10 +94,9 @@ class TimeBasedFeed(BaseFeed):
         assert start_date <= end_date, f"start_date must be before end_date: {start_date} <= {end_date}"
         return start_date, end_date    
   
-    def _create_batch_dataflows(self, extract_func: Callable, extract_type: ExtractType) -> list[DataFlow]:
+    def _create_batch_dataflows(self, extract_func: Callable, extract_type: ExtractType):
         self._clear_dataflows()
         request: TimeBasedFeedDownloadRequest = self._current_request
-        dataflows: list[DataFlow] = []
         data_model: TimeBasedDataModel = self._create_data_model_from_request(request)
         if request.dataflow_per_date:
             # one dataflow per date
@@ -108,13 +107,12 @@ class TimeBasedFeed(BaseFeed):
                 data_model_copy.update_end_date(date)
                 faucet: Faucet = self._create_faucet(data_model=data_model_copy, extract_func=extract_func, extract_type=extract_type)
                 dataflow: DataFlow = self._create_dataflow(data_model_copy, faucet)
-                dataflows.append(dataflow)
+                self._dataflows.append(dataflow)
         else:
             # one dataflow for the entire date range
             faucet: Faucet = self._create_faucet(data_model=data_model, extract_func=extract_func, extract_type=extract_type)
             dataflow: DataFlow = self._create_dataflow(data_model, faucet)
-            dataflows.append(dataflow)
-        return dataflows
+            self._dataflows.append(dataflow)
     
     def _run_retrieve(
         self,
@@ -161,7 +159,7 @@ class TimeBasedFeed(BaseFeed):
             )
         )
     
-    def run(self, prefect_kwargs: dict | None=None) -> GenericFrame | None:
+    def run(self, **prefect_kwargs) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
         from pfeed.utils.dataframe import is_empty_dataframe

@@ -11,7 +11,3 @@ class BaseSource(ABC):
     def __init__(self, data_categories: list[DataCategory]):
         self.data_categories = data_categories
         
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        assert hasattr(cls, 'name'), f'{cls.__name__} must have a name attribute'
-        assert isinstance(cls.name, DataSource), f'{cls.__name__} name must be a DataSource enum value'

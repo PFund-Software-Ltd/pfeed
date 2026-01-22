@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.sink import Sink
     from pfeed.dataflow.result import FlowResult
     from pfeed.data_handlers.base_data_handler import BaseMetadata
-    
+
 import logging
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -82,7 +82,7 @@ class BaseFeed(ABC):
         pass
 
     @abstractmethod
-    def _create_batch_dataflows(self, *args, **kwargs) -> list[DataFlow]:
+    def _create_batch_dataflows(self, *args, **kwargs):
         pass
     
     def configure_io(self, io_format: IOFormat, **io_options) -> BaseFeed:
@@ -183,17 +183,12 @@ class BaseFeed(ABC):
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     @abstractmethod
-    def run(self, prefect_kwargs: dict | None=None) -> GenericData | None:
+    def run(self, **prefect_kwargs) -> GenericData | None:
         pass
     
     def _create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
         from pfeed.dataflow.dataflow import DataFlow
         dataflow = DataFlow(data_model=data_model, faucet=faucet)
-        if self._dataflows:
-            existing_dataflow = self._dataflows[0]
-            assert existing_dataflow.is_streaming() == dataflow.is_streaming(), \
-                'Cannot mix streaming and non-streaming dataflows in the same feed'
-        self._dataflows.append(dataflow)
         return dataflow
     
     def _create_faucet(
@@ -294,6 +289,8 @@ class BaseFeed(ABC):
             io_format=io_format,
             compression=compression,
         )
+        # NOTE: need to confirm the final destination before adding any transformations
+        # so transformations are applied only after the load request above
         self._add_default_transformations()
         self._flush_pending_transformations()
         if self._ray_kwargs:
@@ -328,7 +325,7 @@ class BaseFeed(ABC):
         '''
         has_sink = any(dataflow.sink is not None for dataflow in self._dataflows)
         if not has_sink:
-            if self._load_request.to_storage is not None:
+            if self._load_request and self._load_request.to_storage is not None:
                 self.load(
                     to_storage=self._load_request.to_storage,
                     data_layer=self._load_request.data_layer,
@@ -344,10 +341,24 @@ class BaseFeed(ABC):
         self._failed_dataflows.clear()
         self._dataflows.clear()
     
+    def _is_prefect_running(self) -> bool:
+        import os
+        import httpx
+
+        PREFECT_API_URL = os.getenv('PREFECT_API_URL', 'http://127.0.0.1:4200/api').rstrip('/')
+        if not PREFECT_API_URL.startswith('http'):
+            PREFECT_API_URL = f'http://{PREFECT_API_URL}'
+        try:
+            response = httpx.get(f'{PREFECT_API_URL}/health', timeout=2.0)
+            return response.status_code == 200
+        except Exception:
+            # Catch all exceptions - if we can't verify Prefect is running, assume it's not
+            return False
+    
     def _run_batch_dataflows(self, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track
         
-        use_prefect = prefect_kwargs is not None
+        use_prefect = self._is_prefect_running()
         self._auto_load()
         
         def _run_dataflow(dataflow: DataFlow) -> FlowResult:
@@ -449,5 +460,7 @@ class BaseFeed(ABC):
         Args:
             kwargs: kwargs specific to prefect @flow decorator
         '''
+        # execute the deferred LoadRequest created by e.g. download() if load() hasn't been called yet
+        self._auto_load()
         return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self._dataflows]
     

@@ -109,10 +109,9 @@ class DataFlow:
         if self._flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
             data: GenericData | None = prefect_dataflow()
-            self._result.set_data(data)
         else:
             data: GenericData | None = self._run_batch_etl()
-            self._result.set_data(data)
+        self._result.set_data(data)
         return self._result
     
     def _setup_messaging(self, worker_name: str):
@@ -202,5 +201,6 @@ class DataFlow:
         def prefect_flow():
             # from prefect.logging import get_run_logger
             # prefect_logger = get_run_logger()  # this is a logger adapter
+            self._flow_type = FlowType.prefect
             return self._run_batch_etl()
         return prefect_flow

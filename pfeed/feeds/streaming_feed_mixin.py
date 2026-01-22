@@ -87,11 +87,12 @@ class StreamingFeedMixin:
                 extract_type=ExtractType.stream,
                 close_stream=self._close_stream,
             )
+        dataflow: DataFlow = self._create_dataflow(data_model=data_model, faucet=faucet)
+        self._dataflows.append(dataflow)
         
         
         if callback:
             faucet.set_streaming_callback(callback)
-        dataflow: DataFlow = self._create_dataflow(data_model=data_model, faucet=faucet)
         faucet.bind_data_model_to_dataflow(data_model, dataflow)
         add_default_transformations()
         if load_to_storage:

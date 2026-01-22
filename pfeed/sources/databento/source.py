@@ -49,9 +49,10 @@ class DatabentoSource(TradFiDataProviderSource):
         pass
     
     def _derive_start_date(self, symbol: str) -> str | None:
+        from pfund_kit.utils.temporal import convert_to_date
         def is_valid_date(date_string):
             try:
-                datetime.datetime.strptime(date_string, "%Y-%m-%d")
+                convert_to_date(date_string)
                 return True
             except ValueError:
                 return False
@@ -80,7 +81,8 @@ class DatabentoSource(TradFiDataProviderSource):
     
     def _derive_end_date(self, start_date: str) -> str:
         '''Derive the end date to be the day after the start date.'''
-        return (datetime.datetime.strptime(start_date, '%Y-%m-%d') + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        from pfund_kit.utils.temporal import convert_to_date
+        return (convert_to_date(start_date) + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
 
     def _derive_dataset(self, symbol: str) -> tDATASET | None:
         try:

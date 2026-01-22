@@ -23,18 +23,15 @@ class CacheStorage(LocalStorage):
         )
         self._clear_caches()
     
-    @staticmethod
-    def _get_today() -> datetime.date:
-        return datetime.datetime.now(tz=datetime.timezone.utc).date()
-    
     def _clear_caches(self):
         '''Clear old caches except the current date'''
         from pfund import print_error
         from pfund_kit.utils import get_last_modified_time
+        from pfund_kit.utils.temporal import get_today
         from pfeed.config import get_config
         config = get_config()
         cache_path = config.cache_path
-        today = self._get_today()
+        today = get_today()
         
         for file_dir in Path(cache_path).rglob("*"):
             if not file_dir.is_dir():

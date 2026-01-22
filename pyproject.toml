@@ -28,7 +28,7 @@ dependencies = [
     # TODO: upgrade to pandas 3.0.0 when other libraries support it (currently it breaks pandera etc.)
     "pandas>=2.3.3,<3.0.0",
     "polars>=1.37.1",
-    "pyarrow>=23.0.0",
+    "pyarrow>=22.0.0",
     "pandera>=0.28.1",
     "msgspec>=0.20.0",
     "pydantic>=2.12.5",

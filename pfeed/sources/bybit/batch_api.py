@@ -70,11 +70,12 @@ class BatchAPI:
     
     @staticmethod
     def _create_filename(product: BybitProduct, resolution: Resolution, date: str):
+        from pfund_kit.utils.temporal import convert_to_date
         if resolution.is_quote():
             orderbook_levels = 200
             # NOTE: somehow after this date, the orderbook (non-spot) levels are changed from 500 to 200
             cutoff_date = '2025-08-21'
-            is_before_cutoff = datetime.datetime.strptime(date, '%Y-%m-%d').date() < datetime.datetime.strptime(cutoff_date, '%Y-%m-%d').date()
+            is_before_cutoff = convert_to_date(date) < convert_to_date(cutoff_date)
             if not product.is_spot():
                 if is_before_cutoff:
                     orderbook_levels = 500

@@ -47,7 +47,12 @@ class TimeBasedFeed(BaseFeed):
         df = standardize_date_column(df)
         return df
     
-    def _standardize_dates(self, start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd', 'max']) -> tuple[datetime.date, datetime.date]:
+    def _standardize_dates(
+        self, 
+        start_date: str | datetime.date, 
+        end_date: str | datetime.date,
+        rollback_period: str | Literal['ytd', 'max'],
+    ) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.
 
         Args:
@@ -67,32 +72,14 @@ class TimeBasedFeed(BaseFeed):
         Raises:
             ValueError: If rollback_period='max' but data source has no start_date attribute
         '''
+        from pfeed.utils import parse_date_range
         if rollback_period == 'max' and not start_date:
             if hasattr(self.data_source, 'start_date') and self.data_source.start_date:
                 start_date = self.data_source.start_date
             else:
                 raise ValueError(f'{self.name} {rollback_period=} is not supported')        
-        start_date, end_date = self._parse_date_range(start_date, end_date, rollback_period)
+        start_date, end_date = parse_date_range(start_date, end_date, rollback_period)
         return start_date, end_date
-        
-    # FIXME: move to utils
-    @staticmethod
-    def _parse_date_range(start_date: str | datetime.date, end_date: str | datetime.date, rollback_period: str | Literal['ytd']) -> tuple[datetime.date, datetime.date]:
-        from pfeed.utils import rollback_date_range
-        if start_date:
-            if isinstance(start_date, str):
-                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-            if end_date:
-                if isinstance(end_date, str):
-                    end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
-            else:
-                yesterday = datetime.datetime.now(tz=datetime.timezone.utc).date() - datetime.timedelta(days=1)
-                end_date = yesterday
-        else:
-            assert rollback_period != 'max', '"max" is not allowed for `rollback_period`'
-            start_date, end_date = rollback_date_range(rollback_period)
-        assert start_date <= end_date, f"start_date must be before end_date: {start_date} <= {end_date}"
-        return start_date, end_date    
   
     def _create_batch_dataflows(self, extract_func: Callable, extract_type: ExtractType):
         self._clear_dataflows()

@@ -82,6 +82,7 @@ class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
         )
         
     def _download_impl(self, data_model: NewsDataModel) -> dict[str, list[list[dict]]]:
+        from pfund_kit.utils.temporal import convert_to_date
         self.logger.debug(f'downloading {data_model}')
         symbol = data_model.product.symbol
         assert symbol, f'symbol is required for {data_model}'
@@ -91,7 +92,7 @@ class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
         start_date, end_date = data_model.start_date, data_model.end_date
         data = [
             item for item in data
-            if start_date <= datetime.datetime.strptime(item['content']['pubDate'], '%Y-%m-%dT%H:%M:%SZ').date() <= end_date
+            if start_date <= convert_to_date(item['content']['pubDate'], format='%Y-%m-%dT%H:%M:%SZ') <= end_date
         ]
         self.logger.debug(f'downloaded {data_model}')
         return data

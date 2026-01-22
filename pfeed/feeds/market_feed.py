@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from pfeed.data_models.retrieve_market_data_model import RetrieveMarketDataModel
     from pfeed.enums import DataSource
     from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
-    from pfeed.dataflow.dataflow import DataFlow
     from pfeed.typing import GenericFrame
 
 import datetime
@@ -415,6 +414,8 @@ class MarketFeed(TimeBasedFeed):
                 Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
                 This is expected to be fine-tuned based on the actual use case.
         '''
+        from pfund_kit.utils.temporal import get_utc_now
+        
         env = Environment[env.upper()]
         assert env != Environment.BACKTEST, 'streaming is not supported in env BACKTEST'
         setup_logging(env=env)
@@ -426,7 +427,7 @@ class MarketFeed(TimeBasedFeed):
             product=product,
             resolution=resolution,
             data_origin=data_origin,
-            start_date=datetime.datetime.now(tz=datetime.timezone.utc).date(),
+            start_date=get_utc_now().date(),
         )
         self._add_data_channel(data_model)
         self._create_streaming_settings(mode=mode, flush_interval=flush_interval)

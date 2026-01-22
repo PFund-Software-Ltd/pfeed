@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
 
 
-from pfund.datas.resolution import Resolution
+from pfund.datas.resolution import Resolution, ResolutionUnit
 
 
 def standardize_columns(df: pd.DataFrame, product: BaseProduct, resolution: Resolution) -> pd.DataFrame:
@@ -72,11 +72,11 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution, product: BaseP
     eresolution = (
         repr(resolution)
         # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
-        .replace('m', 'min')
-        .replace('d', 'D')
-        .replace('M', 'MS')  # MS = Month Start
-        .replace('y', 'YS')  # YS = Year Start
-        .replace('w', 'W-MON')  # W = Week, starting from Monday, otherwise, default is Sunday
+        .replace(ResolutionUnit.MINUTE.value, 'min')
+        .replace(ResolutionUnit.DAY.value, 'D')
+        .replace(ResolutionUnit.MONTH.value, 'MS')  # MS = Month Start
+        .replace(ResolutionUnit.YEAR.value, 'YS')  # YS = Year Start
+        .replace(ResolutionUnit.WEEK.value, 'W-MON')  # W = Week, starting from Monday, otherwise, default is Sunday
     )
     
     is_tick_data = 'price' in df.columns

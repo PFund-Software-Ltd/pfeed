@@ -132,8 +132,6 @@ def configure_logging(logging_config: dict | None=None, debug: bool=False) -> di
     
 
 class PFeedConfig(Configuration):
-    __version__ = '0.1.0'
-    
     def __init__(self):
         from pfund_kit.utils import load_env_file
         load_env_file(verbose=False)

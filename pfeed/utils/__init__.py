@@ -1,6 +1,10 @@
 from typing import Callable, Literal
-import re
 import datetime
+
+
+def lambda_with_name(name: str, lambda_func: Callable):
+    lambda_func.__name__ = name
+    return lambda_func
 
 
 def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):
@@ -72,54 +76,6 @@ def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):
     scaling_factor = 10 ** (target_unit_multiplier - unit_multiplier)
 
     return target_unit, scaling_factor
-
-
-def lambda_with_name(name: str, lambda_func: Callable):
-    lambda_func.__name__ = name
-    return lambda_func
-    
-
-def get_args_and_kwargs(func):
-    import inspect
-    signature = inspect.signature(func)
-    args = [param.name for param in signature.parameters.values() if param.default == inspect.Parameter.empty]
-    kwargs = {param.name: param.default for param in signature.parameters.values() if param.default != inspect.Parameter.empty}
-    return args, kwargs
-
-
-def separate_number_and_chars(input_string):
-    """Separates the number and characters from a string.
-    Args:
-        input_string: e.g. '1d'
-    Returns:
-        number_part: e.g. 1
-        char_part: e.g. 'd'
-    """
-    # Regex pattern: (\d+) captures one or more digits, (\D+) captures one or more non-digits
-    pattern = r'(\d+)(\D+)'
-    
-    match = re.match(pattern, input_string)
-    
-    if match:
-        number_part = match.group(1)
-        char_part = match.group(2)
-        return number_part, char_part
-    else:
-        return None, None  # Return None if no match is found
-
-
-def get_TZ_abbrev_and_UTC_offset(date: str, tz_identifier='US/Eastern'):
-    '''Returns timezone abbreviation (e.g. EST, EDT) based on the timezone identifier.
-    Useful when you want to determine if e.g. New York is in EST or EDT now.
-    Args:
-        date: e.g. 2023-11-11
-        timezone: TZ identifier from IANA timezone database
-    '''
-    import pytz
-    date = datetime.datetime.strptime(date, '%Y-%m-%d')
-    timezone = pytz.timezone(tz_identifier)
-    local_date = timezone.localize(date)  # attach timezone to the datetime object 
-    return local_date.strftime('%Z%z')
 
 
 def rollback_date_range(rollback_period: str | Literal['ytd']) -> tuple[datetime.date, datetime.date]:

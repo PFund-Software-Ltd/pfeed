@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Callable, Any, ClassVar, overload
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
+    from ray.util.queue import Queue
     from pfund.products.product_base import BaseProduct
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.engine import DataEngine
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.result import FlowResult
     from pfeed.data_handlers.base_data_handler import BaseMetadata
 
+import os
 import logging
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -104,6 +106,8 @@ class BaseFeed(ABC):
         import ray
         import atexit
         if not ray.is_initialized():
+            # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
+            os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
             ray.init(**self._ray_kwargs)
             atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
 
@@ -342,7 +346,6 @@ class BaseFeed(ABC):
         self._dataflows.clear()
     
     def _is_prefect_running(self) -> bool:
-        import os
         import httpx
 
         PREFECT_API_URL = os.getenv('PREFECT_API_URL', 'http://127.0.0.1:4200/api').rstrip('/')
@@ -376,7 +379,7 @@ class BaseFeed(ABC):
             from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
             
             @ray.remote
-            def ray_task(logger_name: str, dataflow: DataFlow) -> tuple[bool, DataFlow]:
+            def ray_task(logger_name: str, dataflow: DataFlow, log_queue: Queue) -> tuple[bool, DataFlow]:
                 success = False
                 try:
                     logger = setup_logger_in_ray_task(logger_name, log_queue)
@@ -397,8 +400,9 @@ class BaseFeed(ABC):
                     for dataflow_batch in track(dataflow_batches, description=f'Running {self.name} dataflows'):
                         futures = [
                             ray_task.remote(
-                                logger_name=self.name.lower(), 
+                                logger_name=self.logger.name,
                                 dataflow=dataflow,
+                                log_queue=log_queue,
                             ) for dataflow in dataflow_batch
                         ]
                         returns = ray.get(futures)
@@ -411,9 +415,8 @@ class BaseFeed(ABC):
                     print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
                 except Exception:
                     self.logger.exception(f'Error in running {self.name} dataflows:')
-                finally:
-                    self.logger.debug('shutting down ray...')
-                    self._shutdown_ray()
+            self.logger.debug('shutting down ray...')
+            self._shutdown_ray()
         else:
             try:
                 for dataflow in track(self._dataflows, description=f'Running {self.name} dataflows'):

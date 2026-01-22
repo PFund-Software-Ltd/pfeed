@@ -24,7 +24,7 @@ class DataEngine:
     STREAMING_QUEUE_MAXSIZE = 1000
 
     def __init__(self):
-        self._params = {k: v for k, v in locals().items() if k not in ['self', 'backfill']}
+        self._params = {k: v for k, v in locals().items() if k not in ['self']}
         self._feeds: list[BaseFeed] = []
         self._is_running: bool = False
         self._msg_queue: ZeroMQ | None = None

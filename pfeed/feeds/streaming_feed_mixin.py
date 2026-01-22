@@ -125,6 +125,8 @@ class StreamingFeedMixin:
 
             @ray.remote
             def ray_task(
+                logger_name: str,
+                log_queue: Queue,
                 feed_name: str,
                 worker_name: str,
                 transformations_per_dataflow: dict[DataFlowName, list[Callable]],
@@ -132,7 +134,7 @@ class StreamingFeedMixin:
                 ports_to_connect: dict[Literal['sender', 'receiver'], list[int]],
                 ready_queue: Queue,
             ):
-                logger = setup_logger_in_ray_task(feed_name.lower(), log_queue)
+                logger = setup_logger_in_ray_task(logger_name, log_queue)
                 logger.debug(f"Ray {worker_name} started")
 
                 try:
@@ -214,6 +216,8 @@ class StreamingFeedMixin:
                     # start ray workers
                     futures = [
                         ray_task.remote(
+                            logger_name=self.logger.name,
+                            log_queue=log_queue,
                             feed_name=self.name.value,
                             worker_name=worker_name,
                             transformations_per_dataflow=transformations_per_worker[worker_name],
@@ -241,11 +245,10 @@ class StreamingFeedMixin:
                     print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
                 except Exception:
                     self.logger.exception(f'Error in running {self.name} dataflows:')
-                finally:
-                    self.logger.debug('waiting for ray tasks to finish...')
-                    ray.get(futures)
-                    self.logger.debug('shutting down ray...')
-                    self._shutdown_ray()
+            self.logger.debug('waiting for ray tasks to finish...')
+            ray.get(futures)
+            self.logger.debug('shutting down ray...')
+            self._shutdown_ray()
         else:
             await _run_dataflows()
     

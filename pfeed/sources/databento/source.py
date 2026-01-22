@@ -27,7 +27,6 @@ tDATASET = Literal[
 
 # NOTE: 2024-10-26, best free llm for deriving databento dataset and start date is 'mistral'
 class DatabentoSource(TradFiDataProviderSource):
-    # TODO: add api_key to params
     def __init__(self):
         super().__init__('DATABENTO')
         if not os.getenv('DATABENTO_API_KEY'):

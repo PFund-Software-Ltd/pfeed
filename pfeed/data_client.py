@@ -16,28 +16,24 @@ class DataClient(ABC):
         self,
         # NOTE: these params should be the same as the ones in BaseFeed
         pipeline_mode: bool=False,
-        **kwargs,
+        **ray_kwargs,
     ):
-        '''
-        Args:
-            kwargs: kwargs specific to the data client, e.g. api_key for Databento
-        '''
-
-        params = {k: v for k, v in locals().items() if k not in ['self', 'kwargs']}
-        params.update(kwargs)
-
         self._pipeline_mode: bool = pipeline_mode
         self.data_source: BaseSource = self._create_data_source()
 
         # initialize data feeds
         for data_category in self.data_categories:
             feed: BaseFeed = create_feed(
-                data_source=self.name,
+                data_source=self.data_source.name,
                 data_category=data_category,
-                **params,
+                pipeline_mode=pipeline_mode,
+                **ray_kwargs,
             )
             # dynamically set attributes e.g. self.market_feed
             setattr(self, data_category.feed_name, feed)
+            
+    def is_pipeline(self) -> bool:
+        return self._pipeline_mode
     
     def get_feed(self, data_category: DataCategory | tDataCategory) -> BaseFeed | None:
         return getattr(self, DataCategory[data_category.upper()].feed_name, None)

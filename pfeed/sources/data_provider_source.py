@@ -10,10 +10,10 @@ from pfeed.sources.base_source import BaseSource
 
 
 class DataProviderSource(BaseSource):
-    def __init__(self, api_key: str | None=None):
+    def __init__(self):
         self.generic_metadata, self.specific_metadata = self._load_metadata()
         super().__init__(data_categories=[DataCategory[category.upper()] for category in self.generic_metadata['data_categories'].keys()])
-        self._api_key: str | None = api_key or self._get_api_key()
+        self._api_key: str | None = self._get_api_key()
         self.start_date: str | None = self.specific_metadata.get('start_date', None)
         self.access_type = DataAccessType[self.generic_metadata['access_type'].upper()]
         self.provider_type = DataProviderType[self.generic_metadata['provider_type'].upper()]

@@ -64,7 +64,23 @@ class FilePath:
 
     # Delegate all attribute access to the underlying path object
     def __getattr__(self, name):
+        # Guard against infinite recursion during pickle deserialization
+        # When unpickling, _path doesn't exist yet, causing __getattr__ to be called for it
+        if name == '_path':
+            raise AttributeError(name)
         return getattr(self._path, name)
+
+    def __getstate__(self):
+        """Support pickle serialization (used by Ray)."""
+        return {'_path_str': str(self._path), '_is_cloud': self.is_cloud}
+
+    def __setstate__(self, state):
+        """Support pickle deserialization (used by Ray)."""
+        from cloudpathlib import CloudPath
+        if state['_is_cloud']:
+            self._path = CloudPath(state['_path_str'])
+        else:
+            self._path = Path(state['_path_str'])
 
     def __str__(self):
         return str(self._path)

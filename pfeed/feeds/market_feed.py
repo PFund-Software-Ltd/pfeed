@@ -184,6 +184,10 @@ class MarketFeed(TimeBasedFeed):
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
         )
+        self.logger.info(
+            f'{self._current_request.name}:\n{self._current_request}\n', 
+            style=str(TextStyle.BOLD + RichColor.GREEN)
+        )
         self._load_request = LoadRequest(
             to_storage=to_storage,
             data_layer=data_layer,

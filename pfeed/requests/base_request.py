@@ -8,3 +8,7 @@ class BaseRequest(BaseModel):
 
     data_origin: str = ''
     request_type: ExtractType
+
+    @property
+    def name(self) -> str:
+        return f'{self.__class__.__name__}'

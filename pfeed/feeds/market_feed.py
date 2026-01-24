@@ -184,8 +184,6 @@ class MarketFeed(TimeBasedFeed):
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
         )
-        print(f'{self._current_request}')
-        exit()
         self._load_request = LoadRequest(
             to_storage=to_storage,
             data_layer=data_layer,

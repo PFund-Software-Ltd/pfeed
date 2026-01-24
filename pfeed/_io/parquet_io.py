@@ -55,7 +55,7 @@ class ParquetIO(FileIO):
 
     def read(self, file_paths: list[FilePath], **io_kwargs) -> pl.LazyFrame | None:
         lf: pl.LazyFrame | None = None
-        non_empty_file_paths = [file_path for file_path in file_paths if self.exists(file_path) and not self.is_empty(file_path)]
+        non_empty_file_paths = [str(file_path) for file_path in file_paths if self.exists(file_path) and not self.is_empty(file_path)]
         if non_empty_file_paths:
             lf = pl.scan_parquet(non_empty_file_paths, storage_options=self._storage_options, **io_kwargs)
         return lf

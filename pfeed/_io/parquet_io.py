@@ -36,7 +36,7 @@ class ParquetIO(FileIO):
             True if file exists and is a valid parquet file
             False if file doesn't exist or is not valid parquet
         """
-        if not self.exists(file_path):
+        if not FileIO.exists(self, file_path):
             return False
         
         try:

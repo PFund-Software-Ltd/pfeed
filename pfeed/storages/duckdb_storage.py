@@ -20,6 +20,9 @@ class DuckDBStorage(DatabaseStorage):
     # TODO: add __new__ to determine if inherit from LocalStorage or S3Storage?
     def __new__(cls, *args, in_memory: bool=DEFAULT_IN_MEMORY, memory_limit: str=DEFAULT_MEMORY_LIMIT, **kwargs):
         pass
+
+    def _create_uri(self) -> str:
+        return ':memory:' if self._in_memory else self.data_path
     
     def with_io(
         self, 

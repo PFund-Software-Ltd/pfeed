@@ -1,6 +1,5 @@
 from typing import Literal
 
-from pfeed.utils.file_path import FilePath
 from pfeed.enums import DataLayer
 from pfeed.storages.local_storage import LocalStorage
 from pfeed.config import get_config
@@ -20,7 +19,7 @@ class CacheStorage(LocalStorage):
         num_retained_days: int = DEFAULT_NUM_RETAINED_DAYS,
     ):
         super().__init__(
-            data_path=FilePath(config.cache_path),
+            data_path=config.cache_path,
             data_layer=data_layer,
             data_domain=data_domain,
             storage_options=storage_options,

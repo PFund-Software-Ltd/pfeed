@@ -3,18 +3,34 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
+    from pathlib import Path
     from pfeed._io.file_io import FileIO
     from pfeed._io.deltalake_io import DeltaLakeIO
 
 from abc import abstractmethod
 
-from pfeed.enums import IOFormat, Compression
+from pfeed.utils.file_path import FilePath
+from pfeed.enums import IOFormat, Compression, DataLayer
 from pfeed.storages.base_storage import BaseStorage
 
 
 class FileBasedStorage(BaseStorage):
     # EXTEND: add more file-based formats, iceberg, etc.
     SUPPORTED_IO_FORMATS = [IOFormat.PARQUET, IOFormat.DELTALAKE]
+    
+    def __init__(
+        self,
+        data_path: Path | str,
+        data_layer: DataLayer,
+        data_domain: str,
+        storage_options: dict | None = None,
+    ):
+        super().__init__(
+            data_path=FilePath(data_path),
+            data_layer=data_layer,
+            data_domain=data_domain,
+            storage_options=storage_options,
+        )
     
     @abstractmethod
     def get_filesystem(self) -> pa_fs.FileSystem:

@@ -2,10 +2,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from pfeed.utils.file_path import FilePath
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import GenericData, GenericFrame
+    from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO
     from pfeed.messaging.streaming_message import StreamingMessage
 
@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from pprint import pformat
 
 from pfeed.enums import DataLayer, IOFormat
+from pfeed.utils.file_path import FilePath
 
 
 class BaseStorage(ABC):
@@ -20,10 +21,10 @@ class BaseStorage(ABC):
     
     def __init__(
         self,
+        data_path: FilePath | DatabaseURI,
         data_layer: DataLayer,
         data_domain: str,
         storage_options: dict | None = None,
-        data_path: FilePath | None = None,
     ):
         '''
         Args:
@@ -32,7 +33,7 @@ class BaseStorage(ABC):
             # NOTE: NOT IMPLEMENTED YET, storage_options should be compatible with other libraries like polars, etc.
             storage_options: Storage options
         '''
-        self.data_path: FilePath | None = data_path
+        self.data_path = data_path
         self.data_layer = DataLayer[str(data_layer).upper()]
         self.data_domain = data_domain.upper()
         self.storage_options = storage_options or {}

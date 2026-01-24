@@ -75,11 +75,11 @@ class MarketDataHandler(TimeBasedDataHandler):
         ]).lower()
         # NOTE: special case "duckdb" where its file io and database io at the same time
         if self._is_file_io(strict=False):
-            db_uri = self._io._create_uri(data_path=self._data_path, db_name=db_name)
+            db_uri = self._data_path + '/' + db_name + self._io.FILE_EXTENSION
         # NOTE: special case "lancedb" where its table io and database io at the same time
         elif self._is_table_io(strict=False):
             table_path = self._create_table_path()
-            db_uri = self._io._create_uri(table_path=table_path)
+            db_uri = str(table_path)
         else:
-            db_uri = self._io._create_uri(db_name=db_name)
+            db_uri = self._data_path + '/' + db_name
         return DBPath(db_uri=db_uri, db_name=db_name, schema_name=schema_name, table_name=table_name)

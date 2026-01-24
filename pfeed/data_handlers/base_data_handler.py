@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, TypeAlias
 if TYPE_CHECKING:
     from pfeed.typing import GenericData
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO, MetadataModelAsDict
 
 from abc import ABC, abstractmethod
@@ -64,7 +65,7 @@ class BaseMetadata(BaseModel):
 
 
 class BaseDataHandler(ABC):
-    def __init__(self, data_path: FilePath, data_layer: DataLayer, data_domain: str, data_model: BaseDataModel, io: BaseIO):
+    def __init__(self, data_path: FilePath | DatabaseURI, data_layer: DataLayer, data_domain: str, data_model: BaseDataModel, io: BaseIO):
         self._data_path = data_path
         self._data_layer = data_layer
         self._data_domain = data_domain

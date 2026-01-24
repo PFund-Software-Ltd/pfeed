@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pandas as pd
+    from pfeed.storages.database_storage import DatabaseURI
     from pfeed.typing import GenericFrame, StreamingData
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.streaming_settings import StreamingSettings
@@ -10,7 +11,6 @@ if TYPE_CHECKING:
     from pfeed.utils.file_path import FilePath
 
 import datetime
-from pathlib import Path
 from abc import abstractmethod
 
 import polars as pl
@@ -47,7 +47,7 @@ class TimeBasedDataHandler(BaseDataHandler):
 
     def __init__(
         self,
-        data_path: FilePath | None,
+        data_path: FilePath | DatabaseURI,
         data_layer: DataLayer,
         data_domain: str,
         data_model: TimeBasedDataModel,

@@ -39,9 +39,6 @@ class DuckDBIO(DatabaseIO, FileIO):
         self._in_memory = in_memory
         self._memory_limit = memory_limit
     
-    def _create_uri(self, data_path: FilePath, db_name: str) -> str:
-        return ':memory:' if self._in_memory else f'{data_path}/{db_name}{self.FILE_EXTENSION}'
-    
     def _open_connection(self, uri: str):
         self._conn_uri = uri
         self._conn: DuckDBPyConnection = duckdb.connect(uri, **self._io_options)

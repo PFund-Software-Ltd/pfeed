@@ -35,10 +35,6 @@ class DatabaseIO(BaseIO):
         self._conn: DBConnection | None = None
         self._conn_uri: str | None = None
     
-    @abstractmethod
-    def _create_uri(self, *args, **kwargs) -> str:
-        pass
-
     def _connect(self, uri: str) -> DBConnection:
         if self._conn is None:
             self._open_connection(uri)

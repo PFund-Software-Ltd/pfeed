@@ -11,7 +11,7 @@ import pyarrow.fs as pa_fs
 import lancedb
 
 from pfeed.enums import TimestampPrecision
-from pfeed._io.table_io import TableIO, TablePath
+from pfeed._io.table_io import TableIO
 from pfeed._io.database_io import DatabaseIO, DBPath
 
 
@@ -31,9 +31,6 @@ class LanceDBIO(DatabaseIO, TableIO):
     ):
         DatabaseIO.__init__(self, storage_options=storage_options, io_options=io_options)
         TableIO.__init__(self, filesystem=filesystem, storage_options=storage_options, io_options=io_options)
-
-    def _create_uri(self, table_path: TablePath) -> str:
-        return str(table_path)
 
     def _open_connection(self, uri: str):
         self._conn_uri = uri

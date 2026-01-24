@@ -32,3 +32,16 @@ class MarketFeedDownloadRequest(TimeBasedFeedDownloadRequest):
         if isinstance(v, str):
             return Resolution(v)
         return v
+    
+    def __str__(self):
+        from pprint import pformat
+        data = {
+            'env': self.env.value,
+            'start_date': str(self.start_date),
+            'end_date': str(self.end_date),
+            'product': self.product.name,
+            'resolution': self.target_resolution,
+        }
+        if self.data_origin:
+            data['data_origin'] = self.data_origin
+        return pformat(data, sort_dicts=False)

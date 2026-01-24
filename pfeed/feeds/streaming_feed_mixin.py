@@ -118,7 +118,7 @@ class StreamingFeedMixin:
         if self._ray_kwargs:
             import ray
             from ray.util.queue import Queue
-            from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
+            from pfeed.utils.ray_logging import setup_logger_in_ray_task, ray_logging_context
             
             import zmq
             from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel, ZeroMQSignal

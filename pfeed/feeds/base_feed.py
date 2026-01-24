@@ -376,7 +376,7 @@ class BaseFeed(ABC):
         
         if self._ray_kwargs:
             import ray
-            from pfeed.utils.logging import setup_logger_in_ray_task, ray_logging_context
+            from pfeed.utils.ray_logging import setup_logger_in_ray_task, ray_logging_context
             
             @ray.remote
             def ray_task(logger_name: str, dataflow: DataFlow, log_queue: Queue) -> tuple[bool, DataFlow]:

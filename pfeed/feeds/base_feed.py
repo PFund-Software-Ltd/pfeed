@@ -370,9 +370,7 @@ class BaseFeed(ABC):
             else:
                 flow_type = FlowType.native
             result: DataFlowResult = dataflow.run_batch(flow_type=flow_type, prefect_kwargs=prefect_kwargs)
-            # NOTE: EMPTY dataframe is considered as success
-            success = result.data is not None
-            return success
+            return result.success
         
         if self._ray_kwargs:
             import ray

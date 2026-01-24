@@ -111,7 +111,9 @@ class DataFlow:
             data: GenericData | None = prefect_dataflow()
         else:
             data: GenericData | None = self._run_batch_etl()
-        self._result.set_data(data)
+        self._result.set_sink(self.sink)
+        # NOTE: EMPTY dataframe is considered as success
+        self._result.set_success(data is not None)
         return self._result
     
     def _setup_messaging(self, worker_name: str):

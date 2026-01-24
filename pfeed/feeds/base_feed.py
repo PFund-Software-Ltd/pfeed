@@ -39,6 +39,11 @@ class BaseFeed(ABC):
     data_domain: ClassVar[DataCategory]
     
     def __init__(self, pipeline_mode: bool=False, **ray_kwargs):
+        '''
+        Args:
+            pipeline_mode: whether to run in pipeline mode
+            **ray_kwargs: kwargs for ray.init()
+        '''
         setup_logging()
         self.data_source: DataProviderSource = self._create_data_source()
         self.logger = logging.getLogger(f'pfeed.{self.name.lower()}')
@@ -359,7 +364,7 @@ class BaseFeed(ABC):
             return False
     
     def _run_batch_dataflows(self, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
-        from pfund_kit.utils.progress_bar import track
+        from pfund_kit.utils.progress_bar import track, ProgressBar
         
         use_prefect = self._is_prefect_running()
         self._auto_load()
@@ -395,20 +400,25 @@ class BaseFeed(ABC):
                 try:
                     batch_size = self._ray_kwargs['num_cpus']
                     dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
-                    for dataflow_batch in track(dataflow_batches, description=f'Running {self.name} dataflows'):
-                        futures = [
-                            ray_task.remote(
-                                logger_name=self.logger.name,
-                                dataflow=dataflow,
-                                log_queue=log_queue,
-                            ) for dataflow in dataflow_batch
-                        ]
-                        returns = ray.get(futures)
-                        for success, dataflow in returns:
-                            if not success:
-                                self._failed_dataflows.append(dataflow)
-                            else:
-                                self._completed_dataflows.append(dataflow)
+                    with ProgressBar(total=len(self._dataflows), description=f'Running {self.name} dataflows') as pbar:
+                        for dataflow_batch in dataflow_batches:
+                            futures = [
+                                ray_task.remote(
+                                    logger_name=self.logger.name,
+                                    dataflow=dataflow,
+                                    log_queue=log_queue,
+                                ) for dataflow in dataflow_batch
+                            ]
+                            unfinished = futures
+                            while unfinished:
+                                finished, unfinished = ray.wait(unfinished, num_returns=1)
+                                for future in finished:
+                                    success, dataflow = ray.get(future)
+                                    if not success:
+                                        self._failed_dataflows.append(dataflow)
+                                    else:
+                                        self._completed_dataflows.append(dataflow)
+                                    pbar.advance(1)
                 except KeyboardInterrupt:
                     print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
                 except Exception:

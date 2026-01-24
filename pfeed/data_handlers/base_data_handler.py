@@ -10,7 +10,7 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, ConfigDict
 
-from pfeed.enums import DataTool, DataLayer
+from pfeed.enums import DataLayer
 from pfeed.data_models.base_data_model import BaseMetadataModel
 
 from pfeed.utils.file_path import FilePath
@@ -24,6 +24,44 @@ class BaseMetadata(BaseModel):
 
     source_metadata: dict[SourcePath, BaseMetadataModel]
     missing_source_paths: list[SourcePath]
+
+    def to_dict(self) -> dict:
+        return {
+            "source_metadata": self.source_metadata,
+            "missing_source_paths": self.missing_source_paths,
+        }
+    
+    # VIBE-CODED
+    def __str__(self) -> str:
+        from pprint import pformat
+        data = self.to_dict()
+        lines = [f"{self.__class__.__name__}("]
+        for key, value in data.items():
+            if key == "source_metadata":
+                lines.append(f"  {key}={{")
+                items = list(value.items())
+                for i, (source_path, metadata) in enumerate(items):
+                    lines.append(f"    [{i}] '{source_path}':")
+                    formatted = pformat(metadata, sort_dicts=False, indent=6)
+                    lines.append(f"        {formatted.replace(chr(10), chr(10) + '        ')}")
+                    if i < len(items) - 1:
+                        lines.append("")  # blank line between entries
+                lines.append("  }")
+            elif isinstance(value, list):
+                if not value:
+                    lines.append(f"  {key}=[]")
+                else:
+                    lines.append(f"  {key}=[")
+                    for item in value:
+                        lines.append(f"    {item},")
+                    lines.append("  ]")
+            else:
+                formatted = pformat(value, sort_dicts=False, indent=4)
+                lines.append(f"  {key}={formatted}")
+        lines.append(")")
+        return "\n".join(lines)
+    
+    __repr__ = __str__
 
 
 class BaseDataHandler(ABC):
@@ -42,9 +80,7 @@ class BaseDataHandler(ABC):
         pass
 
     @abstractmethod
-    def read(
-        self, data_tool: DataTool = DataTool.polars, **kwargs
-    ) -> GenericData | None:
+    def read(self, **kwargs) -> GenericData | None:
         pass
 
     @abstractmethod

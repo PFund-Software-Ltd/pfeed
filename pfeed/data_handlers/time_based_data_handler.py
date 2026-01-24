@@ -35,6 +35,12 @@ class TimeBasedMetadata(BaseMetadata):
     #     description="Dates within the requested data period where no data exists at the source (e.g. non-trading days, holidays)."
     # )
 
+    def to_dict(self) -> dict:
+        return {
+            **super().to_dict(),
+            "missing_dates_in_storage": self.missing_dates_in_storage,
+        }
+
 
 class TimeBasedDataHandler(BaseDataHandler):
     PARTITION_COLUMNS = ["year", "month", "day"]  # used by e.g. Delta Lake for partitioning
@@ -249,6 +255,28 @@ class TimeBasedDataHandler(BaseDataHandler):
             lf = self._io.read(file_paths=self._file_paths, **io_kwargs)
         elif self._is_table_io():
             lf = self._io.read(table_path=self._table_path, **io_kwargs)
+            start_date = self._data_model.start_date
+            end_date = self._data_model.end_date
+            def _filter_based_on_data_model_date_range(lf: pl.LazyFrame) -> pl.LazyFrame:
+                return lf.filter(
+                    (pl.col("date").dt.date() >= start_date) & 
+                    (pl.col("date").dt.date() <= end_date)
+                )
+            # Apply date filtering for table IO
+            if lf is not None and start_date and end_date:
+                if self._data_layer == DataLayer.RAW:
+                    # Raw data may not have a proper 'date' column, try best-effort filtering
+                    try:
+                        if "date" in lf.collect_schema().names():
+                            lf = _filter_based_on_data_model_date_range(lf)
+                    except Exception:
+                        cprint(
+                            f"Warning: Could not filter raw data by date range ({start_date} to {end_date}). "
+                            f"Returning unfiltered data. Ensure 'date' column exists and is of datetime type.",
+                            style=TextStyle.BOLD + RichColor.YELLOW
+                        )
+                else:
+                    lf = _filter_based_on_data_model_date_range(lf)
         elif self._is_database_io():
             lf = self._io.read(db_path=self._db_path, **io_kwargs)
         else:

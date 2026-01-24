@@ -173,7 +173,7 @@ class BaseFeed(ABC):
                     io_options=io_options,
                 )
             )
-            data, metadata = storage.read_data()
+            data, metadata = storage.read_data(include_metadata=True)
             if data is not None:
                 self.logger.info(f'found data {data_model} in {data_storage} ({data_layer=})')
             else:

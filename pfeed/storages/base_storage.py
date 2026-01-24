@@ -144,7 +144,7 @@ class BaseStorage(ABC):
     ):
         self.data_handler.write(data=data, streaming=streaming, **io_kwargs)
 
-    def read_data(self, **io_kwargs) -> tuple[GenericFrame | None, BaseMetadata]:
+    def read_data(self, include_metadata: bool = False, **io_kwargs) -> GenericFrame | None | tuple[GenericFrame | None, BaseMetadata]:
         """Read data from storage.
 
         Args:
@@ -164,4 +164,7 @@ class BaseStorage(ABC):
         """
         data: GenericFrame | None = self.data_handler.read(**io_kwargs)
         metadata: BaseMetadata = self.data_handler.read_metadata()
-        return data, metadata
+        if include_metadata:
+            return data, metadata
+        else:
+            return data

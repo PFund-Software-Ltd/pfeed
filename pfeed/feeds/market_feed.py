@@ -70,11 +70,11 @@ class MarketFeed(TimeBasedFeed):
     
     def create_data_model(
         self,
-        env: Environment,
         product: str | BaseProduct,
         resolution: str | Resolution,
         start_date: str | datetime.date,
         end_date: str | datetime.date,
+        env: Environment = Environment.BACKTEST,
         data_origin: str='',
         **product_specs
     ) -> MarketDataModel:
@@ -155,18 +155,17 @@ class MarketFeed(TimeBasedFeed):
         env = Environment.BACKTEST
         setup_logging(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
-        resolution: Resolution = self.create_resolution(resolution)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
 
         # Normalize resolution: use unit resolution as fallback if requested resolution is not supported
+        resolution: Resolution = self.create_resolution(resolution)
         supported_resolutions: list[Resolution] = self.get_supported_resolutions()
         if resolution not in supported_resolutions:
             unit_resolution: Resolution = resolution.to_unit()
             if unit_resolution in supported_resolutions:
                 data_resolution: Resolution = unit_resolution
-                cprint(
-                    f'{resolution} is not supported, using {data_resolution} instead', 
-                    style=str(TextStyle.BOLD + RichColor.YELLOW)
+                self.logger.warning(
+                    f'{resolution=} is not supported, using {data_resolution} instead', 
                 )
             else:
                 raise ValueError(f'{resolution} is not supported')
@@ -186,7 +185,7 @@ class MarketFeed(TimeBasedFeed):
         )
         self.logger.info(
             f'{self._current_request.name}:\n{self._current_request}\n', 
-            style=str(TextStyle.BOLD + RichColor.GREEN)
+            style=TextStyle.BOLD + RichColor.GREEN
         )
         self._load_request = LoadRequest(
             to_storage=to_storage,

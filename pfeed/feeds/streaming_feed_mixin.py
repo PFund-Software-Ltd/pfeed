@@ -263,7 +263,7 @@ class StreamingFeedMixin:
                 cprint(
                     "Cannot call feed.run() from within a running event loop.\n"
                     "Did you mean to call feed.run_async() or forget to set 'pipeline_mode=True'?",
-                    style=str(TextStyle.BOLD + RichColor.RED),
+                    style=TextStyle.BOLD + RichColor.RED,
                 )
                 return
             return asyncio.run(self._run_stream_dataflows())

@@ -28,7 +28,14 @@ class MarketDataModel(TimeBasedDataModel):
     resolution: Resolution
     
     def __str__(self):
-        return ':'.join([self.env, super().__str__(), str(self.product.asset_type), self.product.symbol, repr(self.resolution)])
+        return ':'.join([self.env, super().__str__(), str(self.product.asset_type), self.product.symbol, str(self.resolution)])
+    
+    @field_validator('env', mode='before')
+    @classmethod
+    def create_env(cls, v):
+        if isinstance(v, str):
+            return Environment[v.upper()]
+        return v
     
     @field_validator('resolution', mode='before')
     @classmethod

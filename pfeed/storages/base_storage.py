@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from pprint import pformat
 
 from pfeed.config import get_config
 from pfeed.enums import DataLayer, IOFormat
@@ -23,11 +24,20 @@ class BaseStorage(ABC):
     
     def __init__(
         self,
-        data_layer: DataLayer,
-        data_domain: str,
+        data_layer: DataLayer=DataLayer.CLEANED,
+        data_domain: str | Literal['MARKET_DATA', 'NEWS_DATA'] = 'MARKET_DATA',
         data_path: Path | None = None,
         storage_options: dict | None = None,
     ):
+        '''
+        Args:
+            data_layer: Data layer to store the data.
+            data_domain: Data domain of the data, used for grouping data inside a data layer.
+            data_path: Path to store the data.
+                if not provided, will use the default data path from the config.
+            # NOTE: NOT IMPLEMENTED YET, storage_options should be compatible with other libraries like polars, etc.
+            storage_options: Storage options
+        '''
         self.data_path = data_path or config.data_path
         self.data_layer = DataLayer[str(data_layer).upper()]
         self.data_domain = data_domain.upper()
@@ -47,8 +57,38 @@ class BaseStorage(ABC):
     ):
         pass
 
+    @property
+    def name(self) -> str:
+        return self.__class__.__name__
+    
     def __str__(self) -> str:
-        return f'{self.__class__.__name__} (data_layer={self.data_layer})'
+        parts = []
+        if self._io:
+            parts.append(f"io={self._io.__class__.__name__}")
+        if self._data_model:
+            parts.append(f"data_model={self._data_model}")
+        parts.extend(
+            [
+                f"data_path={self.data_path}",
+                f"data_layer={self.data_layer}",
+                f"data_domain={self.data_domain}",
+            ]
+        )
+        if self.storage_options:
+            parts.append(f"storage_options={self.storage_options}")
+        return f"{self.__class__.__name__} (" + " | ".join(parts) + ")"
+    
+    def __repr__(self) -> str:
+        data = {
+            "data_path": self.data_path,
+            "data_layer": self.data_layer,
+            "data_domain": self.data_domain,
+            "storage_options": self.storage_options,
+            "data_model": str(self._data_model),
+            "io": self._io.name,
+            "data_handler": self._data_handler,
+        }
+        return f"{self.name}(\n{pformat(data, sort_dicts=False)}\n)"
 
     @property
     def data_model(self) -> BaseDataModel:
@@ -64,7 +104,7 @@ class BaseStorage(ABC):
             self._is_data_handler_stale = False
         if not self._data_handler:
             raise AttributeError(
-                f"No data handler has been set for storage: {self.name}"
+                f"No data handler has been set for storage: {self.name}, please call with_data_model() first"
             )
         return self._data_handler
 

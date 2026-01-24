@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import ClassVar
 
+from pydantic import field_validator
+
 from pfund.products.product_base import BaseProduct
 from pfund.enums import Environment
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel, TimeBasedMetadataModel
@@ -18,9 +20,16 @@ class NewsDataModel(TimeBasedDataModel):
     data_handler_class: ClassVar[type[NewsDataHandler]] = NewsDataHandler
     metadata_class: ClassVar[type[NewsMetadataModel]] = NewsMetadataModel
 
-    env: Environment = Environment.LIVE
+    env: Environment
     product: BaseProduct | None = None  # when product is None, it means general news (e.g. market news)
 
+    @field_validator('env', mode='before')
+    @classmethod
+    def create_env(cls, v):
+        if isinstance(v, str):
+            return Environment[v.upper()]
+        return v
+    
     def __str__(self):
         return ':'.join([self.env, super().__str__(), repr(self.product) if self.product else 'GENERAL', 'NEWS'])
     

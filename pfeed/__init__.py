@@ -7,6 +7,8 @@ if TYPE_CHECKING:
         YahooFinance,
         YahooFinance as YF,
     )
+    from pfeed.storages.local_storage import LocalStorage
+    from pfeed.storages.cache_storage import CacheStorage
     from pfeed.sources.bybit import Bybit
     from pfeed.sources.financial_modeling_prep import (
         FinancialModelingPrep,
@@ -19,8 +21,6 @@ import os
 from importlib.metadata import version
 
 from pfeed.config import configure, get_config, configure_logging
-from pfeed.storages import create_storage
-from pfeed.feeds import create_feed, create_market_feed
 
 
 os.environ['PYARROW_IGNORE_TIMEZONE'] = '1'  # used to suppress warning from pyspark
@@ -36,15 +36,21 @@ def __getattr__(name: str):
     elif name in ('YahooFinance', 'YF'):
         from pfeed.sources.yahoo_finance import YahooFinance
         return YahooFinance
-    elif name in ('Bybit',):
+    elif name.lower() == 'bybit':
         from pfeed.sources.bybit import Bybit
         return Bybit
     elif name in ('FinancialModelingPrep', 'FMP'):
         from pfeed.sources.financial_modeling_prep import FinancialModelingPrep
         return FinancialModelingPrep
-    elif name == 'PFund':
+    elif name.lower() == 'pfund':
         from pfeed.sources.pfund import PFund
         return PFund
+    elif name == 'LocalStorage':
+        from pfeed.storages.local_storage import LocalStorage
+        return LocalStorage
+    elif name == 'CacheStorage':
+        from pfeed.storages.cache_storage import CacheStorage
+        return CacheStorage
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     
     
@@ -57,10 +63,9 @@ __all__ = (
     "alias",
     "plot",
     "DataEngine",
-    # sugar functions
-    "create_storage",
-    "create_feed",
-    "create_market_feed",
+    # storages
+    "LocalStorage",
+    "CacheStorage",
     # data sources
     "YahooFinance", "YF",
     "Bybit",

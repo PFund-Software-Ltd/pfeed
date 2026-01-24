@@ -180,11 +180,12 @@ class TimeBasedDataHandler(BaseDataHandler):
                         month=df["date"].dt.month,
                         day=df["date"].dt.day,
                     )
+                    # FIXME: this is hardcoded to deltalake's kwargs "partition_by"
                     io_kwargs["partition_by"] = self.PARTITION_COLUMNS
             elif self._is_database_io():
                 source_path = self._db_path
                 if df.empty:
-                    cprint(f'Empty DataFrame (db_path={source_path})', style=str(TextStyle.BOLD + RichColor.RED))
+                    cprint(f'Empty DataFrame (db_path={source_path})', style=TextStyle.BOLD + RichColor.RED)
                     return
                 # convert datetime64[ns] to lower precision if db doesn't support nanosecond precision
                 if self._io.TIMESTAMP_PRECISION < TimestampPrecision.NANOSECOND and is_datetime64_ns_dtype(df['date'].dtype):

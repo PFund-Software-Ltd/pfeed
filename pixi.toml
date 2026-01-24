@@ -55,24 +55,24 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 [feature.optional.pypi-dependencies]
 # TEMP
 fmp-api-client = { path = "../fmp-api-client", editable = true }
-pfund-plot = { path = "../pfund-plot", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 # fmp-api-client = ">=0.0.1"
 # pfund-plot = { version = ">=0.0.1.dev3", extras = ["marimo", "jupyter"] }
 yfinance = ">=1.0"
-prefect = ">=3.6.11"
+prefect = ">=3.6.13"
 # polars-cloud = ">=0.4.2"
 dask = { version = ">=2026.1.1", extras = ["complete", "dataframe"] }
-coiled = ">=1.130.2"
+coiled = ">=1.130.3"
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
 duckdb = ">=1.4.3"
-lancedb = ">=0.26.1"
+lancedb = ">=0.27.0"
 psycopg = { version = ">=3.3.2", extras = ["binary", "pool"] }
 
 # TEMP
 [pypi-options.dependency-overrides]
 pfeed = { path = ".", editable = true }
 pfund = { path = "../pfund", editable = true }
-pfund-plot = { path = "../pfund-plot", editable = true }
+pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
 pfund-kit = { path = "../pfund-kit", editable = true }
 fmp-api-client = { path = "../fmp-api-client", editable = true }
 

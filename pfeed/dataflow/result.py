@@ -4,10 +4,10 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericData
 
 
-class FlowResult:
+class DataFlowResult:
     def __init__(self):
         '''
-        FlowResult is a class that contains the result of a flow.
+        DataFlowResult is a class that contains the result of a flow.
         Attributes:
             _data: The output data of the flow.
             _metadata: Additional information about the flow.

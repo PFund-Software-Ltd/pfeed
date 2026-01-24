@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, ClassVar, overload
+from typing import TYPE_CHECKING, Callable, Any, ClassVar
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.sink import Sink
-    from pfeed.dataflow.result import FlowResult
+    from pfeed.dataflow.result import DataFlowResult
     from pfeed.data_handlers.base_data_handler import BaseMetadata
 
 import os
@@ -122,7 +122,7 @@ class BaseFeed(ABC):
     @abstractmethod
     def download(self, *args, **kwargs) -> GenericData | None | BaseFeed:
         pass
-   
+
     @abstractmethod
     def retrieve(self, *args, **kwargs) -> GenericData | None:
         pass
@@ -258,18 +258,15 @@ class BaseFeed(ABC):
         # e.g. ParquetIO doesn't support parallel writes to a single file but supports parallel writes to multiple files
         if not IO.SUPPORTS_PARALLEL_WRITES and IO.__bases__[0] is not FileIO:
             raise RuntimeError(f'{IO.__name__} does not support parallel writes, cannot be used with Ray')
+    
+    def _ensure_no_current_request(self):
+        if self._current_request:
+            raise RuntimeError(
+                f"A pending request already exists:\n"
+                f"{self._current_request}\n"
+                f"Call clear_requests() first to discard the pending request."
+            )
 
-    @overload
-    def load(
-        self, 
-        to_storage: DataStorage = DataStorage.DUCKDB,
-        data_layer: DataLayer = DataLayer.CLEANED,
-        data_domain: str = '',
-        in_memory: bool=True,
-        memory_limit: str='4GB',
-    ) -> BaseFeed:
-        ...
-        
     def load(
         self, 
         to_storage: DataStorage = DataStorage.LOCAL,
@@ -320,7 +317,6 @@ class BaseFeed(ABC):
                 storage.data_handler.create_stream_buffer(self._streaming_settings)
             sink: Sink = self._create_sink(data_model, storage)
             dataflow.set_sink(sink)
-        self._load_request = None
         return self
     
     def _auto_load(self):
@@ -345,6 +341,10 @@ class BaseFeed(ABC):
         self._failed_dataflows.clear()
         self._dataflows.clear()
     
+    def clear_requests(self):
+        self._current_request = None
+        self._load_request = None
+    
     def _is_prefect_running(self) -> bool:
         import httpx
 
@@ -364,12 +364,12 @@ class BaseFeed(ABC):
         use_prefect = self._is_prefect_running()
         self._auto_load()
         
-        def _run_dataflow(dataflow: DataFlow) -> FlowResult:
+        def _run_dataflow(dataflow: DataFlow) -> DataFlowResult:
             if use_prefect:
                 flow_type = FlowType.prefect
             else:
                 flow_type = FlowType.native
-            result: FlowResult = dataflow.run_batch(flow_type=flow_type, prefect_kwargs=prefect_kwargs)
+            result: DataFlowResult = dataflow.run_batch(flow_type=flow_type, prefect_kwargs=prefect_kwargs)
             # NOTE: EMPTY dataframe is considered as success
             success = result.data is not None
             return success
@@ -442,6 +442,7 @@ class BaseFeed(ABC):
                     f'{pformat([str(dataflow) for dataflow in non_retrieve_dataflows])}\n'
                     f'check {self.logger.name}.log for details'
                 )
+        self.clear_requests()
         return self._completed_dataflows, self._failed_dataflows
     
     @property

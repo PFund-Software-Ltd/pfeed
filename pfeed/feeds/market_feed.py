@@ -109,7 +109,7 @@ class MarketFeed(TimeBasedFeed):
         for dataflow in self._dataflows:
             faucet_data_model: MarketDataModel = dataflow.faucet.data_model 
             faucet_data_model.update_resolution(self._current_request.data_resolution)
-        
+    
     def download(
         self,
         product: str,
@@ -172,7 +172,7 @@ class MarketFeed(TimeBasedFeed):
         else:
             data_resolution: Resolution = resolution
         self._validate_resolution_bounds(data_resolution)
-        
+        self._ensure_no_current_request()
         self._current_request = MarketFeedDownloadRequest(
             env=env,
             product=product,

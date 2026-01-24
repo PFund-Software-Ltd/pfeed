@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
     from pfeed.typing import GenericFrame
-    from pfeed.dataflow.dataflow import DataFlow, FlowResult
+    from pfeed.dataflow.dataflow import DataFlow, DataFlowResult
     from pfeed.dataflow.faucet import Faucet
     from pfeed.enums import DataStorage, DataLayer
     from pfeed.requests.time_based_feed_download_request import TimeBasedFeedDownloadRequest
@@ -158,7 +158,7 @@ class TimeBasedFeed(BaseFeed):
         
         for dataflow in completed_dataflows + failed_dataflows:
             data_model: TimeBasedDataModel = dataflow.data_model
-            result: FlowResult = dataflow.result
+            result: DataFlowResult = dataflow.result
             _df: GenericFrame | None = result.data
             _metadata: dict[str, Any] | StorageMetadata | TimeBasedStorageMetadata = result.metadata
 

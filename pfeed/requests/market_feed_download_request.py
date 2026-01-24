@@ -45,3 +45,4 @@ class MarketFeedDownloadRequest(TimeBasedFeedDownloadRequest):
         if self.data_origin:
             data['data_origin'] = self.data_origin
         return pformat(data, sort_dicts=False)
+    

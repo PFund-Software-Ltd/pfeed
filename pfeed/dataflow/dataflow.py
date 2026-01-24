@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 import logging
 
-from pfeed.dataflow.result import FlowResult
+from pfeed.dataflow.result import DataFlowResult
 from pfeed.enums import ExtractType, FlowType
 
 
@@ -23,7 +23,7 @@ class DataFlow:
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
         self._transformations: list[Callable] = []
-        self._result = FlowResult()
+        self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
         self._msg_queue: ZeroMQ | None = None
         self._zmq_channel: str | None = None
@@ -54,7 +54,7 @@ class DataFlow:
         return self.faucet._extract_type
     
     @property
-    def result(self) -> FlowResult:
+    def result(self) -> DataFlowResult:
         return self._result
     
     def add_transformations(self, *funcs: tuple[Callable, ...]):
@@ -103,7 +103,7 @@ class DataFlow:
             self._load(data)
         return data
     
-    def run_batch(self, flow_type: FlowType=FlowType.native, prefect_kwargs: dict | None=None) -> FlowResult:
+    def run_batch(self, flow_type: FlowType=FlowType.native, prefect_kwargs: dict | None=None) -> DataFlowResult:
         self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
         self._flow_type = FlowType[flow_type.lower()]
         if self._flow_type == FlowType.prefect:

@@ -47,12 +47,18 @@ class TimeBasedDataHandler(BaseDataHandler):
 
     def __init__(
         self,
-        data_path: Path,
+        data_path: FilePath | None,
         data_layer: DataLayer,
         data_domain: str,
         data_model: TimeBasedDataModel,
         io: BaseIO,
     ):
+        '''
+        Args:
+            data_path: data path provided by file based storage
+                e.g. for local storage, data_path = config.data_path
+                it is None for database based storage
+        '''
         super().__init__(data_path=data_path, data_layer=data_layer, data_domain=data_domain, data_model=data_model, io=io)
         self._stream_buffer: StreamBuffer | None = None
         self._file_paths_per_date = {

@@ -5,29 +5,13 @@ if TYPE_CHECKING:
 
 import polars as pl
 import pyarrow as pa
-import pyarrow.fs as pa_fs
 
 from pfeed._io.file_io import FileIO
-from pfeed.enums import Compression
 
 
 class ParquetIO(FileIO):
     SUPPORTS_PARALLEL_WRITES: bool = False
     FILE_EXTENSION: str = '.parquet'
-    
-    def __init__(
-        self, 
-        filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(), 
-        compression: Compression | str | None=Compression.SNAPPY, 
-        storage_options: dict | None = None,
-        io_options: dict | None = None,
-    ):
-        super().__init__(
-            filesystem=filesystem, 
-            compression=compression,
-            storage_options=storage_options, 
-            io_options=io_options,
-        )
     
     def exists(self, file_path: FilePath) -> bool:
         """Check if a valid parquet file exists at this path.

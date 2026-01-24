@@ -1,7 +1,6 @@
 from typing import Literal
 
-from pathlib import Path
-
+from pfeed.utils.file_path import FilePath
 from pfeed.enums import DataLayer
 from pfeed.storages.local_storage import LocalStorage
 from pfeed.config import get_config
@@ -17,14 +16,13 @@ class CacheStorage(LocalStorage):
         self,
         data_layer: DataLayer=DataLayer.CLEANED,
         data_domain: str | Literal['MARKET_DATA', 'NEWS_DATA'] = 'MARKET_DATA',
-        data_path: Path | None = None,
         storage_options: dict | None = None,
         num_retained_days: int = DEFAULT_NUM_RETAINED_DAYS,
     ):
         super().__init__(
+            data_path=FilePath(config.cache_path),
             data_layer=data_layer,
             data_domain=data_domain,
-            data_path=data_path,
             storage_options=storage_options,
         )
         self.num_retained_days = num_retained_days

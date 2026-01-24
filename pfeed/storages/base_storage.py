@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
+    from pfeed.utils.file_path import FilePath
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import GenericData, GenericFrame
@@ -9,14 +10,9 @@ if TYPE_CHECKING:
     from pfeed.messaging.streaming_message import StreamingMessage
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from pprint import pformat
 
-from pfeed.config import get_config
 from pfeed.enums import DataLayer, IOFormat
-
-
-config = get_config()
 
 
 class BaseStorage(ABC):
@@ -24,21 +20,19 @@ class BaseStorage(ABC):
     
     def __init__(
         self,
-        data_layer: DataLayer=DataLayer.CLEANED,
-        data_domain: str | Literal['MARKET_DATA', 'NEWS_DATA'] = 'MARKET_DATA',
-        data_path: Path | None = None,
+        data_layer: DataLayer,
+        data_domain: str,
         storage_options: dict | None = None,
+        data_path: FilePath | None = None,
     ):
         '''
         Args:
             data_layer: Data layer to store the data.
             data_domain: Data domain of the data, used for grouping data inside a data layer.
-            data_path: Path to store the data.
-                if not provided, will use the default data path from the config.
             # NOTE: NOT IMPLEMENTED YET, storage_options should be compatible with other libraries like polars, etc.
             storage_options: Storage options
         '''
-        self.data_path = data_path or config.data_path
+        self.data_path: FilePath | None = data_path
         self.data_layer = DataLayer[str(data_layer).upper()]
         self.data_domain = data_domain.upper()
         self.storage_options = storage_options or {}

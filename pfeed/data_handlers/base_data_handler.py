@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed._io.base_io import BaseIO, MetadataModelAsDict
 
-from pathlib import Path
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, ConfigDict
 
@@ -65,7 +64,7 @@ class BaseMetadata(BaseModel):
 
 
 class BaseDataHandler(ABC):
-    def __init__(self, data_path: Path, data_layer: DataLayer, data_domain: str, data_model: BaseDataModel, io: BaseIO):
+    def __init__(self, data_path: FilePath, data_layer: DataLayer, data_domain: str, data_model: BaseDataModel, io: BaseIO):
         self._data_path = data_path
         self._data_layer = data_layer
         self._data_domain = data_domain

@@ -29,7 +29,7 @@ class FileIO(BaseIO):
     def __init__(
         self,
         filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(),
-        compression: Compression | str | None = None,
+        compression: Compression | str = Compression.SNAPPY,
         storage_options: dict | None = None,
         io_options: dict | None = None,
     ):
@@ -41,7 +41,7 @@ class FileIO(BaseIO):
         '''
         super().__init__(storage_options=storage_options, io_options=io_options)
         self._filesystem = filesystem
-        self._compression = Compression[compression.upper()] if compression else None
+        self._compression = Compression[compression.upper()]
     
     @abstractmethod
     def write(self, data: pa.Table, file_path: FilePath, *args, **kwargs):

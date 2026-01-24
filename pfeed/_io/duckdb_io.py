@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
-    from pathlib import Path
+    from pfeed.utils.file_path import FilePath
     from pfeed.typing import GenericFrame
     from pfeed.data_models.base_data_model import BaseMetadataModel
     from pfeed._io.base_io import MetadataModelAsDict
@@ -39,7 +39,7 @@ class DuckDBIO(DatabaseIO, FileIO):
         self._in_memory = in_memory
         self._memory_limit = memory_limit
     
-    def _create_uri(self, data_path: Path | str, db_name: str) -> str:
+    def _create_uri(self, data_path: FilePath, db_name: str) -> str:
         return ':memory:' if self._in_memory else f'{data_path}/{db_name}{self.FILE_EXTENSION}'
     
     def _open_connection(self, uri: str):

@@ -9,8 +9,6 @@ from pfeed.storages.base_storage import BaseStorage
 class DatabaseStorage(BaseStorage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # set data_path to be the URI of the database
-        self.data_path = self._create_uri()
 
     @property
     def conn(self) -> DBConnection:

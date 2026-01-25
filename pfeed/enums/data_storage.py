@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.storages.base_storage import BaseStorage
-    from pfeed.enums import IOFormat
 
 from enum import StrEnum
 

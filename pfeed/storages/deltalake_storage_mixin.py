@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from deltalake.writer.properties import WriterProperties
 
 from datetime import timedelta
+from pathlib import Path
 
 from rich.pretty import Pretty
 from rich.panel import Panel
@@ -18,14 +19,14 @@ from deltalake import DeltaTable
 from pfund_kit.style import cprint, TextStyle, RichColor
 
 
-
 class DeltaLakeStorageMixin:
     def get_delta_table(self: FileBasedStorage | DeltaLakeStorageMixin) -> DeltaTable:
         table_path = self.data_handler._table_path
         return self.io.get_table(table_path)
     
+    @staticmethod
     def vacuum_delta_table(
-        self: FileBasedStorage | DeltaLakeStorageMixin, 
+        delta_table: DeltaTable,
         retention_hours: int | None = None,
         dry_run: bool = True,
         enforce_retention_duration: bool = True,
@@ -49,7 +50,6 @@ class DeltaLakeStorageMixin:
             the list of files no longer referenced by the Delta Table and are older than the retention threshold.
         """
         cprint('Vacuuming Delta Lake...', style=TextStyle.BOLD + RichColor.YELLOW)
-        delta_table = self.get_delta_table()
         files_deleted = delta_table.vacuum(
             dry_run=dry_run, 
             retention_hours=retention_hours,
@@ -80,8 +80,9 @@ class DeltaLakeStorageMixin:
             cprint(f'No files to delete from {table_uri}', style=TextStyle.BOLD + RichColor.BLUE)
         return files_deleted
     
+    @staticmethod
     def optimize_delta_table(
-        self: FileBasedStorage | DeltaLakeStorageMixin,
+        delta_table: DeltaTable,
         partition_filters: FilterConjunctionType | None = None,
         target_size: int | None = None,
         max_concurrent_tasks: int | None = None,
@@ -138,7 +139,6 @@ class DeltaLakeStorageMixin:
             ```
         """
         cprint('Optimizing Delta Lake...', style=TextStyle.BOLD + RichColor.YELLOW)
-        delta_table = self.get_delta_table()
         
         # Run optimization
         result = delta_table.optimize.compact(

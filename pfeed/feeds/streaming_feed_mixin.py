@@ -35,7 +35,7 @@ class StreamingFeedMixin:
         pass
     
     @abstractmethod
-    def _add_default_transformations_to_stream(self, *args, **kwargs):
+    def _get_default_transformations_for_stream(self, *args, **kwargs) -> list[Callable]:
         pass
 
     @property

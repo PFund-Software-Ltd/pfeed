@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.sink import Sink
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.data_handlers.base_data_handler import BaseMetadata
     from pfeed.messaging.zeromq import ZeroMQ
 
 import logging
@@ -19,7 +20,8 @@ class DataFlow:
     def __init__(self, data_model: BaseDataModel, faucet: Faucet):
         self._data_model: BaseDataModel = data_model
         self._logger: logging.Logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
-        self._is_streaming = faucet._extract_type == ExtractType.stream
+        self._is_streaming = faucet.extract_type == ExtractType.stream
+        self._is_sealed = False
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
         self._transformations: list[Callable] = []
@@ -51,7 +53,7 @@ class DataFlow:
 
     @property
     def extract_type(self) -> ExtractType:
-        return self.faucet._extract_type
+        return self.faucet.extract_type
     
     @property
     def result(self) -> DataFlowResult:
@@ -71,11 +73,16 @@ class DataFlow:
         self._transformations.extend(funcs)
     
     def set_sink(self, sink: Sink):
+        if self.is_sealed():
+            raise RuntimeError(f'{self} is sealed, cannot set sink')
         self._sink = sink
+    
+    def seal(self):
+        self._is_sealed = True
     
     def is_sealed(self):
         '''Check if the dataflow is sealed, i.e. cannot add transformations'''
-        return self._sink is not None
+        return self._is_sealed
     
     def __str__(self):
         if not self.is_streaming():
@@ -86,32 +93,38 @@ class DataFlow:
     def is_streaming(self) -> bool:
         return self._is_streaming
     
-    def _run_batch_etl(self) -> GenericData | None:
+    def _run_batch_etl(self) -> tuple[GenericData | None, BaseMetadata | None]:
         from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
         if self._flow_type == FlowType.prefect:
             from prefect import task
             extract = task(self.faucet.open_batch)
         else:
             extract = self.faucet.open_batch
+        data: GenericData | None
+        metadata: BaseMetadata | None
         data, metadata = extract()
-        if metadata:
-            self._result.set_metadata(metadata)
         if (data is not None) and not (is_dataframe(data) and is_empty_dataframe(data)):
             data: GenericData = self._transform(data)
-            if self.sink is None and self.extract_type != ExtractType.retrieve:
-                self._logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
             self._load(data)
-        return data
+        return data, metadata
     
     def run_batch(self, flow_type: FlowType=FlowType.native, prefect_kwargs: dict | None=None) -> DataFlowResult:
         self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
         self._flow_type = FlowType[flow_type.lower()]
         if self._flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
-            data: GenericData | None = prefect_dataflow()
+            data, metadata = prefect_dataflow()
         else:
-            data: GenericData | None = self._run_batch_etl()
-        self._result.set_sink(self.sink)
+            data, metadata = self._run_batch_etl()
+        if self.faucet.extract_type == ExtractType.download:
+            self._result.set_data_loader(self.sink.storage.read_data)
+        elif self.faucet.extract_type == ExtractType.retrieve:
+            # NOTE: if using ray, setting large data directly in result will be inefficient, since ray will copy the data back to the main thread
+            self._result.set_data(data)
+        else:
+            raise ValueError(f'Unhandled extract type for result: {self.faucet.extract_type}')
+        if metadata:
+            self._result.set_metadata(metadata)
         # NOTE: EMPTY dataframe is considered as success
         self._result.set_success(data is not None)
         return self._result

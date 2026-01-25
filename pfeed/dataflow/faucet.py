@@ -1,13 +1,11 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Awaitable, TypeAlias, Any
+from typing import Callable, TYPE_CHECKING, Awaitable, TypeAlias
 if TYPE_CHECKING:
-    from pfeed.data_models.base_data_model import BaseDataModel, BaseFileMetadata
+    from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.typing import GenericData
-    from pfeed._io.base_io import StorageMetadata
-    from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
-    from pfeed.data_models.market_data_model import MarketFileMetadata
+    from pfeed.data_handlers.base_data_handler import BaseMetadata
 
 import logging    
 import asyncio
@@ -36,8 +34,8 @@ class Faucet:
             close_stream:
                 A function to disconnect the streaming after running the extract_func.
         '''
-        self._extract_type = ExtractType[extract_type.lower()] if isinstance(extract_type, str) else extract_type
-        if self._extract_type == ExtractType.stream:
+        self.extract_type = ExtractType[extract_type.lower()] if isinstance(extract_type, str) else extract_type
+        if self.extract_type == ExtractType.stream:
             assert close_stream is not None, 'close_stream is required for streaming'
         self._data_model: BaseDataModel = data_model
         self._extract_func = extract_func
@@ -49,7 +47,7 @@ class Faucet:
         self._logger: logging.Logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
     
     def __str__(self):
-        return f'{self.data_source.name}.{self._extract_type}'
+        return f'{self.data_source.name}.{self.extract_type}'
     
     @property
     def data_source(self) -> DataProviderSource:
@@ -59,18 +57,17 @@ class Faucet:
     def data_model(self) -> BaseDataModel | None:
         # NOTE: multiple data models are sharing the same faucet during streaming, 
         # return None to prevent from using the wrong data model
-        if self._extract_type == ExtractType.stream:
+        if self.extract_type == ExtractType.stream:
             return None
         return self._data_model
     
-    def open_batch(self) -> tuple[GenericData | None, dict[str, Any] | StorageMetadata | TimeBasedStorageMetadata]:
-        if self._extract_type == ExtractType.retrieve:
-            metadata: StorageMetadata | TimeBasedStorageMetadata
+    def open_batch(self) -> tuple[GenericData | None, BaseMetadata | None]:
+        data: GenericData | None = None
+        metadata: BaseMetadata | None = None
+        if self.extract_type == ExtractType.retrieve:
             data, metadata = self._extract_func(self.data_model)
         else:
-            data: GenericData | None = self._extract_func(self.data_model)
-            # NOTE: currently no metadata for other ExtractType
-            metadata: dict[str, Any] = {}
+            data = self._extract_func(self.data_model)
         return data, metadata
     
     async def open_stream(self):

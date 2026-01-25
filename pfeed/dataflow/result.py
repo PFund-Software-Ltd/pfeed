@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from pfeed.typing import GenericData
-    from pfeed.dataflow.sink import Sink
+    from pfeed.data_handlers.base_data_handler import BaseMetadata
 
 
 class DataFlowResult:
@@ -15,8 +15,8 @@ class DataFlowResult:
                 e.g. missing_dates, etc.
         '''
         self._data: GenericData | None = None
-        self._metadata: dict[str, Any] = {}
-        self._sink: Sink | None = None
+        self._metadata: BaseMetadata | None = None
+        self._data_loader: Callable | None = None  # Function called to lazy-load data when accessed
         self._success: bool = False
     
     @property
@@ -29,7 +29,7 @@ class DataFlowResult:
         memory unnecessarily, which is critical when using Ray for parallel processing:
         """
         if self._data is None:
-            self._data = self._sink.storage.read_data()
+            self._data = self._data_loader()
         return self._data
     
     @property
@@ -42,12 +42,12 @@ class DataFlowResult:
     
     def set_success(self, success: bool):
         self._success = success
+    
+    def set_data(self, data: GenericData):
+        self._data = data
+    
+    def set_data_loader(self, func: Callable):
+        self._data_loader = func
         
-    def set_sink(self, sink: Sink):
-        self._sink = sink
-    
-    def set_metadata(self, metadata: dict[str, Any]):
+    def set_metadata(self, metadata: BaseMetadata):
         self._metadata = metadata
-    
-    def add_metadata(self, key: str, value: Any) -> None:
-        self._metadata[key] = value

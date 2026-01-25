@@ -158,8 +158,8 @@ class BaseStorage(ABC):
             Tuple of (data, metadata)
         """
         data: GenericFrame | None = self.data_handler.read(**io_kwargs)
-        metadata: BaseMetadata = self.data_handler.read_metadata()
         if include_metadata:
+            metadata: BaseMetadata = self.data_handler.read_metadata()
             return data, metadata
         else:
             return data

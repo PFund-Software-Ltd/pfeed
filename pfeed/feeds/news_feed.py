@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Callable
 if TYPE_CHECKING:
     from pfund.products.product_base import BaseProduct
     from pfeed._io.base_io import StorageMetadata
@@ -92,30 +92,26 @@ class NewsFeed(TimeBasedFeed):
             load_to_storage=(lambda: self.load(to_storage, data_layer)) if to_storage else None,
         )
     
-    def _add_default_transformations_to_download(self, data_layer: DataLayer, product: BaseProduct | None=None):
+    def _get_default_transformations_for_download(self, data_layer: DataLayer, product: BaseProduct | None=None) -> list[Callable]:
         from pfeed._etl import news as etl
         from pfeed._etl.base import convert_to_desired_df
+        default_transformations = []
         if data_layer != DataLayer.RAW:
-            self.transform(
+            default_transformations.extend([
+                self._normalize_raw_data,
                 lambda_with_name(
-                    '__normalize_raw_data',
-                    lambda df: self._normalize_raw_data(df)
-                ),
-                lambda_with_name(
-                    '__standardize_columns',
+                    'standardize_columns',
                     lambda df: etl.standardize_columns(df, product=product),
                 ),
-                lambda_with_name(
-                    '__organize_columns',
-                    lambda df: etl.organize_columns(df)
-                ),
-            )
-        self.transform(
+                etl.organize_columns,
+            ])
+        default_transformations.append(
             lambda_with_name(
-                '__convert_to_user_df',
+                'convert_to_user_df',
                 lambda df: convert_to_desired_df(df, config.data_tool)
-            )
+            ),
         )
+        return default_transformations
         
     def retrieve(
         self,

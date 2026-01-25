@@ -19,9 +19,7 @@ if TYPE_CHECKING:
 
 import os
 import logging
-from pathlib import Path
 from abc import ABC, abstractmethod
-from pprint import pformat
 
 from pfeed.config import setup_logging, get_config
 from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType, DataCategory
@@ -52,7 +50,7 @@ class BaseFeed(ABC):
         self._dataflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
-        self._pending_transformations: list[Callable] = []
+        self._transformations: list[Callable] = []
         self._current_request: BaseRequest | None = None
         self._load_request: LoadRequest | None = None
         self._storage_options: dict[DataStorage, dict] = {}
@@ -141,51 +139,16 @@ class BaseFeed(ABC):
         pass
 
     @abstractmethod
-    def _add_default_transformations_to_download(self, *args, **kwargs):
+    def _get_default_transformations_for_download(self, *args, **kwargs):
         pass
     
     @abstractmethod
-    def _add_default_transformations_to_retrieve(self, *args, **kwargs):
+    def _get_default_transformations_for_retrieve(self, *args, **kwargs):
         pass
 
-    def _retrieve_impl(
-        self,
-        data_path: Path,
-        data_model: BaseDataModel, 
-        data_layer: DataLayer,
-        data_domain: str,
-        from_storage: DataStorage,
-        io_format: IOFormat,
-    ) -> tuple[pl.LazyFrame | None, BaseMetadata]:
-        '''Retrieves data by searching through all local storages, using polars for scanning data'''
-        data_storage = DataStorage[from_storage.upper()]
-        io_format = IOFormat[io_format.upper()]
-        storage_options = self._storage_options.get(data_storage, {})
-        io_options = self._io_options.get(io_format, {})
-        self.logger.debug(f'searching for data {data_model} in {data_storage} ({data_layer=})...')
-        Storage = data_storage.storage_class
-        try:
-            storage = (
-                Storage(
-                    data_path=data_path,
-                    data_layer=data_layer,
-                    data_domain=data_domain,
-                    storage_options=storage_options,
-                )
-                .with_data_model(data_model)
-                .with_io(
-                    io_format, 
-                    io_options=io_options,
-                )
-            )
-            data, metadata = storage.read_data(include_metadata=True)
-            if data is not None:
-                self.logger.info(f'found data {data_model} in {data_storage} ({data_layer=})')
-            else:
-                self.logger.debug(f'failed to find data {data_model} in {data_storage} ({data_layer=})')
-        except Exception:
-            self.logger.exception(f'Error in retrieving data {data_model} in {data_storage} ({data_layer=}):')
-        return data, metadata
+    @abstractmethod
+    def _retrieve_impl(self, data_model: BaseDataModel, *args, **kwargs) -> tuple[pl.LazyFrame | None, BaseMetadata | None]:
+        pass
 
     # TODO
     def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> GenericData | None:
@@ -195,13 +158,14 @@ class BaseFeed(ABC):
     def run(self, **prefect_kwargs) -> GenericData | None:
         pass
     
-    def _create_dataflow(self, data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
+    @staticmethod
+    def _create_dataflow(data_model: BaseDataModel, faucet: Faucet) -> DataFlow:
         from pfeed.dataflow.dataflow import DataFlow
         dataflow = DataFlow(data_model=data_model, faucet=faucet)
         return dataflow
     
+    @staticmethod
     def _create_faucet(
-        self, 
         data_model: BaseDataModel,
         extract_func: Callable, 
         extract_type: ExtractType, 
@@ -225,34 +189,32 @@ class BaseFeed(ABC):
         return Sink(data_model, storage)
     
     def transform(self, *funcs) -> BaseFeed:
-        is_default_transformations = all(func.__name__.startswith('__') for func in funcs)
-        if is_default_transformations:
-            for dataflow in self._dataflows:
-                dataflow.add_transformations(*funcs)
-        else:
-            self._pending_transformations.extend(funcs)
+        self._transformations.extend(funcs)
         return self
     
-    def _add_default_transformations(self):
-        if self._current_request.request_type == ExtractType.download:
-            self._add_default_transformations_to_download()
-        elif self._current_request.request_type == ExtractType.stream:
-            self._add_default_transformations_to_stream()
-        elif self._current_request.request_type == ExtractType.retrieve:
-            self._add_default_transformations_to_retrieve()
-        elif self._current_request.request_type == ExtractType.fetch:
-            self._add_default_transformations_to_fetch()
+    def _get_default_transformations(self) -> list[Callable]:
+        request = self._current_request
+        if request.extract_type == ExtractType.download:
+            return self._get_default_transformations_for_download()
+        elif request.extract_type == ExtractType.stream:
+            return self._get_default_transformations_for_stream()
+        elif request.extract_type == ExtractType.retrieve:
+            return self._get_default_transformations_for_retrieve()
+        elif request.extract_type == ExtractType.fetch:
+            return self._get_default_transformations_for_fetch()
         else:
-            raise ValueError(f'Unknown request type: {self._current_request.request_type}')
+            raise ValueError(f'Unknown extract type: {request.extract_type}')
     
-    def _flush_pending_transformations(self):
-        if self._pending_transformations and self._load_request.data_layer != DataLayer.CURATED:
+    def _add_transformations(self):
+        if self._transformations and self._load_request.data_layer != DataLayer.CURATED:
             raise RuntimeError(
                 'Custom transformations are only allowed when data layer is CURATED'
             )
+        default_transformations = self._get_default_transformations()
+        all_transformations = default_transformations + self._transformations
         for dataflow in self._dataflows:
-            dataflow.add_transformations(*self._pending_transformations)
-        self._pending_transformations.clear()
+            dataflow.add_transformations(*all_transformations)
+        self._transformations.clear()
 
     # REVIEW: 
     def _check_if_io_supports_parallel_writes(self, io_format: IOFormat) -> bool:
@@ -289,57 +251,55 @@ class BaseFeed(ABC):
         from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
         
         self._load_request = LoadRequest(
-            to_storage=to_storage,
+            storage=to_storage,
             data_layer=data_layer,
             data_domain=data_domain,
             io_format=io_format,
             compression=compression,
         )
-        # NOTE: need to confirm the final destination before adding any transformations
-        # so transformations are applied only after the load request above
-        self._add_default_transformations()
-        self._flush_pending_transformations()
+        # NOTE: need to confirm the final load request before adding any transformations since they could depend on e.g. data_layer etc.
+        self._add_transformations()
         if self._ray_kwargs:
             self._check_if_io_supports_parallel_writes(self._load_request.io_format)
-        Storage = self._load_request.to_storage.storage_class
         for dataflow in self._dataflows:
             data_model = dataflow.data_model
-            storage = (
-                Storage(
-                    data_layer=self._load_request.data_layer,
-                    data_domain=self._load_request.data_domain or self.data_domain.value,
-                    storage_options=self._storage_options.get(self._load_request.to_storage, {}),
+            if self._load_request.storage:
+                Storage = self._load_request.storage.storage_class
+                storage = (
+                    Storage(
+                        data_layer=self._load_request.data_layer,
+                        data_domain=self._load_request.data_domain or self.data_domain.value,
+                        storage_options=self._storage_options.get(self._load_request.storage, {}),
+                    )
+                    .with_data_model(data_model)
+                    .with_io(
+                        io_options=self._io_options.get(self._load_request.io_format, {}),
+                        io_format=self._load_request.io_format,
+                        compression=self._load_request.compression,
+                        **io_kwargs
+                    )
                 )
-                .with_data_model(data_model)
-                .with_io(
-                    io_options=self._io_options.get(self._load_request.io_format, {}),
-                    io_format=self._load_request.io_format,
-                    compression=self._load_request.compression,
-                    **io_kwargs
-                )
-            )
-            if isinstance(self, StreamingFeedMixin) and self._streaming_settings:
-                storage.data_handler.create_stream_buffer(self._streaming_settings)
-            sink: Sink = self._create_sink(data_model, storage)
-            dataflow.set_sink(sink)
+                if isinstance(self, StreamingFeedMixin) and self._streaming_settings:
+                    storage.data_handler.create_stream_buffer(self._streaming_settings)
+                sink: Sink = self._create_sink(data_model, storage)
+                dataflow.set_sink(sink)
+            dataflow.seal()
         return self
     
     def _auto_load(self):
         '''
         Automatically call load() if it hasn't been called yet
+        It ensures that load() is called at least once before running the dataflows
         '''
-        has_sink = any(dataflow.sink is not None for dataflow in self._dataflows)
-        if not has_sink:
-            if self._load_request and self._load_request.to_storage is not None:
-                self.load(
-                    to_storage=self._load_request.to_storage,
-                    data_layer=self._load_request.data_layer,
-                    data_domain=self._load_request.data_domain,
-                    io_format=self._load_request.io_format,
-                    compression=self._load_request.compression,
-                )
-            else:
-                self._flush_pending_transformations()
+        if self._load_request:
+            self.load(
+                # NOTE: self._load_request.storage could be None, still call it to make sure self._add_transformations() is called and seal the dataflows
+                to_storage=self._load_request.storage,  
+                data_layer=self._load_request.data_layer,
+                data_domain=self._load_request.data_domain,
+                io_format=self._load_request.io_format,
+                compression=self._load_request.compression,
+            )
     
     def _clear_dataflows(self):
         self._completed_dataflows.clear()
@@ -442,14 +402,9 @@ class BaseFeed(ABC):
                 self.logger.exception(f'Error in running {self.name} dataflows:')
 
         if self._failed_dataflows:
-            # retrieve_dataflows = [dataflow for dataflow in failed_dataflows if dataflow.extract_type == 'retrieve']
-            non_retrieve_dataflows = [dataflow for dataflow in self._failed_dataflows if dataflow.extract_type != ExtractType.retrieve]
-            if non_retrieve_dataflows:
-                self.logger.warning(
-                    f'{self.name} failed dataflows:\n'
-                    f'{pformat([str(dataflow) for dataflow in non_retrieve_dataflows])}\n'
-                    f'check {self.logger.name}.log for details'
-                )
+            self.logger.warning(
+                f'{self.name} has {len(self._failed_dataflows)} failed dataflows, check {self.logger.name}.log for more details'
+            )
         self.clear_requests()
         return self._completed_dataflows, self._failed_dataflows
     

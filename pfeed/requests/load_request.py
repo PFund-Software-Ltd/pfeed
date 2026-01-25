@@ -6,15 +6,16 @@ from pfeed.enums import DataStorage, DataLayer, IOFormat, Compression
 class LoadRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
-    to_storage: DataStorage | None
+    storage: DataStorage | None
     data_layer: DataLayer
     data_domain: str
     io_format: IOFormat
     compression: Compression
+    is_validate_data_domain: bool = True
     
-    @field_validator('to_storage', mode='before')
+    @field_validator('storage', mode='before')
     @classmethod
-    def create_to_storage(cls, v):
+    def create_storage(cls, v):
         if isinstance(v, str):
             return DataStorage[v.upper()]
         return v
@@ -34,7 +35,7 @@ class LoadRequest(BaseModel):
     
     @model_validator(mode='after')
     def validate_data_domain(self):
-        if self.data_domain and self.data_layer != DataLayer.CURATED:
+        if self.is_validate_data_domain and self.data_domain and self.data_layer != DataLayer.CURATED:
             raise ValueError(f'custom data_domain={self.data_domain} is only allowed when data layer is CURATED, but got data_layer={self.data_layer}')
         return self
     
@@ -44,7 +45,7 @@ class LoadRequest(BaseModel):
         need to resolve to the supported io format for the storage if the storage only supports one io format
         raise error if the storage supports multiple io formats and the io format is not supported
         '''
-        Storage = self.to_storage.storage_class
+        Storage = self.storage.storage_class
         supported_io_formats = Storage.SUPPORTED_IO_FORMATS
         if self.io_format not in supported_io_formats:
             if len(supported_io_formats) == 1:

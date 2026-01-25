@@ -1,27 +1,17 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypedDict, Literal, Callable, Any, ClassVar
+from typing import TYPE_CHECKING, Literal, ClassVar, Callable
 if TYPE_CHECKING:
     import pandas as pd
     from narwhals.typing import Frame
-    from pfeed._io.base_io import StorageMetadata
-    from pfeed.data_handlers.time_based_data_handler import TimeBasedStorageMetadata
     from pfeed.typing import GenericFrame
     from pfeed.dataflow.dataflow import DataFlow, DataFlowResult
     from pfeed.dataflow.faucet import Faucet
-    from pfeed.enums import DataStorage, DataLayer
-    from pfeed.requests.time_based_feed_download_request import TimeBasedFeedDownloadRequest
-    class TimeBasedFeedMetadata(TypedDict, total=True):
-        missing_dates: list[datetime.date]
+    from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
 
 import datetime
 
-from pfeed.enums import ExtractType
-from pfeed.config import get_config
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
-
-
-config = get_config()
 
 
 __all__ = ["TimeBasedFeed"]
@@ -81,9 +71,9 @@ class TimeBasedFeed(BaseFeed):
         start_date, end_date = parse_date_range(start_date, end_date, rollback_period)
         return start_date, end_date
   
-    def _create_batch_dataflows(self, extract_func: Callable, extract_type: ExtractType):
+    def _create_batch_dataflows(self, extract_func: Callable):
         self._clear_dataflows()
-        request: TimeBasedFeedDownloadRequest = self._current_request
+        request: TimeBasedFeedBaseRequest = self._current_request
         data_model: TimeBasedDataModel = self._create_data_model_from_request(request)
         if request.dataflow_per_date:
             # one dataflow per date
@@ -92,59 +82,14 @@ class TimeBasedFeed(BaseFeed):
                 data_model_copy = data_model.model_copy(deep=False)
                 data_model_copy.update_start_date(date)
                 data_model_copy.update_end_date(date)
-                faucet: Faucet = self._create_faucet(data_model=data_model_copy, extract_func=extract_func, extract_type=extract_type)
+                faucet: Faucet = self._create_faucet(data_model=data_model_copy, extract_func=extract_func, extract_type=request.extract_type)
                 dataflow: DataFlow = self._create_dataflow(data_model_copy, faucet)
                 self._dataflows.append(dataflow)
         else:
             # one dataflow for the entire date range
-            faucet: Faucet = self._create_faucet(data_model=data_model, extract_func=extract_func, extract_type=extract_type)
+            faucet: Faucet = self._create_faucet(data_model=data_model, extract_func=extract_func, extract_type=request.extract_type)
             dataflow: DataFlow = self._create_dataflow(data_model, faucet)
             self._dataflows.append(dataflow)
-    
-    def _run_retrieve(
-        self,
-        partial_dataflow_data_model: Callable,
-        partial_faucet_data_model: Callable,
-        start_date: datetime.date,
-        end_date: datetime.date,
-        data_layer: DataLayer,
-        from_storage: DataStorage,
-        storage_options: dict | None,
-        add_default_transformations: Callable,
-        dataflow_per_date: bool,
-    ) -> GenericFrame | None | TimeBasedFeed:
-        from pfeed.config import get_config
-        config = get_config()
-        self._create_batch_dataflows(
-            extract_func=lambda data_model: self._retrieve_impl(
-                data_path=config.data_path,
-                data_model=data_model,
-                data_layer=data_layer,
-                from_storage=from_storage,
-                storage_options=storage_options,
-            ),
-            partial_dataflow_data_model=partial_dataflow_data_model,
-            partial_faucet_data_model=partial_faucet_data_model,
-            dataflow_per_date=dataflow_per_date,
-            start_date=start_date,
-            end_date=end_date,
-            extract_type=ExtractType.retrieve,
-        )
-        add_default_transformations()
-        if not self._pipeline_mode:
-            return self.run()
-        else:
-            return self
-    
-    def _add_default_transformations_to_retrieve(self, *args, **kwargs):
-        from pfeed.utils import lambda_with_name
-        from pfeed._etl.base import convert_to_desired_df
-        self.transform(
-            lambda_with_name(
-                '__convert_to_user_df',
-                lambda df: convert_to_desired_df(df, config.data_tool)
-            )
-        )
     
     def run(self, **prefect_kwargs) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''
@@ -153,31 +98,24 @@ class TimeBasedFeed(BaseFeed):
         
         completed_dataflows, failed_dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
 
-        dfs: list[GenericFrame | None] = []
-        metadata: TimeBasedFeedMetadata = {'missing_dates': []}
+        dfs: list[GenericFrame] = []
         
         for dataflow in completed_dataflows + failed_dataflows:
-            data_model: TimeBasedDataModel = dataflow.data_model
             result: DataFlowResult = dataflow.result
             _df: GenericFrame | None = result.data
-            _metadata: dict[str, Any] | StorageMetadata | TimeBasedStorageMetadata = result.metadata
+            if _df is not None:
+                dfs.append(_df)
 
-            dfs.append(_df)
-
-            # Handle missing dates
-            # NOTE: only data read from storage will have 'missing_dates' in metadata
-            # downloaded data will need to create 'missing_dates' by itself by checking if _df is None
-            if 'missing_dates' in _metadata:
-                metadata['missing_dates'].extend(_metadata['missing_dates'])
-            elif _df is None:
-                metadata['missing_dates'].extend(data_model.dates)
-
-        dfs: list[Frame] = [nw.from_native(df) for df in dfs if df is not None and not is_empty_dataframe(df)]
+        dfs: list[Frame] = [nw.from_native(df) for df in dfs if not is_empty_dataframe(df)]
         if dfs:
             df: Frame = nw.concat(dfs)
-            columns = df.collect_schema().names()
+            schema = df.collect_schema()
+            columns = schema.names()
             if 'date' in columns:
-                df: Frame = df.sort(by='date', descending=False)
+                date_dtype = schema['date']
+                # Check if 'date' column is a temporal type (Date or Datetime) before sorting
+                if 'Date' in str(date_dtype) or 'Datetime' in str(date_dtype):
+                    df: Frame = df.sort(by='date', descending=False)
             df: GenericFrame = nw.to_native(df)
         else:
             df = None

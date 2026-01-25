@@ -111,13 +111,14 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
     async def _close_stream(self):
         await self.data_source.stream_api.disconnect()
     
-    def _add_default_transformations_to_stream(self, data_layer: DataLayer, product: BybitProduct, resolution: Resolution):
+    def _get_default_transformations_for_stream(self, data_layer: DataLayer, product: BybitProduct, resolution: Resolution) -> list[Callable]:
         from pfeed.utils import lambda_with_name
+        default_transformations = super()._get_default_transformations_for_stream(data_layer, product, resolution)
         if data_layer != DataLayer.RAW:
-            self.transform(
-                lambda_with_name('__parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
-            )
-        super()._add_default_transformations_to_stream(data_layer, product, resolution)
+            default_transformations = [
+                lambda_with_name('parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
+            ] + default_transformations
+        return default_transformations
         
     @staticmethod
     def _parse_message(product: BybitProduct, msg: dict) -> dict:

@@ -43,7 +43,12 @@ def filter_columns(df: pd.DataFrame, product: BaseProduct | None = None) -> pd.D
 def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
     '''Moves 'date', 'product', 'resolution', 'symbol' to the leftmost side.'''
     left_cols = ['date', 'product', 'resolution', 'symbol']
-    df = df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
+    target_cols = left_cols + [col for col in df.columns if col not in left_cols]
+    
+    # Only reindex if columns are not already in the target order
+    if list(df.columns) != target_cols:
+        df = df.reindex(target_cols, axis=1)
+    
     return df
     
 

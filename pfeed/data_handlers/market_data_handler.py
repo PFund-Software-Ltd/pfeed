@@ -64,18 +64,19 @@ class MarketDataHandler(TimeBasedDataHandler):
         product = data_model.product
         db_name = data_model.env
         schema_name = "_".join([
-            f"{self._data_layer}"
-            f"{self._data_domain}"
-            f"{data_model.data_source.name}"
-            f"{data_model.data_origin}"
+            f"{self._data_layer}",
+            f"{self._data_domain}",
+            f"{data_model.data_source.name}",
+            f"{data_model.data_origin}",
         ]).lower()
         table_name = '_'.join([
-            str(product.asset_type), 
-            str(data_model.resolution)
+            str(product.asset_type),
+            str(data_model.resolution),
         ]).lower()
         # NOTE: special case "duckdb" where its file io and database io at the same time
         if self._is_file_io(strict=False):
-            db_uri = self._data_path + '/' + db_name + self._io.FILE_EXTENSION
+            db_uri = self._data_path / (db_name + self._io.FILE_EXTENSION)
+            db_uri = str(db_uri)
         # NOTE: special case "lancedb" where its table io and database io at the same time
         elif self._is_table_io(strict=False):
             table_path = self._create_table_path()

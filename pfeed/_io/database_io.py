@@ -35,7 +35,28 @@ class DatabaseIO(BaseIO):
         self._conn: DBConnection | None = None
         self._conn_uri: str | None = None
     
-    def _connect(self, uri: str) -> DBConnection:
+    def _get_schema_qualified_table_name(self, db_path: DBPath) -> SchemaQualifiedTableName:
+        schema_name = self._sanitize_identifier(db_path.schema_name)
+        table_name = self._sanitize_identifier(db_path.table_name)
+        return f"{schema_name}.{table_name}"
+    
+    # REVIEW:
+    def _sanitize_identifier(self, name: str) -> str:
+        return (
+            name
+            .replace('-', '_')
+            .replace(':', '_')
+            .replace('.', 'p')    # 123456.123 -> 123456p123, e.g. for strike price
+            .replace('/', '_')    # for crypto pairs like BTC/USDT
+            .replace(' ', '_')    # spaces
+            .replace(';', '_')    # prevent statement termination
+            .replace("'", '_')    # prevent string breakout
+            .replace('"', '_')    # prevent identifier breakout
+            .replace('\\', '_')   # prevent escape sequences
+            .replace('\x00', '')  # null byte
+        )
+    
+    def connect(self, uri: str) -> DBConnection:
         if self._conn is None:
             self._open_connection(uri)
         else:
@@ -44,6 +65,11 @@ class DatabaseIO(BaseIO):
                 self._close_connection()
                 self._open_connection(uri)
         return self._conn
+    
+    def disconnect(self):
+        """Explicitly close the database connection."""
+        if self._conn:
+            self._close_connection()
     
     @abstractmethod
     def write(self, db_path: DBPath, data: GenericFrame) -> bool:
@@ -68,3 +94,13 @@ class DatabaseIO(BaseIO):
     @abstractmethod
     def _close_connection(self):
         pass
+
+    def __enter__(self):
+        return self  # Setup - returns the object to be used in 'with'
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.disconnect()  # Cleanup - always runs at end of 'with' block
+    
+    def __del__(self):
+        """Ensure connection is closed when object is garbage collected"""
+        self.disconnect()

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     )
     from pfeed.storages.local_storage import LocalStorage
     from pfeed.storages.cache_storage import CacheStorage
+    from pfeed.storages.duckdb_storage import DuckDBStorage
     from pfeed.sources.bybit import Bybit
     from pfeed.sources.financial_modeling_prep import (
         FinancialModelingPrep,
@@ -51,6 +52,9 @@ def __getattr__(name: str):
     elif name == 'CacheStorage':
         from pfeed.storages.cache_storage import CacheStorage
         return CacheStorage
+    elif name == 'DuckDBStorage':
+        from pfeed.storages.duckdb_storage import DuckDBStorage
+        return DuckDBStorage
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     
     
@@ -66,6 +70,7 @@ __all__ = (
     # storages
     "LocalStorage",
     "CacheStorage",
+    "DuckDBStorage",
     # data sources
     "YahooFinance", "YF",
     "Bybit",

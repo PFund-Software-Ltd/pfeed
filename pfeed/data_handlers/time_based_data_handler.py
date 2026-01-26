@@ -88,7 +88,8 @@ class TimeBasedDataHandler(BaseDataHandler):
         if streaming:
             self._write_stream(data)
         else:
-            self._write_batch(data, **io_kwargs)
+            with self._io:
+                self._write_batch(data, **io_kwargs)
 
     # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same columns in write_batch (env=BACKTEST)
     def _standardize_streaming_msg(self, msg: StreamingMessage) -> dict:
@@ -149,8 +150,9 @@ class TimeBasedDataHandler(BaseDataHandler):
         from pfeed._etl.base import convert_to_desired_df
 
         df: pd.DataFrame = convert_to_desired_df(df, DataTool.pandas)
+        is_raw_data = self._data_layer == DataLayer.RAW
         # validate before writing data
-        if self._data_layer != DataLayer.RAW:
+        if not is_raw_data:
             df = self._validate_schema(df)
         data_model: TimeBasedDataModel = self._data_model
 
@@ -202,7 +204,10 @@ class TimeBasedDataHandler(BaseDataHandler):
                 # convert datetime64[ns] to lower precision if db doesn't support nanosecond precision
                 if self._io.TIMESTAMP_PRECISION < TimestampPrecision.NANOSECOND and is_datetime64_ns_dtype(df['date'].dtype):
                     df['date'] = df['date'].astype('datetime64[us]')
-                    cprint(f"Converting 'date' column from NANOSECOND precision to {self._io.TIMESTAMP_PRECISION} for compatibility in {self._io.name}")
+                    cprint(
+                        f"\nConverting 'date' column from NANOSECOND precision to {self._io.TIMESTAMP_PRECISION} for compatibility in {self._io.name}",
+                        style=TextStyle.BOLD
+                    )
             
             source_metadata: TimeBasedMetadataModel = data_model.to_metadata()
             existing_metadata: TimeBasedMetadata = self.read_metadata()
@@ -215,15 +220,18 @@ class TimeBasedDataHandler(BaseDataHandler):
                 source_metadata.dates = list(set(existing_dates + source_metadata.dates))
                 # Replace any overlapping data within the date range
                 start_ts, end_ts = df["date"].min(), df["date"].max()
-                where = f"date >= '{start_ts}' AND date <= '{end_ts}'"
+                delete_where = f"date >= '{start_ts}' AND date <= '{end_ts}'"
             else:
-                where = None
+                delete_where = None
+            if is_raw_data:
+                # raw data does NOT have a date column, so can't delete any data
+                delete_where = None
             df = self._drop_temporary_date_column_in_raw_data(df)
             data = pa.Table.from_pandas(df, preserve_index=False)
             self._io.write(
                 data,
                 source_path,
-                where=where,
+                delete_where=delete_where,
                 **io_kwargs,
             )
             self._io.write_metadata(source_path, source_metadata)

@@ -43,13 +43,7 @@ class BaseStorage(ABC):
         self._is_data_handler_stale: bool = False
     
     @abstractmethod
-    def _create_io(
-        self,
-        *args,
-        storage_options: dict | None = None,
-        io_options: dict | None = None,
-        **kwargs,
-    ):
+    def _create_io(self, *args, io_options: dict | None = None, **kwargs):
         pass
 
     @property
@@ -114,13 +108,8 @@ class BaseStorage(ABC):
         self._is_data_handler_stale = True
         return self
 
-    def with_io(self, *args, io_options: dict | None = None, **kwargs) -> BaseStorage:
-        self._io = self._create_io(
-            *args,
-            storage_options=self.storage_options,
-            io_options=io_options,
-            **kwargs,
-        )
+    def with_io(self, *, io_options: dict | None = None, **kwargs) -> BaseStorage:
+        self._io = self._create_io(io_options=io_options, **kwargs)
         self._is_data_handler_stale = True
         return self
 

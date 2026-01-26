@@ -7,26 +7,26 @@ from enum import StrEnum
 
 
 
-class LocalDataStorage(StrEnum):
+class FileBasedDataStorage(StrEnum):
     CACHE = 'CACHE'
     LOCAL = 'LOCAL'
     # MINIO = 'MINIO'
 
 
-class DatabaseStorage(StrEnum):
+class DatabaseDataStorage(StrEnum):
     DUCKDB = 'DUCKDB'
     LANCEDB = 'LANCEDB'
     POSTGRESQL = 'POSTGRESQL'
 
     
 class DataStorage(StrEnum):
-    CACHE = LocalDataStorage.CACHE
-    LOCAL = LocalDataStorage.LOCAL
-    DUCKDB = DatabaseStorage.DUCKDB
-    LANCEDB = DatabaseStorage.LANCEDB
-    POSTGRESQL = DatabaseStorage.POSTGRESQL
+    CACHE = FileBasedDataStorage.CACHE
+    LOCAL = FileBasedDataStorage.LOCAL
+    DUCKDB = DatabaseDataStorage.DUCKDB
+    LANCEDB = DatabaseDataStorage.LANCEDB
+    POSTGRESQL = DatabaseDataStorage.POSTGRESQL
     # TODO:
-    # MINIO = LocalDataStorage.MINIO
+    # MINIO = FileBasedDataStorage.MINIO
     # HUGGINGFACE = HF = 'HUGGINGFACE'
     # S3 = 'S3'
     # AZURE = 'AZURE'

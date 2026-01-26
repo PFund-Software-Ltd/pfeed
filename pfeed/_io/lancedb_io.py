@@ -39,10 +39,11 @@ class LanceDBIO(DatabaseIO, TableIO):
         )
     
     def _close_connection(self):
-        self._conn.close()
+        if self._conn:
+            self._conn.close()
 
     def exists(self, db_path: DBPath) -> bool:
-        conn: LanceDBConnection = self._connect(db_path.db_uri)
+        conn: LanceDBConnection = self.connect(db_path.db_uri)
         return db_path.table_name in conn
 
     def is_empty(self, db_path: DBPath) -> bool:
@@ -51,14 +52,14 @@ class LanceDBIO(DatabaseIO, TableIO):
 
     # FIXME: remove io_kwargs and pass in args from lancedb explicitly
     def get_table(self, db_path: DBPath) -> LanceTable:
-        conn: LanceDBConnection = self._connect(db_path.db_uri)
+        conn: LanceDBConnection = self.connect(db_path.db_uri)
         return conn.open_table(db_path.table_name, storage_options=self._storage_options)
 
     def write(
         self,
         data: list[dict] | pa.Table,
         db_path: DBPath,
-        where: str | None = None,
+        delete_where: str | None = None,
         schema: pa.Schema | LanceModel | None = None,
         **io_kwargs,
     ):
@@ -67,19 +68,19 @@ class LanceDBIO(DatabaseIO, TableIO):
         Args:
             data: Data to write as list of dicts or PyArrow table.
             db_path: Path to the LanceDB database.
-            where: Optional filter to replace only matching rows.
+            delete_where: Optional filter to replace only matching rows.
                 If None, data is appended. If provided, matching rows are deleted
                 before new data is inserted (e.g., "date >= '2024-01-15' AND date <= '2024-01-20'").
             schema: Optional schema for table creation.
         """
-        conn: LanceDBConnection = self._connect(db_path.db_uri)
+        conn: LanceDBConnection = self.connect(db_path.db_uri)
         if not self.exists(db_path):
             table = conn.create_table(db_path.table_name, data, schema=schema, mode="overwrite", **io_kwargs)
         else:
             table = self.get_table(db_path)
             # Delete matching rows, then add new data
-            if where:
-                table.delete(where=where)
+            if delete_where:
+                table.delete(where=delete_where)
             table.add(data)
 
     def read(

@@ -41,7 +41,7 @@ class FileBasedStorage(BaseStorage):
         io_format: IOFormat=IOFormat.PARQUET,
         compression: Compression | None=Compression.SNAPPY,
         io_options: dict | None = None,
-        **kwargs,  # Unused parameters accepted for compatibility with other storage backends
+        **kwargs,
     ) -> FileIO | DeltaLakeIO:
         # Dynamically add DeltaLake mixin if using DeltaLake format
         if io_format == IOFormat.DELTALAKE:
@@ -53,13 +53,12 @@ class FileBasedStorage(BaseStorage):
                     {'__module__': self.__class__.__module__}
                 )
                 self.__class__ = new_cls
-        return super().with_io(io_format, compression, io_options=io_options)
+        return super().with_io(io_format=io_format, compression=compression, io_options=io_options, **kwargs)
 
     def _create_io(
         self,
         io_format: IOFormat,
         compression: Compression | None,
-        storage_options: dict | None = None,
         io_options: dict | None = None,
     ) -> FileIO:
         assert io_format in self.SUPPORTED_IO_FORMATS, (
@@ -70,6 +69,6 @@ class FileBasedStorage(BaseStorage):
         return IO(
             filesystem=self.get_filesystem(),
             compression=compression,
-            storage_options=storage_options,
+            storage_options=self.storage_options,
             io_options=io_options,
         )

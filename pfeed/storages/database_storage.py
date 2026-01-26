@@ -1,35 +1,43 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias
 if TYPE_CHECKING:
-    from pfeed._io.database_io import DBConnection
+    from pfeed._io.database_io import DBConnection, DBPath
     DatabaseURI: TypeAlias = str
 
 from abc import abstractmethod
 
 from pfeed.storages.base_storage import BaseStorage
+from pfeed.enums import DataLayer
 
 
 class DatabaseStorage(BaseStorage):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # set data_path to be the URI of the database
-        self.data_path: DatabaseURI = self._create_uri()
+    def __init__(
+        self,
+        data_path: str | None,
+        data_layer: DataLayer,
+        data_domain: str,
+        storage_options: dict | None = None,
+    ):
+        super().__init__(
+            data_path=data_path or self._create_uri(),
+            data_layer=data_layer,
+            data_domain=data_domain,
+            storage_options=storage_options,
+        )
 
     @abstractmethod
     def _create_uri(self) -> DatabaseURI:
         """Create server connection URI without database name."""
         pass
 
+    def _get_db_path(self) -> DBPath:
+        return self.data_handler._db_path
+
     @property
-    def conn(self) -> DBConnection:
-        return self.io._conn
-    
-    def __enter__(self):
-        return self  # Setup - returns the object to be used in 'with'
-        
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()  # Cleanup - always runs at end of 'with' block
-    
-    def __del__(self):
-        """Ensure connection is closed when object is garbage collected"""
-        self.io._close_connection()
+    def conn(self) -> DBConnection | None:
+        if self.io:
+            db_path = self._get_db_path()
+            self.io.connect(db_path.db_uri)
+            return self.io._conn
+        else:
+            return None

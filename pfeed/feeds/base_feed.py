@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, ClassVar
+from typing import TYPE_CHECKING, Callable, Any, ClassVar, Literal, overload
 if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
@@ -234,6 +234,30 @@ class BaseFeed(ABC):
                 f"Call clear_requests() first to discard the pending request."
             )
 
+    @overload
+    def load(
+        self, 
+        to_storage: Literal[DataStorage.LOCAL] = DataStorage.LOCAL,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        data_domain: str = '',
+        io_format: IOFormat = IOFormat.PARQUET,
+        compression: Compression = Compression.SNAPPY,
+        **io_kwargs,
+    ) -> BaseFeed:
+        ...
+        
+    @overload
+    def load(
+        self, 
+        to_storage: Literal[DataStorage.DUCKDB] = DataStorage.DUCKDB,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        data_domain: str = '',
+        in_memory: bool = False,
+        memory_limit: str = '4GB',
+        **io_kwargs,
+    ) -> BaseFeed:
+        ...
+
     def load(
         self, 
         to_storage: DataStorage = DataStorage.LOCAL,
@@ -291,6 +315,9 @@ class BaseFeed(ABC):
         Automatically call load() if it hasn't been called yet
         It ensures that load() is called at least once before running the dataflows
         '''
+        is_all_sealed = all(dataflow.is_sealed() for dataflow in self._dataflows)
+        if is_all_sealed:
+            return
         if self._load_request:
             self.load(
                 to_storage=self._load_request.storage,  
@@ -300,7 +327,7 @@ class BaseFeed(ABC):
                 compression=self._load_request.compression,
             )
         else:
-            # NOTE: since load() must be called for finalizing and sealing the dataflows, call it with to_storage=None even theres no actual load request
+            # NOTE: load() must be called once for finalizing and sealing the dataflows, call it with to_storage=None even theres no actual load request
             # so that self._add_transformations() is called and the dataflows are sealed
             self.load(to_storage=None)
     

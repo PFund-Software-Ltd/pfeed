@@ -50,7 +50,7 @@ class DeltaLakeIO(TableIO):
         self,
         data: pa.Table,
         table_path: TablePath,
-        where: str | None = None,
+        delete_where: str | None = None,
         partition_by: list[str] | None=None,
         max_retries: int=5,
         base_delay: float=0.1,
@@ -65,7 +65,7 @@ class DeltaLakeIO(TableIO):
         Args:
             data: PyArrow table to write.
             table_path: Path to the Delta Lake table.
-            where: Optional filter to replace only matching rows (triggers overwrite mode).
+            delete_where: Optional filter to replace only matching rows (triggers overwrite mode).
                 If None, data is appended (creates table if needed). If provided, only rows
                 matching the clause are replaced (e.g., "date = '2024-01-15'" or
                 "year = 2024 AND month = 1").
@@ -83,10 +83,10 @@ class DeltaLakeIO(TableIO):
                 write_deltalake(
                     str(table_path),
                     data,
-                    mode='overwrite' if where else 'append',
+                    mode='overwrite' if delete_where else 'append',
                     storage_options=self._storage_options,
                     partition_by=partition_by,
-                    predicate=where,
+                    predicate=delete_where,
                     **io_kwargs,
                 )
                 break

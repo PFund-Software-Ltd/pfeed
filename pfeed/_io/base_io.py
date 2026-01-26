@@ -49,3 +49,9 @@ class BaseIO(ABC):
     @abstractmethod
     def read_metadata(self, *args, **kwargs):
         pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass  # No-op - do nothing

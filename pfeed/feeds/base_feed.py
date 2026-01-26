@@ -293,13 +293,16 @@ class BaseFeed(ABC):
         '''
         if self._load_request:
             self.load(
-                # NOTE: self._load_request.storage could be None, still call it to make sure self._add_transformations() is called and seal the dataflows
                 to_storage=self._load_request.storage,  
                 data_layer=self._load_request.data_layer,
                 data_domain=self._load_request.data_domain,
                 io_format=self._load_request.io_format,
                 compression=self._load_request.compression,
             )
+        else:
+            # NOTE: since load() must be called for finalizing and sealing the dataflows, call it with to_storage=None even theres no actual load request
+            # so that self._add_transformations() is called and the dataflows are sealed
+            self.load(to_storage=None)
     
     def _clear_dataflows(self):
         self._completed_dataflows.clear()
@@ -310,23 +313,22 @@ class BaseFeed(ABC):
         self._current_request = None
         self._load_request = None
     
-    def _is_prefect_running(self) -> bool:
-        import httpx
-
-        PREFECT_API_URL = os.getenv('PREFECT_API_URL', 'http://127.0.0.1:4200/api').rstrip('/')
-        if not PREFECT_API_URL.startswith('http'):
-            PREFECT_API_URL = f'http://{PREFECT_API_URL}'
-        try:
-            response = httpx.get(f'{PREFECT_API_URL}/health', timeout=2.0)
-            return response.status_code == 200
-        except Exception:
-            # Catch all exceptions - if we can't verify Prefect is running, assume it's not
-            return False
-    
     def _run_batch_dataflows(self, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track, ProgressBar
+        def _is_prefect_running() -> bool:
+            import httpx
+
+            PREFECT_API_URL = os.getenv('PREFECT_API_URL', 'http://127.0.0.1:4200/api').rstrip('/')
+            if not PREFECT_API_URL.startswith('http'):
+                PREFECT_API_URL = f'http://{PREFECT_API_URL}'
+            try:
+                response = httpx.get(f'{PREFECT_API_URL}/health', timeout=2.0)
+                return response.status_code == 200
+            except Exception:
+                # Catch all exceptions - if we can't verify Prefect is running, assume it's not
+                return False
         
-        use_prefect = self._is_prefect_running()
+        use_prefect = _is_prefect_running()
         self._auto_load()
         
         def _run_dataflow(dataflow: DataFlow) -> DataFlowResult:

@@ -96,12 +96,10 @@ class MarketFeed(TimeBasedFeed):
         )
     
     def _create_data_model_from_request(self, request: MarketFeedBaseRequest) -> MarketDataModel:
-        exclude = ['extract_type', 'dataflow_per_date', 'product']
-        if request.extract_type == ExtractType.download:
-            exclude.append('data_resolution')
         return self.create_data_model(
-            **request.model_dump(exclude=exclude),
+            **request.model_dump(exclude={'extract_type', 'dataflow_per_date', 'product', 'data_resolution'}),
             product=request.product,
+            resolution=request.target_resolution,
         )
     
     def download(
@@ -169,7 +167,7 @@ class MarketFeed(TimeBasedFeed):
         self._current_request = MarketFeedDownloadRequest(
             env=env,
             product=product,
-            resolution=resolution,
+            target_resolution=resolution,
             data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
@@ -201,9 +199,15 @@ class MarketFeed(TimeBasedFeed):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
+        from pfeed.requests import MarketFeedRetrieveRequest
         
-        request: MarketFeedDownloadRequest = self._current_request
-        is_raw_data = self._load_request.data_layer == DataLayer.RAW
+        request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest = self._current_request
+        if self._load_request is not None:
+            clean_raw_data = self._load_request.data_layer != DataLayer.RAW
+        elif isinstance(request, MarketFeedRetrieveRequest):
+            clean_raw_data = request.clean_raw_data
+        else:
+            raise ValueError(f'unknown request type: {type(request)}')
 
         default_transformations = [
             lambda_with_name(
@@ -212,10 +216,10 @@ class MarketFeed(TimeBasedFeed):
             ),
             lambda_with_name(
                 'standardize_date_column',
-                lambda df: self._standardize_date_column(df, is_raw_data)
+                lambda df: self._standardize_date_column(df, is_raw_data=not clean_raw_data)
             ),
         ]
-        if not is_raw_data:
+        if clean_raw_data:
             default_transformations.extend([
                 self._normalize_raw_data,
                 lambda_with_name(
@@ -252,6 +256,7 @@ class MarketFeed(TimeBasedFeed):
         data_domain: str = '',
         io_format: IOFormat=IOFormat.PARQUET,
         compression: Compression=Compression.SNAPPY,
+        clean_raw_data: bool=False,
         **product_specs
     ) -> GenericFrame | None | MarketFeed:
         '''Retrieve data from storage.
@@ -284,6 +289,10 @@ class MarketFeed(TimeBasedFeed):
                 )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
             env: Environment to retrieve data from.
+            clean_raw_data: Whether to clean raw data.
+                If data_layer is not RAW, this parameter will be ignored.
+                If True, raw data stored in data layer=RAW will be cleaned using the default transformations for download.
+                If False, raw data stored in data layer=RAW will be loaded as is.
         '''
         from pfeed.requests import MarketFeedRetrieveRequest
         
@@ -303,13 +312,16 @@ class MarketFeed(TimeBasedFeed):
         self._current_request = MarketFeedRetrieveRequest(
             env=env,
             product=product,
-            resolution=resolution,
+            target_resolution=resolution,
+            data_resolution=resolution,
             start_date=start_date,
             end_date=end_date,
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
+            data_layer=data_layer,
+            clean_raw_data=clean_raw_data,
         )
-        # use load request to validate the data types
+        # borrow load request to validate the data types (conceptually LoadRequest is for loading data to storage, not from storage)
         load_request = LoadRequest(
             storage=from_storage,
             data_layer=data_layer,
@@ -374,21 +386,24 @@ class MarketFeed(TimeBasedFeed):
         from pfeed.utils import lambda_with_name
 
         request: MarketFeedRetrieveRequest = self._current_request
-        default_transformations = [
-            lambda_with_name(
-                'convert_to_pandas_df',
-                lambda df: convert_to_desired_df(df, DataTool.pandas)
-            ),
-            lambda_with_name(
-                'resample_data_if_necessary', 
-                lambda df: etl.resample_data(df, request.resolution)
-            ),
-            etl.organize_columns,
-            lambda_with_name(
-                'convert_to_user_df',
-                lambda df: convert_to_desired_df(df, config.data_tool)
-            )
-        ]
+        if not request.clean_raw_data:
+            default_transformations = [
+                lambda_with_name(
+                    'convert_to_pandas_df',
+                    lambda df: convert_to_desired_df(df, DataTool.pandas)
+                ),
+                lambda_with_name(
+                    'resample_data_if_necessary', 
+                    lambda df: etl.resample_data(df, request.target_resolution)
+                ),
+                etl.organize_columns,
+                lambda_with_name(
+                    'convert_to_user_df',
+                    lambda df: convert_to_desired_df(df, config.data_tool)
+                )
+            ]
+        else:
+            default_transformations = self._get_default_transformations_for_download()
         return default_transformations
     
     def stream(

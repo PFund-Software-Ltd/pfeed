@@ -45,6 +45,8 @@ class LoadRequest(BaseModel):
         need to resolve to the supported io format for the storage if the storage only supports one io format
         raise error if the storage supports multiple io formats and the io format is not supported
         '''
+        if self.storage is None:
+            return self
         Storage = self.storage.storage_class
         supported_io_formats = Storage.SUPPORTED_IO_FORMATS
         if self.io_format not in supported_io_formats:

@@ -19,6 +19,8 @@ from pfeed.storages.duckdb_storage import DuckDBStorage
 
 
 class DuckDBIO(DatabaseIO, FileIO):
+    # TODO: support streaming
+    # SUPPORTS_STREAMING: bool = True
     SUPPORTS_PARALLEL_WRITES: bool = False
     FILE_EXTENSION = ".duckdb"
     TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
@@ -110,8 +112,6 @@ class DuckDBIO(DatabaseIO, FileIO):
                 """)
             
             conn.execute(f"INSERT INTO {schema_qualified_table_name} SELECT * FROM data")
-
-            print(f'***wrote data to {schema_qualified_table_name}')
         except Exception as exc:
             raise Exception(
                 f'Failed to write data (type={type(data)}) ({db_path=}): {exc}'

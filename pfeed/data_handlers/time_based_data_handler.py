@@ -116,7 +116,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         data["date"] = date
 
         # add year, month, day columns for delta table partitioning
-        if self._io.SUPPORTS_PARTITIONING:
+        if self._supports_partitioning():
             data["year"] = date.year
             data["month"] = date.month
             data["day"] = date.day
@@ -143,6 +143,10 @@ class TimeBasedDataHandler(BaseDataHandler):
             metadata=self._data_model.to_metadata(),
             partition_by=self.PARTITION_COLUMNS,
         )
+    
+    # FIXME: currently hardcoded for deltalake_io, need to generalize
+    def _requires_partitioning(self) -> bool:
+        return self._io.name == 'DeltaLakeIO'
 
     def _write_batch(self, df: GenericFrame, **io_kwargs):
         import pandas as pd
@@ -187,14 +191,13 @@ class TimeBasedDataHandler(BaseDataHandler):
         elif self._is_table_io() or self._is_database_io():
             if self._is_table_io():
                 source_path = self._table_path
-                if self._io.SUPPORTS_PARTITIONING:
-                    # Preprocess table to add year, month, day columns for partitioning
+                # Preprocess table to add year, month, day columns for partitioning
+                if self._requires_partitioning():
                     df = df.assign(
                         year=df["date"].dt.year,
                         month=df["date"].dt.month,
                         day=df["date"].dt.day,
                     )
-                    # FIXME: this is hardcoded to deltalake's kwargs "partition_by"
                     io_kwargs["partition_by"] = self.PARTITION_COLUMNS
             elif self._is_database_io():
                 source_path = self._db_path
@@ -218,14 +221,13 @@ class TimeBasedDataHandler(BaseDataHandler):
                 existing_dates = existing_source_metadata.dates
                 # merge the current data model's metadata "dates" with the existing table metadata "dates"
                 source_metadata.dates = list(set(existing_dates + source_metadata.dates))
-                # Replace any overlapping data within the date range
-                start_ts, end_ts = df["date"].min(), df["date"].max()
-                delete_where = f"date >= '{start_ts}' AND date <= '{end_ts}'"
+
+            # Replace any overlapping data within the date range
+            if not is_raw_data:  # raw data does NOT have a date column, so can't delete any data
+                delete_where = self._get_delete_where(df)
             else:
                 delete_where = None
-            if is_raw_data:
-                # raw data does NOT have a date column, so can't delete any data
-                delete_where = None
+
             df = self._drop_temporary_date_column_in_raw_data(df)
             data = pa.Table.from_pandas(df, preserve_index=False)
             self._io.write(
@@ -237,6 +239,27 @@ class TimeBasedDataHandler(BaseDataHandler):
             self._io.write_metadata(source_path, source_metadata)
         else:
             raise ValueError(f"Unsupported IO format: {self._io.name}")
+    
+    def _get_delete_where(self, df: pd.DataFrame) -> str:
+        """Generate a delete filter for overlapping date ranges with IO-specific syntax.
+
+        Constructs a WHERE clause to delete existing rows that overlap with the date range
+        of the incoming data. Handles IO-specific syntax differences, particularly timestamp
+        casting requirements for LanceDBIO.
+
+        Args:
+            df: DataFrame containing a 'date' column with timestamp data.
+
+        Returns:
+            Filter expression string for deleting overlapping rows, or None if no filter needed.
+            - LanceDBIO: Uses explicit timestamp casting (e.g., "date >= cast('2025-01-01' as timestamp)")
+            - Other IOs: Uses standard SQL syntax (e.g., "date >= '2025-01-01'")
+        """
+        start_ts, end_ts = df["date"].min(), df["date"].max()
+        if self._io.name == 'LanceDBIO':
+            return f"date >= cast('{start_ts}' as timestamp) AND date <= cast('{end_ts}' as timestamp)"
+        else:
+            return f"date >= '{start_ts}' AND date <= '{end_ts}'"
 
     def read_metadata(self) -> TimeBasedMetadata:
         '''Reads all metadata from storage based on the data model'''
@@ -295,7 +318,4 @@ class TimeBasedDataHandler(BaseDataHandler):
             lf = self._io.read(db_path=self._db_path, **io_kwargs)
         else:
             raise ValueError(f"Unsupported IO format: {self._io.name}")
-        # drop e.g. year, month, day columns which are only used for partitioning
-        if lf is not None and self._io.SUPPORTS_PARTITIONING:
-            lf: pl.LazyFrame = lf.drop(self.PARTITION_COLUMNS, strict=False)
         return lf

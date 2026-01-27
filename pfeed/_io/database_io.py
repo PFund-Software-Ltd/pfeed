@@ -68,15 +68,17 @@ class DatabaseIO(BaseIO):
     
     def disconnect(self):
         """Explicitly close the database connection."""
-        if self._conn:
+        if self._conn is not None:
             self._close_connection()
+            self._conn = None
+            self._conn_uri = None
     
     @abstractmethod
-    def write(self, db_path: DBPath, data: GenericFrame) -> bool:
+    def write(self, data: GenericFrame, db_path: DBPath):
         pass
     
     @abstractmethod
-    def read(self, db_path: DBPath) -> pl.LazyFrame:
+    def read(self, db_path: DBPath) -> pl.LazyFrame | None:
         pass
 
     @abstractmethod
@@ -88,7 +90,7 @@ class DatabaseIO(BaseIO):
         pass
     
     @abstractmethod
-    def _open_connection(self, uri: str) -> DBConnection:
+    def _open_connection(self, uri: str):
         pass
 
     @abstractmethod

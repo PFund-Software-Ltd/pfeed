@@ -38,7 +38,7 @@ class TableIO(FileIO):
         pass
     
     @abstractmethod
-    def write(self, table_path: TablePath, data: pa.Table, *args, **kwargs):
+    def write(self, data: pa.Table, table_path: TablePath, *args, **kwargs):
         pass
 
     @abstractmethod

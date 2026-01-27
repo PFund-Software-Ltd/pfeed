@@ -206,9 +206,9 @@ class BaseFeed(ABC):
             raise ValueError(f'Unknown extract type: {request.extract_type}')
     
     def _add_transformations(self):
-        if self._transformations and self._load_request.data_layer != DataLayer.CURATED:
+        if self._transformations and self._load_request and self._load_request.data_layer == DataLayer.RAW:
             raise RuntimeError(
-                'Custom transformations are only allowed when data layer is CURATED'
+                'Custom transformations are not allowed when data layer is RAW'
             )
         default_transformations = self._get_default_transformations()
         all_transformations = default_transformations + self._transformations
@@ -260,7 +260,7 @@ class BaseFeed(ABC):
 
     def load(
         self, 
-        to_storage: DataStorage = DataStorage.LOCAL,
+        to_storage: DataStorage | None = DataStorage.LOCAL,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
         io_format: IOFormat = IOFormat.PARQUET,
@@ -274,20 +274,23 @@ class BaseFeed(ABC):
         '''
         from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
         
-        self._load_request = LoadRequest(
-            storage=to_storage,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            io_format=io_format,
-            compression=compression,
-        )
+        if to_storage is not None:
+            self._load_request = LoadRequest(
+                storage=to_storage,
+                data_layer=data_layer,
+                data_domain=data_domain,
+                io_format=io_format,
+                compression=compression,
+            )
+            if self._ray_kwargs:
+                self._check_if_io_supports_parallel_writes(self._load_request.io_format)
+        else:
+            self._load_request = None
         # NOTE: need to confirm the final load request before adding any transformations since they could depend on e.g. data_layer etc.
         self._add_transformations()
-        if self._ray_kwargs:
-            self._check_if_io_supports_parallel_writes(self._load_request.io_format)
         for dataflow in self._dataflows:
             data_model = dataflow.data_model
-            if self._load_request.storage:
+            if self._load_request:
                 Storage = self._load_request.storage.storage_class
                 storage = (
                     Storage(
@@ -327,7 +330,7 @@ class BaseFeed(ABC):
                 compression=self._load_request.compression,
             )
         else:
-            # NOTE: load() must be called once for finalizing and sealing the dataflows, call it with to_storage=None even theres no actual load request
+            # HACK: load() must be called once for finalizing and sealing the dataflows, call it with to_storage=None even theres no actual load request
             # so that self._add_transformations() is called and the dataflows are sealed
             self.load(to_storage=None)
     

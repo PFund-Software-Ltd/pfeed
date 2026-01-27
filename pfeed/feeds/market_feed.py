@@ -178,13 +178,16 @@ class MarketFeed(TimeBasedFeed):
             f'{self._current_request.name}:\n{self._current_request}\n', 
             style=TextStyle.BOLD + RichColor.GREEN
         )
-        self._load_request = LoadRequest(
-            storage=to_storage,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            io_format=io_format,
-            compression=compression,
-        )
+        if to_storage is not None:
+            self._load_request = LoadRequest(
+                storage=to_storage,
+                data_layer=data_layer,
+                data_domain=data_domain,
+                io_format=io_format,
+                compression=compression,
+            )
+        else:
+            self._load_request = None
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._download_impl(data_model),
         )

@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, Any
 if TYPE_CHECKING:
-    from typing import Any
+    from pfeed.typing import GenericData
+    from pfeed.data_handlers.base_data_handler import SourcePath
     # MetadataModel (e.g. TimeBasedMetadataModel) in dict format
     MetadataModelAsDict: TypeAlias = dict[str, Any]
 
@@ -30,7 +31,7 @@ class BaseIO(ABC):
         pass
 
     @abstractmethod
-    def read(self, *args, **kwargs):
+    def read(self, *args, **kwargs) -> GenericData:
         pass
 
     @abstractmethod
@@ -47,7 +48,7 @@ class BaseIO(ABC):
         pass
 
     @abstractmethod
-    def read_metadata(self, *args, **kwargs):
+    def read_metadata(self, *args, **kwargs) -> dict[SourcePath, MetadataModelAsDict]:
         pass
 
     def __enter__(self):

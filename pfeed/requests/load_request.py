@@ -6,7 +6,7 @@ from pfeed.enums import DataStorage, DataLayer, IOFormat, Compression
 class LoadRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
-    storage: DataStorage | None
+    storage: DataStorage
     data_layer: DataLayer
     data_domain: str
     io_format: IOFormat

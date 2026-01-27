@@ -100,12 +100,10 @@ class BaseDataHandler(ABC):
         if self._is_file_io():
             source_metadata_dict: dict[FilePath, MetadataModelAsDict] = self._io.read_metadata(file_paths=self._file_paths)
             missing_source_paths=[fp for fp in self._file_paths if not self._io.exists(fp)]
-        elif self._is_table_io():
-            source_metadata_dict: dict[TablePath, MetadataModelAsDict] = self._io.read_metadata(table_path=self._table_path)
-            missing_source_paths = [self._table_path] if not self._io.exists(self._table_path) else []
-        elif self._is_database_io():
-            source_metadata_dict: dict[DBPath, MetadataModelAsDict] = self._io.read_metadata(db_path=self._db_path)
-            missing_source_paths = [self._db_path] if not self._io.exists(self._db_path) else []
+        elif self._is_table_io() or self._is_database_io():
+            source_path = self._table_path if self._is_table_io() else self._db_path
+            source_metadata_dict: dict[SourcePath, MetadataModelAsDict] = self._io.read_metadata(source_path)
+            missing_source_paths = [source_path] if not self._io.exists(source_path) else []
         else:
             raise ValueError(f'Unsupported IO format: {self._io.name}')
         MetadataModel: type[BaseMetadataModel] = self._data_model.metadata_class
@@ -162,3 +160,8 @@ class BaseDataHandler(ABC):
         if self._io.FILE_EXTENSION is None:
             raise ValueError(f'{self._io.__class__.__name__} does not support file extension, cannot get file extension')
         return self._io.FILE_EXTENSION
+    
+    def _supports_partitioning(self) -> bool:
+        if self._is_file_io(strict=False):
+            return self._io.SUPPORTS_PARTITIONING
+        return False

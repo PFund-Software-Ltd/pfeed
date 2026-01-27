@@ -4,13 +4,9 @@ if TYPE_CHECKING:
     from pathlib import Path
     from pfeed._io.duckdb_io import DuckDBIO
 
-from pfeed import get_config
 from pfeed.enums import IOFormat, DataLayer, DataStorage
 from pfeed.enums.data_storage import FileBasedDataStorage
 from pfeed.storages.database_storage import DatabaseStorage
-
-
-config = get_config()
 
 
 class DuckDBStorage(DatabaseStorage):
@@ -18,8 +14,8 @@ class DuckDBStorage(DatabaseStorage):
     DEFAULT_IN_MEMORY = False
     DEFAULT_MEMORY_LIMIT = '4GB'
     
-    def __new__(cls, *args, data_storage: FileBasedDataStorage = FileBasedDataStorage.LOCAL, **kwargs):
-        FileBasedStorage = DataStorage[data_storage].storage_class
+    def __new__(cls, *args, data_storage: FileBasedDataStorage | str = FileBasedDataStorage.LOCAL, **kwargs):
+        FileBasedStorage = DataStorage[data_storage.upper()].storage_class
         new_cls = type(cls.__name__, (cls, FileBasedStorage), {'__module__': cls.__module__})
         return object.__new__(new_cls)
     
@@ -28,7 +24,7 @@ class DuckDBStorage(DatabaseStorage):
         data_path: Path | str | None = None,
         data_layer: DataLayer=DataLayer.CLEANED,
         data_domain: str | Literal['MARKET_DATA', 'NEWS_DATA'] = 'MARKET_DATA',
-        data_storage: FileBasedDataStorage = FileBasedDataStorage.LOCAL,
+        data_storage: FileBasedDataStorage | str = FileBasedDataStorage.LOCAL,
         storage_options: dict | None = None,
     ):
         super().__init__(

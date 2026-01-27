@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from pfeed.enums import DataStorage, DataLayer, IOFormat, Compression
@@ -7,6 +9,7 @@ class LoadRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
     storage: DataStorage
+    data_path: Path | str | None
     data_layer: DataLayer
     data_domain: str
     io_format: IOFormat

@@ -10,6 +10,7 @@ from enum import StrEnum
 class FileBasedDataStorage(StrEnum):
     CACHE = 'CACHE'
     LOCAL = 'LOCAL'
+    HUGGINGFACE = 'HUGGINGFACE'
     # MINIO = 'MINIO'
 
 
@@ -25,9 +26,9 @@ class DataStorage(StrEnum):
     DUCKDB = DatabaseDataStorage.DUCKDB
     LANCEDB = DatabaseDataStorage.LANCEDB
     POSTGRESQL = DatabaseDataStorage.POSTGRESQL
+    HUGGINGFACE = HF = FileBasedDataStorage.HUGGINGFACE
     # TODO:
     # MINIO = FileBasedDataStorage.MINIO
-    # HUGGINGFACE = HF = 'HUGGINGFACE'
     # S3 = 'S3'
     # AZURE = 'AZURE'
     # GCP = 'GCP'
@@ -46,6 +47,9 @@ class DataStorage(StrEnum):
         elif self == DataStorage.LANCEDB:
             from pfeed.storages.lancedb_storage import LanceDBStorage
             return LanceDBStorage
+        elif self == DataStorage.HUGGINGFACE:
+            from pfeed.storages.huggingface_storage import HuggingFaceStorage
+            return HuggingFaceStorage
         # elif self == DataStorage.POSTGRESQL:
         #     from pfeed.storages.postgresql_storage import PostgreSQLStorage
         #     return PostgreSQLStorage

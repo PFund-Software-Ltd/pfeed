@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
     from pfeed.typing import GenericFrame
 
+from pathlib import Path
 import datetime
 from abc import abstractmethod
 
@@ -113,6 +114,7 @@ class MarketFeed(TimeBasedFeed):
         data_origin: str='',
         dataflow_per_date: bool=True,
         to_storage: DataStorage | None=DataStorage.LOCAL,
+        data_path: Path | str | None=None,
         data_layer: DataLayer=DataLayer.CLEANED,
         data_domain: str = '',
         io_format: IOFormat=IOFormat.PARQUET,
@@ -181,6 +183,7 @@ class MarketFeed(TimeBasedFeed):
         if to_storage is not None:
             self._load_request = LoadRequest(
                 storage=to_storage,
+                data_path=data_path,
                 data_layer=data_layer,
                 data_domain=data_domain,
                 io_format=io_format,
@@ -255,6 +258,7 @@ class MarketFeed(TimeBasedFeed):
         dataflow_per_date: bool=False,
         env: Environment=Environment.BACKTEST,
         from_storage: DataStorage=DataStorage.LOCAL,
+        data_path: Path | str | None=None,
         data_layer: DataLayer=DataLayer.CLEANED,
         data_domain: str = '',
         io_format: IOFormat=IOFormat.PARQUET,
@@ -327,6 +331,7 @@ class MarketFeed(TimeBasedFeed):
         # borrow load request to validate the data types (conceptually LoadRequest is for loading data to storage, not from storage)
         load_request = LoadRequest(
             storage=from_storage,
+            data_path=data_path,
             data_layer=data_layer,
             data_domain=data_domain,
             io_format=io_format,
@@ -338,6 +343,7 @@ class MarketFeed(TimeBasedFeed):
         Storage = load_request.storage.storage_class
         storage = (
             Storage(
+                data_path=load_request.data_path,
                 data_layer=load_request.data_layer,
                 data_domain=load_request.data_domain or self.data_domain.value,
                 storage_options=self._storage_options.get(load_request.storage, {}),

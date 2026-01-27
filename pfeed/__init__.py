@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pfeed.storages.cache_storage import CacheStorage
     from pfeed.storages.duckdb_storage import DuckDBStorage
     from pfeed.storages.lancedb_storage import LanceDBStorage
+    from pfeed.storages.huggingface_storage import HuggingFaceStorage
     from pfeed.sources.bybit import Bybit
     from pfeed.sources.financial_modeling_prep import (
         FinancialModelingPrep,
@@ -59,6 +60,9 @@ def __getattr__(name: str):
     elif name == 'LanceDBStorage':
         from pfeed.storages.lancedb_storage import LanceDBStorage
         return LanceDBStorage
+    elif name == 'HuggingFaceStorage':
+        from pfeed.storages.huggingface_storage import HuggingFaceStorage
+        return HuggingFaceStorage
     raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
     
     
@@ -76,6 +80,7 @@ __all__ = (
     "CacheStorage",
     "DuckDBStorage",
     "LanceDBStorage",
+    "HuggingFaceStorage",
     # data sources
     "YahooFinance", "YF",
     "Bybit",

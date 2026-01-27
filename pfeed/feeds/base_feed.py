@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 import os
 import logging
+from pathlib import Path
 from abc import ABC, abstractmethod
 
 from pfeed.config import setup_logging, get_config
@@ -238,6 +239,7 @@ class BaseFeed(ABC):
     def load(
         self, 
         to_storage: Literal[DataStorage.LOCAL] = DataStorage.LOCAL,
+        data_path: Path | str | None = None,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
         io_format: IOFormat = IOFormat.PARQUET,
@@ -250,6 +252,7 @@ class BaseFeed(ABC):
     def load(
         self, 
         to_storage: Literal[DataStorage.DUCKDB] = DataStorage.DUCKDB,
+        data_path: Path | str | None = None,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
         in_memory: bool = False,
@@ -259,8 +262,9 @@ class BaseFeed(ABC):
         ...
 
     def load(
-        self, 
+        self,
         to_storage: DataStorage | None = DataStorage.LOCAL,
+        data_path: Path | str | None = None,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
         io_format: IOFormat = IOFormat.PARQUET,
@@ -273,10 +277,11 @@ class BaseFeed(ABC):
                 e.g. in_memory, memory_limit, for DuckDBStorage
         '''
         from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
-        
+
         if to_storage is not None:
             self._load_request = LoadRequest(
                 storage=to_storage,
+                data_path=data_path,
                 data_layer=data_layer,
                 data_domain=data_domain,
                 io_format=io_format,
@@ -294,6 +299,7 @@ class BaseFeed(ABC):
                 Storage = self._load_request.storage.storage_class
                 storage = (
                     Storage(
+                        data_path=self._load_request.data_path,
                         data_layer=self._load_request.data_layer,
                         data_domain=self._load_request.data_domain or self.data_domain.value,
                         storage_options=self._storage_options.get(self._load_request.storage, {}),
@@ -323,7 +329,8 @@ class BaseFeed(ABC):
             return
         if self._load_request:
             self.load(
-                to_storage=self._load_request.storage,  
+                to_storage=self._load_request.storage,
+                data_path=self._load_request.data_path,
                 data_layer=self._load_request.data_layer,
                 data_domain=self._load_request.data_domain,
                 io_format=self._load_request.io_format,

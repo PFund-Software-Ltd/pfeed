@@ -1,7 +1,9 @@
+# VIBE-CODED
 from __future__ import annotations
 from typing import Union, TYPE_CHECKING
 if TYPE_CHECKING:
     from cloudpathlib import CloudPath
+    from pfeed.utils.hf_path import HfPath
 
 from pathlib import Path
 from urllib.parse import urlparse
@@ -12,42 +14,84 @@ class FilePath:
     Unified path class that works with both local paths and cloud storage paths.
 
     Automatically detects whether the path is local or cloud-based and delegates
-    to the appropriate backend (pathlib.Path or CloudPath).
+    to the appropriate backend (pathlib.Path, CloudPath, or HfPath).
 
     Examples:
         >>> FilePath("/local/path/file.txt")  # Uses pathlib.Path
         >>> FilePath("s3://bucket/file.txt")   # Uses CloudPath
         >>> FilePath("gs://bucket/file.csv")   # Uses CloudPath
+        >>> FilePath("hf://datasets/org/repo/file.parquet")  # Uses HfPath
     """
+    
+    # Cloud schemes supported by cloudpathlib
+    _CLOUDPATH_SCHEMES = frozenset({'s3', 'gs', 'az', 'file'})
+    # HuggingFace scheme
+    _HF_SCHEME = 'hf'
 
-    def __init__(self, path: Union[str, Path, CloudPath, FilePath]):
-        """Initialize with automatic backend detection."""
+    def __init__(self, path: Union[str, Path, CloudPath, HfPath, FilePath], **kwargs):
+        """Initialize with automatic backend detection.
+        
+        Args:
+            path: Path string or path object
+            **kwargs: Additional arguments passed to backend (e.g., token for HfPath)
+        """
         from cloudpathlib import CloudPath
+        from pfeed.utils.hf_path import HfPath
         
         if isinstance(path, FilePath):
             self._path = path._path
-        elif isinstance(path, (Path, CloudPath)):
+        elif isinstance(path, (Path, CloudPath, HfPath)):
             self._path = path
         else:
             path_str = str(path)
-            # Check if it's a cloud path (has scheme like s3://, gs://, az://)
-            if self._is_cloud_path(path_str):
+            scheme = self._get_scheme(path_str)
+            
+            if scheme == self._HF_SCHEME:
+                self._path = HfPath(path_str, **kwargs)
+            elif scheme in self._CLOUDPATH_SCHEMES:
                 self._path = CloudPath(path_str)
             else:
                 self._path = Path(path_str)
+    
+    @staticmethod
+    def _get_scheme(path_str: str) -> str | None:
+        """Extract scheme from path string."""
+        parsed = urlparse(path_str)
+        return parsed.scheme if parsed.scheme else None
 
     @staticmethod
     def _is_cloud_path(path_str: str) -> bool:
-        """Check if path string is a cloud path."""
-        parsed = urlparse(path_str)
-        # Cloud paths have schemes like s3, gs, az
-        return parsed.scheme in ('s3', 'gs', 'az', 'file')
+        """Check if path string is a cloud path (cloudpathlib only, not HuggingFace)."""
+        scheme = FilePath._get_scheme(path_str)
+        return scheme in FilePath._CLOUDPATH_SCHEMES
+    
+    @staticmethod
+    def _is_hf_path(path_str: str) -> bool:
+        """Check if path string is a HuggingFace path."""
+        scheme = FilePath._get_scheme(path_str)
+        return scheme == FilePath._HF_SCHEME
+    
+    @staticmethod
+    def _is_remote_path(path_str: str) -> bool:
+        """Check if path string is a remote path (cloud or HuggingFace)."""
+        return FilePath._is_cloud_path(path_str) or FilePath._is_hf_path(path_str)
 
     @property
     def is_cloud(self) -> bool:
-        """Check if this is a cloud path."""
+        """Check if this is a cloud path (cloudpathlib: s3, gs, az)."""
         from cloudpathlib import CloudPath
         return isinstance(self._path, CloudPath)
+    
+    @property
+    def is_hf(self) -> bool:
+        """Check if this is a HuggingFace path."""
+        from pfeed.utils.hf_path import HfPath
+        return isinstance(self._path, HfPath)
+    
+    @property
+    def is_remote(self) -> bool:
+        """Check if this is a remote path (cloud or HuggingFace)."""
+        return self.is_cloud or self.is_hf
 
     @property
     def schemeless(self) -> str:
@@ -55,11 +99,12 @@ class FilePath:
         Returns the path without the URI scheme.
 
         For cloud paths: 's3://bucket/path/file.parquet' -> 'bucket/path/file.parquet'
+        For HF paths: 'hf://datasets/org/repo/file.parquet' -> 'datasets/org/repo/file.parquet'
         For local paths: '/local/path/file.parquet' -> '/local/path/file.parquet'
         """
-        if self.is_cloud:
+        if self.is_cloud or self.is_hf:
             parsed = urlparse(str(self._path))
-            return f"{parsed.netloc}{parsed.path}"
+            return f"{parsed.netloc}{parsed.path}" if parsed.netloc else parsed.path
         return str(self._path)
 
     # Delegate all attribute access to the underlying path object
@@ -72,12 +117,24 @@ class FilePath:
 
     def __getstate__(self):
         """Support pickle serialization (used by Ray)."""
-        return {'_path_str': str(self._path), '_is_cloud': self.is_cloud}
+        from pfeed.utils.hf_path import HfPath
+        state = {
+            '_path_str': str(self._path),
+            '_is_cloud': self.is_cloud,
+            '_is_hf': self.is_hf,
+        }
+        if isinstance(self._path, HfPath):
+            state['_token'] = self._path._token
+        return state
 
     def __setstate__(self, state):
         """Support pickle deserialization (used by Ray)."""
         from cloudpathlib import CloudPath
-        if state['_is_cloud']:
+        from pfeed.utils.hf_path import HfPath
+        
+        if state.get('_is_hf'):
+            self._path = HfPath(state['_path_str'], token=state.get('_token'))
+        elif state.get('_is_cloud'):
             self._path = CloudPath(state['_path_str'])
         else:
             self._path = Path(state['_path_str'])

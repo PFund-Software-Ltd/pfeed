@@ -28,7 +28,7 @@ class DataFlowResult:
         DataFlowResult is created. This prevents large datasets from being held in
         memory unnecessarily, which is critical when using Ray for parallel processing:
         """
-        if self._data is None:
+        if self._data is None and self._data_loader:
             self._data = self._data_loader()
         return self._data
     

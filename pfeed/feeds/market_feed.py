@@ -20,7 +20,7 @@ from pfund.datas.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle
 from pfeed.config import setup_logging, get_config
 from pfeed.messaging import BarMessage, TickMessage
-from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataStorage, IOFormat, Compression, DataCategory, ExtractType
+from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataStorage, IOFormat, Compression, DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.requests import LoadRequest
@@ -44,7 +44,7 @@ class MarketFeed(TimeBasedFeed):
         return sorted(self.get_supported_resolutions(), reverse=True)[0]
     
     def get_lowest_resolution(self) -> Resolution:
-        return max(
+        return min(
             sorted(self.get_supported_resolutions(), reverse=False)[0], 
             self.SUPPORTED_LOWEST_RESOLUTION
         )
@@ -375,9 +375,9 @@ class MarketFeed(TimeBasedFeed):
             storage = storage.with_data_model(data_model_copy)
             df, metadata = storage.read_data(include_metadata=True)
             if df is not None:
-                self.logger.debug(f'found data {data_model_copy} in {storage}, update faucet data model resolution to {resolution}')
-                # NOTE: This also updates the faucet's data model with the actual resolution found in storage
-                data_model.update_resolution(resolution)
+                self.logger.debug(f'found data {data_model_copy} in {storage}')
+                # update storage's data model back to the original data model
+                storage.with_data_model(data_model)
                 break
         else:
             self.logger.warning(f'failed to find data {data_model} in {storage}')

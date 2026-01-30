@@ -62,7 +62,7 @@ class MarketDataHandler(TimeBasedDataHandler):
     def _create_db_path(self):
         data_model = self._data_model
         product = data_model.product
-        db_name = data_model.env
+        db_name = data_model.env.lower()
         schema_name = "_".join([
             f"{self._data_layer}",
             f"{self._data_domain}",

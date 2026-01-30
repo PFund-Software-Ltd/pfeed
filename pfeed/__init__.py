@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     )
     from pfeed.engine import DataEngine
     from pfeed.sources.pfund import PFund
+    from pfeed.sources.alphafund import AlphaFund
 
 import os
 from importlib.metadata import version
@@ -48,6 +49,9 @@ def __getattr__(name: str):
     elif name.lower() == 'pfund':
         from pfeed.sources.pfund import PFund
         return PFund
+    elif name.lower() == 'alphafund':
+        from pfeed.sources.alphafund import AlphaFund
+        return AlphaFund
     elif name == 'LocalStorage':
         from pfeed.storages.local_storage import LocalStorage
         return LocalStorage
@@ -63,7 +67,7 @@ def __getattr__(name: str):
     elif name == 'HuggingFaceStorage':
         from pfeed.storages.huggingface_storage import HuggingFaceStorage
         return HuggingFaceStorage
-    raise AttributeError(f"'{__name__}' object has no attribute '{name}'")
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
     
     
 __version__ = version("pfeed")
@@ -82,9 +86,10 @@ __all__ = (
     "LanceDBStorage",
     "HuggingFaceStorage",
     # data sources
+    "PFund",
+    "AlphaFund",
     "YahooFinance", "YF",
     "Bybit",
-    "PFund",
     "FinancialModelingPrep", "FMP",
 )
 def __dir__():

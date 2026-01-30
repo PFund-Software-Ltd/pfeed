@@ -70,10 +70,6 @@ class BaseFeed(ABC):
             raise NotImplementedError(f'{self.data_source.name} does not support creating products')
         return self.data_source.create_product(basis, symbol=symbol, **specs)
     
-    @abstractmethod
-    def _normalize_raw_data(self, data: Any) -> Any:
-        pass
-    
     @staticmethod
     @abstractmethod
     def _create_data_source(*args, **kwargs) -> DataProviderSource:

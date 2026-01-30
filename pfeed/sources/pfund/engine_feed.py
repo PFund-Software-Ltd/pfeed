@@ -6,22 +6,18 @@ if TYPE_CHECKING:
 import datetime
 
 from pfeed.feeds.base_feed import BaseFeed
-from pfeed.sources.pfund.source import PFundSource
+from pfeed.sources.pfund.mixin import PFundMixin
 from pfeed.sources.pfund.data_model import PFundDataModel
 
 
 # TODO: get around the data source issue, since technically its data source is the engine.
 # this feed should be able to get backtesting data from pfund's BacktestEngine for monitoring and analysis puporse
 # some functions require api calls (e.g. get dynamic backtest results) and some do not (e.g. load backtest hisory)
-class PFundEngineFeed(BaseFeed):
-    def __init__(self, env: Environment, data_source: PFundSource, **params):
+class PFundEngineFeed(PFundMixin, BaseFeed):
+    def __init__(self, env: Environment, **params):
         self._env = env
-        super().__init__(data_source=data_source, **params)
+        super().__init__(**params)
     
-    @staticmethod
-    def _create_data_source() -> PFundSource:
-        return PFundSource()
-
     def create_data_model(
         self, 
         start_date: datetime.date | None=None,

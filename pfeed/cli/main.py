@@ -16,6 +16,7 @@ def init_context(ctx):
 pfeed_group = create_cli_group('pfeed', init_context=init_context)
 pfeed_group.add_command(config)
 pfeed_group.add_command(docker_compose)
+pfeed_group.add_command(docker_compose, name='compose')
 pfeed_group.add_command(remove)
 pfeed_group.add_command(remove, name='rm')
 pfeed_group.add_command(deltalake)

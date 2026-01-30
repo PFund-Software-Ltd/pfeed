@@ -8,13 +8,21 @@ from enum import StrEnum
 from pfeed.sources.base_source import BaseSource
 
 
-# FIXME: only need to create a source object with "name" attribute, no need to inherit from DataProviderSource
+class PFundDataSource(StrEnum):
+    PFund = 'PFund'
+
+    
+class PFundDataCategory(StrEnum):
+    ENGINE_DATA = 'ENGINE_DATA'
+    TRADE_DATA = 'TRADE_DATA'
+
+    @property
+    def feed_name(self) -> str:
+        return self.lower().replace('_data', '_feed')
+
+
 class PFundSource(BaseSource):
-    name = StrEnum('PFundSource', ['PFund']).PFund
+    name = PFundDataSource.PFund
     
     def __init__(self, env: Environment):
-        from pfeed.sources.pfund.batch_api import BatchAPI
-        from pfeed.sources.pfund.stream_api import StreamAPI
-        super().__init__()
-        self.batch_api = BatchAPI()
-        self.stream_api = StreamAPI(env=env)
+        super().__init__(data_categories=list(PFundDataCategory))

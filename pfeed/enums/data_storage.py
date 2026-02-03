@@ -17,7 +17,7 @@ class FileBasedDataStorage(StrEnum):
 class DatabaseDataStorage(StrEnum):
     DUCKDB = 'DUCKDB'
     LANCEDB = 'LANCEDB'
-    POSTGRESQL = 'POSTGRESQL'
+    # POSTGRESQL = 'POSTGRESQL'
 
     
 class DataStorage(StrEnum):
@@ -25,9 +25,9 @@ class DataStorage(StrEnum):
     LOCAL = FileBasedDataStorage.LOCAL
     DUCKDB = DatabaseDataStorage.DUCKDB
     LANCEDB = DatabaseDataStorage.LANCEDB
-    POSTGRESQL = DatabaseDataStorage.POSTGRESQL
     HUGGINGFACE = HF = FileBasedDataStorage.HUGGINGFACE
     # TODO:
+    # POSTGRESQL = DatabaseDataStorage.POSTGRESQL
     # MINIO = FileBasedDataStorage.MINIO
     # S3 = 'S3'
     # AZURE = 'AZURE'

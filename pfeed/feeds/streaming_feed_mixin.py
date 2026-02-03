@@ -60,6 +60,7 @@ class StreamingFeedMixin:
                     except asyncio.CancelledError:
                         producer.cancel()
                         break
+                    # FIXME: use another sentinel than just None
                     if msg is None:          # sentinel from faucet.close_stream()
                         break
                     yield msg

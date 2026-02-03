@@ -93,12 +93,6 @@ def rollback_date_range(
     import calendar
     from pfund.datas.resolution import Resolution
 
-    def _nextmonth(year, month):
-        if month == 12:
-            return year + 1, 1
-        else:
-            return year, month + 1
-
     utcnow = get_utc_now()
     end_date = utcnow - datetime.timedelta(days=1)  # Previous day
 
@@ -113,16 +107,16 @@ def rollback_date_range(
         elif rollback_period.is_week():
             timedelta = datetime.timedelta(weeks=period)
         elif rollback_period.is_month():
+            # Calculate target year/month
             year, month = utcnow.year, utcnow.month - period
             while month <= 0:
-                month += 12  # Rollback to the previous year
+                month += 12
                 year -= 1
-            total_days_in_month = 0
-            while not (year == utcnow.year and month == utcnow.month):
-                year, month = _nextmonth(year, month)
-                _, days_in_month = calendar.monthrange(year, month)
-                total_days_in_month += days_in_month
-            timedelta = datetime.timedelta(days=total_days_in_month)
+            # Clamp day to the last day of target month if needed (e.g., Mar 31 → Feb 28)
+            _, last_day_of_target_month = calendar.monthrange(year, month)
+            day = min(utcnow.day, last_day_of_target_month)
+            target_date = datetime.datetime(year, month, day, tzinfo=datetime.timezone.utc)
+            timedelta = utcnow - target_date
         elif rollback_period.is_year():
             year = utcnow.year - period
             total_days_in_year = 0

@@ -29,10 +29,10 @@ dependencies = [
     "pandas>=2.3.3,<3.0.0",
     "polars>=1.37.1",
     "pyarrow>=22.0.0",
-    "pandera>=0.28.1",
+    "pandera>=0.29.0",
     "msgspec>=0.20.0",
     "pydantic>=2.12.5",
-    "narwhals>=2.15.0",
+    "narwhals>=2.16.0",
     "zstandard>=0.25.0", # REVIEW: this is included in python 3.14
     "beautifulsoup4>=4.14.3",
     "cloudpathlib[s3,gs,azure]>=0.23.0",
@@ -42,12 +42,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-marimo = ["pfund-plot[marimo]>=0.0.1.dev3"]
-jupyter = ["pfund-plot[jupyter]>=0.0.1.dev3"]
 fmp = ["fmp-api-client>=0.0.1"]
 yfinance = ["yfinance>=1.1.0"]
 prefect = ["prefect>=3.6.15"]
-hf = ["huggingface-hub>=1.3.5"]
+hf = ["huggingface-hub>=1.3.7"]
 # polars-cloud = ["polars-cloud>=0.4.2"]
 dask = ["dask[complete,dataframe]>=2026.1.2"]
 coiled = ["coiled>=1.130.4"]

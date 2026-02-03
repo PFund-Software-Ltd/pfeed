@@ -39,8 +39,11 @@ handlers:
     class: 'pfund_kit.logging.handlers.CompressedTimedRotatingFileHandler'
     level: 'DEBUG'
     formatter: 'file'
-    kwargs: {'when': 'midnight', 'backupCount': 7, 'utc': True, 'encoding': 'utf-8'}
     filters: ['trimmedpath']
+    when: 'midnight'
+    backupCount: 7
+    utc: true
+    encoding: 'utf-8'
   stream_handler:
     class: 'logging.StreamHandler'
     level: 'INFO'

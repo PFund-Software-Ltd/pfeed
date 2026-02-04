@@ -7594,14 +7594,16 @@ packages:
 - pypi: ../pfolio
   name: pfolio
   version: 0.0.2
-  sha256: 35354d3b7d54ccbd4fbb62ae74d709b7e7919b4e457c74ac85c5598bf2dae8f0
+  sha256: 17371ec7874c5c7003489b4371e1cab068c426650b031b47792d21e05b4e8acb
   requires_dist:
+  - narwhals>=2.16.0
+  - polars>=1.37.1
   - skfolio>=0.15.4
   requires_python: '>=3.11'
 - pypi: ../pfund
   name: pfund
   version: 0.0.2
-  sha256: 8aa162c92d00e5ad104f617e47b867077b2ad0f06ccbd372d18d835953a73187
+  sha256: a24585811cf3c8e16fe6f23aab9866178770d2bf72508aff7299ed6a5842765b
   requires_dist:
   - pfeed[duckdb] @ file:///Users/stephenyau/pfund.ai/pfeed
   - pfolio @ file:///Users/stephenyau/pfund.ai/pfolio
@@ -7614,8 +7616,8 @@ packages:
   requires_python: '>=3.11'
 - pypi: ../pfund-kit
   name: pfund-kit
-  version: 0.1.2
-  sha256: 16e6c50bcc1282a2b643433c04550ae94fabccdb1071ac7c714fb5733d6522e4
+  version: 0.1.3
+  sha256: 36ea4e7777700c1eede21c35c12eb3df0a46ac61381770883409c3708b115815
   requires_dist:
   - rich>=14.2.0
   - tqdm>=4.67.1

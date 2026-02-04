@@ -11,13 +11,15 @@ from pfeed.enums import DataSource, DataCategory
 def create_market_feed(
     data_source: DataSource | str,
     pipeline_mode: bool = False,
-    **ray_kwargs,
+    num_batch_workers: int | None = None,
+    num_stream_workers: int | None = None,
 ) -> MarketFeed:
     return create_feed(
         data_source=data_source,
         data_category=DataCategory.MARKET_DATA,
         pipeline_mode=pipeline_mode,
-        **ray_kwargs,
+        num_batch_workers=num_batch_workers,
+        num_stream_workers=num_stream_workers,
     )
 
 
@@ -27,7 +29,8 @@ def create_feed(
     data_source: DataSource | str,
     data_category: DataCategory.MARKET_DATA | Literal["MARKET_DATA"],
     pipeline_mode: bool = False,
-    **ray_kwargs,
+    num_batch_workers: int | None = None,
+    num_stream_workers: int | None = None,
 ) -> MarketFeed: ...
 
 
@@ -35,7 +38,8 @@ def create_feed(
     data_source: DataSource | str,
     data_category: DataCategory | str,
     pipeline_mode: bool = False,
-    **ray_kwargs,
+    num_batch_workers: int | None = None,
+    num_stream_workers: int | None = None,
 ) -> BaseFeed:
     import importlib
     from pfund_kit.utils.text import to_camel_case
@@ -51,5 +55,5 @@ def create_feed(
         )
     except Exception:
         raise ValueError(f"{data_source} has no feed for {data_category}")
-    feed: BaseFeed = Feed(pipeline_mode=pipeline_mode, **ray_kwargs)
+    feed: BaseFeed = Feed(pipeline_mode=pipeline_mode, num_batch_workers=num_batch_workers, num_stream_workers=num_stream_workers)
     return feed

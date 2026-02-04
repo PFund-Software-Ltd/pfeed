@@ -15,11 +15,13 @@ class DataClient(ABC):
         self,
         # NOTE: these params should be the same as the ones in BaseFeed
         pipeline_mode: bool=False,
-        ray_kwargs: dict | dict[Literal['market_feed', 'news_feed'], dict] | None = None,
+        num_batch_workers: int | dict[Literal['market_feed', 'news_feed'], int] | None = None,
+        num_stream_workers: int | dict[Literal['market_feed', 'news_feed'], int] | None = None,
     ):
         self._pipeline_mode: bool = pipeline_mode
         self.data_source: BaseSource = self._create_data_source()
-        self._ray_kwargs: dict = ray_kwargs or {}
+        self._num_batch_workers: int | dict[Literal['market_feed', 'news_feed'], int] | None = num_batch_workers
+        self._num_stream_workers: int | dict[Literal['market_feed', 'news_feed'], int] | None = num_stream_workers
 
         # initialize data feeds
         self._create_feeds()
@@ -37,14 +39,26 @@ class DataClient(ABC):
 
     def _create_feeds(self):
         for data_category in self.data_categories:
+            feed_name = data_category.feed_name
+            num_batch_workers: int | None = (
+                self._num_batch_workers[feed_name] 
+                if isinstance(self._num_batch_workers, dict) 
+                else self._num_batch_workers
+            )
+            num_stream_workers: int | None = (
+                self._num_stream_workers[feed_name] 
+                if isinstance(self._num_stream_workers, dict) 
+                else self._num_stream_workers
+            )
             feed: BaseFeed = create_feed(
                 data_source=self.data_source.name,
                 data_category=data_category,
                 pipeline_mode=self._pipeline_mode,
-                **self._ray_kwargs.get(data_category.feed_name, self._ray_kwargs),
+                num_batch_workers=num_batch_workers,
+                num_stream_workers=num_stream_workers,
             )
             # dynamically set attributes e.g. self.market_feed
-            setattr(self, data_category.feed_name, feed)
+            setattr(self, feed_name, feed)
 
     @property
     def name(self) -> str:

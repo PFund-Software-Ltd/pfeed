@@ -37,11 +37,19 @@ class BaseFeed(ABC):
     data_model_class: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
     
-    def __init__(self, pipeline_mode: bool=False, **ray_kwargs):
+    def __init__(
+        self, 
+        pipeline_mode: bool=False, 
+        num_batch_workers: int | None = None,
+        num_stream_workers: int | None = None,
+    ):
         '''
         Args:
             pipeline_mode: whether to run in pipeline mode
-            **ray_kwargs: kwargs for ray.init()
+            num_batch_workers: number of workers to run the batch dataflows
+                when this is not None, Ray will be automatically initialized with the number of CPUs available if ray.init() hasn't been called yet
+            num_stream_workers: number of workers to run the streaming dataflows
+                when this is not None, Ray will be automatically initialized with the number of CPUs available if ray.init() hasn't been called yet
         '''
         setup_logging()
         self.data_source: DataProviderSource = self._create_data_source()
@@ -56,10 +64,10 @@ class BaseFeed(ABC):
         self._load_request: LoadRequest | None = None
         self._storage_options: dict[DataStorage, dict] = {}
         self._io_options: dict[IOFormat, dict] = {}
-        self._ray_kwargs: dict = ray_kwargs
-        if self._ray_kwargs:
-            assert 'num_cpus' in self._ray_kwargs, 'num_cpus is required when using Ray'
-            self._init_ray()
+        self._num_batch_workers: int | None = num_batch_workers
+        self._num_stream_workers: int | None = num_stream_workers
+        if self._num_batch_workers or self._num_stream_workers:
+            self._setup_ray()
             
     @property
     def name(self):
@@ -102,14 +110,16 @@ class BaseFeed(ABC):
     def is_pipeline(self) -> bool:
         return self._pipeline_mode
 
-    def _init_ray(self):
+    def _setup_ray(self):
         import ray
         import atexit
+        from pfund_kit.style import cprint, TextStyle, RichColor
         if not ray.is_initialized():
-            # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
-            os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
-            ray.init(**self._ray_kwargs)
-            atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
+            ray.init(num_cpus=os.cpu_count())
+            cprint(f'Auto-initialized Ray with {os.cpu_count()} CPUs', style=TextStyle.BOLD + RichColor.YELLOW)
+        # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
+        os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
+        atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
 
     def _shutdown_ray(self):
         import ray
@@ -283,7 +293,8 @@ class BaseFeed(ABC):
                 io_format=io_format,
                 compression=compression,
             )
-            if self._ray_kwargs:
+            is_using_ray = self._num_batch_workers or self._num_stream_workers
+            if is_using_ray:
                 self._check_if_io_supports_parallel_writes(self._load_request.io_format)
         else:
             self._load_request = None
@@ -372,7 +383,8 @@ class BaseFeed(ABC):
             result: DataFlowResult = dataflow.run_batch(flow_type=flow_type, prefect_kwargs=prefect_kwargs)
             return result.success
         
-        if self._ray_kwargs:
+        is_using_ray = self._num_batch_workers
+        if is_using_ray:
             import ray
             from pfeed.utils.ray_logging import setup_logger_in_ray_task, ray_logging_context
             
@@ -393,7 +405,7 @@ class BaseFeed(ABC):
             
             with ray_logging_context(self.logger) as log_queue:
                 try:
-                    batch_size = self._ray_kwargs['num_cpus']
+                    batch_size = self._num_batch_workers
                     dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
                     with ProgressBar(total=len(self._dataflows), description=f'Running {self.name} dataflows') as pbar:
                         for dataflow_batch in dataflow_batches:

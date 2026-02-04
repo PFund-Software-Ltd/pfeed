@@ -9,6 +9,15 @@ def lambda_with_name(name: str, lambda_func: Callable):
     return lambda_func
 
 
+def get_ray_num_cpus(self) -> int:
+    """Get the number of CPUs available in the Ray cluster."""
+    import ray
+    if not ray.is_initialized():
+        raise RuntimeError('Ray must be initialized before getting the number of CPUs')
+    cluster_resources = ray.cluster_resources()
+    return int(cluster_resources.get('CPU', 0))
+
+
 def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):
     """
     Determines the nearest integer timestamp unit and scaling factor for a given timestamp value.

@@ -3152,11 +3152,17 @@ name = "pfolio"
 version = "0.0.2"
 source = { editable = "../pfolio" }
 dependencies = [
+    { name = "narwhals" },
+    { name = "polars" },
     { name = "skfolio" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "skfolio", specifier = ">=0.15.4" }]
+requires-dist = [
+    { name = "narwhals", specifier = ">=2.16.0" },
+    { name = "polars", specifier = ">=1.37.1" },
+    { name = "skfolio", specifier = ">=0.15.4" },
+]
 
 [[package]]
 name = "pfund"
@@ -3186,7 +3192,7 @@ provides-extras = ["ibkr", "ta-lib"]
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "../pfund-kit" }
 dependencies = [
     { name = "click" },

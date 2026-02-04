@@ -235,7 +235,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         default_transformations = super()._get_default_transformations_for_stream(data_layer, product, resolution)
         # since Ray can't serialize the "self" in self._parse_message, disable it for now
         # REVIEW
-        assert not self._ray_kwargs, "Transformations in Yahoo Finance streaming data is not supported with Ray"
+        assert self._num_stream_workers is None, "Transformations in Yahoo Finance streaming data is not supported with Ray"
         if data_layer != DataLayer.RAW:
             default_transformations = [
                 lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),

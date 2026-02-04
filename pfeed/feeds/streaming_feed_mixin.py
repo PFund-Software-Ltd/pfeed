@@ -116,7 +116,7 @@ class StreamingFeedMixin:
 
         self._auto_load()
 
-        if self._ray_kwargs:
+        if self._num_stream_workers:
             import ray
             from ray.util.queue import Queue
             from pfeed.utils.ray_logging import setup_logger_in_ray_task, ray_logging_context
@@ -186,7 +186,7 @@ class StreamingFeedMixin:
             
             with ray_logging_context(self.logger) as log_queue:
                 try:
-                    num_workers = min(self._ray_kwargs['num_cpus'], len(self._dataflows))
+                    num_workers = min(self._num_stream_workers, len(self._dataflows))
                     
                     # Distribute dataflows' transformations across workers
                     def _create_worker_name(worker_num: int) -> str:

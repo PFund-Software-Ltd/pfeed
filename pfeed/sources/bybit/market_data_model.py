@@ -1,6 +1,6 @@
 from typing import ClassVar
 
-from pfund.products.product_bybit import BybitProduct
+from pfund.entities.products.product_bybit import BybitProduct
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.sources.bybit.market_data_handler import BybitMarketDataHandler
 

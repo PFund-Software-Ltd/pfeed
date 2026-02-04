@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Any, Union
 if TYPE_CHECKING:
     from zmq import SocketType, SocketOption
-    from pfund.accounts.account_base import BaseAccount
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.accounts.account_base import BaseAccount
+    from pfund.entities.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from pfund.enums import PrivateDataChannel
     from pfeed.enums import DataSource

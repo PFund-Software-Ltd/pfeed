@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from yfinance import Ticker
     from pfund.typing import FullDataChannel
     from pfund.datas.resolution import Resolution
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     from pfeed.typing import GenericFrame
     from pfeed.enums import DataStorage
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey

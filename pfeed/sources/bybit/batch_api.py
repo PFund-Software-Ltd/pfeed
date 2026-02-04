@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
     from httpx import Response
-    from pfund.products.product_bybit import BybitProduct
+    from pfund.entities.products.product_bybit import BybitProduct
     from pfund.datas.resolution import Resolution
     from pfund.typing import tEnvironment
     
@@ -41,7 +41,7 @@ class BatchAPI:
     def __init__(self, env: tEnvironment='BACKTEST'):
         env = Environment[env.upper()]
         if env != Environment.BACKTEST:
-            from pfund.exchanges.bybit.rest_api import RESTfulAPI
+            from pfund.brokers.crypto.exchanges.bybit.rest_api import RESTfulAPI
             # TODO: use rest api to support fetch()?
             self._rest_api = RESTfulAPI(env)
         else:

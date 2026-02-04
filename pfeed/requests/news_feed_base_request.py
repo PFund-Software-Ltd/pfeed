@@ -1,7 +1,7 @@
 from pydantic import field_validator
 
 from pfund.enums import Environment
-from pfund.products.product_base import BaseProduct
+from pfund.entities.products.product_base import BaseProduct
 from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
     from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
@@ -51,7 +51,7 @@ class MarketFeed(TimeBasedFeed):
         )
         
     def get_supported_asset_types(self) -> list[str]:
-        from pfund.products.product_basis import ProductAssetType
+        from pfund.entities.products.product_basis import ProductAssetType
         market_data_types_or_resolutions: list[str] = self.data_source.generic_metadata['data_categories']['market_data']
         return list(set(
             str(ProductAssetType(as_string=asset_type.upper()))

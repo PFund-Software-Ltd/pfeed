@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
     import pandas as pd
-    from pfund.exchanges.bybit.exchange import tProductCategory
+    from pfund.brokers.crypto.exchanges.bybit.exchange import ProductCategory
     from pfund.datas.resolution import Resolution
     from pfund.typing import FullDataChannel
     from pfeed.sources.bybit.stream_api import ChannelKey
     from pfeed.typing import GenericFrame
 
-from pfund.products.product_bybit import BybitProduct
+from pfund.entities.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
 from pfeed.enums import DataLayer, DataStorage, IOFormat, Compression
@@ -122,8 +122,8 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         
     @staticmethod
     def _parse_message(product: BybitProduct, msg: dict) -> dict:
-        from pfund.exchanges.bybit.ws_api import WebSocketAPI
-        from pfund.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
+        from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
+        from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
         BybitWebSocketAPIClass: type[BybitWebSocketAPI] = WebSocketAPI._get_api_class(product.category)
         return BybitWebSocketAPIClass._parse_message(msg)
     
@@ -137,7 +137,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         channel: FullDataChannel, 
         *,
         channel_type: Literal['public', 'private'],
-        category: tProductCategory | None = None,
+        category: ProductCategory | None = None,
     ):
         '''
         Args:

@@ -3,7 +3,7 @@ from typing import ClassVar
 
 from pydantic import field_validator
 
-from pfund.products.product_base import BaseProduct
+from pfund.entities.products.product_base import BaseProduct
 from pfund.enums import Environment
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel, TimeBasedMetadataModel
 from pfeed.data_handlers.news_data_handler import NewsDataHandler

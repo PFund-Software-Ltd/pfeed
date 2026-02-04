@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, Callable, Awaitable
 if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
     
 

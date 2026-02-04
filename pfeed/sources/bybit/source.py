@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
-    from pfund.products.product_bybit import BybitProduct
+    from pfund.entities.products.product_bybit import BybitProduct
 
 from pfeed.sources.data_provider_source import DataProviderSource
 from pfeed.enums import DataSource
@@ -17,7 +17,7 @@ class BybitSource(DataProviderSource):
     name = DataSource.BYBIT
 
     def __init__(self):
-        from pfund.exchanges import Bybit
+        from pfund.brokers.crypto.exchanges import Bybit
         super().__init__()
         self._exchange = Bybit(env='LIVE')
         self.batch_api: BatchAPI = self.create_batch_api(env='BACKTEST')

@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     import polars as pl
     from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.engine import DataEngine
     from pfeed.data_models.base_data_model import BaseDataModel

@@ -5,7 +5,7 @@ from pydantic import field_validator, field_serializer
 
 from pfund.enums import TradingVenue, Environment
 from pfund.datas.resolution import Resolution
-from pfund.products.product_base import BaseProduct
+from pfund.entities.products.product_base import BaseProduct
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel, TimeBasedMetadataModel
 from pfeed.data_handlers.market_data_handler import MarketDataHandler
 

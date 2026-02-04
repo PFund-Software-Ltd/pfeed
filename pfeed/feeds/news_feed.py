@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, Callable
 if TYPE_CHECKING:
-    from pfund.products.product_base import BaseProduct
+    from pfund.entities.products.product_base import BaseProduct
     from pfeed._io.base_io import StorageMetadata
     from pfeed.data_models.news_data_model import NewsDataModel
     from pfeed.typing import GenericFrame

@@ -43,7 +43,7 @@ class StreamBuffer:
         analytics capabilities.
         
         '''
-        from pfeed.adapter import Adapter
+        from pfeed.utils.adapter import Adapter
         
         self._io: BaseIO = io
         self._buffer_path: FilePath = buffer_path

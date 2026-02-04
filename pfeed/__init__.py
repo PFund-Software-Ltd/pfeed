@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
+    import pfund_plot as plot
     from pfeed.aliases import ALIASES as alias
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
@@ -34,6 +35,9 @@ def __getattr__(name: str):
     if name == 'alias':
         from pfeed.aliases import ALIASES
         return ALIASES
+    elif name == 'plot':
+        import pfund_plot as plot
+        return plot
     elif name == 'DataEngine':
         from pfeed.engine import DataEngine
         return DataEngine

@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed.typing import GenericFrame, StreamingData
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
-    from pfeed.streaming_settings import StreamingSettings
+    from pfeed.streaming.settings import StreamingSettings
     from pfeed._io.base_io import BaseIO
     from pfeed.utils.file_path import FilePath
 
@@ -20,8 +20,8 @@ from pydantic import Field
 from pfund_kit.style import cprint, TextStyle, RichColor
 from pfeed.enums import DataTool, DataLayer, TimestampPrecision
 from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
-from pfeed.messaging.streaming_message import StreamingMessage
-from pfeed.stream_buffer import StreamBuffer
+from pfeed.streaming.streaming_message import StreamingMessage
+from pfeed.streaming.stream_buffer import StreamBuffer
 from pfeed.data_handlers.base_data_handler import SourcePath
 from pfeed.data_models.time_based_data_model import TimeBasedMetadataModel
 

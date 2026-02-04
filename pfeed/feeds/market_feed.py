@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
     from pfund.datas.resolution import Resolution
     from pfund.typing import FullDataChannel
-    from pfeed.messaging.streaming_message import StreamingMessage
+    from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.enums import DataSource
     from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
     from pfeed.typing import GenericFrame
@@ -20,7 +20,7 @@ from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle
 from pfeed.config import setup_logging, get_config
-from pfeed.messaging import BarMessage, TickMessage
+from pfeed.streaming import BarMessage, TickMessage
 from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataStorage, IOFormat, Compression, DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel

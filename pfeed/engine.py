@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Coroutine, AsyncGenerator
 if TYPE_CHECKING:
     from pfeed.typing import tDataSource, tDataCategory, GenericData
     from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.messaging.zeromq import ZeroMQ
+    from pfeed.streaming.zeromq import ZeroMQ
 
 import asyncio
 import logging
@@ -40,7 +40,7 @@ class DataEngine:
     
     def _setup_messaging(self, zmq_url: str | None=None, zmq_sender_port: int | None=None, zmq_receiver_port: int | None=None):
         import zmq
-        from pfeed.messaging.zeromq import ZeroMQ
+        from pfeed.streaming.zeromq import ZeroMQ
         self._msg_queue = ZeroMQ(
             name='data_engine',
             logger=logger,

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.data_handlers.base_data_handler import BaseMetadata
-    from pfeed.messaging.zeromq import ZeroMQ
+    from pfeed.streaming.zeromq import ZeroMQ
 
 import logging
 
@@ -136,7 +136,7 @@ class DataFlow:
         '''
         import zmq
         from pfund.enums.data_channel import PublicDataChannel
-        from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel
+        from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel
         self._msg_queue = ZeroMQ(name=f'{self.name}', logger=self._logger, sender_type=zmq.ROUTER)
         self._msg_queue.bind(self._msg_queue.sender)
         self._msg_queue.set_target_identity(worker_name)  # store zmq.DEALER's identity to send to

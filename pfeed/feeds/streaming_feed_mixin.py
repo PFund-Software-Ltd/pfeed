@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import StreamingData, GenericData
     from pfeed.dataflow.sink import Sink
-    from pfeed.messaging.zeromq import ZeroMQ, ZeroMQSignal
+    from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
     from pfeed.enums import StreamMode, ExtractType
 
 import asyncio
@@ -15,7 +15,7 @@ from abc import abstractmethod
 from collections import defaultdict
 
 from pfund_kit.style import cprint, TextStyle, RichColor
-from pfeed.streaming_settings import StreamingSettings
+from pfeed.streaming.settings import StreamingSettings
 
 
 class StreamingFeedMixin:
@@ -122,7 +122,7 @@ class StreamingFeedMixin:
             from pfeed.utils.ray_logging import setup_logger_in_ray_task, ray_logging_context
             
             import zmq
-            from pfeed.messaging.zeromq import ZeroMQ, ZeroMQDataChannel, ZeroMQSignal
+            from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel, ZeroMQSignal
 
             @ray.remote
             def ray_task(

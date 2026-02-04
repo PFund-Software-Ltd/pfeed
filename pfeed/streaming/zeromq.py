@@ -73,7 +73,7 @@ class ZeroMQ:
                 Only the newest unprocessed message is kept; arriving messages overwrite older ones if not yet received.
                 Use when you only care about the most recent data and not the message history.
         '''
-        from pfeed.messaging import BarMessage
+        from pfeed.streaming import BarMessage
         
         assert any([sender_type, receiver_type]), 'Either sender_type or receiver_type must be provided'
         self._name = name

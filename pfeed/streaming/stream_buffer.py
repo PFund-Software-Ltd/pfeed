@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from io import TextIOWrapper
     from pyarrow.ipc import RecordBatchStreamWriter
-    from pfeed.streaming_settings import StreamingSettings
+    from pfeed.streaming.settings import StreamingSettings
     from pfeed.typing import FilePath
     from pfeed._io.base_io import BaseIO
 

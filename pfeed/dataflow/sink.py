@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.messaging.streaming_message import StreamingMessage
+    from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.storages.base_storage import BaseStorage

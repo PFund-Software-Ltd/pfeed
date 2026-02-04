@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericData, GenericFrame
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO
-    from pfeed.messaging.streaming_message import StreamingMessage
+    from pfeed.streaming.streaming_message import StreamingMessage
 
 from abc import ABC, abstractmethod
 from pprint import pformat

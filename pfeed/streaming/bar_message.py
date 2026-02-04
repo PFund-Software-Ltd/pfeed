@@ -2,7 +2,7 @@ from typing import Annotated
 
 from msgspec import Meta
 
-from pfeed.messaging.streaming_message import StreamingMessage
+from pfeed.streaming.streaming_message import StreamingMessage
 
 
 class BarMessage(StreamingMessage):

@@ -1,7 +1,7 @@
 from typing import Any, Literal, Protocol, TypeAlias
 from narwhals.series import Series
 from narwhals.dataframe import DataFrame, LazyFrame
-from pfeed.messaging.streaming_message import StreamingMessage
+from pfeed.streaming.streaming_message import StreamingMessage
 
 class DataFrameLike(Protocol):
     def __dataframe__(self, *args: Any, **kwargs: Any) -> Any: ...

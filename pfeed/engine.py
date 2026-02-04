@@ -9,7 +9,7 @@ import asyncio
 import logging
 from threading import Thread
 
-from pfund import print_warning
+from pfund_kit.style import cprint, TextStyle, RichColor
 import pfeed as pe
 from pfeed.enums import DataSource, DataCategory
 from pfeed.config import get_config
@@ -129,7 +129,7 @@ class DataEngine:
                 # No running event loop, safe to use asyncio.run()
                 pass
             else:
-                print_warning("Cannot call engine.run() from within a running event loop. Did you mean to call engine.run_async()?")
+                cprint("Cannot call engine.run() from within a running event loop. Did you mean to call engine.run_async()?", style=TextStyle.BOLD + RichColor.RED)
                 return
             return asyncio.run(self.run_async())
     

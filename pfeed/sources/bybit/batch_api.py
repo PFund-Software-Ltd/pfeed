@@ -90,7 +90,7 @@ class BatchAPI:
     def _get(url: str, params: dict | None=None):
         import time
         import httpx
-        from pfund import print_warning
+        from pfund_kit.style import cprint, TextStyle, RichColor
         
         NUM_RETRY = 3
         while NUM_RETRY:
@@ -100,12 +100,12 @@ class BatchAPI:
                 result = response.raise_for_status().content
                 return result
             except httpx.RequestError as exc:
-                print_warning(f'RequestError: failed to get data from {url}, {exc=}')
+                cprint(f'RequestError: failed to get data from {url}, {exc=}', style=TextStyle.BOLD + RichColor.RED)
             except Exception as exc:
-                print_warning(f'Error: failed to get data from {url}, {exc=}')
+                cprint(f'Error: failed to get data from {url}, {exc=}', style=TextStyle.BOLD + RichColor.RED)
             time.sleep(1)
         else:
-            print_warning(f'Failed to get data from {url}')
+            cprint(f'Failed to get data from {url}', style=TextStyle.BOLD + RichColor.RED)
             return None
     
     def _create_url(self, product: BybitProduct, resolution: Resolution, date: str) -> str:

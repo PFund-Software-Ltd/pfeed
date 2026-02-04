@@ -20,8 +20,8 @@ class StreamAPI:
         self._last_time_in_mts: dict[ChannelKey, int] = {}  
     
     async def connect(self):
-        from pfund import print_warning
-        print_warning("Warning: Yahoo Finance streaming data is not true tick data (every trade) but tick snapshots (aggregated trades)")
+        from pfund_kit.style import cprint, TextStyle, RichColor
+        cprint("Warning: Yahoo Finance streaming data is not true tick data (every trade) but tick snapshots (aggregated trades)", style=TextStyle.BOLD + RichColor.YELLOW)
         symbols = [data_model.product.symbol for data_model in self._streaming_bindings.values()]
         await self._ws_api.subscribe(symbols)
         await self._ws_api.listen(self._callback)

@@ -8,7 +8,7 @@ from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 from pfeed.sources.pfund.source import PFundSource
 
 
-class PFundDataModel(TimeBasedDataModel):
+class PFundComponentDataModel(TimeBasedDataModel):
     '''
     Data model for pfund to store its components data, e.g. computed features, model predictions, etc.
     '''

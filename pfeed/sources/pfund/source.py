@@ -14,7 +14,7 @@ class PFundDataSource(StrEnum):
     
 class PFundDataCategory(StrEnum):
     ENGINE_DATA = 'ENGINE_DATA'
-    TRADE_DATA = 'TRADE_DATA'
+    COMPONENT_DATA = 'COMPONENT_DATA'
 
     @property
     def feed_name(self) -> str:

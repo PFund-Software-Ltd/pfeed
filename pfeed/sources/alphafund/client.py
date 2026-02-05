@@ -29,8 +29,3 @@ class AlphaFund(AlphaFundMixin, DataClient):
     def get_feed(self, data_category: AlphaFundDataCategory) -> BaseFeed | None:
         return getattr(self, AlphaFundDataCategory[data_category.upper()].feed_name, None)
         
-        
-        
-# TEMP
-if __name__ == '__main__':
-    alphafund = AlphaFund()

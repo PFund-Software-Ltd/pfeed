@@ -1,23 +1,23 @@
-from pfeed.sources.alphafund.mixin import AlphaFundMixin
-from pfeed.sources.alphafund.chat_data_model import ChatDataModel
+from pfeed.sources.pfund.mixin import PFundMixin
+from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
 from pfeed.feeds.base_feed import BaseFeed
 
 
 # TODO
-class AlphaFundChatFeed(AlphaFundMixin, BaseFeed):
+class PFundComponentFeed(PFundMixin, BaseFeed):
     def create_data_model(self, *args, **kwargs):
         pass
     
     def download(self):
         pass
     
-    def _download_impl(self, data_model: ChatDataModel):
+    def _download_impl(self, data_model: PFundComponentDataModel):
         pass
 
     def retrieve(self):
         pass
 
-    def _retrieve_impl(self, data_model: ChatDataModel):
+    def _retrieve_impl(self, data_model: PFundComponentDataModel):
         pass
     
     def _create_data_model_from_request(self, request):

@@ -27,7 +27,7 @@ dependencies = [
     "pfund>=0.0.2",
     # TODO: upgrade to pandas 3.0.0 when other libraries support it (currently it breaks pandera etc.)
     "pandas>=2.3.3,<3.0.0",
-    "polars>=1.37.1",
+    "polars>=1.38.0",
     "pyarrow>=22.0.0",
     "pandera>=0.29.0",
     "msgspec>=0.20.0",
@@ -45,7 +45,7 @@ dependencies = [
 fmp = ["fmp-api-client>=0.0.1"]
 yfinance = ["yfinance>=1.1.0"]
 prefect = ["prefect>=3.6.15"]
-hf = ["huggingface-hub>=1.3.7"]
+hf = ["huggingface-hub>=1.4.0"]
 # polars-cloud = ["polars-cloud>=0.4.2"]
 dask = ["dask[complete,dataframe]>=2026.1.2"]
 coiled = ["coiled>=1.130.4"]
@@ -71,7 +71,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.9.28,<0.10.0"]
+requires = ["uv_build>=0.9.30,<0.10.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]

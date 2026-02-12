@@ -20,6 +20,7 @@ class MarketDataHandler(TimeBasedDataHandler):
         df = df.reset_index(drop=True)
         data_model: MarketDataModel = self._data_model
         resolution: Resolution = data_model.resolution
+
         if resolution.is_quote():
             raise NotImplementedError('quote data is not supported yet')
         elif resolution.is_tick():

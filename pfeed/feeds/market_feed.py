@@ -112,6 +112,7 @@ class MarketFeed(TimeBasedFeed):
         end_date: datetime.date | str='',
         data_origin: str='',
         dataflow_per_date: bool=True,
+        clean_raw_data: bool=True,
         storage_config: StorageConfig | None=None,
         **product_specs
     ) -> GenericFrame | None | MarketFeed:
@@ -139,6 +140,10 @@ class MarketFeed(TimeBasedFeed):
             dataflow_per_date: Whether to create a dataflow for each date.
                 If True, a dataflow will be created for each date.
                 If False, a single dataflow will be created for the entire date range.
+            clean_raw_data: Whether to clean raw data after download.
+                If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
+                If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
+                If False, downloaded raw data will be returned as is.
             storage_config: Storage configuration.
                 if None, downloaded data will NOT be stored to storage.
                 if provided, downloaded data will be stored to storage based on the storage config.
@@ -172,6 +177,7 @@ class MarketFeed(TimeBasedFeed):
             end_date=end_date,
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
+            clean_raw_data=storage_config.data_layer != DataLayer.RAW if storage_config else clean_raw_data,
         )
         self.logger.info(
             f'{self._current_request.name}:\n{self._current_request}\n', 
@@ -191,13 +197,12 @@ class MarketFeed(TimeBasedFeed):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
-        from pfeed.requests import MarketFeedRetrieveRequest
+        from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
         
         request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest = self._current_request
 
-        storage_config = request.storage_config
-        if storage_config is not None:
-            clean_raw_data = storage_config.data_layer != DataLayer.RAW
+        if isinstance(request, MarketFeedDownloadRequest):
+            clean_raw_data = request.clean_raw_data
         elif isinstance(request, MarketFeedRetrieveRequest):
             clean_raw_data = request.clean_raw_data
         else:

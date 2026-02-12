@@ -97,7 +97,10 @@ class DataFlow:
         else:
             data, metadata = self._run_batch_etl()
         if self.faucet.extract_type == ExtractType.download:
-            self._result.set_data_loader(self.sink.storage.read_data)
+            if self.sink:
+                self._result.set_data_loader(self.sink.storage.read_data)
+            else:
+                self._result.set_data(data)
         elif self.faucet.extract_type == ExtractType.retrieve:
             # NOTE: if using ray, setting large data directly in result will be inefficient, since ray will copy the data back to the main thread
             self._result.set_data(data)

@@ -114,6 +114,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         start_date: datetime.date | str='',
         end_date: datetime.date | str='',
         storage_config: StorageConfig | None=None,
+        clean_raw_data: bool=True,
         yfinance_kwargs: dict | None=None,
         **product_specs
     ) -> GenericFrame | None | YahooFinanceMarketFeed:
@@ -150,6 +151,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             end_date=end_date,
             storage_config=storage_config,
             dataflow_per_date=False,
+            clean_raw_data=clean_raw_data,
             **product_specs
         )
     

@@ -57,6 +57,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         start_date: datetime.date | str='',
         end_date: datetime.date | str='',
         storage_config: StorageConfig | None=None,
+        clean_raw_data: bool=True,
         **product_specs
     ) -> GenericFrame | None | BybitMarketFeed:
         '''
@@ -78,6 +79,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
             start_date=start_date,
             end_date=end_date,
             dataflow_per_date=True,
+            clean_raw_data=clean_raw_data,
             storage_config=storage_config,
             **product_specs
         )

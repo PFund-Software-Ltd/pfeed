@@ -206,6 +206,7 @@ class StreamingFeedMixin:
                         ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)
                         ports_to_connect[worker_name]['receiver'].extend(ports_in_use)
                         # get ports in use for engine's ZMQ.PULL
+                        # FIXME: this ties streaming dataflows to the data engine, decouple them?
                         if self._engine:
                             engine_zmq: ZeroMQ = self._engine._msg_queue
                             ports_in_use: list[int] = engine_zmq.get_ports_in_use(engine_zmq.receiver)

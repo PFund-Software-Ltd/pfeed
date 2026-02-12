@@ -17,7 +17,7 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.10.0"
+uv = ">=0.10.2"
 openjdk = "21.*"  # for spark
 libpq = ">=18.1"  # for postgresql
 
@@ -39,7 +39,7 @@ beautifulsoup4 = ">=4.14.3"
 cloudpathlib = { version = ">=0.23.0", extras = ["s3", "gs", "azure"] }
 ray = { version = ">=2.53.0", extras = ["default"] }
 pyzmq = ">=27.1.0"
-deltalake = ">=1.4.1"
+deltalake = ">=1.4.2"
 
 [environments]
 default = ["py311", "dev", "optional"]
@@ -64,7 +64,7 @@ dask = { version = ">=2026.1.2", extras = ["complete", "dataframe"] }
 coiled = ">=1.130.4"
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
 duckdb = ">=1.4.4"
-lancedb = ">=0.29.1"
+lancedb = ">=0.29.2"
 psycopg = { version = ">=3.3.2", extras = ["binary", "pool"] }
 
 # TEMP

@@ -2,7 +2,7 @@ from typing import ClassVar
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator, Field
 
 from pfeed.enums import DataStorage, DataLayer, IOFormat, Compression
 
@@ -10,11 +10,11 @@ from pfeed.enums import DataStorage, DataLayer, IOFormat, Compression
 class StorageConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
-    storage: DataStorage | str=DataStorage.LOCAL
-    data_path: Path | str | None=None
-    data_layer: DataLayer | str=DataLayer.CLEANED
+    storage: DataStorage | str = DataStorage.LOCAL
+    data_path: Path | str | None = Field(default=None, validate_default=True)
+    data_layer: DataLayer | str = DataLayer.CLEANED
     data_domain: str=''
-    io_format: IOFormat | str=IOFormat.PARQUET
+    io_format: IOFormat | str = IOFormat.PARQUET
     compression: Compression | str=Compression.SNAPPY
     
     @field_validator('storage', mode='before')

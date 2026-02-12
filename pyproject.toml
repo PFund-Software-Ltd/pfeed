@@ -38,7 +38,7 @@ dependencies = [
     "cloudpathlib[s3,gs,azure]>=0.23.0",
     "ray[default]>=2.53.0",
     "pyzmq>=27.1.0",
-    "deltalake>=1.4.1",
+    "deltalake>=1.4.2",
 ]
 
 [project.optional-dependencies]
@@ -51,7 +51,7 @@ dask = ["dask[complete,dataframe]>=2026.1.2"]
 coiled = ["coiled>=1.130.4"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.1"]
 duckdb = ["duckdb>=1.4.4"]
-lancedb = ["lancedb>=0.29.1"]
+lancedb = ["lancedb>=0.29.2"]
 postgresql = ["psycopg[binary,pool]>=3.3.2"]
 # "databento>=0.63.0",
 # vortex = ["vortex-data>=0.55.0"]
@@ -71,7 +71,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.10.0,<0.11.0"]
+requires = ["uv_build>=0.10.2,<0.11.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

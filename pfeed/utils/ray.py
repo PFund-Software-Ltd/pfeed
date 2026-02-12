@@ -27,8 +27,6 @@ def setup_ray():
         ray.init(num_cpus=os.cpu_count())
         cprint(f'Auto-initialized Ray with {os.cpu_count()} CPUs', style=TextStyle.BOLD + RichColor.YELLOW)
         atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
-    # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
-    os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 
 def shutdown_ray():

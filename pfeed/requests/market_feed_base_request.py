@@ -43,6 +43,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
             "product": self.product.name,
             "target_resolution": str(self.target_resolution),
             "data_resolution": str(self.data_resolution),
+            "dataflow_per_date": self.dataflow_per_date,
         }
         if self.data_origin:
             data["data_origin"] = self.data_origin

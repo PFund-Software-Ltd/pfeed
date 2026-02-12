@@ -89,7 +89,7 @@ class DataFlow:
         return data, metadata
     
     def run_batch(self, flow_type: FlowType=FlowType.native, prefect_kwargs: dict | None=None) -> DataFlowResult:
-        self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
+        self._logger.debug(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
         self._flow_type = FlowType[flow_type.lower()]
         if self._flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))

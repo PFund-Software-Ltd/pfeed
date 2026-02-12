@@ -309,7 +309,7 @@ class MarketFeed(TimeBasedFeed):
                     False if no resampling needed (single scan_parquet is more efficient).
                 If True/False, uses the specified value directly.
             clean_raw_data: Whether to clean raw data.
-                If data_layer is not RAW, this parameter will be ignored.
+                If data_layer is not RAW in storage_config, this parameter will be ignored.
                 If True, raw data stored in data layer=RAW will be cleaned using the default transformations for download.
                 If False, raw data stored in data layer=RAW will be loaded as is.
         '''

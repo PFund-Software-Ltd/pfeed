@@ -30,6 +30,8 @@ from pfeed.config import configure, get_config, configure_logging
 
 
 os.environ['PYARROW_IGNORE_TIMEZONE'] = '1'  # used to suppress warning from pyspark
+# disable this warning in Ray: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
+os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 
 def __getattr__(name: str):

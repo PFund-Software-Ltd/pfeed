@@ -46,9 +46,9 @@ class BaseFeed(ABC):
         '''
         Args:
             pipeline_mode: whether to run in pipeline mode
-            num_batch_workers: number of workers to run the batch dataflows
+            num_batch_workers: number of Ray tasks to run the batch dataflows in parallel
                 when this is not None, Ray will be automatically initialized with the number of CPUs available if ray.init() hasn't been called yet
-            num_stream_workers: number of workers to run the streaming dataflows
+            num_stream_workers: number of Ray tasks to run the streaming dataflows in parallel
                 when this is not None, Ray will be automatically initialized with the number of CPUs available if ray.init() hasn't been called yet
         '''
         setup_logging()

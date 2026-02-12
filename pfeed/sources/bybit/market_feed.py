@@ -2,13 +2,15 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
 if TYPE_CHECKING:
+    import datetime
     import pandas as pd
     from pfund.brokers.crypto.exchanges.bybit.exchange import ProductCategory
     from pfund.datas.resolution import Resolution
     from pfund.typing import FullDataChannel
     from pfeed.sources.bybit.stream_api import ChannelKey
     from pfeed.typing import GenericFrame
-
+    from pfeed.storages.storage_config import StorageConfig
+    
 from pfund.entities.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
@@ -52,13 +54,9 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         product: str, 
         resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day']='tick',
         rollback_period: Resolution | str | Literal['ytd', 'max']='1d',
-        start_date: str='',
-        end_date: str='',
-        to_storage: DataStorage | str | None=DataStorage.LOCAL,
-        data_layer: DataLayer | str =DataLayer.CLEANED,
-        data_domain: str = '',
-        io_format: IOFormat = IOFormat.PARQUET,
-        compression: Compression = Compression.SNAPPY,
+        start_date: datetime.date | str='',
+        end_date: datetime.date | str='',
+        storage_config: StorageConfig | None=None,
         **product_specs
     ) -> GenericFrame | None | BybitMarketFeed:
         '''
@@ -80,11 +78,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
             start_date=start_date,
             end_date=end_date,
             dataflow_per_date=True,
-            to_storage=to_storage,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            io_format=io_format,
-            compression=compression,
+            storage_config=storage_config,
             **product_specs
         )
 

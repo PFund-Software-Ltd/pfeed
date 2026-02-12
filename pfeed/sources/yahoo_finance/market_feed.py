@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.typing import GenericFrame
-    from pfeed.enums import DataStorage
+    from pfeed.storages.storage_config import StorageConfig
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
 
 import time
@@ -111,12 +111,9 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         symbol: str='',
         resolution: Resolution | str | Literal['minute', 'hour', 'day']='day',
         rollback_period: str | Literal["ytd", "max"]='max',
-        start_date: str='',
-        end_date: str='',
-        data_layer: DataLayer='CLEANED',
-        data_origin: str='',
-        to_storage: DataStorage | None='LOCAL',
-        storage_options: dict | None=None,
+        start_date: datetime.date | str='',
+        end_date: datetime.date | str='',
+        storage_config: StorageConfig | None=None,
         yfinance_kwargs: dict | None=None,
         **product_specs
     ) -> GenericFrame | None | YahooFinanceMarketFeed:
@@ -151,10 +148,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            data_layer=data_layer,
-            data_origin=data_origin,
-            to_storage=to_storage,
-            storage_options=storage_options,
+            storage_config=storage_config,
             dataflow_per_date=False,
             **product_specs
         )

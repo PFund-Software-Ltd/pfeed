@@ -233,6 +233,37 @@ class MarketFeed(TimeBasedFeed):
         )
         return default_transformations
 
+    def _find_stored_resolution(
+        self,
+        storage: BaseStorage,
+        data_model: MarketDataModel,
+        search_resolutions: list[Resolution],
+    ) -> Resolution | None:
+        """Probe storage to find which resolution the data is stored at, without reading data.
+
+        Uses a single-date data model to minimize probe cost — only one file/table existence
+        check per resolution instead of checking all dates.
+
+        Returns:
+            The resolution at which data was found in storage, or None if no data exists.
+        """
+        # probe with just the first date to keep it cheap
+        first_date = data_model.dates[0]
+        probe_data_model = data_model.model_copy(deep=False)
+        probe_data_model.update_start_date(first_date)
+        probe_data_model.update_end_date(first_date)
+
+        for resolution in search_resolutions:
+            probe_copy = probe_data_model.model_copy(deep=False)
+            probe_copy.update_resolution(resolution)
+            storage.with_data_model(probe_copy)
+            metadata = storage.data_handler.read_metadata()
+            # if this date's source path exists, data is stored at this resolution
+            if not metadata.missing_source_paths:
+                return resolution
+
+        return None
+
     def retrieve(
         self,
         product: str,
@@ -243,7 +274,7 @@ class MarketFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         env: Environment=Environment.BACKTEST,
-        dataflow_per_date: bool=False,
+        dataflow_per_date: bool | None=None,
         clean_raw_data: bool=False,
         storage_config: StorageConfig | None=None,
         **product_specs: Any
@@ -262,12 +293,6 @@ class MarketFeed(TimeBasedFeed):
                     Otherwise, use rollback_period to determine the start date.
             end_date: End date.
                 If not specified, use today's date as the end date.
-            from_storage: try to load data from this storage.
-                If not specified, will search through all storages, e.g. local, minio, cache.
-                If no data is found, will try to download the missing data from the data source.
-            dataflow_per_date: Whether to create a dataflow for each date, where data is stored per date.
-                If True, a dataflow will be created for each date.
-                If False, a single dataflow will be created for the entire date range.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
                 retrieve(
@@ -278,39 +303,31 @@ class MarketFeed(TimeBasedFeed):
                 )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
             env: Environment to retrieve data from.
+            dataflow_per_date: Whether to create a dataflow for each date.
+                If None (default), automatically determined by probing storage:
+                    True if stored data needs resampling (stored resolution != target resolution),
+                    False if no resampling needed (single scan_parquet is more efficient).
+                If True/False, uses the specified value directly.
             clean_raw_data: Whether to clean raw data.
                 If data_layer is not RAW, this parameter will be ignored.
                 If True, raw data stored in data layer=RAW will be cleaned using the default transformations for download.
                 If False, raw data stored in data layer=RAW will be loaded as is.
         '''
         from pfeed.requests import MarketFeedRetrieveRequest
-        
+
         env = Environment[env.upper()]
         setup_logging(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         resolution: Resolution = self.create_resolution(resolution)
-        # search for higher resolutions, e.g. search '1m' -> search '1t'
-        search_resolutions = [resolution] + [
-            _resolution for _resolution in self.get_supported_resolutions()
-            if _resolution > resolution
-        ]
+        # search for higher resolutions (highest first), e.g. if resolution is '1m', search '1m' -> '1t' -> '1s'
+        search_resolutions = [resolution] + sorted(
+            [_resolution for _resolution in self.get_supported_resolutions() if _resolution > resolution],
+            reverse=True,
+        )
         for _resolution in search_resolutions:
             self._validate_resolution_bounds(_resolution)
         storage_config = storage_config or StorageConfig()
-        self._current_request = MarketFeedRetrieveRequest(
-            storage_config=storage_config,
-            env=env,
-            product=product,
-            target_resolution=resolution,
-            data_resolution=resolution,
-            start_date=start_date,
-            end_date=end_date,
-            data_origin=data_origin,
-            dataflow_per_date=dataflow_per_date,
-            data_layer=data_layer,
-            clean_raw_data=clean_raw_data,
-        )
         # NOTE: Create storage in main thread to avoid Ray process config loss.
         # Ray workers reload config via get_config(), losing pe.configure(data_path=...) changes.
         Storage = storage_config.storage.storage_class
@@ -327,14 +344,40 @@ class MarketFeed(TimeBasedFeed):
                 compression=storage_config.compression,
             )
         )
+        # Auto-determine dataflow_per_date if not explicitly set
+        if dataflow_per_date is None:
+            probe_data_model = self.create_data_model(
+                env=env,
+                product=product,
+                resolution=resolution,
+                start_date=start_date,
+                end_date=end_date,
+                data_origin=data_origin,
+            )
+            stored_resolution = self._find_stored_resolution(storage, probe_data_model, search_resolutions)
+            # resampling needed → per-date dataflows for parallel Ray tasks
+            # no resampling (or no data found) → single dataflow with one scan_parquet
+            dataflow_per_date = stored_resolution is not None and stored_resolution != resolution
+        self._current_request = MarketFeedRetrieveRequest(
+            storage_config=storage_config,
+            env=env,
+            product=product,
+            target_resolution=resolution,
+            data_resolution=resolution,
+            start_date=start_date,
+            end_date=end_date,
+            data_origin=data_origin,
+            dataflow_per_date=dataflow_per_date,
+            clean_raw_data=clean_raw_data,
+        )
         self.logger.info(
-            f'{self._current_request.name}:\n{self._current_request}\n', 
+            f'{self._current_request.name}:\n{self._current_request}\n',
             style=TextStyle.BOLD + RichColor.GREEN
         )
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(
-                data_model=data_model, 
-                storage=storage, 
+                data_model=data_model,
+                storage=storage,
                 search_resolutions=search_resolutions,
             ),
         )

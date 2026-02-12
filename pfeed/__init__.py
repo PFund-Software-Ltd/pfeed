@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
     from pfeed.aliases import ALIASES as alias
+    from pfeed.storages.storage_config import StorageConfig
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
         YahooFinance as YF,
@@ -38,6 +39,9 @@ def __getattr__(name: str):
     elif name == 'plot':
         import pfund_plot as plot
         return plot
+    elif name == 'StorageConfig':
+        from pfeed.storages.storage_config import StorageConfig
+        return StorageConfig
     elif name == 'DataEngine':
         from pfeed.engine import DataEngine
         return DataEngine
@@ -77,11 +81,15 @@ def __getattr__(name: str):
 __version__ = version("pfeed")
 __all__ = (
     "__version__",
+    "alias",
+    # config
     "configure",
     'get_config',
     'configure_logging',
-    "alias",
+    "StorageConfig",
+    # plot
     "plot",
+    # engine
     "DataEngine",
     # storages
     "LocalStorage",

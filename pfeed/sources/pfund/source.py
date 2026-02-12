@@ -1,7 +1,4 @@
-from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from pfund.enums import Environment
+from typing import ClassVar
 
 from enum import StrEnum
 
@@ -22,7 +19,7 @@ class PFundDataCategory(StrEnum):
 
 
 class PFundSource(BaseSource):
-    name = PFundDataSource.PFund
+    name: ClassVar[PFundDataSource | StrEnum] = PFundDataSource.PFund
     
-    def __init__(self, env: Environment):
+    def __init__(self):
         super().__init__(data_categories=list(PFundDataCategory))

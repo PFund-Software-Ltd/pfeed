@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, ClassVar, Callable
+from typing import TYPE_CHECKING, Literal, ClassVar, Callable, Any
 if TYPE_CHECKING:
     import pandas as pd
     from narwhals.typing import Frame
@@ -91,7 +91,7 @@ class TimeBasedFeed(BaseFeed):
             dataflow: DataFlow = self._create_dataflow(data_model, faucet)
             self._dataflows.append(dataflow)
     
-    def run(self, **prefect_kwargs) -> GenericFrame | None:
+    def run(self, **prefect_kwargs: Any) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''
         import narwhals as nw
         from pfeed.utils.dataframe import is_empty_dataframe

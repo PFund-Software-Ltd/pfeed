@@ -144,7 +144,7 @@ class PFeedConfig(Configuration):
 
     def _initialize_from_data(self):
         """Initialize PFeedConfig-specific attributes from config data."""
-        self.data_tool = self._data.get('data_tool', DataTool.polars)
+        self.data_tool = DataTool[self._data.get('data_tool', DataTool.polars).lower()]
     
     def to_dict(self) -> dict:
         return {

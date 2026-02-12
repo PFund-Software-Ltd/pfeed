@@ -9,6 +9,34 @@ from logging.handlers import QueueHandler, QueueListener
 from contextlib import contextmanager
 
 
+def get_ray_num_cpus(self) -> int:
+    """Get the number of CPUs available in the Ray cluster."""
+    import ray
+    if not ray.is_initialized():
+        raise RuntimeError('Ray must be initialized before getting the number of CPUs')
+    cluster_resources = ray.cluster_resources()
+    return int(cluster_resources.get('CPU', 0))
+
+
+def setup_ray():
+    import os
+    import ray
+    import atexit
+    from pfund_kit.style import cprint, TextStyle, RichColor
+    if not ray.is_initialized():
+        ray.init(num_cpus=os.cpu_count())
+        cprint(f'Auto-initialized Ray with {os.cpu_count()} CPUs', style=TextStyle.BOLD + RichColor.YELLOW)
+        atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
+    # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
+    os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
+
+
+def shutdown_ray():
+    import ray
+    if ray.is_initialized():
+        ray.shutdown()
+            
+
 def setup_logger_in_ray_task(logger_name: str, log_queue: Queue) -> logging.Logger:
     """Configure a logger with QueueHandler in a Ray task.
     

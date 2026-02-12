@@ -27,11 +27,21 @@ def create_market_feed(
 @overload
 def create_feed(
     data_source: DataSource | str,
-    data_category: DataCategory.MARKET_DATA | Literal["MARKET_DATA"],
+    data_category: Literal[DataCategory.MARKET_DATA, "MARKET_DATA"],
     pipeline_mode: bool = False,
     num_batch_workers: int | None = None,
     num_stream_workers: int | None = None,
 ) -> MarketFeed: ...
+
+
+@overload
+def create_feed(
+    data_source: DataSource | str,
+    data_category: DataCategory | str,
+    pipeline_mode: bool = False,
+    num_batch_workers: int | None = None,
+    num_stream_workers: int | None = None,
+) -> BaseFeed: ...
 
 
 def create_feed(

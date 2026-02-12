@@ -7,7 +7,8 @@ import datetime
 
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.pfund.mixin import PFundMixin
-from pfeed.sources.pfund.data_model import PFundDataModel
+# TODO
+# from pfeed.sources.pfund.engine_data_model import PFundEngineDataModel
 
 
 # TODO: get around the data source issue, since technically its data source is the engine.
@@ -25,7 +26,7 @@ class PFundEngineFeed(PFundMixin, BaseFeed):
         end_date: datetime.date | None=None,
         component_name: str | None=None,
         component_type: ComponentType | None=None,
-    ) -> PFundDataModel:
-        return PFundDataModel(
+    ) -> PFundEngineDataModel:
+        return PFundEngineDataModel(
             ...
         )

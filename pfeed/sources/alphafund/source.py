@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from enum import StrEnum
 
 from pfeed.sources.base_source import BaseSource
@@ -16,7 +18,7 @@ class AlphaFundDataCategory(StrEnum):
 
         
 class AlphaFundSource(BaseSource):
-    name = AlphaFundDataSource.AlphaFund
+    name: ClassVar[AlphaFundDataSource | StrEnum] = AlphaFundDataSource.AlphaFund
 
     def __init__(self):
         super().__init__(data_categories=list(AlphaFundDataCategory))

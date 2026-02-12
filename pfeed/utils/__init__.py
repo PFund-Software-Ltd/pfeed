@@ -9,13 +9,19 @@ def lambda_with_name(name: str, lambda_func: Callable):
     return lambda_func
 
 
-def get_ray_num_cpus(self) -> int:
-    """Get the number of CPUs available in the Ray cluster."""
-    import ray
-    if not ray.is_initialized():
-        raise RuntimeError('Ray must be initialized before getting the number of CPUs')
-    cluster_resources = ray.cluster_resources()
-    return int(cluster_resources.get('CPU', 0))
+def is_prefect_running() -> bool:
+    import os
+    import httpx
+
+    PREFECT_API_URL = os.getenv('PREFECT_API_URL', 'http://127.0.0.1:4200/api').rstrip('/')
+    if not PREFECT_API_URL.startswith('http'):
+        PREFECT_API_URL = f'http://{PREFECT_API_URL}'
+    try:
+        response = httpx.get(f'{PREFECT_API_URL}/health', timeout=2.0)
+        return response.status_code == 200
+    except Exception:
+        # Catch all exceptions - if we can't verify Prefect is running, assume it's not
+        return False
 
 
 def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):

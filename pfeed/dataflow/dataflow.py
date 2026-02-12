@@ -21,7 +21,6 @@ class DataFlow:
         self._data_model: BaseDataModel = data_model
         self._logger: logging.Logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
         self._is_streaming = faucet.extract_type == ExtractType.stream
-        self._is_sealed = False
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
         self._transformations: list[Callable] = []
@@ -60,29 +59,10 @@ class DataFlow:
         return self._result
     
     def add_transformations(self, *funcs: tuple[Callable, ...]):
-        if self.is_sealed():
-            raise RuntimeError(
-                f'{self} is sealed, cannot add transformations. i.e. this pattern is currently not allowed:\n'
-                '''
-                .transform(...)
-                .load(...)
-                .transform(...)
-                .load(...)
-                '''
-            )
         self._transformations.extend(funcs)
     
     def set_sink(self, sink: Sink):
-        if self.is_sealed():
-            raise RuntimeError(f'{self} is sealed, cannot set sink')
         self._sink = sink
-    
-    def seal(self):
-        self._is_sealed = True
-    
-    def is_sealed(self):
-        '''Check if the dataflow is sealed, i.e. cannot add transformations'''
-        return self._is_sealed
     
     def __str__(self):
         if not self.is_streaming():

@@ -119,7 +119,7 @@ class StreamingFeedMixin:
         if self._num_stream_workers:
             import ray
             from ray.util.queue import Queue
-            from pfeed.utils.ray_logging import setup_logger_in_ray_task, ray_logging_context
+            from pfeed.utils.ray import shutdown_ray, setup_logger_in_ray_task, ray_logging_context
             
             import zmq
             from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel, ZeroMQSignal
@@ -249,7 +249,7 @@ class StreamingFeedMixin:
             self.logger.debug('waiting for ray tasks to finish...')
             ray.get(futures)
             self.logger.debug('shutting down ray...')
-            self._shutdown_ray()
+            shutdown_ray()
         else:
             await _run_dataflows()
         self.clear_requests()

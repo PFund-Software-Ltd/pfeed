@@ -14,12 +14,19 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
     def _download_impl(self, data_model: PFundComponentDataModel):
         pass
 
+    def _get_default_transformations_for_download(self, *args, **kwargs):
+        pass
+    
+
     def retrieve(self):
         pass
 
     def _retrieve_impl(self, data_model: PFundComponentDataModel):
         pass
     
+    def _get_default_transformations_for_retrieve(self, *args, **kwargs):
+        pass
+
     def _create_data_model_from_request(self, request):
         pass
     

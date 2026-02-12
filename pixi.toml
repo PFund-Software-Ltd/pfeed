@@ -17,7 +17,7 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.9.30"
+uv = ">=0.10.0"
 openjdk = "21.*"  # for spark
 libpq = ">=18.1"  # for postgresql
 
@@ -28,7 +28,7 @@ pfund = { path = "../pfund", editable = true }
 pfund-kit = { path = "../pfund-kit", editable = true }
 # pfund = ">=0.0.2"
 pandas = ">=2.3.3,<3.0.0"
-polars = ">=1.38.0"
+polars = ">=1.38.1"
 pyarrow = ">=22.0.0"
 pandera = ">=0.29.0"
 msgspec = ">=0.20.0"
@@ -57,14 +57,14 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 fmp-api-client = { path = "../fmp-api-client", editable = true }
 # fmp-api-client = ">=0.0.1download"
 yfinance = ">=1.1.0"
-prefect = ">=3.6.15"
-huggingface-hub = ">=1.4.0"
+prefect = ">=3.6.16"
+huggingface-hub = ">=1.4.1"
 # polars-cloud = ">=0.4.2"
 dask = { version = ">=2026.1.2", extras = ["complete", "dataframe"] }
 coiled = ">=1.130.4"
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
 duckdb = ">=1.4.4"
-lancedb = ">=0.27.1"
+lancedb = ">=0.29.1"
 psycopg = { version = ">=3.3.2", extras = ["binary", "pool"] }
 
 # TEMP

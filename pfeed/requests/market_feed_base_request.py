@@ -32,7 +32,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
         if isinstance(v, str):
             return Resolution(v)
         return v
-
+    
     def __str__(self):
         from pprint import pformat
 

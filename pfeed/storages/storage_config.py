@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -5,42 +7,46 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from pfeed.enums import DataStorage, DataLayer, IOFormat, Compression
 
 
-class LoadRequest(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
+class StorageConfig(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
-    storage: DataStorage
-    data_path: Path | str | None
-    data_layer: DataLayer
-    data_domain: str
-    io_format: IOFormat
-    compression: Compression
-    is_validate_data_domain: bool = True
+    storage: DataStorage | str=DataStorage.LOCAL
+    data_path: Path | str | None=None
+    data_layer: DataLayer | str=DataLayer.CLEANED
+    data_domain: str=''
+    io_format: IOFormat | str=IOFormat.PARQUET
+    compression: Compression | str=Compression.SNAPPY
     
     @field_validator('storage', mode='before')
     @classmethod
-    def create_storage(cls, v):
-        if isinstance(v, str):
+    def create_storage(cls, v: DataStorage | str) -> DataStorage:
+        if not isinstance(v, DataStorage):
             return DataStorage[v.upper()]
+        return v
+    
+    @field_validator('data_path', mode='before')
+    @classmethod
+    def create_data_path(cls, v: Path | str | None) -> Path:
+        from pfeed import get_config
+        config = get_config()
+        if v is None:
+            return config.data_path
+        if isinstance(v, str):
+            return Path(v)
         return v
     
     @field_validator('data_layer', mode='before')
     @classmethod
-    def create_data_layer(cls, v):
+    def create_data_layer(cls, v: DataLayer | str) -> DataLayer:
         if isinstance(v, str):
             return DataLayer[v.upper()]
         return v
     
     @field_validator('data_domain', mode='before')
     @classmethod
-    def uppercase_data_domain(cls, v):
+    def uppercase_data_domain(cls, v: str) -> str:
         v = v.upper()
         return v
-    
-    @model_validator(mode='after')
-    def validate_data_domain(self):
-        if self.is_validate_data_domain and self.data_domain and self.data_layer != DataLayer.CURATED:
-            raise ValueError(f'custom data_domain={self.data_domain} is only allowed when data layer is CURATED, but got data_layer={self.data_layer}')
-        return self
     
     @model_validator(mode='after')
     def resolve_io_format(self):
@@ -48,9 +54,7 @@ class LoadRequest(BaseModel):
         need to resolve to the supported io format for the storage if the storage only supports one io format
         raise error if the storage supports multiple io formats and the io format is not supported
         '''
-        if self.storage is None:
-            return self
-        Storage = self.storage.storage_class
+        Storage = DataStorage[self.storage].storage_class
         supported_io_formats = Storage.SUPPORTED_IO_FORMATS
         if self.io_format not in supported_io_formats:
             if len(supported_io_formats) == 1:
@@ -61,14 +65,14 @@ class LoadRequest(BaseModel):
     
     @field_validator('io_format', mode='before')
     @classmethod
-    def create_io_format(cls, v):
-        if isinstance(v, str):
+    def create_io_format(cls, v: IOFormat | str) -> IOFormat:
+        if not isinstance(v, IOFormat):
             return IOFormat[v.upper()]
         return v
     
     @field_validator('compression', mode='before')
     @classmethod
-    def create_compression(cls, v):
-        if isinstance(v, str):
+    def create_compression(cls, v: Compression | str) -> Compression:
+        if not isinstance(v, Compression):
             return Compression[v.upper()]
         return v

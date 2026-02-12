@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING, Callable, Awaitable, ClassVar
+from typing import Literal, TYPE_CHECKING, Callable, Awaitable, ClassVar, Any
 if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.storages.base_storage import BaseStorage
@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
     from pfeed.typing import GenericFrame
 
-from pathlib import Path
 import datetime
 from abc import abstractmethod
 
@@ -21,10 +20,10 @@ from pfund.datas.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle
 from pfeed.config import setup_logging, get_config
 from pfeed.streaming import BarMessage, TickMessage
-from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataStorage, IOFormat, Compression, DataCategory
+from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataStorage, DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
-from pfeed.requests import LoadRequest
+from pfeed.storages.storage_config import StorageConfig
 
 
 config = get_config()
@@ -113,12 +112,7 @@ class MarketFeed(TimeBasedFeed):
         end_date: str='',
         data_origin: str='',
         dataflow_per_date: bool=True,
-        to_storage: DataStorage | None=DataStorage.LOCAL,
-        data_path: Path | str | None=None,
-        data_layer: DataLayer=DataLayer.CLEANED,
-        data_domain: str = '',
-        io_format: IOFormat=IOFormat.PARQUET,
-        compression: Compression=Compression.SNAPPY,
+        storage_config: StorageConfig | None=None,
         **product_specs
     ) -> GenericFrame | None | MarketFeed:
         '''
@@ -165,8 +159,8 @@ class MarketFeed(TimeBasedFeed):
                 f'{resolution=} is not supported, download data with resolution={data_resolution} instead', 
             )
         self._validate_resolution_bounds(data_resolution)
-        self._ensure_no_current_request()
         self._current_request = MarketFeedDownloadRequest(
+            storage_config=storage_config,
             env=env,
             product=product,
             target_resolution=resolution,
@@ -180,25 +174,16 @@ class MarketFeed(TimeBasedFeed):
             f'{self._current_request.name}:\n{self._current_request}\n', 
             style=TextStyle.BOLD + RichColor.GREEN
         )
-        if to_storage is not None:
-            self._load_request = LoadRequest(
-                storage=to_storage,
-                data_path=data_path,
-                data_layer=data_layer,
-                data_domain=data_domain,
-                io_format=io_format,
-                compression=compression,
-            )
-        else:
-            self._load_request = None
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._download_impl(data_model),
         )
+        default_transformations = self._get_default_transformations_for_download()
         # NOTE: update the data model in faucet to the data resolution
         # because data model in dataflow uses the target resolution, but the faucet uses the data resolution
         for dataflow in self._dataflows:
             faucet_data_model: MarketDataModel = dataflow.faucet.data_model 
             faucet_data_model.update_resolution(self._current_request.data_resolution)
+            dataflow.add_transformations(*default_transformations)
         return self.run() if not self.is_pipeline() else self
     
     def _get_default_transformations_for_download(self) -> list[Callable]:
@@ -208,8 +193,10 @@ class MarketFeed(TimeBasedFeed):
         from pfeed.requests import MarketFeedRetrieveRequest
         
         request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest = self._current_request
-        if self._load_request is not None:
-            clean_raw_data = self._load_request.data_layer != DataLayer.RAW
+
+        storage_config = request.storage_config
+        if storage_config is not None:
+            clean_raw_data = storage_config.data_layer != DataLayer.RAW
         elif isinstance(request, MarketFeedRetrieveRequest):
             clean_raw_data = request.clean_raw_data
         else:
@@ -255,16 +242,11 @@ class MarketFeed(TimeBasedFeed):
         start_date: str='',
         end_date: str='',
         data_origin: str='',
-        dataflow_per_date: bool=False,
         env: Environment=Environment.BACKTEST,
-        from_storage: DataStorage=DataStorage.LOCAL,
-        data_path: Path | str | None=None,
-        data_layer: DataLayer=DataLayer.CLEANED,
-        data_domain: str = '',
-        io_format: IOFormat=IOFormat.PARQUET,
-        compression: Compression=Compression.SNAPPY,
+        dataflow_per_date: bool=False,
         clean_raw_data: bool=False,
-        **product_specs
+        storage_config: StorageConfig | None=None,
+        **product_specs: Any
     ) -> GenericFrame | None | MarketFeed:
         '''Retrieve data from storage.
         Args:
@@ -315,8 +297,9 @@ class MarketFeed(TimeBasedFeed):
         ]
         for _resolution in search_resolutions:
             self._validate_resolution_bounds(_resolution)
-        self._ensure_no_current_request()
+        storage_config = storage_config or StorageConfig()
         self._current_request = MarketFeedRetrieveRequest(
+            storage_config=storage_config,
             env=env,
             product=product,
             target_resolution=resolution,
@@ -328,30 +311,20 @@ class MarketFeed(TimeBasedFeed):
             data_layer=data_layer,
             clean_raw_data=clean_raw_data,
         )
-        # borrow load request to validate the data types (conceptually LoadRequest is for loading data to storage, not from storage)
-        load_request = LoadRequest(
-            storage=from_storage,
-            data_path=data_path,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            io_format=io_format,
-            compression=compression,
-            is_validate_data_domain=False,
-        )
         # NOTE: Create storage in main thread to avoid Ray process config loss.
         # Ray workers reload config via get_config(), losing pe.configure(data_path=...) changes.
-        Storage = load_request.storage.storage_class
+        Storage = storage_config.storage.storage_class
         storage = (
             Storage(
-                data_path=load_request.data_path,
-                data_layer=load_request.data_layer,
-                data_domain=load_request.data_domain or self.data_domain.value,
-                storage_options=self._storage_options.get(load_request.storage, {}),
+                data_path=storage_config.data_path,
+                data_layer=storage_config.data_layer,
+                data_domain=storage_config.data_domain or self.data_domain.value,
+                storage_options=self._storage_options.get(storage_config.storage, {}),
             )
             .with_io(
-                io_options=self._io_options.get(load_request.io_format, {}),
-                io_format=load_request.io_format,
-                compression=load_request.compression,
+                io_options=self._io_options.get(storage_config.io_format, {}),
+                io_format=storage_config.io_format,
+                compression=storage_config.compression,
             )
         )
         self.logger.info(

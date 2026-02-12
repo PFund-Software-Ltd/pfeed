@@ -27,7 +27,7 @@ dependencies = [
     "pfund>=0.0.2",
     # TODO: upgrade to pandas 3.0.0 when other libraries support it (currently it breaks pandera etc.)
     "pandas>=2.3.3,<3.0.0",
-    "polars>=1.38.0",
+    "polars>=1.38.1",
     "pyarrow>=22.0.0",
     "pandera>=0.29.0",
     "msgspec>=0.20.0",
@@ -44,14 +44,14 @@ dependencies = [
 [project.optional-dependencies]
 fmp = ["fmp-api-client>=0.0.1"]
 yfinance = ["yfinance>=1.1.0"]
-prefect = ["prefect>=3.6.15"]
-hf = ["huggingface-hub>=1.4.0"]
+prefect = ["prefect>=3.6.16"]
+hf = ["huggingface-hub>=1.4.1"]
 # polars-cloud = ["polars-cloud>=0.4.2"]
 dask = ["dask[complete,dataframe]>=2026.1.2"]
 coiled = ["coiled>=1.130.4"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.1"]
 duckdb = ["duckdb>=1.4.4"]
-lancedb = ["lancedb>=0.27.1"]
+lancedb = ["lancedb>=0.29.1"]
 postgresql = ["psycopg[binary,pool]>=3.3.2"]
 # "databento>=0.63.0",
 # vortex = ["vortex-data>=0.55.0"]
@@ -71,8 +71,15 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.9.30,<0.10.0"]
+requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
+
+[tool.pyright]
+typeCheckingMode = "basic"
+reportAny = false
+reportRedeclaration = false
+reportMissingTypeStubs = false
+reportImplicitOverride = false
 
 [tool.uv.build-backend]
 module-name = "pfeed"

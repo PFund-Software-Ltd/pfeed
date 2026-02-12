@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.sources.alphafund.chat_feed import ChatFeed
 
+from pfeed.sources.alphafund.chat_feed import AlphaFundChatFeed
 from pfeed.sources.alphafund.source import AlphaFundSource
 from pfeed.sources.alphafund.mixin import AlphaFundMixin
 from pfeed.data_client import DataClient
@@ -22,7 +22,7 @@ class AlphaFund(AlphaFundMixin, DataClient):
     def _create_feeds(self):
         for data_category in self.data_categories:
             if data_category == AlphaFundDataCategory.CHAT_DATA:
-                self.chat_feed = ChatFeed()
+                self.chat_feed = AlphaFundChatFeed()
             else:
                 raise ValueError(f'{data_category} is not supported')
     

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from pfund.entities.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
-from pfeed.enums import DataLayer, DataStorage, IOFormat, Compression
+from pfeed.enums import DataLayer
 from pfeed.feeds.market_feed import MarketFeed
 
 

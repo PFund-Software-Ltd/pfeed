@@ -16,7 +16,6 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
 
     def _get_default_transformations_for_download(self, *args, **kwargs):
         pass
-    
 
     def retrieve(self):
         pass

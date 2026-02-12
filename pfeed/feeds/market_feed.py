@@ -139,6 +139,9 @@ class MarketFeed(TimeBasedFeed):
             dataflow_per_date: Whether to create a dataflow for each date.
                 If True, a dataflow will be created for each date.
                 If False, a single dataflow will be created for the entire date range.
+            storage_config: Storage configuration.
+                if None, downloaded data will NOT be stored to storage.
+                if provided, downloaded data will be stored to storage based on the storage config.
         '''
         from pfeed.requests import MarketFeedDownloadRequest
 
@@ -177,13 +180,11 @@ class MarketFeed(TimeBasedFeed):
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._download_impl(data_model),
         )
-        default_transformations = self._get_default_transformations_for_download()
         # NOTE: update the data model in faucet to the data resolution
         # because data model in dataflow uses the target resolution, but the faucet uses the data resolution
         for dataflow in self._dataflows:
             faucet_data_model: MarketDataModel = dataflow.faucet.data_model 
             faucet_data_model.update_resolution(self._current_request.data_resolution)
-            dataflow.add_transformations(*default_transformations)
         return self.run() if not self.is_pipeline() else self
     
     def _get_default_transformations_for_download(self) -> list[Callable]:

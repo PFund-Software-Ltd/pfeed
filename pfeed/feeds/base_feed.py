@@ -305,9 +305,7 @@ class BaseFeed(ABC):
         
         # conceptually seal the custom transformations by converting it to a tuple after calling load()
         self._custom_transformations = tuple(self._custom_transformations)
-
-        # set current_request's storage_config to None to avoid _auto_load() calling load() again
-        self._current_request.storage_config = None
+        self._current_request.set_loaded()
         return self
     
     def _auto_load(self):
@@ -315,7 +313,7 @@ class BaseFeed(ABC):
         if storage_config is created in e.g. download() during pipeline mode, 
         automatically call load() if it hasn't been called yet.
         '''
-        if self._current_request and self._current_request.storage_config:
+        if self._current_request and not self._current_request.is_loaded:
             storage_config = self._current_request.storage_config
             self.load(
                 storage=storage_config.storage,

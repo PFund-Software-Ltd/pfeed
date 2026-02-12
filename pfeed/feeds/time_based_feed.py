@@ -83,12 +83,14 @@ class TimeBasedFeed(BaseFeed):
                 data_model_copy.update_start_date(date)
                 data_model_copy.update_end_date(date)
                 faucet: Faucet = self._create_faucet(data_model=data_model_copy, extract_func=extract_func, extract_type=request.extract_type)
-                dataflow: DataFlow = self._create_dataflow(data_model_copy, faucet)
+                # copy data_model_copy again to avoid sharing the same data model with faucet
+                dataflow: DataFlow = self._create_dataflow(data_model_copy.model_copy(deep=False), faucet)
                 self._dataflows.append(dataflow)
         else:
             # one dataflow for the entire date range
             faucet: Faucet = self._create_faucet(data_model=data_model, extract_func=extract_func, extract_type=request.extract_type)
-            dataflow: DataFlow = self._create_dataflow(data_model, faucet)
+            # copy data_model to avoid sharing the same data model with faucet
+            dataflow: DataFlow = self._create_dataflow(data_model.model_copy(deep=False), faucet)
             self._dataflows.append(dataflow)
     
     def run(self, **prefect_kwargs: Any) -> GenericFrame | None:

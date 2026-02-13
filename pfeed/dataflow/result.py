@@ -33,7 +33,7 @@ class DataFlowResult:
         return self._data
     
     @property
-    def metadata(self) -> dict[str, Any]:
+    def metadata(self) -> BaseMetadata | None:
         return self._metadata
     
     @property

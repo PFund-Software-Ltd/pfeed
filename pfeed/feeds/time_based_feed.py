@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, ClassVar, Callable, Any
+from typing import TYPE_CHECKING, Literal, ClassVar, Callable, Any, cast
 if TYPE_CHECKING:
     import pandas as pd
     from narwhals.typing import Frame
@@ -9,9 +9,11 @@ if TYPE_CHECKING:
     from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
 
 import datetime
+from pprint import pformat
 
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
 
 
 __all__ = ["TimeBasedFeed"]
@@ -101,12 +103,22 @@ class TimeBasedFeed(BaseFeed):
         completed_dataflows, failed_dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
 
         dfs: list[GenericFrame] = []
+        missing_dates: list[datetime.date] = []
         
         for dataflow in completed_dataflows + failed_dataflows:
             result: DataFlowResult = dataflow.result
             _df: GenericFrame | None = result.data
             if _df is not None:
                 dfs.append(_df)
+            metadata: TimeBasedMetadata | None = cast(TimeBasedMetadata | None, result.metadata)
+            if metadata is not None:
+                missing_dates.extend(metadata.missing_dates_in_storage)
+        
+        if missing_dates:
+            self.logger.warning(
+                f'No data found for the following dates in request {self._current_request.name}:\n' +
+                f'{pformat([str(date) for date in missing_dates])}\n'
+            )
 
         dfs: list[Frame] = [nw.from_native(df) for df in dfs if not is_empty_dataframe(df)]
         if dfs:

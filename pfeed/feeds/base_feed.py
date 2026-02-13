@@ -335,9 +335,6 @@ class BaseFeed(ABC):
         self._failed_dataflows.clear()
         self._dataflows.clear()
     
-    def _clear_current_request(self):
-        self._current_request = None
-    
     def _run_batch_dataflows(self, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track, ProgressBar
         from pfeed.utils import is_prefect_running
@@ -423,7 +420,6 @@ class BaseFeed(ABC):
             self.logger.warning(
                 f'{self.name} has {len(self._failed_dataflows)} failed dataflows, check {self.logger.name}.log for more details'
             )
-        self._clear_current_request()
         return self._completed_dataflows, self._failed_dataflows
     
     @property

@@ -253,7 +253,6 @@ class StreamingFeedMixin:
             shutdown_ray()
         else:
             await _run_dataflows()
-        self.clear_requests()
     
     def run(self, prefect_kwargs: dict | None=None) -> GenericData | None:
         if self.streaming_dataflows:

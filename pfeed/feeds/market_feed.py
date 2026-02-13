@@ -105,7 +105,7 @@ class MarketFeed(TimeBasedFeed):
     def download(
         self,
         product: str,
-        resolution: Resolution | MarketDataType,
+        resolution: Resolution | MarketDataType | str,
         symbol: str='',
         rollback_period: str | Literal['ytd', 'max']='1d',
         start_date: datetime.date | str='',
@@ -273,7 +273,7 @@ class MarketFeed(TimeBasedFeed):
     def retrieve(
         self,
         product: str,
-        resolution: Resolution | MarketDataType,
+        resolution: Resolution | MarketDataType | str,
         symbol: str='',
         rollback_period: str |  Literal['ytd', 'max']="1d",
         start_date: datetime.date | str='',

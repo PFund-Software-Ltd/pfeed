@@ -22,6 +22,7 @@ import logging
 from pathlib import Path
 from abc import ABC, abstractmethod
 
+from pfund_kit.style import cprint
 from pfeed.config import setup_logging, get_config
 from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType, DataCategory
 from pfeed.storages.storage_config import StorageConfig
@@ -422,6 +423,13 @@ class BaseFeed(ABC):
     
     @property
     def dataflows(self) -> list[DataFlow]:
+        is_using_ray = self._num_batch_workers
+        if is_using_ray and (self._completed_dataflows or self._failed_dataflows):
+            cprint(
+                'Accessing `dataflows` after execution with Ray returns the original (pre-execution) dataflows. '
+                'Use `completed_dataflows` and `failed_dataflows` for post-execution results.',
+                style='bold'
+            )
         return self._dataflows
     
     @property 

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from pfund.entities.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
-from pfeed.enums import DataLayer
+from pfeed.enums import DataLayer, MarketDataType
 from pfeed.feeds.market_feed import MarketFeed
 
 
@@ -52,7 +52,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
     def download(
         self,
         product: str, 
-        resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day']='tick',
+        resolution: Resolution | MarketDataType | str='tick',
         rollback_period: Resolution | str | Literal['ytd', 'max']='1d',
         start_date: datetime.date | str='',
         end_date: datetime.date | str='',

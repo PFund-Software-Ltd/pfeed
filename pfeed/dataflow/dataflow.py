@@ -96,6 +96,7 @@ class DataFlow:
             data, metadata = prefect_dataflow()
         else:
             data, metadata = self._run_batch_etl()
+
         if self.faucet.extract_type == ExtractType.download:
             if self.sink:
                 self._result.set_data_loader(self.sink.storage.read_data)
@@ -106,8 +107,10 @@ class DataFlow:
             self._result.set_data(data)
         else:
             raise ValueError(f'Unhandled extract type for result: {self.faucet.extract_type}')
+
         if metadata:
             self._result.set_metadata(metadata)
+
         # NOTE: EMPTY dataframe is considered as success
         self._result.set_success(data is not None)
         return self._result

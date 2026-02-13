@@ -116,7 +116,7 @@ class TimeBasedFeed(BaseFeed):
         
         if missing_dates:
             self.logger.warning(
-                f'No data found for the following dates in request {self._current_request.name}:\n' +
+                f'No data found for the following dates in {self._current_request.name}:\n' +
                 f'{pformat([str(date) for date in missing_dates])}\n'
             )
 

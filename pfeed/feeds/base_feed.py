@@ -248,7 +248,7 @@ class BaseFeed(ABC):
 
     def load(
         self,
-        storage: DataStorage = DataStorage.LOCAL,
+        storage: DataStorage | None = DataStorage.LOCAL,
         data_path: Path | str | None = None,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
@@ -262,6 +262,10 @@ class BaseFeed(ABC):
                 e.g. in_memory, memory_limit, for DuckDBStorage
         '''
         from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
+        
+        # allowing passing in None is useful for dynamically determining if load() is needed
+        if storage is None:
+            return self
 
         storage_config = StorageConfig(
             storage=storage,

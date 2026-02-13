@@ -17,7 +17,7 @@ from abc import abstractmethod
 
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
-from pfund_kit.style import RichColor, TextStyle
+from pfund_kit.style import RichColor, TextStyle, cprint
 from pfeed.config import setup_logging, get_config
 from pfeed.streaming import BarMessage, TickMessage
 from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataStorage, DataCategory
@@ -244,20 +244,22 @@ class MarketFeed(TimeBasedFeed):
         storage: BaseStorage,
         data_model: MarketDataModel,
         search_resolutions: list[Resolution],
+        probe_days: int = 7,
     ) -> Resolution | None:
         """Probe storage to find which resolution the data is stored at, without reading data.
 
-        Uses a single-date data model to minimize probe cost — only one file/table existence
-        check per resolution instead of checking all dates.
+        Args:
+            probe_days: Number of days from the first date to probe. Defaults to 7.
 
         Returns:
             The resolution at which data was found in storage, or None if no data exists.
         """
-        # probe with just the first date to keep it cheap
         first_date = data_model.dates[0]
+        last_date = data_model.dates[-1]
+        probe_end_date = min(first_date + datetime.timedelta(days=probe_days - 1), last_date)
         probe_data_model = data_model.model_copy(deep=False)
         probe_data_model.update_start_date(first_date)
-        probe_data_model.update_end_date(first_date)
+        probe_data_model.update_end_date(probe_end_date)
 
         for resolution in search_resolutions:
             probe_copy = probe_data_model.model_copy(deep=False)
@@ -267,7 +269,8 @@ class MarketFeed(TimeBasedFeed):
             # if this date's source path exists, data is stored at this resolution
             if not metadata.missing_source_paths:
                 return resolution
-
+        else:
+            self.logger.warning(f'failed to find data {probe_data_model} in {storage}')
         return None
 
     def retrieve(
@@ -351,25 +354,30 @@ class MarketFeed(TimeBasedFeed):
             )
         )
         # Auto-determine dataflow_per_date if not explicitly set
+        probe_data_model = self.create_data_model(
+            env=env,
+            product=product,
+            resolution=resolution,
+            start_date=start_date,
+            end_date=end_date,
+            data_origin=data_origin,
+        )
+        stored_resolution = self._find_stored_resolution(storage, probe_data_model, search_resolutions)
+        # resampling needed → per-date dataflows for parallel Ray tasks
+        # no resampling (or no data found) → single dataflow with one scan_parquet
         if dataflow_per_date is None:
-            probe_data_model = self.create_data_model(
-                env=env,
-                product=product,
-                resolution=resolution,
-                start_date=start_date,
-                end_date=end_date,
-                data_origin=data_origin,
-            )
-            stored_resolution = self._find_stored_resolution(storage, probe_data_model, search_resolutions)
-            # resampling needed → per-date dataflows for parallel Ray tasks
-            # no resampling (or no data found) → single dataflow with one scan_parquet
             dataflow_per_date = stored_resolution is not None and stored_resolution != resolution
+            if dataflow_per_date and self._num_batch_workers is None:
+                cprint(
+                    'dataflow_per_date is True but num_batch_workers is None, Ray is NOT being used, retrieving data will be done sequentially', 
+                    style=TextStyle.BOLD + RichColor.YELLOW
+                )
         self._current_request = MarketFeedRetrieveRequest(
             storage_config=storage_config,
             env=env,
             product=product,
             target_resolution=resolution,
-            data_resolution=resolution,
+            data_resolution=stored_resolution if stored_resolution else resolution,
             start_date=start_date,
             end_date=end_date,
             data_origin=data_origin,
@@ -384,7 +392,7 @@ class MarketFeed(TimeBasedFeed):
             extract_func=lambda data_model: self._retrieve_impl(
                 data_model=data_model,
                 storage=storage,
-                search_resolutions=search_resolutions,
+                stored_resolution=stored_resolution,
             ),
         )
         return self.run() if not self.is_pipeline() else self
@@ -393,22 +401,19 @@ class MarketFeed(TimeBasedFeed):
         self,
         data_model: MarketDataModel,
         storage: BaseStorage,
-        search_resolutions: list[Resolution],
+        stored_resolution: Resolution | None,
     ) -> tuple[GenericFrame | None, TimeBasedMetadata | None]:
         df: GenericFrame | None = None
         metadata: TimeBasedMetadata | None = None
-        for resolution in search_resolutions:
+        if stored_resolution is not None:
             data_model_copy = data_model.model_copy(deep=False)
-            data_model_copy.update_resolution(resolution)
+            data_model_copy.update_resolution(stored_resolution)
             storage = storage.with_data_model(data_model_copy)
             df, metadata = storage.read_data(include_metadata=True)
             if df is not None:
                 self.logger.debug(f'found data {data_model_copy} in {storage}')
                 # update storage's data model back to the original data model
                 storage.with_data_model(data_model)
-                break
-        else:
-            self.logger.warning(f'failed to find data {data_model} in {storage}')
         return df, metadata
     
     def _get_default_transformations_for_retrieve(self) -> list[Callable]:

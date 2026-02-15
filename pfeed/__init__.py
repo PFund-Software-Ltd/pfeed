@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
-        YahooFinance as YF,
+        YahooFinance as YFinance,
     )
     from pfeed.storages.local_storage import LocalStorage
     from pfeed.storages.cache_storage import CacheStorage
@@ -47,7 +47,7 @@ def __getattr__(name: str):
     elif name == 'DataEngine':
         from pfeed.engine import DataEngine
         return DataEngine
-    elif name in ('YahooFinance', 'YF'):
+    elif name in ('YahooFinance', 'YFinance'):
         from pfeed.sources.yahoo_finance import YahooFinance
         return YahooFinance
     elif name.lower() == 'bybit':
@@ -102,7 +102,7 @@ __all__ = (
     # data sources
     "PFund",
     "AlphaFund",
-    "YahooFinance", "YF",
+    "YahooFinance", "YFinance",
     "Bybit",
     "FinancialModelingPrep", "FMP",
 )

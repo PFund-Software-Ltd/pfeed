@@ -339,13 +339,16 @@ class BaseFeed(ABC):
         self._failed_dataflows.clear()
         self._dataflows.clear()
     
+    def _prepare_before_run(self):
+        self._auto_load()
+        self._add_transformations()
+    
     def _run_batch_dataflows(self, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track, ProgressBar
         from pfeed.utils import is_prefect_running
         
         use_prefect = is_prefect_running()
-        self._auto_load()
-        self._add_transformations()
+        self._prepare_before_run()
         
         def _run_dataflow(dataflow: DataFlow) -> DataFlowResult:
             if use_prefect:
@@ -452,7 +455,6 @@ class BaseFeed(ABC):
         Args:
             kwargs: kwargs specific to prefect @flow decorator
         '''
-        # execute the deferred LoadRequest created by e.g. download() if load() hasn't been called yet
-        self._auto_load()
+        self._prepare_before_run()
         return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self._dataflows]
     

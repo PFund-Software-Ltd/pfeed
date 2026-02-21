@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
-    from pfeed.aliases import ALIASES as alias
+    from pfeed.utils.aliases import ALIASES as alias
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
@@ -36,7 +36,7 @@ os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 def __getattr__(name: str):
     if name == 'alias':
-        from pfeed.aliases import ALIASES
+        from pfeed.utils.aliases import ALIASES
         return ALIASES
     elif name == 'plot':
         import pfund_plot as plot

@@ -36,19 +36,19 @@ dependencies = [
     "zstandard>=0.25.0", # REVIEW: this is included in python 3.14
     "beautifulsoup4>=4.14.3",
     "cloudpathlib[s3,gs,azure]>=0.23.0",
-    "ray[default]>=2.53.0",
+    "ray[default]>=2.54.0",
     "pyzmq>=27.1.0",
     "deltalake>=1.4.2",
 ]
 
 [project.optional-dependencies]
 fmp = ["fmp-api-client>=0.0.1"]
-yfinance = ["yfinance>=1.1.0"]
-prefect = ["prefect>=3.6.16"]
+yfinance = ["yfinance>=1.2.0"]
+prefect = ["prefect>=3.6.17"]
 hf = ["huggingface-hub>=1.4.1"]
 # polars-cloud = ["polars-cloud>=0.4.2"]
 dask = ["dask[complete,dataframe]>=2026.1.2"]
-coiled = ["coiled>=1.130.4"]
+coiled = ["coiled>=1.131.0"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.1"]
 duckdb = ["duckdb>=1.4.4"]
 lancedb = ["lancedb>=0.29.2"]
@@ -57,7 +57,7 @@ postgresql = ["psycopg[binary,pool]>=3.3.2"]
 # vortex = ["vortex-data>=0.55.0"]
 # "minio>=7.2.20",
 # kafka = ["confluent-kafka>=2.8.2"]
-# polygon = ["polygon-api-client>=1.14.6"]
+# massive = ["massive>=2.2.0"]  # previously "polygon"
 
 [project.scripts]
 pfeed = "pfeed.__main__:run_cli"

@@ -25,7 +25,7 @@ class DataProviderSource(BaseSource):
         raise NotImplementedError(f'{self.name} does not support creating products')
     
     def _get_api_key(self) -> str | None:
-        from pfeed.aliases import ALIASES 
+        from pfeed.utils.aliases import ALIASES 
         alias = ALIASES.resolve(self.name)
         api_key_name, api_key_alias = f'{self.name}_API_KEY', f'{alias}_API_KEY'
         api_key: str | None = os.getenv(api_key_name) or os.getenv(api_key_alias)

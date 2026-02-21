@@ -37,7 +37,7 @@ narwhals = ">=2.16.0"
 zstandard = ">=0.25.0"
 beautifulsoup4 = ">=4.14.3"
 cloudpathlib = { version = ">=0.23.0", extras = ["s3", "gs", "azure"] }
-ray = { version = ">=2.53.0", extras = ["default"] }
+ray = { version = ">=2.54.0", extras = ["default"] }
 pyzmq = ">=27.1.0"
 deltalake = ">=1.4.2"
 
@@ -56,12 +56,12 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 # TEMP
 fmp-api-client = { path = "../fmp-api-client", editable = true }
 # fmp-api-client = ">=0.0.1download"
-yfinance = ">=1.1.0"
-prefect = ">=3.6.16"
+yfinance = ">=1.2.0"
+prefect = ">=3.6.17"
 huggingface-hub = ">=1.4.1"
 # polars-cloud = ">=0.4.2"
 dask = { version = ">=2026.1.2", extras = ["complete", "dataframe"] }
-coiled = ">=1.130.4"
+coiled = ">=1.131.0"
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
 duckdb = ">=1.4.4"
 lancedb = ">=0.29.2"

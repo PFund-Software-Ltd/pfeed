@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Literal, Any
+from typing import Callable, TYPE_CHECKING, Literal, Any, cast
 if TYPE_CHECKING:
     from prefect import Flow as PrefectDataFlow
-    from pfeed.typing import GenericData, StreamingData
+    from pfeed.feeds.streaming_feed_mixin import Message
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.sink import Sink
     from pfeed.sources.data_provider_source import DataProviderSource
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 import logging
 
+from pfeed.typing import GenericData, StreamingData
 from pfeed.dataflow.result import DataFlowResult
 from pfeed.enums import ExtractType, FlowType
 
@@ -23,7 +24,7 @@ class DataFlow:
         self._is_streaming = faucet.extract_type == ExtractType.stream
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
-        self._transformations: list[Callable[..., Any]] = []
+        self._transformations: list[Callable[..., GenericData | StreamingData]] = []
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
         self._msg_queue: ZeroMQ | None = None
@@ -140,14 +141,13 @@ class DataFlow:
         else:
             self._zmq_topic = PublicDataChannel.candlestick
     
-    def _run_stream_etl(self, msg: dict) -> None | StreamingData:
-        # if zeromq is in use (when use_ray=True), send msg to Ray's worker and let it perform ETL
+    def _run_stream_etl(self, msg: Message) -> None:
+        # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
         if self._msg_queue:
-            self._msg_queue.send(channel=self._zmq_channel, topic=self._zmq_topic, data=(self.name, msg))
+            self._msg_queue.send(channel=self._zmq_channel, topic=self._zmq_topic, data=(self.name, msg))  # pyright: ignore[reportArgumentType]
         else:
-            data: StreamingData = self._transform(msg)
+            data: StreamingData = cast(StreamingData, self._transform(msg))
             self._load(data)
-            return data
     
     async def run_stream(self, flow_type: Literal['native']='native'):
         self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
@@ -161,7 +161,7 @@ class DataFlow:
             self._msg_queue.terminate()
         await self.faucet.close_stream()
         
-    def _transform(self, data: GenericData) -> GenericData | StreamingData:
+    def _transform(self, data: GenericData | Message) -> GenericData | StreamingData:
         for transform in self._transformations:
             if self.is_streaming():
                 data: StreamingData = transform(data)

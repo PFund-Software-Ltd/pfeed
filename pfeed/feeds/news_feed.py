@@ -69,7 +69,7 @@ class NewsFeed(TimeBasedFeed):
         end_date: datetime.date | str='',
         data_origin: str='',
         dataflow_per_date: bool=False,
-        clean_raw_data: bool=True,
+        clean_data: bool=True,
         storage_config: StorageConfig | None=None,
         **product_specs: Any
     ) -> GenericFrame | None | NewsFeed:
@@ -126,7 +126,7 @@ class NewsFeed(TimeBasedFeed):
         data_origin: str='',
         env: Environment=Environment.BACKTEST,
         dataflow_per_date: bool=False,
-        clean_raw_data: bool=False,
+        clean_data: bool=False,
         storage_config: StorageConfig | None=None,
         **product_specs: Any
     ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
@@ -154,9 +154,6 @@ class NewsFeed(TimeBasedFeed):
     def _retrieve_impl(self):
         pass
 
-    # TODO:
-    def fetch(self) -> GenericFrame | None | NewsFeed:
-        raise NotImplementedError(f"{self.name} fetch() is not implemented")
 
     # DEPRECATED
     # def get_historical_data(

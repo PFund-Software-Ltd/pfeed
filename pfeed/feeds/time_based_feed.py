@@ -14,6 +14,7 @@ from abc import ABC
 
 from narwhals.typing import Frame
 
+from pfund_kit.style import TextStyle, RichColor
 from pfeed.typing import GenericFrame
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
@@ -105,8 +106,12 @@ class TimeBasedFeed(BaseFeed, ABC):
     def _create_batch_dataflows(self, extract_func: Callable[..., Any]):
         self._clear_dataflows()
         request: TimeBasedFeedBaseRequest = self._current_request
+        self.logger.info(
+            f'{request.name}:\n{request}\n',
+            style=TextStyle.BOLD + RichColor.GREEN  # pyright: ignore[reportCallIssue]
+        )
         data_model: TimeBasedDataModel = cast(TimeBasedDataModel, self._create_data_model_from_request(request))
-        if request.dataflow_per_date:
+        if request.dataflow_per_date:  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
             # one dataflow per date
             for date in data_model.dates:
                 # NOTE: update data_model to a single date since it is one dataflow per date

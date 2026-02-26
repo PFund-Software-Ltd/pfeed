@@ -1,10 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Coroutine
     import pandas as pd
     from yfinance import Ticker
-    from pfund.typing import FullDataChannel
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.typing import GenericFrame
@@ -16,8 +15,8 @@ import datetime
 
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
-from pfeed.enums import DataLayer
 from pfeed.feeds.market_feed import MarketFeed
+from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin, WebSocketName, Message, ChannelKey
 
 
 __all__ = ["YahooFinanceMarketFeed"]
@@ -25,16 +24,15 @@ __all__ = ["YahooFinanceMarketFeed"]
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
-class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
+class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
     data_model_class: ClassVar[type[YahooFinanceMarketDataModel]] = YahooFinanceMarketDataModel
     # "Date" is used for daily data and "Datetime" is used for other resolutions in yfinance
     date_columns_in_raw_data: ClassVar[list[str]] = ['Datetime', 'Date']
     
     _ADAPTER: ClassVar[dict[str, dict[str, str]]] = {
         "timeframe": {
-            # week
+            # pfund's timeframe: yfinance's timeframe
             "w": "wk",
-            "wk": "w",
         }
     }
 
@@ -46,7 +44,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     # yfinance's valid periods = pfund's rollback_periods
     # SUPPORTED_ROLLBACK_PERIODS = {
     #     "d": [1, 5],
-    #     "M": [1, 3, 6],
+    #     "mo": [1, 3, 6],
     #     "y": [1, 2, 5, 10],
     # }
     
@@ -56,7 +54,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     #     "h": [1],
     #     "d": [1, 5],
     #     "w": [1],
-    #     "M": [1, 3],
+    #     "mo": [1, 3],
     # }
     
     @staticmethod
@@ -74,13 +72,13 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         '''
         # convert column names to lowercase and replace spaces with underscores
         # if there are spaces in column names, they will be turned into some weird names like "_10" during "for row in df.itertuples()"
-        df.columns = [col.replace(" ", "_").lower() for col in df.columns]
+        df.columns = [col.replace(" ", "_").lower() for col in df.columns]  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
 
         RENAMING_COLS = {'stock_splits': 'splits'}
         df = df.rename(columns=RENAMING_COLS)
         
         # convert volume (int) to float
-        df['volume'] = df['volume'].astype("float64")
+        df['volume'] = df['volume'].astype("float64")  # pyright: ignore[reportUnknownMemberType]
         return df
     
     def _handle_rollback_max_period(
@@ -120,7 +118,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         start_date: datetime.date | str='',
         end_date: datetime.date | str='',
         storage_config: StorageConfig | None=None,
-        clean_raw_data: bool=True,
+        clean_data: bool=True,
         yfinance_kwargs: dict[str, Any] | None=None,
         **product_specs: Any
     ) -> GenericFrame | None | YahooFinanceMarketFeed:
@@ -145,7 +143,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             storage_config: Storage configuration.
                 if None, downloaded data will NOT be stored to storage.
                 if provided, downloaded data will be stored to storage based on the storage config.
-            clean_raw_data: Whether to clean raw data after download.
+            clean_data: Whether to clean raw data after download.
                 If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
                 If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
                 If False, downloaded raw data will be returned as is.
@@ -178,7 +176,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             end_date=end_date,
             dataflow_per_date=False,
             storage_config=storage_config,
-            clean_raw_data=clean_raw_data,
+            clean_data=clean_data,
             **product_specs
         )
     
@@ -219,8 +217,8 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
                 if hasattr(df.index, 'tz') and df.index.tz is not None:  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
                     df.index = df.index.tz_convert("UTC").tz_localize(None)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
                 if str(data_model.start_date) == '1900-01-01':  # rollback_period='max' for daily data
-                    actual_start_date = min(df.index).date()
-                    data_model.update_start_date(actual_start_date)
+                    actual_start_date = min(df.index).date()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                    data_model.update_start_date(actual_start_date)  # pyright: ignore[reportUnknownArgumentType]
                     self.logger.debug(f'got actual start date, set start_date={actual_start_date} for {data_model}')
                 # NOTE: reset index here so date columns (e.g. 'Datetime', 'Date') are actual columns,
                 # which is required by _standardize_date_column to find and rename them
@@ -236,33 +234,34 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         self._yfinance_kwargs.clear()
         return df
     
-    async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict, YahooFinanceMarketDataModel | None], Awaitable[None] | None]):
-        stream_api = self.data_source.stream_api
-        async def _callback(msg: dict):
-            symbol = msg['id']
-            channel_key: ChannelKey = stream_api.generate_channel_key(symbol)
-            if channel_key not in stream_api._last_day_volume:
-                # needs two 'day_volume' and 'time' to derive the volume, so return for the first message
-                stream_api._last_day_volume[channel_key] = int(msg['day_volume'])
-                stream_api._last_time_in_mts[channel_key] = int(msg['time'])
-                return
-            data_model = stream_api._streaming_bindings[channel_key]
-            await faucet_streaming_callback(self.name.value, msg, data_model)
-        stream_api.set_callback(_callback)
-        await stream_api.connect()
+    async def _stream_impl(
+        self, 
+        faucet_callback: Callable[[WebSocketName, Message, ChannelKey | None], Coroutine[Any, Any, None]]
+    ):
+        async def _callback(msg: Message):
+            symbol: str = msg['id']
+            channel_key: ChannelKey = self.stream_api.generate_channel_key(symbol)
+            await faucet_callback(self.name.value, msg, channel_key)
+        self.stream_api.set_callback(_callback)
+        await self.stream_api.connect()
     
     async def _close_stream(self):
-        await self.data_source.stream_api.disconnect()
+        await self.stream_api.disconnect()
     
-    def _get_default_transformations_for_stream(self, data_layer: DataLayer, product: BaseProduct, resolution: Resolution) -> list[Callable]:
+    def _get_default_transformations_for_stream(self) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
-        default_transformations = super()._get_default_transformations_for_stream(data_layer, product, resolution)
+        from pfeed.requests import MarketFeedStreamRequest
+        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
+        default_transformations = super()._get_default_transformations_for_stream()
         # since Ray can't serialize the "self" in self._parse_message, disable it for now
         # REVIEW
         assert self._num_stream_workers is None, "Transformations in Yahoo Finance streaming data is not supported with Ray"
-        if data_layer != DataLayer.RAW:
+        if request.clean_data:
             default_transformations = [
-                lambda_with_name('parse_message', lambda msg: self._parse_message(product, msg)),
+                lambda_with_name(
+                    'parse_message', 
+                    lambda msg: self._parse_message(request.product, msg)  # pyright: ignore[reportUnknownArgumentType, reportUnknownLambdaType]
+                ),
             ] + default_transformations
         return default_transformations
     
@@ -281,25 +280,28 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         another more accurate solution to handle duplicated 'time' is, wait for the 'time' to change to get the most accurate volume, 
         but it might not be worth it due the quality of yahoo finance streaming data
         ''' 
-        stream_api = self.data_source.stream_api
-        channel_key: ChannelKey = stream_api.generate_channel_key(product.symbol)
+        channel_key: ChannelKey = self.stream_api.generate_channel_key(product.symbol)
         
-        # compute traded volume
-        last_day_volume = stream_api._last_day_volume[channel_key]
+        # derive traded volume
+        last_day_volume = self.stream_api.last_day_volume.get(channel_key, None)
         current_day_volume = int(msg['day_volume'])
-        volume = current_day_volume - last_day_volume
-        stream_api._last_day_volume[channel_key] = current_day_volume
+        if last_day_volume is not None:
+            volume = current_day_volume - last_day_volume
+        else:
+            volume = None
+        self.stream_api.update_last_day_volume(channel_key, current_day_volume)
         
         # detect duplicated 'time', if duplicated, add 1 to it to make it unique
-        last_time_in_mts = stream_api._last_time_in_mts[channel_key]
+        last_time_in_mts = self.stream_api.last_time_in_mts.get(channel_key, None)
         current_time_in_mts = int(msg['time'])
-        if current_time_in_mts == last_time_in_mts:
+        if last_time_in_mts is not None and current_time_in_mts == last_time_in_mts:
             current_time_in_mts += 1
-        stream_api._last_time_in_mts[channel_key] = current_time_in_mts
+        ts = current_time_in_mts / 1000  # convert to seconds
+        self.stream_api.update_last_time_in_mts(channel_key, current_time_in_mts)
         
         parsed_msg = {
             'data': {
-                'ts': current_time_in_mts / 1000,  # convert to seconds
+                'ts': ts,
                 'price': msg['price'],
                 'volume': volume,
             },
@@ -311,16 +313,6 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         }
         return parsed_msg
     
-    def _add_data_channel(self, data_model: YahooFinanceMarketDataModel) -> None:
-        return self.data_source.stream_api._add_data_channel(data_model)
-    
-    def add_channel(self, channel: FullDataChannel, channel_type: Literal['public', 'private'], *args: Any, **kwargs: Any):
-        raise NotImplementedError(f'{self.name} add_channel() is not implemented')
-    
-    # TODO: use data_source.batch_api
-    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args: Any, **kwargs: Any) -> GenericFrame | None:
-        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
-
 
     ##############################################################################################
     # EXTEND: Functions using yfinance for convenience
@@ -353,5 +345,5 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             df: pd.DataFrame = cast(pd.DataFrame, option_chain.puts)
         else:
             raise ValueError(f"Invalid option type: {option_type}")
-        return cast(GenericFrame, convert_to_desired_df(df, config.data_tool))  # pyright: ignore[reportArgumentType]
+        return cast(GenericFrame, convert_to_desired_df(df, config.data_tool))
     

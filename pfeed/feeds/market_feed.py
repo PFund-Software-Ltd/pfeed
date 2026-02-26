@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
     from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
     from pfund.datas.resolution import Resolution
-    from pfund.typing import FullDataChannel
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.enums import DataSource
     from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
@@ -22,7 +21,7 @@ from pfund.datas.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfeed.config import setup_logging, get_config
 from pfeed.streaming import BarMessage, TickMessage
-from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataStorage, DataCategory
+from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
@@ -32,7 +31,6 @@ from pfeed.storages.base_storage import BaseStorage
 config = get_config()
 
 
-# FIXME: integrate with StreamingFeedMixin
 class MarketFeed(TimeBasedFeed, ABC):
     data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
@@ -46,13 +44,16 @@ class MarketFeed(TimeBasedFeed, ABC):
         pass
     
     def get_supported_resolutions(self) -> list[Resolution]:
+        '''Get all supported resolutions for batch processing for the data source.'''
         market_data_types_or_resolutions: list[str] = self.data_source.generic_metadata['data_categories']['market_data']
         return [Resolution(dtype_or_resol) for dtype_or_resol in market_data_types_or_resolutions]
     
     def get_highest_resolution(self) -> Resolution:
+        '''Get the highest (e.g. 1second > 1minute) resolution for batch processing for the data source.'''
         return sorted(self.get_supported_resolutions(), reverse=True)[0]
     
     def get_lowest_resolution(self) -> Resolution:
+        '''Get the lowest (e.g. 1minute < 1second) resolution for batch processing for the data source.'''
         return min(
             sorted(self.get_supported_resolutions(), reverse=False)[0], 
             self.SUPPORTED_LOWEST_RESOLUTION
@@ -119,8 +120,12 @@ class MarketFeed(TimeBasedFeed, ABC):
         )
     
     def _create_data_model_from_request(self, request: MarketFeedBaseRequest) -> MarketDataModel:
+        if not request.is_streaming():
+            exclude = {'extract_type', 'dataflow_per_date', 'product', 'data_resolution'}
+        else:
+            exclude = {'extract_type', 'product', 'stream_mode', 'flush_interval'}
         return self.create_data_model(
-            **request.model_dump(exclude={'extract_type', 'dataflow_per_date', 'product', 'data_resolution'}),
+            **request.model_dump(exclude=exclude),
             product=request.product,
             resolution=request.target_resolution,
         )
@@ -135,7 +140,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         end_date: datetime.date | str='',
         data_origin: str='',
         dataflow_per_date: bool=True,
-        clean_raw_data: bool=True,
+        clean_data: bool=True,
         storage_config: StorageConfig | None=None,
         **product_specs: Any
     ) -> GenericFrame | None | MarketFeed:
@@ -157,7 +162,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             dataflow_per_date: Whether to create a dataflow for each date.
                 If True, a dataflow will be created for each date.
                 If False, a single dataflow will be created for the entire date range.
-            clean_raw_data: Whether to clean raw data after download.
+            clean_data: Whether to clean raw data after download.
                 If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
                 If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
                 If False, downloaded raw data will be returned as is.
@@ -183,6 +188,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         assert any([start_date, end_date, rollback_period]), 'at least one of start_date, end_date, or rollback_period must be provided'
         env = Environment.BACKTEST
         setup_logging(env=env)
+        self.data_source.create_batch_api(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         resolution: Resolution = self.create_resolution(resolution)
@@ -208,11 +214,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             end_date=end_date,
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
-            clean_raw_data=storage_config.data_layer != DataLayer.RAW if storage_config else clean_raw_data,
-        )
-        self.logger.info(
-            f'{self._current_request.name}:\n{self._current_request}\n', 
-            style=TextStyle.BOLD + RichColor.GREEN  # pyright: ignore[reportCallIssue]
+            clean_data=storage_config.data_layer != DataLayer.RAW if storage_config else clean_data,
         )
         self._create_batch_dataflows(extract_func=self._download_impl)
         # NOTE: update the data model in faucet to the data resolution
@@ -234,9 +236,9 @@ class MarketFeed(TimeBasedFeed, ABC):
         )
 
         if isinstance(request, MarketFeedDownloadRequest):
-            clean_raw_data = request.clean_raw_data
+            clean_data = request.clean_data
         elif isinstance(request, MarketFeedRetrieveRequest):
-            clean_raw_data = request.clean_raw_data
+            clean_data = request.clean_data
         else:
             raise ValueError(f'unknown request type: {type(request)}')
 
@@ -247,10 +249,10 @@ class MarketFeed(TimeBasedFeed, ABC):
             ),
             lambda_with_name(
                 'standardize_date_column',
-                lambda df: self._standardize_date_column(df, is_raw_data=not clean_raw_data)
+                lambda df: self._standardize_date_column(df, is_raw_data=not clean_data)
             ),
         ]
-        if clean_raw_data:
+        if clean_data:
             default_transformations.extend([
                 self._normalize_raw_data,
                 lambda_with_name(
@@ -316,7 +318,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         data_origin: str='',
         env: Environment=Environment.BACKTEST,
         dataflow_per_date: bool | None=None,
-        clean_raw_data: bool=False,
+        clean_data: bool=False,
         storage_config: StorageConfig | None=None,
         **product_specs: Any
     ) -> GenericFrame | None | MarketFeed:
@@ -349,7 +351,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                     True if stored data needs resampling (stored resolution != target resolution),
                     False if no resampling needed (single scan_parquet is more efficient).
                 If True/False, uses the specified value directly.
-            clean_raw_data: Whether to clean raw data.
+            clean_data: Whether to clean raw data.
                 If data_layer is not RAW in storage_config, this parameter will be ignored.
                 If True, raw data stored in data layer=RAW will be cleaned using the default transformations for download.
                 If False, raw data stored in data layer=RAW will be loaded as is.
@@ -415,11 +417,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             end_date=end_date,
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
-            clean_raw_data=clean_raw_data,
-        )
-        self.logger.info(
-            f'{self._current_request.name}:\n{self._current_request}\n',
-            style=TextStyle.BOLD + RichColor.GREEN  # pyright: ignore[reportCallIssue]
+            clean_data=clean_data,
         )
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(
@@ -456,7 +454,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         from pfeed.utils import lambda_with_name
 
         request: MarketFeedRetrieveRequest = cast(MarketFeedRetrieveRequest, self._current_request)
-        if not request.clean_raw_data:
+        if not request.clean_data:
             default_transformations = [
                 lambda_with_name(
                     'convert_to_pandas_df',
@@ -479,17 +477,17 @@ class MarketFeed(TimeBasedFeed, ABC):
     def stream(
         self,
         product: str,
+        resolution: Resolution | MarketDataType | str,
         symbol: str='',
-        resolution: Resolution | MarketDataType=MarketDataType.TICK,
-        data_layer: DataLayer=DataLayer.CLEANED,
+        callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None=None,
         data_origin: str='',
-        to_storage: DataStorage=DataStorage.LOCAL,
-        callback: Callable[[dict], Awaitable[None] | None] | None=None,
-        env: Environment=Environment.LIVE,
-        mode: StreamMode=StreamMode.FAST,
+        env: Environment | str=Environment.LIVE,
+        stream_mode: StreamMode | str=StreamMode.FAST,
         flush_interval: int=100,  # in seconds
+        clean_data: bool=True,
+        storage_config: StorageConfig | None=None,
         **product_specs: Any
-    ) -> MarketFeed:
+    ) -> MarketFeed | None:
         '''
         Args:
             stream_mode: SAFE or FAST
@@ -503,47 +501,62 @@ class MarketFeed(TimeBasedFeed, ABC):
                 (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
                 Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
                 This is expected to be fine-tuned based on the actual use case.
+            clean_data: Whether to clean raw data after download.
+                If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
+                If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
+                If False, downloaded raw data will be returned as is.
         '''
         from pfund_kit.utils.temporal import get_utc_now
+        from pfeed.requests import MarketFeedStreamRequest
         
         env = Environment[env.upper()]
         assert env != Environment.BACKTEST, 'streaming is not supported in env BACKTEST'
         setup_logging(env=env)
+        self.data_source.create_stream_api(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
         resolution: Resolution = self.create_resolution(resolution)
-        data_layer = DataLayer[data_layer.upper()]
-        data_model: MarketDataModel = self.create_data_model(
+        today = get_utc_now().date()
+        self._current_request = MarketFeedStreamRequest(
+            storage_config=storage_config,
             env=env,
             product=product,
-            resolution=resolution,
+            target_resolution=resolution,
+            start_date=today,
+            end_date=today,
             data_origin=data_origin,
-            start_date=get_utc_now().date(),
+            clean_data=storage_config.data_layer != DataLayer.RAW if storage_config else clean_data,
+            stream_mode=stream_mode,
+            flush_interval=flush_interval,
         )
-        self._add_data_channel(data_model)
-        self._create_streaming_settings(mode=mode, flush_interval=flush_interval)
-        return self._run_stream(
-            data_model=data_model,
-            add_default_transformations=lambda: self._add_default_transformations_to_stream(data_layer, product, resolution),
-            load_to_storage=(lambda: self.load(to_storage, data_layer)) if to_storage else None,
-            callback=callback,
-        )
+        self._create_stream_dataflows(callback=callback)  # pyright: ignore[reportAttributeAccessIssue]
+        return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
     
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
-    def _get_default_transformations_for_stream(self, data_layer: DataLayer, product: BaseProduct, resolution: Resolution):
+    def _get_default_transformations_for_stream(self) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
-        default_transformations = []
-        if data_layer != DataLayer.RAW:
+        from pfeed.requests import MarketFeedStreamRequest
+        default_transformations: list[Callable[..., Any]] = []
+        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
+        if request.clean_data:
             # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
             data_source: DataSource = self.data_source.name
             default_transformations.append(
-                lambda_with_name('standardize_message', lambda msg: MarketFeed._standardize_message(data_source, product, resolution, msg)),
+                lambda_with_name(
+                    'standardize_message', 
+                    lambda msg: MarketFeed._standardize_message(
+                        data_source=data_source, 
+                        product=request.product, 
+                        resolution=request.target_resolution, 
+                        msg=msg
+                    )
+                ),
             )
         return default_transformations
     
     @staticmethod
-    def _standardize_message(data_source: DataSource, product: BaseProduct, resolution: Resolution, msg: dict) -> StreamingMessage:
+    def _standardize_message(data_source: DataSource, product: BaseProduct, resolution: Resolution, msg: dict[str, Any]) -> StreamingMessage:
         if resolution.is_tick():
-            data = msg['data']
+            data: dict[str, Any] = msg['data']
             message = TickMessage(
                 data_source=data_source.value,
                 product=product.name,
@@ -557,7 +570,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                 extra_data=msg.get('extra_data', {}),
             )
         elif resolution.is_bar():
-            data: dict= msg['data']
+            data: dict[str, Any] = msg['data']
             message = BarMessage(
                 data_source=data_source.value,
                 product=product.name,
@@ -581,24 +594,5 @@ class MarketFeed(TimeBasedFeed, ABC):
     
     @staticmethod
     @abstractmethod
-    def _parse_message(product: BaseProduct, msg: dict) -> dict:
+    def _parse_message(product: BaseProduct, msg: dict[str, Any]) -> dict[str, Any]:
         pass
-    
-    @abstractmethod
-    def _add_data_channel(self, data_model: MarketDataModel) -> FullDataChannel:
-        pass
-    
-    @abstractmethod
-    def add_channel(self, channel: FullDataChannel, channel_type: Literal['public', 'private'], *args, **kwargs):
-        '''
-        Args:
-            channel: A channel to subscribe to.
-                The channel specified will be used directly for the external data source, no modification will be made.
-                Useful for subscribing channels not related to resolution.
-        '''
-        pass
-        
-    # TODO: General-purpose data fetching/LLM call? without storage overhead
-    # NOTE: integrate it well with prefect's serve()
-    def fetch(self) -> GenericFrame | None | MarketFeed:
-        raise NotImplementedError(f"{self.name} fetch() is not implemented")

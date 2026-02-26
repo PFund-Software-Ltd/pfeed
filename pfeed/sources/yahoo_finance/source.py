@@ -3,6 +3,7 @@ import types
 from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from pfund.entities.products.product_ibkr import IBKRProduct
+    from pfund.enums import Environment
 
 import yfinance
 
@@ -23,8 +24,24 @@ class YahooFinanceSource(TradFiDataProviderSource):
     
     def __init__(self):
         super().__init__()
-        self.batch_api: types.ModuleType = yfinance
-        self.stream_api = StreamAPI()
+        self._batch_api: types.ModuleType | None = None
+        self._stream_api: StreamAPI | None = None
+    
+    @property
+    def batch_api(self) -> types.ModuleType:
+        assert self._batch_api is not None, 'batch_api is not initialized'
+        return self._batch_api
+    
+    @property
+    def stream_api(self) -> StreamAPI:
+        assert self._stream_api is not None, 'stream_api is not initialized'
+        return self._stream_api
+    
+    def create_batch_api(self, env: Environment | str):
+        self._batch_api = yfinance
+    
+    def create_stream_api(self, env: Environment | str):
+        self._stream_api = StreamAPI()
 
     def create_product(self, basis: str, symbol: str='', **specs: Any) -> IBKRProduct:
         product = super().create_product(basis, symbol=symbol, **specs)

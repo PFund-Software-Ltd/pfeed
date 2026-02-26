@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
+    from pfund.enums import Environment
 
 import os
 
@@ -24,7 +25,13 @@ class DataProviderSource(BaseSource):
         self.data_origin: str = self.generic_metadata['data_origin']
         self.rate_limits: Any = self.generic_metadata['rate_limits']
         self.docs_url: str | None = self.generic_metadata['docs_url']
-
+    
+    def create_batch_api(self, env: Environment | str):  # pyright: ignore[reportUnusedParameter, reportUnknownParameterType]
+        raise NotImplementedError(f'{self.name} does not support creating batch APIs')
+    
+    def create_stream_api(self, env: Environment | str):  # pyright: ignore[reportUnusedParameter, reportUnknownParameterType]
+        raise NotImplementedError(f'{self.name} does not support creating stream APIs')
+    
     def create_product(self, basis: str, symbol: str='', **specs: Any) -> BaseProduct:  # pyright: ignore[reportUnusedParameter]
         raise NotImplementedError(f'{self.name} does not support creating products')
 

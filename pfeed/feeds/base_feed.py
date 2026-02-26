@@ -124,6 +124,7 @@ class BaseFeed(ABC):
         pass
     
     # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
+    # NOTE: integrate it well with prefect's serve()
     def fetch(self, *args: Any, **kwargs: Any) -> GenericData | None | BaseFeed:
         raise NotImplementedError(f'{self.name} fetch() is not implemented')
     
@@ -159,13 +160,17 @@ class BaseFeed(ABC):
     
     @staticmethod
     def _create_faucet(
-        data_model: BaseDataModel,
         extract_func: Callable[..., Any], 
         extract_type: ExtractType, 
+        data_model: BaseDataModel | None = None,
         close_stream: Callable[..., Any] | None=None,
     ) -> Faucet:
         '''
         Args:
+            extract_func: the function to perform the extraction, e.g. _download_impl(), _stream_impl(), _retrieve_impl()
+            extract_type: the type of the extraction, e.g. download, stream, retrieve
+            data_model: the data model to be used for the dataflow
+                It is None for streaming dataflows since streaming dataflows and data models are not one-to-one mapping
             close_stream: a function that closes the streaming dataflow after running the extract_func
         '''
         from pfeed.dataflow.faucet import Faucet
@@ -308,8 +313,11 @@ class BaseFeed(ABC):
                     **io_kwargs
                 )
             )
-            if isinstance(self, StreamingFeedMixin) and self._streaming_settings:
-                storage.data_handler.create_stream_buffer(self._streaming_settings)
+            if self._current_request and self._current_request.is_streaming():
+                storage.data_handler.create_stream_buffer(
+                    mode=self._current_request.mode,
+                    flush_interval=self._current_request.flush_interval,
+                )
             sink: Sink = self._create_sink(data_model, storage)
             dataflow.set_sink(sink)
         

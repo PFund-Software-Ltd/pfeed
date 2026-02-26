@@ -9,8 +9,7 @@ from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
 class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
     env: Environment | str
     product: BaseProduct
-    target_resolution: Resolution | str = Field(description="Final resolution of the output data after resampling (if any)")
-    data_resolution: Resolution | str = Field(description="Resolution of the raw data to extract from source before resampling to target_resolution")
+    target_resolution: Resolution | str = Field(description="Final resolution of the output data")
 
     @field_validator("env", mode="before")
     @classmethod
@@ -26,13 +25,6 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
             return Resolution(v)
         return v
     
-    @field_validator("data_resolution", mode="before")
-    @classmethod
-    def create_data_resolution(cls, v: Resolution | str) -> Resolution:
-        if isinstance(v, str):
-            return Resolution(v)
-        return v
-    
     def __str__(self) -> str:
         from pprint import pformat
 
@@ -41,9 +33,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
             "start_date": str(self.start_date),
             "end_date": str(self.end_date),
             "product": self.product.name,
-            "target_resolution": str(self.target_resolution),
-            "data_resolution": str(self.data_resolution),
-            "dataflow_per_date": self.dataflow_per_date,
+            "resolution": str(self.target_resolution),
         }
         if self.data_origin:
             data["data_origin"] = self.data_origin

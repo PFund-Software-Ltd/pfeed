@@ -1,56 +1,55 @@
+# pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, AsyncGenerator, TypeAlias, Callable, Literal, Awaitable
+from typing import TYPE_CHECKING, TypeAlias, Callable, Literal, Any, cast
 if TYPE_CHECKING:
-    from pfeed.feeds.base_feed import BaseFeed
+    from collections.abc import AsyncGenerator, Awaitable
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.dataflow import DataFlow
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing import StreamingData, GenericData
     from pfeed.dataflow.sink import Sink
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
-    from pfeed.enums import StreamMode, ExtractType
+    from pfeed.requests.market_feed_stream_request import MarketFeedStreamRequest
+    from pfeed.feeds.market_feed import MarketFeed
 
 import asyncio
-from abc import abstractmethod
 from collections import defaultdict
 
 from pfund_kit.style import cprint, TextStyle, RichColor
-from pfeed.streaming.settings import StreamingSettings
 
 
+WebSocketName: TypeAlias = str
+Message: TypeAlias = dict[str, Any]
+WorkerName: TypeAlias = str
+DataFlowName: TypeAlias = str
+ChannelKey: TypeAlias = str | tuple[str, str]
+
+
+# EXTEND: only support market feed for now, if need to support other feeds, fix MarketFeedStreamRequest and MarketDataModel
 class StreamingFeedMixin:
-    def __init__(self):
-        self._streaming_settings: StreamingSettings | None = None
-        
-    @abstractmethod
-    def stream(self, *args, **kwargs) -> BaseFeed:
-        pass
+    def stream(self, *args: Any, **kwargs: Any) -> MarketFeed | None:
+        raise NotImplementedError(f'{self.name} stream() is not implemented')
     
-    @abstractmethod
-    def _stream_impl(self, data_model: BaseDataModel) -> GenericData | None:
-        pass
+    def _stream_impl(self, data_model: MarketDataModel):
+        raise NotImplementedError(f'{self.name} _stream_impl() is not implemented')
 
-    @abstractmethod
     def _close_stream(self):
-        pass
+        raise NotImplementedError(f'{self.name} _close_stream() is not implemented')
     
-    @abstractmethod
-    def _get_default_transformations_for_stream(self, *args, **kwargs) -> list[Callable]:
-        pass
+    def _get_default_transformations_for_stream(self, *args: Any, **kwargs: Any) -> list[Callable[..., Any]]:
+        raise NotImplementedError(f'{self.name} _get_default_transformations_for_stream() is not implemented')
 
     @property
     def streaming_dataflows(self) -> list[DataFlow]:
-        return [dataflow for dataflow in self._dataflows if dataflow.is_streaming()]
-    
-    def _create_streaming_settings(self, mode: StreamMode, flush_interval: int):
-        self._streaming_settings = StreamingSettings(mode=mode, flush_interval=flush_interval)
+        return [dataflow for dataflow in self._dataflows if dataflow.is_streaming()]  # pyright: ignore[reportUnknownVariableType]
     
     def __aiter__(self) -> AsyncGenerator:
         if not self.streaming_dataflows:
             raise RuntimeError("No streaming dataflow to iterate over")
         # get the first dataflow, doesn't matter, they share the same faucet
-        streaming_dataflow = self.streaming_dataflows[0]
-        queue: asyncio.Queue = streaming_dataflow.faucet.get_streaming_queue()
+        dataflow = self.streaming_dataflows[0]
+        faucet = dataflow.faucet
+        queue: asyncio.Queue[tuple[WebSocketName, Message] | None] = faucet.streaming_queue
         async def _iter():
             async with asyncio.TaskGroup() as task_group:
                 producer = task_group.create_task(self.run_async())
@@ -67,41 +66,39 @@ class StreamingFeedMixin:
                 await producer
         return _iter()
     
-    def _run_stream(
+    def _create_stream_dataflows(
         self,
-        data_model: BaseDataModel,
-        add_default_transformations: Callable,
-        load_to_storage: Callable | None,
-        callback: Callable[[dict], Awaitable[None] | None] | None,
-    ) -> None | BaseFeed:
+        callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None=None,
+    ) -> None | MarketFeed:
+        from pfeed.data_models.market_data_model import MarketDataModel  # pyright: ignore[reportUnusedImport]
+        from pfeed.dataflow.faucet import Faucet  # pyright: ignore[reportUnusedImport]
+        from pfeed.dataflow.dataflow import DataFlow  # pyright: ignore[reportUnusedImport]
         
+        self._clear_dataflows()
+        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
+        self.logger.info(
+            f'{request.name}:\n{request}\n',
+            style=TextStyle.BOLD + RichColor.GREEN
+        )
+        data_model: MarketDataModel = cast(MarketDataModel, self._create_data_model_from_request(request))
+        channel_key: ChannelKey = cast(ChannelKey, self.stream_api.add_channel(data_model))
         
-        # FIXME: move this to _create_stream_dataflow(), refer to _create_batch_dataflows()
-        # reuse existing faucet for streaming dataflows since they share the same extract_func
+        # NOTE: reuse existing faucet for streaming dataflows since they share the same extract_func
         if self.streaming_dataflows:
             existing_dataflow = self.streaming_dataflows[0]
             faucet: Faucet = existing_dataflow.faucet
         else:
-            faucet: Faucet = self._create_faucet(
-                data_model=data_model,
+            faucet: Faucet = cast(Faucet, self._create_faucet(
                 extract_func=self._stream_impl,
-                extract_type=ExtractType.stream,
+                extract_type=request.extract_type,
                 close_stream=self._close_stream,
-            )
-        dataflow: DataFlow = self._create_dataflow(data_model=data_model, faucet=faucet)
+            ))
+        dataflow: DataFlow = cast(DataFlow, self._create_dataflow(data_model=data_model, faucet=faucet))
         self._dataflows.append(dataflow)
-        
         
         if callback:
             faucet.set_streaming_callback(callback)
-        faucet.bind_data_model_to_dataflow(data_model, dataflow)
-        add_default_transformations()
-        if load_to_storage:
-            load_to_storage()
-        if not self._pipeline_mode:
-            return self.run()
-        else:
-            return self
+        faucet.bind_channel_key_to_dataflow(channel_key, dataflow)
 
     async def _run_stream_dataflows(self):
         async def _run_dataflows():
@@ -111,10 +108,8 @@ class StreamingFeedMixin:
                 self.logger.warning(f'{self.name} dataflows were cancelled, ending streams...')
                 await asyncio.gather(*[dataflow.end_stream() for dataflow in self._dataflows])
                     
-        WorkerName: TypeAlias = str
-        DataFlowName: TypeAlias = str
 
-        self._auto_load()
+        self._prepare_before_run()
 
         if self._num_stream_workers:
             import ray
@@ -254,26 +249,25 @@ class StreamingFeedMixin:
         else:
             await _run_dataflows()
     
-    def run(self, prefect_kwargs: dict | None=None) -> GenericData | None:
+    def run(self, **prefect_kwargs: Any) -> GenericData | None:
         if self.streaming_dataflows:
             try:
-                asyncio.get_running_loop()
+                _ = asyncio.get_running_loop()
             except RuntimeError:  # if no running loop, asyncio.get_running_loop() will raise RuntimeError
                 # No running event loop, safe to use asyncio.run()
                 pass
             else:
                 cprint(
-                    "Cannot call feed.run() from within a running event loop.\n"
+                    "Cannot call feed.run() from within a running event loop.\n" + 
                     "Did you mean to call feed.run_async() or forget to set 'pipeline_mode=True'?",
-                    style=TextStyle.BOLD + RichColor.RED,
+                    style=TextStyle.BOLD + RichColor.YELLOW,
                 )
                 return
             return asyncio.run(self._run_stream_dataflows())
         else:
-            return super().run(prefect_kwargs=prefect_kwargs)
+            return super().run(**prefect_kwargs)  # pyright: ignore[reportUnknownVariableType]
 
-    async def run_async(self, prefect_kwargs: dict | None=None) -> GenericData | None:
-        if self.streaming_dataflows:
-            return await self._run_stream_dataflows()
-        else:
-            return super().run(prefect_kwargs=prefect_kwargs)
+    async def run_async(self):
+        if not self.streaming_dataflows:
+            raise RuntimeError(f"{self.name} run_async() is only for streaming dataflows. Use run() instead.")
+        return await self._run_stream_dataflows()

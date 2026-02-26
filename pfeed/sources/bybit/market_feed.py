@@ -1,28 +1,26 @@
 """High-level API for getting historical/streaming data from Bybit."""
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any
+from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Coroutine
     import datetime
     import pandas as pd
-    from pfund.brokers.crypto.exchanges.bybit.exchange import ProductCategory
     from pfund.datas.resolution import Resolution
-    from pfund.typing import FullDataChannel
-    from pfeed.sources.bybit.stream_api import ChannelKey
     from pfeed.typing import GenericFrame
     from pfeed.storages.storage_config import StorageConfig
     
 from pfund.entities.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
-from pfeed.enums import DataLayer, MarketDataType
+from pfeed.enums import MarketDataType
 from pfeed.feeds.market_feed import MarketFeed
+from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin, WebSocketName, Message, ChannelKey
 
 
 __all__ = ['BybitMarketFeed']
 
 
-class BybitMarketFeed(BybitMixin, MarketFeed):
+class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
     data_model_class: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
     date_columns_in_raw_data: ClassVar[list[str]] = ['timestamp']
     
@@ -39,13 +37,14 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
             - 'side' mapped from Buy/Sell (case-insensitive) to 1/-1
             - volume cast to float64
         '''
-        df['side'] = df['side'].str.lower()  # some products use "Buy"/"Sell" while some use "buy"/"sell"
-        MAPPING_COLS = {'buy': 1, 'sell': -1}
-        RENAMING_COLS = {'size': 'volume'}
+        # some products use "Buy"/"Sell" while some use "buy"/"sell"
+        df['side'] = df['side'].str.lower()    # pyright: ignore[reportUnknownMemberType]
+        MAPPING_COLS: dict[str, int] = {'buy': 1, 'sell': -1}
+        RENAMING_COLS: dict[str, str] = {'size': 'volume'}
         df = df.rename(columns=RENAMING_COLS)
-        df['side'] = df['side'].map(MAPPING_COLS)
+        df['side'] = df['side'].map(MAPPING_COLS)  # pyright: ignore[reportArgumentType,reportUnknownMemberType]
         # Convert volume column to float64 to pass pandera schema validation, since inverse products have int volume
-        df["volume"] = df["volume"].astype("float64")
+        df["volume"] = df["volume"].astype("float64")  # pyright: ignore[reportUnknownMemberType]
         return df
     
     def download(
@@ -56,7 +55,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         start_date: datetime.date | str='',
         end_date: datetime.date | str='',
         storage_config: StorageConfig | None=None,
-        clean_raw_data: bool=True,
+        clean_data: bool=True,
         **product_specs: Any
     ) -> GenericFrame | None | BybitMarketFeed:
         '''Download historical data from Bybit.
@@ -74,7 +73,7 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
             storage_config: Storage configuration.
                 if None, downloaded data will NOT be stored to storage.
                 if provided, downloaded data will be stored to storage based on the storage config.
-            clean_raw_data: Whether to clean raw data after download.
+            clean_data: Whether to clean raw data after download.
                 If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
                 If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
                 If False, downloaded raw data will be returned as is.
@@ -100,69 +99,54 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
             end_date=end_date,
             dataflow_per_date=True,
             storage_config=storage_config,
-            clean_raw_data=clean_raw_data,
+            clean_data=clean_data,
             **product_specs
         )
 
     def _download_impl(self, data_model: BybitMarketDataModel) -> bytes | pd.DataFrame | None:
         self.logger.debug(f'downloading {data_model}')
-        data = self.data_source.batch_api.get_data(data_model.product, data_model.resolution, data_model.date)
+        data = self.batch_api.get_data(data_model.product, data_model.resolution, data_model.date)
         self.logger.debug(f'downloaded {data_model}')
         return data
     
-    async def _stream_impl(self, faucet_streaming_callback: Callable[[str, dict, BybitMarketDataModel | None], Awaitable[None] | None]):
-        stream_api = self.data_source.stream_api
-        async def _callback(ws_name: str, msg: dict):
-            if channel := msg.get('topic', None):
+    async def _stream_impl(
+        self, 
+        faucet_callback: Callable[[WebSocketName, Message, ChannelKey | None], Coroutine[Any, Any, None]]
+    ):
+        async def _callback(ws_name: WebSocketName, msg: Message):
+            if 'topic' in msg:
+                channel: str = msg['topic']
                 category = ws_name.split('_')[1]
                 category = BybitProduct.ProductCategory[category.upper()]
-                channel_key: ChannelKey = stream_api.generate_channel_key(category, channel)
-                data_model = stream_api._streaming_bindings[channel_key]
+                channel_key: tuple[str, str] = self.stream_api.generate_channel_key(category, channel)
             else:
-                data_model = None
-            await faucet_streaming_callback(ws_name, msg, data_model)
-        stream_api.set_callback(_callback)
-        await stream_api.connect()
+                channel_key: tuple[str, str] | None = None
+            await faucet_callback(ws_name, msg, channel_key)
+        self.stream_api.set_callback(_callback)
+        await self.stream_api.connect()
         
     async def _close_stream(self):
-        await self.data_source.stream_api.disconnect()
+        await self.stream_api.disconnect()
     
-    def _get_default_transformations_for_stream(self, data_layer: DataLayer, product: BybitProduct, resolution: Resolution) -> list[Callable]:
+    def _get_default_transformations_for_stream(self) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
-        default_transformations = super()._get_default_transformations_for_stream(data_layer, product, resolution)
-        if data_layer != DataLayer.RAW:
+        from pfeed.requests import MarketFeedStreamRequest
+        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
+        default_transformations = super()._get_default_transformations_for_stream()
+        if request.clean_data:
+            product: BybitProduct = cast(BybitProduct, request.product)
             default_transformations = [
-                lambda_with_name('parse_message', lambda msg: BybitMarketFeed._parse_message(product, msg)),
+                lambda_with_name(
+                    'parse_message', 
+                    lambda msg: BybitMarketFeed._parse_message(product, msg)  # pyright: ignore[reportUnknownArgumentType, reportUnknownLambdaType]
+                ),
             ] + default_transformations
         return default_transformations
         
     @staticmethod
-    def _parse_message(product: BybitProduct, msg: dict) -> dict:
+    def _parse_message(product: BybitProduct, msg: Message) -> Message:
         from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
         from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
+        assert product.category is not None, 'product.category is not initialized'
         BybitWebSocketAPIClass: type[BybitWebSocketAPI] = WebSocketAPI._get_api_class(product.category)
         return BybitWebSocketAPIClass._parse_message(msg)
-    
-    def _add_data_channel(self, data_model: BybitMarketDataModel) -> FullDataChannel:
-        if data_model.env != self.data_source.stream_api.env:
-            self.data_source.create_stream_api(env=data_model.env)
-        return self.data_source.stream_api._add_data_channel(data_model)
-
-    def add_channel(
-        self, 
-        channel: FullDataChannel, 
-        *,
-        channel_type: Literal['public', 'private'],
-        category: ProductCategory | None = None,
-    ):
-        '''
-        Args:
-            channel: A channel to subscribe to.
-                The channel specified will be used directly for the external data source, no modification will be made.
-                Useful for subscribing channels not related to resolution.
-        '''
-        self.data_source.stream_api.add_channel(channel, channel_type=channel_type, category=category)
-
-    # TODO: use data_source.batch_api
-    def _fetch_impl(self, data_model: BybitMarketDataModel, *args, **kwargs) -> GenericFrame | None:
-        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')

@@ -8,7 +8,6 @@ from pfeed.requests.base_request import BaseRequest
 class TimeBasedFeedBaseRequest(BaseRequest):
     start_date: datetime.date | str
     end_date: datetime.date | str
-    dataflow_per_date: bool
 
     @field_validator("start_date", mode="before")
     @classmethod

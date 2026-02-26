@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Any, cast
 if TYPE_CHECKING:
     from pfund.entities.products.product_bybit import BybitProduct
     from pfund.enums import Environment
@@ -20,20 +20,25 @@ class BybitSource(DataProviderSource):
         from pfund.brokers.crypto.exchanges import Bybit
         super().__init__()
         self._exchange = Bybit(env='LIVE')
-        self.batch_api: BatchAPI = self.create_batch_api(env='BACKTEST')
-        self.stream_api: StreamAPI = self.create_stream_api(env='LIVE')
-    
-    def create_batch_api(self, env: Environment | str) -> BatchAPI:
-        self.batch_api = BatchAPI(env)
-        return self.batch_api
+        self._batch_api: BatchAPI | None = None
+        self._stream_api: StreamAPI | None = None
         
-    def create_stream_api(self, env: Environment | str) -> StreamAPI:
-        self.stream_api = StreamAPI(env=env)
-        return self.stream_api
+    @property
+    def batch_api(self) -> BatchAPI:
+        assert self._batch_api is not None, 'batch_api is not initialized'
+        return self._batch_api
     
-    def create_product(self, basis: str, symbol: str='', **specs) -> BybitProduct:
-        return self._exchange.create_product(basis, symbol=symbol, **specs)
-
-    # TODO: backfill here?
-    def backfill(self):
-        pass
+    @property
+    def stream_api(self) -> StreamAPI:
+        assert self._stream_api is not None, 'stream_api is not initialized'
+        return self._stream_api
+    
+    def create_batch_api(self, env: Environment | str):
+        self._batch_api = BatchAPI(env)
+        
+    def create_stream_api(self, env: Environment | str):
+        self._stream_api = StreamAPI(env=env)
+    
+    def create_product(self, basis: str, symbol: str='', **specs: Any) -> BybitProduct:
+        from pfund.entities.products.product_bybit import BybitProduct  # pyright: ignore[reportUnusedImport]
+        return cast(BybitProduct, self._exchange.create_product(basis, symbol=symbol, **specs))

@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     import pandas as pd
     from pfeed.storages.database_storage import DatabaseURI
+    from pfeed.enums import StreamMode
     from pfeed.typing import GenericFrame, StreamingData
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
-    from pfeed.streaming.settings import StreamingSettings
     from pfeed._io.base_io import BaseIO
     from pfeed.utils.file_path import FilePath
 
@@ -70,13 +70,13 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
     def _create_file_path(self, date: datetime.date) -> FilePath:
         pass
 
-    def create_stream_buffer(self, streaming_settings: StreamingSettings):
+    def create_stream_buffer(self, mode: StreamMode, flush_interval: int):
         if self._is_streaming_io():
             # EXTEND: only support deltalake_io for now
             if self._is_table_io():
                 buffer_path = self._table_path
                 self._stream_buffer = StreamBuffer(
-                    self._io, buffer_path, streaming_settings
+                    self._io, buffer_path, mode=mode, flush_interval=flush_interval
                 )
             # TODO: writing streaming data to database is not supported yet
             else:

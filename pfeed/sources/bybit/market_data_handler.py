@@ -1,3 +1,5 @@
+from typing import Any
+
 import datetime
 
 from pfeed.data_handlers.market_data_handler import MarketDataHandler
@@ -13,7 +15,7 @@ so we probably need sth like BybitMarketDataHandler to do some work:
 - and more ...
 '''
 class BybitMarketDataHandler(MarketDataHandler):
-    def _standardize_streaming_data(self, data: dict) -> dict:
+    def _standardize_streaming_data(self, data: dict[str, Any]) -> dict[str, Any]:
         '''handle raw data streaming'''
         mts = data['ts']  # in ms
         date = datetime.datetime.fromtimestamp(

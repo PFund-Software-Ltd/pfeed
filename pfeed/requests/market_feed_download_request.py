@@ -1,22 +1,25 @@
 from typing import Literal, Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
+from pfund.datas.resolution import Resolution
 from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
 from pfeed.enums import ExtractType, DataLayer
 
 
 class MarketFeedDownloadRequest(MarketFeedBaseRequest):
-    extract_type: Literal[ExtractType.download] = ExtractType.download
-    clean_raw_data: bool = Field(
-        default=True,
-        description="""
-            Whether to clean raw data after download when storage_config is None.
-            When storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
-            If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
-            If False, downloaded raw data will be returned as is.
-        """
+    dataflow_per_date: bool = Field(description='Whether to create a dataflow for each date')
+    data_resolution: Resolution | str = Field(
+        description="Resolution of the raw data to download from source before resampling (if any) to target_resolution"
     )
+    extract_type: Literal[ExtractType.download] = ExtractType.download
+    
+    @field_validator("data_resolution", mode="before")
+    @classmethod
+    def create_data_resolution(cls, v: Resolution | str) -> Resolution:
+        if isinstance(v, str):
+            return Resolution(v)
+        return v
 
     def model_post_init(self, __context: Any) -> None:
         super().model_post_init(__context)

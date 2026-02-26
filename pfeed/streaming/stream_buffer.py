@@ -3,8 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from io import TextIOWrapper
     from pyarrow.ipc import RecordBatchStreamWriter
-    from pfeed.streaming.settings import StreamingSettings
-    from pfeed.typing import FilePath
+    from pfeed.utils.file_path import FilePath
     from pfeed._io.base_io import BaseIO
 
 import os
@@ -19,7 +18,7 @@ from pfeed.enums import StreamMode
 class StreamBuffer:
     FILENAME = 'buffer.arrow'
     
-    def __init__(self, io: BaseIO, buffer_path: FilePath, settings: StreamingSettings):
+    def __init__(self, io: BaseIO, buffer_path: FilePath, stream_mode: StreamMode=StreamMode.FAST, flush_interval: int=100):
         '''
         Manages a 3-layer buffering system for high-speed streaming data:
         
@@ -42,6 +41,22 @@ class StreamBuffer:
         This design keeps streaming writes fast while ensuring data durability and 
         analytics capabilities.
         
+        Args:
+            io: IO object
+            buffer_path: Path to the buffer file
+            stream_mode: SAFE or FAST
+                if "FAST" is chosen, streaming data will be cached to memory to a certain amount before writing to disk,
+                faster write speed, but data loss risk will increase.
+                if "SAFE" is chosen, streaming data will be written to disk immediately,
+                slower write speed, but data loss risk will be minimized.
+            flush_interval: Interval in seconds for flushing buffered streaming data to storage. 
+                Default is 100 seconds.
+                If using deltalake:
+                Frequent flushes will reduce write performance and generate many small files 
+                (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
+                Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
+                This is expected to be fine-tuned based on the actual use case.
+        
         '''
         from pfeed.utils.adapter import Adapter
         
@@ -49,7 +64,8 @@ class StreamBuffer:
         self._buffer_path: FilePath = buffer_path
         self._file_path: FilePath = buffer_path / self.FILENAME
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
-        self._settings: StreamingSettings = settings
+        self._stream_mode: StreamMode = stream_mode
+        self._flush_interval: int = flush_interval
         self._file: TextIOWrapper | None = None
         self._ipc_writer: RecordBatchStreamWriter | None = None
         self._buffer: list[dict] = []
@@ -59,23 +75,11 @@ class StreamBuffer:
         self._recover_from_crash()
         atexit.register(self._recover_from_crash)
     
-    @property
-    def settings(self) -> StreamingSettings:
-        return self._settings
-    
-    @property
-    def mode(self) -> StreamMode:
-        return self._settings.mode
-    
-    @property
-    def flush_interval(self) -> int:
-        return self._settings.flush_interval
-    
     def _recover_from_crash(self):
         '''
         Recover from crash by reading buffer.arrow and writing it to deltalake
         '''
-        if self.mode == StreamMode.SAFE and self._file_path and self._file_path.exists() and self._file_path.stat().st_size != 0:
+        if self._stream_mode == StreamMode.SAFE and self._file_path and self._file_path.exists() and self._file_path.stat().st_size != 0:
             self._flush()
 
     def _open_writer(self):
@@ -95,18 +99,18 @@ class StreamBuffer:
     def write(self, data: dict, metadata: dict | None=None, partition_by: list[str] | None=None):
         if self._message_schema is None:
             self._create_message_schema(data)
-        if self.mode == StreamMode.FAST:
+        if self._stream_mode == StreamMode.FAST:
             self._buffer.append(data)
-        elif self.mode == StreamMode.SAFE:
+        elif self._stream_mode == StreamMode.SAFE:
             self._spill_to_disk(data)
         else:
-            raise ValueError(f'Invalid stream mode: {self.mode}')
+            raise ValueError(f'Invalid stream mode: {self._stream_mode}')
         self._flush(metadata=metadata, partition_by=partition_by)
             
     # OPTIMIZE
     def _flush(self, metadata: dict | None=None, partition_by: list[str] | None=None):
         now = time.time()
-        if now - self._last_flush_ts <= self.flush_interval:
+        if now - self._last_flush_ts <= self._flush_interval:
             return
         buffer_table: pa.Table = self.read()
         self._io.write(
@@ -132,10 +136,10 @@ class StreamBuffer:
         self._message_schema = self._adapter.dict_to_schema(data)
             
     def read(self) -> pa.Table:
-        if self.mode == StreamMode.FAST:
+        if self._stream_mode == StreamMode.FAST:
             assert self._message_schema is not None, 'schema is required for reading in fast mode'
             return pa.Table.from_pylist(self._buffer, schema=self._message_schema)
-        elif self.mode == StreamMode.SAFE:
+        elif self._stream_mode == StreamMode.SAFE:
             self._close_writer()
             with open(self._file_path, "rb") as f:
                 with pa.ipc.open_stream(f) as reader:
@@ -159,8 +163,8 @@ class StreamBuffer:
 
     def clear(self):
         '''Clear buffer or the buffer.arrow file'''
-        if self.mode == StreamMode.FAST:
+        if self._stream_mode == StreamMode.FAST:
             self._buffer.clear()
-        elif self.mode == StreamMode.SAFE:
+        elif self._stream_mode == StreamMode.SAFE:
             if self._file_path.exists():
                 self._file_path.unlink()

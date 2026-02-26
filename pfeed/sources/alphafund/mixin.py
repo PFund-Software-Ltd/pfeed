@@ -5,5 +5,5 @@ class AlphaFundMixin:
     data_source: AlphaFundSource
 
     @staticmethod
-    def _create_data_source(*args, **kwargs) -> AlphaFundSource:
+    def _create_data_source() -> AlphaFundSource:
         return AlphaFundSource()

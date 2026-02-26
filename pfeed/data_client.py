@@ -34,7 +34,7 @@ class DataClient(ABC):
     
     @staticmethod
     @abstractmethod
-    def _create_data_source(*args, **kwargs) -> BaseSource:
+    def _create_data_source() -> BaseSource:
         pass
 
     def _create_feeds(self):

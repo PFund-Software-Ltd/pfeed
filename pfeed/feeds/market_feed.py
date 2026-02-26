@@ -1,8 +1,10 @@
+# pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false, reportArgumentType=false
 from __future__ import annotations
-from typing import Literal, TYPE_CHECKING, Callable, Awaitable, ClassVar, Any
+from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+    import pandas as pd
     from pfund.entities.products.product_base import BaseProduct
-    from pfeed.storages.base_storage import BaseStorage
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
     from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
     from pfund.datas.resolution import Resolution
@@ -13,7 +15,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
 
 import datetime
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
@@ -24,17 +26,24 @@ from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataSto
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
+from pfeed.storages.base_storage import BaseStorage
 
 
 config = get_config()
 
 
 # FIXME: integrate with StreamingFeedMixin
-class MarketFeed(TimeBasedFeed):
+class MarketFeed(TimeBasedFeed, ABC):
     data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
+    SUPPORTED_LOWEST_RESOLUTION: ClassVar[Resolution] = Resolution('1d')
 
-    SUPPORTED_LOWEST_RESOLUTION = Resolution('1d')
+    _current_request: MarketFeedBaseRequest
+
+    @staticmethod
+    @abstractmethod
+    def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
+        pass
     
     def get_supported_resolutions(self) -> list[Resolution]:
         market_data_types_or_resolutions: list[str] = self.data_source.generic_metadata['data_categories']['market_data']
@@ -51,7 +60,7 @@ class MarketFeed(TimeBasedFeed):
         
     def get_supported_asset_types(self) -> list[str]:
         from pfund.entities.products.product_basis import ProductAssetType
-        market_data_types_or_resolutions: list[str] = self.data_source.generic_metadata['data_categories']['market_data']
+        market_data_types_or_resolutions: dict[str, list[str]] = self.data_source.generic_metadata['data_categories']['market_data']
         return list(set(
             str(ProductAssetType(as_string=asset_type.upper()))
             for dtype_or_resol in market_data_types_or_resolutions
@@ -73,15 +82,29 @@ class MarketFeed(TimeBasedFeed):
         product: str | BaseProduct,
         resolution: str | Resolution,
         start_date: str | datetime.date,
-        end_date: str | datetime.date,
+        end_date: str | datetime.date = '',
         env: Environment = Environment.BACKTEST,
         data_origin: str='',
-        **product_specs
+        **product_specs: Any
     ) -> MarketDataModel:
-        if isinstance(product, str) and product:
+        '''Create a MarketDataModel instance.
+
+        Args:
+            product: product basis (e.g. 'BTC_USDT_PERP') or a Product instance.
+            resolution: Data resolution string (e.g. '1m', '1h') or a Resolution instance.
+            start_date: Start date as a string ('YYYY-MM-DD') or datetime.date.
+            end_date: End date as a string ('YYYY-MM-DD') or datetime.date.
+                If not provided (empty string ''), defaults to start_date, creating a single-day model.
+            env: Trading environment.
+            data_origin: Origin label for the data.
+            product_specs: Additional product specifications (e.g. strike_price, expiration for options).
+        '''
+        if isinstance(product, str):
+            if not product:
+                raise ValueError('product must be a non-empty string or a BaseProduct instance')
             product = self.data_source.create_product(product, **product_specs)
         if len(self._dataflows) > 0:
-            existing_env = self._dataflows[0].data_model.env
+            existing_env = cast(MarketDataModel, self._dataflows[0].data_model).env
             if existing_env != env:
                 raise ValueError(f'{self.name} dataflows have different environments: {existing_env} and {env}')
         DataModel = self.data_model_class
@@ -107,36 +130,30 @@ class MarketFeed(TimeBasedFeed):
         product: str,
         resolution: Resolution | MarketDataType | str,
         symbol: str='',
-        rollback_period: str | Literal['ytd', 'max']='1d',
+        rollback_period: Resolution | str | Literal['ytd', 'max']='1d',
         start_date: datetime.date | str='',
         end_date: datetime.date | str='',
         data_origin: str='',
         dataflow_per_date: bool=True,
         clean_raw_data: bool=True,
         storage_config: StorageConfig | None=None,
-        **product_specs
+        **product_specs: Any
     ) -> GenericFrame | None | MarketFeed:
-        '''
-        Download historical data from data source.
-        
+        '''Download historical data from data source.
+
         Args:
-            rollback_period: Data resolution or 'ytd' (year to date) or 'max'
-                Period to rollback from today, only used when `start_date` is not specified.
+            product: product basis, e.g. BTC_USDT_PERP, AAPL_USD_STK.
+                Details of specifications should be specified in `product_specs`.
+            resolution: Data resolution, e.g. '1m', '1h', 'day'.
+            symbol: Symbol used by the data source. If not specified, derived from `product`.
+                Note that the derived symbol might NOT be correct, in that case, you should specify it manually.
+            rollback_period: Period to rollback from today, only used when `start_date` is not specified.
+                Accepts a resolution string, 'ytd' (year to date), or 'max'. Default is '1d'.
             start_date: Start date.
-                If not specified:
-                    If the data source has a 'start_date' attribute, use it as the start date.
-                    Otherwise, use rollback_period to determine the start date.
-            end_date: End date.
-                If not specified, use today's date as the end date.
-            product_specs: The specifications for the product.
-                if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
-                download(
-                    product='BTC_USDT_OPT',
-                    strike_price=10000,
-                    expiration='2024-01-01',
-                    option_type='CALL',
-                )
-                The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
+                If not specified, rollback_period is used to determine the start date.
+                Special case: if rollback_period='max', uses the data source's start_date attribute.
+            end_date: End date. If not specified, use today's date.
+            data_origin: Origin label for the data, used to distinguish data from different sources.
             dataflow_per_date: Whether to create a dataflow for each date.
                 If True, a dataflow will be created for each date.
                 If False, a single dataflow will be created for the entire date range.
@@ -147,9 +164,23 @@ class MarketFeed(TimeBasedFeed):
             storage_config: Storage configuration.
                 if None, downloaded data will NOT be stored to storage.
                 if provided, downloaded data will be stored to storage based on the storage config.
+            product_specs: The specifications for the product.
+                if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
+                download(
+                    product='BTC_USDT_OPT',
+                    strike_price=10000,
+                    expiration='2024-01-01',
+                    option_type='CALL',
+                )
+                The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
+
+        Returns:
+            Downloaded data as a DataFrame, or None if no data is available.
+            Returns self if used in pipeline mode (i.e. after calling `.pipeline()`).
         '''
         from pfeed.requests import MarketFeedDownloadRequest
 
+        assert any([start_date, end_date, rollback_period]), 'at least one of start_date, end_date, or rollback_period must be provided'
         env = Environment.BACKTEST
         setup_logging(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
@@ -181,25 +212,26 @@ class MarketFeed(TimeBasedFeed):
         )
         self.logger.info(
             f'{self._current_request.name}:\n{self._current_request}\n', 
-            style=TextStyle.BOLD + RichColor.GREEN
+            style=TextStyle.BOLD + RichColor.GREEN  # pyright: ignore[reportCallIssue]
         )
-        self._create_batch_dataflows(
-            extract_func=lambda data_model: self._download_impl(data_model),
-        )
+        self._create_batch_dataflows(extract_func=self._download_impl)
         # NOTE: update the data model in faucet to the data resolution
         # because data model in dataflow uses the target resolution, but the faucet uses the data resolution
         for dataflow in self._dataflows:
-            faucet_data_model: MarketDataModel = dataflow.faucet.data_model 
+            faucet_data_model: MarketDataModel = cast(MarketDataModel, dataflow.faucet.data_model)
             faucet_data_model.update_resolution(self._current_request.data_resolution)
         return self.run() if not self.is_pipeline() else self
     
-    def _get_default_transformations_for_download(self) -> list[Callable]:
+    def _get_default_transformations_for_download(self) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
         from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
         
-        request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest = self._current_request
+        request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest = cast(
+            MarketFeedDownloadRequest | MarketFeedRetrieveRequest, 
+            self._current_request
+        )
 
         if isinstance(request, MarketFeedDownloadRequest):
             clean_raw_data = request.clean_raw_data
@@ -264,7 +296,7 @@ class MarketFeed(TimeBasedFeed):
         for resolution in search_resolutions:
             probe_copy = probe_data_model.model_copy(deep=False)
             probe_copy.update_resolution(resolution)
-            storage.with_data_model(probe_copy)
+            _ = storage.with_data_model(probe_copy)
             metadata = storage.data_handler.read_metadata()
             # if this date's source path exists, data is stored at this resolution
             if not metadata.missing_source_paths:
@@ -324,6 +356,7 @@ class MarketFeed(TimeBasedFeed):
         '''
         from pfeed.requests import MarketFeedRetrieveRequest
 
+        assert any([start_date, end_date, rollback_period]), 'at least one of start_date, end_date, or rollback_period must be provided'
         env = Environment[env.upper()]
         setup_logging(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
@@ -339,16 +372,16 @@ class MarketFeed(TimeBasedFeed):
         storage_config = storage_config or StorageConfig()
         # NOTE: Create storage in main thread to avoid Ray process config loss.
         # Ray workers reload config via get_config(), losing pe.configure(data_path=...) changes.
-        Storage = storage_config.storage.storage_class
+        Storage = cast(type[BaseStorage], storage_config.storage.storage_class)  # pyright: ignore[reportAttributeAccessIssue]
         storage = (
             Storage(
                 data_path=storage_config.data_path,
                 data_layer=storage_config.data_layer,
                 data_domain=storage_config.data_domain or self.data_domain.value,
-                storage_options=self._storage_options.get(storage_config.storage, {}),
+                storage_options=self._storage_options.get(storage_config.storage, {}),  # pyright: ignore[reportCallIssue]
             )
             .with_io(
-                io_options=self._io_options.get(storage_config.io_format, {}),
+                io_options=self._io_options.get(storage_config.io_format, {}),  # pyright: ignore[reportCallIssue]
                 io_format=storage_config.io_format,
                 compression=storage_config.compression,
             )
@@ -386,7 +419,7 @@ class MarketFeed(TimeBasedFeed):
         )
         self.logger.info(
             f'{self._current_request.name}:\n{self._current_request}\n',
-            style=TextStyle.BOLD + RichColor.GREEN
+            style=TextStyle.BOLD + RichColor.GREEN  # pyright: ignore[reportCallIssue]
         )
         self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(
@@ -409,19 +442,20 @@ class MarketFeed(TimeBasedFeed):
             data_model_copy = data_model.model_copy(deep=False)
             data_model_copy.update_resolution(stored_resolution)
             storage = storage.with_data_model(data_model_copy)
-            df, metadata = storage.read_data(include_metadata=True)
+            df, _metadata = storage.read_data(include_metadata=True)
+            metadata = cast(TimeBasedMetadata | None, _metadata)
             if df is not None:
                 self.logger.debug(f'found data {data_model_copy} in {storage}')
                 # update storage's data model back to the original data model
-                storage.with_data_model(data_model)
+                _ = storage.with_data_model(data_model)
         return df, metadata
     
-    def _get_default_transformations_for_retrieve(self) -> list[Callable]:
+    def _get_default_transformations_for_retrieve(self) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
 
-        request: MarketFeedRetrieveRequest = self._current_request
+        request: MarketFeedRetrieveRequest = cast(MarketFeedRetrieveRequest, self._current_request)
         if not request.clean_raw_data:
             default_transformations = [
                 lambda_with_name(
@@ -454,7 +488,7 @@ class MarketFeed(TimeBasedFeed):
         env: Environment=Environment.LIVE,
         mode: StreamMode=StreamMode.FAST,
         flush_interval: int=100,  # in seconds
-        **product_specs
+        **product_specs: Any
     ) -> MarketFeed:
         '''
         Args:
@@ -568,59 +602,3 @@ class MarketFeed(TimeBasedFeed):
     # NOTE: integrate it well with prefect's serve()
     def fetch(self) -> GenericFrame | None | MarketFeed:
         raise NotImplementedError(f"{self.name} fetch() is not implemented")
-    
-    
-    # DEPRECATED
-    # def get_historical_data(
-    #     self,
-    #     product: str,
-    #     resolution: Resolution | str | tDataType | Literal['max'],
-    #     symbol: str='',
-    #     rollback_period: str | Literal['ytd', 'max']="1w",
-    #     start_date: str='',
-    #     end_date: str='',
-    #     data_origin: str='',
-    #     data_layer: DataLayer | None=None,
-    #     data_domain: str='',
-    #     from_storage: DataStorage | None=None,
-    #     to_storage: DataStorage | None=None,
-    #     storage_options: dict | None=None,
-    #     force_download: bool=False,
-    #     retrieve_per_date: bool=False,
-    #     **product_specs
-    # ) -> GenericFrame | None:
-    #     from pfeed._etl import market as etl
-    #     from pfeed._etl.base import convert_to_pandas_df, convert_to_desired_df
-
-    #     resolution: Resolution = self.create_resolution(resolution)
-    #     # handle cases where resolution is less than the minimum resolution, e.g. '3d' -> '1d'
-    #     data_resolution: Resolution = max(resolution, self.SUPPORTED_LOWEST_RESOLUTION)
-    #     data_domain = data_domain or self.data_domain.value
-    #     df: GenericFrame | None = self._get_historical_data_impl(
-    #         product=product,
-    #         symbol=symbol,
-    #         rollback_period=rollback_period,
-    #         start_date=start_date,
-    #         end_date=end_date,
-    #         data_origin=data_origin,
-    #         data_layer=data_layer,
-    #         data_domain=data_domain,
-    #         from_storage=from_storage,
-    #         to_storage=to_storage,
-    #         storage_options=storage_options,
-    #         force_download=force_download,
-    #         retrieve_per_date=retrieve_per_date,
-    #         product_specs=product_specs,
-    #         # NOTE: feed specific kwargs
-    #         resolution=data_resolution,
-    #     )
-
-    #     # NOTE: df from storage/source should have been resampled, 
-    #     # this is only called when resolution is less than the minimum resolution, e.g. '3d' -> '1d'
-    #     if df is not None:
-    #         is_resample_required = resolution < data_resolution
-    #         if is_resample_required:
-    #             df: pd.DataFrame = etl.resample_data(convert_to_pandas_df(df), resolution)
-    #             self.logger.debug(f'resampled {product} {data_resolution} data to {resolution}')
-    #         df: GenericFrame = convert_to_desired_df(df, self._data_tool)
-    #     return df

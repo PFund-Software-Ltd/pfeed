@@ -1,10 +1,15 @@
-from typing import Callable, Literal
+from __future__ import annotations
+from typing import Callable, Literal, TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pfund.datas.resolution import Resolution
+    
 import datetime
         
 from pfund_kit.utils.temporal import get_utc_now, convert_to_date, get_yesterday
 
 
-def lambda_with_name(name: str, lambda_func: Callable):
+def lambda_with_name(name: str, lambda_func: Callable[..., Any]):
     lambda_func.__name__ = name
     return lambda_func
 
@@ -13,11 +18,11 @@ def is_prefect_running() -> bool:
     import os
     import httpx
 
-    PREFECT_API_URL = os.getenv('PREFECT_API_URL', 'http://127.0.0.1:4200/api').rstrip('/')
-    if not PREFECT_API_URL.startswith('http'):
-        PREFECT_API_URL = f'http://{PREFECT_API_URL}'
+    url = os.getenv('PREFECT_API_URL', 'http://127.0.0.1:4200/api').rstrip('/')
+    if not url.startswith('http'):
+        url = f'http://{url}'
     try:
-        response = httpx.get(f'{PREFECT_API_URL}/health', timeout=2.0)
+        response = httpx.get(f'{url}/health', timeout=2.0)
         return response.status_code == 200
     except Exception:
         # Catch all exceptions - if we can't verify Prefect is running, assume it's not
@@ -102,7 +107,7 @@ def determine_timestamp_integer_unit_and_scaling_factor(ts: float | int):
 
 
 def rollback_date_range(
-    rollback_period: str | Literal["ytd"],
+    rollback_period: Resolution | str | Literal["ytd"],
 ) -> tuple[datetime.date, datetime.date]:
     """Returns start_date and end_date based on the rollback_period (e.g. '1d', 'ytd' (Year To Date))."""
     import calendar
@@ -147,7 +152,7 @@ def rollback_date_range(
 def parse_date_range(
     start_date: str | datetime.date,
     end_date: str | datetime.date,
-    rollback_period: str | Literal["ytd"],
+    rollback_period: Resolution | str | Literal["ytd"],
 ) -> tuple[datetime.date, datetime.date]:
     """Parse and standardize date range based on input parameters.
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, ClassVar, Literal, overload
+from typing import TYPE_CHECKING, Callable, ClassVar, Literal, overload, Any
 if TYPE_CHECKING:
     from collections.abc import Sequence
     import polars as pl
@@ -23,7 +23,7 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 
 from pfund_kit.style import cprint
-from pfeed.config import setup_logging, get_config
+from pfeed.config import get_config
 from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType, DataCategory
 from pfeed.storages.storage_config import StorageConfig
 
@@ -52,18 +52,19 @@ class BaseFeed(ABC):
             num_stream_workers: number of Ray tasks to run the streaming dataflows in parallel
                 when this is not None, Ray will be automatically initialized with the number of CPUs available if ray.init() hasn't been called yet
         '''
+        from pfeed.config import setup_logging
         setup_logging()
         self.data_source: DataProviderSource = self._create_data_source()
-        self.logger = logging.getLogger(f'pfeed.{self.name.lower()}')
+        self.logger: logging.Logger = logging.getLogger(f'pfeed.{self.name.lower()}')
         self._engine: DataEngine | None = None
         self._pipeline_mode: bool = pipeline_mode
         self._dataflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
-        self._custom_transformations: Sequence[Callable] = []
+        self._custom_transformations: Sequence[Callable[..., Any]] = []
         self._current_request: BaseRequest | None = None
-        self._storage_options: dict[DataStorage, dict] = {}
-        self._io_options: dict[IOFormat, dict] = {}
+        self._storage_options: dict[DataStorage, dict[str, Any]] = {}
+        self._io_options: dict[IOFormat, dict[str, Any]] = {}
         self._num_batch_workers: int | None = num_batch_workers
         self._num_stream_workers: int | None = num_stream_workers
         if self._num_batch_workers or self._num_stream_workers:
@@ -74,14 +75,14 @@ class BaseFeed(ABC):
     def name(self):
         return self.data_source.name
     
-    def create_product(self, basis: str, symbol: str='', **specs) -> BaseProduct:
+    def create_product(self, basis: str, symbol: str='', **specs: Any) -> BaseProduct:
         if not hasattr(self.data_source, 'create_product'):
             raise NotImplementedError(f'{self.data_source.name} does not support creating products')
         return self.data_source.create_product(basis, symbol=symbol, **specs)
     
     @staticmethod
     @abstractmethod
-    def _create_data_source(*args, **kwargs) -> DataProviderSource:
+    def _create_data_source() -> DataProviderSource:
         pass
 
     @abstractmethod
@@ -89,18 +90,18 @@ class BaseFeed(ABC):
         pass
     
     @abstractmethod
-    def create_data_model(self, *args, **kwargs) -> BaseDataModel:
+    def create_data_model(self, *args: Any, **kwargs: Any) -> BaseDataModel:
         pass
 
     @abstractmethod
-    def _create_batch_dataflows(self, *args, **kwargs):
+    def _create_batch_dataflows(self, *args: Any, **kwargs: Any):
         pass
     
-    def configure_io(self, io_format: IOFormat, **io_options) -> BaseFeed:
+    def configure_io(self, io_format: IOFormat, **io_options: Any) -> BaseFeed:
         self._io_options[io_format] = io_options
         return self
     
-    def configure_storage(self, storage: DataStorage, storage_options: dict) -> BaseFeed:
+    def configure_storage(self, storage: DataStorage, storage_options: dict[str, Any]) -> BaseFeed:
         '''Configure storage kwargs for the given storage
         Args:
             storage_options: A dictionary containing configuration options that are universally applicable across different storage systems. These options typically include settings such as connection parameters, authentication credentials, and other general configurations that are not specific to a particular storage type.
@@ -115,15 +116,15 @@ class BaseFeed(ABC):
         self._engine = engine
 
     @abstractmethod
-    def download(self, *args, **kwargs) -> GenericData | None | BaseFeed:
+    def download(self, *args: Any, **kwargs: Any) -> GenericData | None | BaseFeed:
         pass
 
     @abstractmethod
-    def retrieve(self, *args, **kwargs) -> GenericData | None:
+    def retrieve(self, *args: Any, **kwargs: Any) -> GenericData | None:
         pass
     
     # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
-    def fetch(self, *args, **kwargs) -> GenericData | None | BaseFeed:
+    def fetch(self, *args: Any, **kwargs: Any) -> GenericData | None | BaseFeed:
         raise NotImplementedError(f'{self.name} fetch() is not implemented')
     
     @abstractmethod
@@ -131,23 +132,23 @@ class BaseFeed(ABC):
         pass
 
     @abstractmethod
-    def _get_default_transformations_for_download(self, *args, **kwargs):
+    def _get_default_transformations_for_download(self, *args: Any, **kwargs: Any) -> list[Callable[..., Any]]:
         pass
     
     @abstractmethod
-    def _get_default_transformations_for_retrieve(self, *args, **kwargs):
+    def _get_default_transformations_for_retrieve(self, *args: Any, **kwargs: Any) -> list[Callable[..., Any]]:
         pass
-
+    
     @abstractmethod
-    def _retrieve_impl(self, data_model: BaseDataModel, *args, **kwargs) -> tuple[pl.LazyFrame | None, BaseMetadata | None]:
+    def _retrieve_impl(self, data_model: BaseDataModel, *args: Any, **kwargs: Any) -> tuple[pl.LazyFrame | None, BaseMetadata | None]:
         pass
 
     # TODO
-    def _fetch_impl(self, data_model: BaseDataModel, *args, **kwargs) -> GenericData | None:
+    def _fetch_impl(self, data_model: BaseDataModel, *args: Any, **kwargs: Any) -> GenericData | None:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
     
     @abstractmethod
-    def run(self, **prefect_kwargs) -> GenericData | None:
+    def run(self, **prefect_kwargs: Any) -> GenericData | None:
         pass
     
     @staticmethod
@@ -159,9 +160,9 @@ class BaseFeed(ABC):
     @staticmethod
     def _create_faucet(
         data_model: BaseDataModel,
-        extract_func: Callable, 
+        extract_func: Callable[..., Any], 
         extract_type: ExtractType, 
-        close_stream: Callable | None=None,
+        close_stream: Callable[..., Any] | None=None,
     ) -> Faucet:
         '''
         Args:
@@ -180,7 +181,7 @@ class BaseFeed(ABC):
         from pfeed.dataflow.sink import Sink
         return Sink(data_model, storage)
     
-    def transform(self, *funcs) -> BaseFeed:
+    def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
         if isinstance(self._custom_transformations, list):
             self._custom_transformations.extend(funcs)
         # NOTE: self._custom_transformations will be converted to a tuple (conceptually sealed) after calling load()
@@ -190,16 +191,17 @@ class BaseFeed(ABC):
             raise ValueError(f'unknown custom transformations type: {type(self._custom_transformations)}')
         return self
     
-    def _get_default_transformations(self) -> list[Callable]:
+    def _get_default_transformations(self) -> list[Callable[..., Any]]:
+        assert self._current_request is not None, 'current request is not set'
         request = self._current_request
         if request.extract_type == ExtractType.download:
             return self._get_default_transformations_for_download()
         elif request.extract_type == ExtractType.stream:
-            return self._get_default_transformations_for_stream()
+            return self._get_default_transformations_for_stream()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType,reportAttributeAccessIssue]
         elif request.extract_type == ExtractType.retrieve:
             return self._get_default_transformations_for_retrieve()
         elif request.extract_type == ExtractType.fetch:
-            return self._get_default_transformations_for_fetch()
+            return self._get_default_transformations_for_fetch()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType,reportAttributeAccessIssue]
         else:
             raise ValueError(f'Unknown extract type: {request.extract_type}')
     
@@ -211,7 +213,7 @@ class BaseFeed(ABC):
         self._custom_transformations = []
 
     # REVIEW: 
-    def _check_if_io_supports_parallel_writes(self, io_format: IOFormat) -> bool:
+    def _check_if_io_supports_parallel_writes(self, io_format: IOFormat) -> None:
         from pfeed._io.file_io import FileIO
         IO = io_format.io_class
         # check if not supports parallel writes and not a file io
@@ -222,39 +224,42 @@ class BaseFeed(ABC):
     
     @overload
     def load(
-        self, 
-        to_storage: Literal[DataStorage.LOCAL] = DataStorage.LOCAL,
+        self,
+        *,
+        storage: Literal[DataStorage.LOCAL] = DataStorage.LOCAL,
         data_path: Path | str | None = None,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
         io_format: IOFormat = IOFormat.PARQUET,
         compression: Compression = Compression.SNAPPY,
-        **io_kwargs,
+        **io_kwargs: Any,
     ) -> BaseFeed:
         ...
         
     @overload
     def load(
         self, 
-        to_storage: Literal[DataStorage.DUCKDB] = DataStorage.DUCKDB,
+        *,
+        storage: Literal[DataStorage.DUCKDB] = DataStorage.DUCKDB,
         data_path: Path | str | None = None,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
         in_memory: bool = False,
         memory_limit: str = '4GB',
-        **io_kwargs,
+        **io_kwargs: Any,
     ) -> BaseFeed:
         ...
 
-    def load(
+    def load(  
         self,
+        *,
         storage: DataStorage | None = DataStorage.LOCAL,
         data_path: Path | str | None = None,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
         io_format: IOFormat = IOFormat.PARQUET,
         compression: Compression = Compression.SNAPPY,
-        **io_kwargs,
+        **io_kwargs: Any,
     ) -> BaseFeed:
         '''
         Args:
@@ -343,7 +348,7 @@ class BaseFeed(ABC):
         self._auto_load()
         self._add_transformations()
     
-    def _run_batch_dataflows(self, prefect_kwargs: dict) -> tuple[list[DataFlow], list[DataFlow]]:
+    def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track, ProgressBar
         from pfeed.utils import is_prefect_running
         

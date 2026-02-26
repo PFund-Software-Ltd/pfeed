@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Any, Literal, overload
 
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
@@ -24,7 +24,7 @@ class BaseStorage(ABC):
         data_path: FilePath | DatabaseURI,
         data_layer: DataLayer,
         data_domain: str,
-        storage_options: dict | None = None,
+        storage_options: dict[str, Any] | None = None,
     ):
         '''
         Args:
@@ -36,14 +36,14 @@ class BaseStorage(ABC):
         self.data_path = data_path
         self.data_layer = DataLayer[str(data_layer).upper()]
         self.data_domain = data_domain.upper()
-        self.storage_options = storage_options or {}
+        self.storage_options: dict[str, Any] = storage_options or {}
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
         self._io: BaseIO | None = None
         self._is_data_handler_stale: bool = False
     
     @abstractmethod
-    def _create_io(self, *args, io_options: dict | None = None, **kwargs):
+    def _create_io(self, *args: Any, io_options: dict[str, Any] | None = None, **kwargs: Any) -> BaseIO:
         pass
 
     @property
@@ -108,7 +108,7 @@ class BaseStorage(ABC):
         self._is_data_handler_stale = True
         return self
 
-    def with_io(self, *, io_options: dict | None = None, **kwargs) -> BaseStorage:
+    def with_io(self, *, io_options: dict[str, Any] | None = None, **kwargs: Any) -> BaseStorage:
         self._io = self._create_io(io_options=io_options, **kwargs)
         self._is_data_handler_stale = True
         return self
@@ -124,11 +124,17 @@ class BaseStorage(ABC):
         )
 
     def write_data(
-        self, data: GenericData | StreamingMessage, streaming: bool = False, **io_kwargs
+        self, data: GenericData | StreamingMessage, streaming: bool = False, **io_kwargs: Any
     ):
         self.data_handler.write(data=data, streaming=streaming, **io_kwargs)
+    
+    @overload
+    def read_data(self, include_metadata: Literal[True], **io_kwargs: Any) -> tuple[GenericFrame | None, BaseMetadata]: ...
+    
+    @overload
+    def read_data(self, include_metadata: Literal[False] = ..., **io_kwargs: Any) -> GenericFrame | None: ...
 
-    def read_data(self, include_metadata: bool = False, **io_kwargs) -> GenericFrame | None | tuple[GenericFrame | None, BaseMetadata]:
+    def read_data(self, include_metadata: bool = False, **io_kwargs: Any) -> GenericFrame | None | tuple[GenericFrame | None, BaseMetadata]:
         """Read data from storage.
 
         Args:

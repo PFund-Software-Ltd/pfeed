@@ -1,14 +1,19 @@
-from pfund.entities.products.product_base import BaseProduct
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any, cast
+if TYPE_CHECKING:
+    from pfund.entities.products.product_ibkr import IBKRProduct
+
 from pfund.enums import TradingVenue
 from pfeed.sources.data_provider_source import DataProviderSource
 
 
 class TradFiDataProviderSource(DataProviderSource):
-    def create_product(self, basis: str, symbol='', **specs) -> BaseProduct:
+    def create_product(self, basis: str, symbol: str='', **specs: Any) -> IBKRProduct:
         from pfund.entities.products import ProductFactory
+        from pfund.entities.products.product_ibkr import IBKRProduct  # pyright: ignore[reportUnusedImport]
         # HACK: use 'IB' as trading venue to work around pydantic model's validation
         trading_venue = TradingVenue.IBKR
-        Product = ProductFactory(trading_venue=trading_venue, basis=basis)
+        Product = cast(type[IBKRProduct], ProductFactory(trading_venue=trading_venue, basis=basis))
         product = Product(
             trading_venue=trading_venue,
             broker=trading_venue,
@@ -16,7 +21,7 @@ class TradFiDataProviderSource(DataProviderSource):
             exchange='SMART',
             basis=basis,
             specs=specs,
-            symbol=symbol,   
+            symbol=symbol,
         )
         # HACK: write it back to data source's name
         # data_source_name = self.name.value

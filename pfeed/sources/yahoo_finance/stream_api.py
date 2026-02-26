@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias, Callable, Awaitable
+from typing import TYPE_CHECKING, TypeAlias, Callable
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
     

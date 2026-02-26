@@ -6,8 +6,6 @@ if TYPE_CHECKING:
     from pfeed.enums import DataStorage, DataLayer
     from pfeed.data_models.news_data_model import NewsDataModel
 
-import datetime
-
 from pfeed.feeds.news_feed import NewsFeed
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 

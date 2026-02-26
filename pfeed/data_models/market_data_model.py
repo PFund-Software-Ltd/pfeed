@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 from pydantic import field_validator, field_serializer
 
@@ -27,25 +27,25 @@ class MarketDataModel(TimeBasedDataModel):
     product: BaseProduct
     resolution: Resolution
     
-    def __str__(self):
+    def __str__(self) -> str:
         return ':'.join([self.env, super().__str__(), str(self.product.asset_type), self.product.symbol, str(self.resolution)])
     
     @field_validator('env', mode='before')
     @classmethod
-    def create_env(cls, v):
+    def create_env(cls, v: str | Environment) -> Environment:
         if isinstance(v, str):
             return Environment[v.upper()]
         return v
     
     @field_validator('resolution', mode='before')
     @classmethod
-    def create_resolution(cls, v):
+    def create_resolution(cls, v: str | Resolution) -> Resolution:
         if isinstance(v, str):
             return Resolution(v)
         return v
     
     @field_serializer('resolution')
-    def serialize_resolution(self, value: Resolution):
+    def serialize_resolution(self, value: Resolution) -> str:
         return repr(value)
 
     def update_resolution(self, resolution: Resolution | str) -> None:
@@ -54,8 +54,8 @@ class MarketDataModel(TimeBasedDataModel):
         assert isinstance(resolution, Resolution), f'resolution must be a Resolution, but got {type(resolution)}'
         self.resolution = resolution
     
-    def to_metadata(self, **fields) -> MarketMetadataModel:
-        return super().to_metadata(
+    def to_metadata(self, **fields: Any) -> MarketMetadataModel:
+        return cast(MarketMetadataModel, super().to_metadata(
             trading_venue=self.product.trading_venue,
             exchange=self.product.exchange,
             product_name=self.product.name,
@@ -64,4 +64,4 @@ class MarketDataModel(TimeBasedDataModel):
             resolution=repr(self.resolution),
             asset_type=str(self.product.asset_type),
             **fields,
-        )
+        ))

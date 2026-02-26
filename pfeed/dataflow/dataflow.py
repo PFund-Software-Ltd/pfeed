@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Literal
+from typing import Callable, TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
     from prefect import Flow as PrefectDataFlow
     from pfeed.typing import GenericData, StreamingData
@@ -23,7 +23,7 @@ class DataFlow:
         self._is_streaming = faucet.extract_type == ExtractType.stream
         self._faucet: Faucet = faucet
         self._sink: Sink | None = None
-        self._transformations: list[Callable] = []
+        self._transformations: list[Callable[..., Any]] = []
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
         self._msg_queue: ZeroMQ | None = None
@@ -58,7 +58,7 @@ class DataFlow:
     def result(self) -> DataFlowResult:
         return self._result
     
-    def add_transformations(self, *funcs: tuple[Callable, ...]):
+    def add_transformations(self, *funcs: Callable[..., Any]):
         if self._transformations:
             raise ValueError('transformations are already added')
         self._transformations.extend(funcs)

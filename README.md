@@ -1,13 +1,16 @@
 # PFeed: The Single Source of Truth for Algo-Trading Data. Uniting Traders to Clean Once & Share with All.
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)
-<!-- ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfeed?style=social) -->
-![PyPI downloads](https://img.shields.io/pypi/dm/pfeed?label=downloads)
-[![PyPI](https://img.shields.io/pypi/v/pfeed.svg)](https://pypi.org/project/pfeed)
-![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfeed)
+[![Downloads](https://static.pepy.tech/badge/pfeed/month)](https://pepy.tech/project/pfeed)
+[![PyPI](https://img.shields.io/pypi/v/pfeed.svg?cacheSeconds=300)](https://pypi.org/project/pfeed)
+![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfeed?cacheSeconds=300)
 [![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfeed/discussions)
 [![afterpython](https://afterpython.org/shield.svg)](https://afterpython.org)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PFund-Software-Ltd/pfeed)
+[![View Code Wiki](https://assets.codewiki.google/readme-badge/static.svg)](https://codewiki.google/github.com/pfund-software-ltd/pfeed?utm_source=badge&utm_medium=github&utm_campaign=github.com/pfund-software-ltd/pfeed)
+<!-- [![PyPI version](https://badge.fury.io/py/pfeed.svg)](https://badge.fury.io/py/pfeed) -->
+<!-- ![PyPI downloads](https://img.shields.io/pypi/dm/pfeed?label=downloads&cacheSeconds=86400) -->
+<!-- ![GitHub stars](https://img.shields.io/github/stars/PFund-Software-Ltd/pfeed?style=social) -->
 <!-- [![Jupyter Book Badge](https://raw.githubusercontent.com/PFund-Software-Ltd/pfeed/main/docs/images/jupyterbook.svg)](https://jupyterbook.org) -->
 <!-- [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/) -->
 
@@ -40,7 +43,7 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 `pfeed` leverages modern data engineering tools to centralize data cleaning efforts, automate ETL/ELT, store data in a **data lake with Delta Lake** support, and output **backtesting-ready data**, allowing traders to focus on strategy development.
 
 ---
-PFeed (/piː fiːd/) is the data engine for trading, serving as a pipeline between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, supporting both **batch processing** and **streaming** workflows through streamlined data collection, cleaning, transformation, and storage.
+`pfeed` (/piː fiːd/) is the data engine for trading, serving as a pipeline between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, supporting both **batch processing** and **streaming** workflows through streamlined data collection, cleaning, transformation, and storage.
 
 ## Core Features
 - [x] Download or stream reliable, validated and **clean data** for research, backtesting, or live trading

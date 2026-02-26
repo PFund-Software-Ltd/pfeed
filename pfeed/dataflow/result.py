@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from pfeed.typing import GenericData
     from pfeed.data_handlers.base_data_handler import BaseMetadata
@@ -16,7 +16,7 @@ class DataFlowResult:
         '''
         self._data: GenericData | None = None
         self._metadata: BaseMetadata | None = None
-        self._data_loader: Callable | None = None  # Function called to lazy-load data when accessed
+        self._data_loader: Callable[..., GenericData] | None = None  # Function called to lazy-load data when accessed
         self._success: bool = False
     
     @property
@@ -46,7 +46,7 @@ class DataFlowResult:
     def set_data(self, data: GenericData):
         self._data = data
     
-    def set_data_loader(self, func: Callable):
+    def set_data_loader(self, func: Callable[..., GenericData]):
         self._data_loader = func
         
     def set_metadata(self, metadata: BaseMetadata):

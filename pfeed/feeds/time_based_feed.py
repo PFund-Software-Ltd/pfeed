@@ -2,15 +2,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar, Callable, Any, cast
 if TYPE_CHECKING:
     import pandas as pd
-    from narwhals.typing import Frame
-    from pfeed.typing import GenericFrame
-    from pfeed.dataflow.dataflow import DataFlow, DataFlowResult
+    from pfeed.dataflow.dataflow import DataFlow
+    from pfeed.dataflow.result import DataFlowResult
     from pfeed.dataflow.faucet import Faucet
     from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
+    from pfund.datas.resolution import Resolution
 
 import datetime
 from pprint import pformat
+from abc import ABC
 
+from narwhals.typing import Frame
+
+from pfeed.typing import GenericFrame
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
@@ -19,23 +23,48 @@ from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
 __all__ = ["TimeBasedFeed"]
 
 
-class TimeBasedFeed(BaseFeed):
+class TimeBasedFeed(BaseFeed, ABC):
     data_model_class: ClassVar[type[TimeBasedDataModel]]
-    date_column_in_raw_data: ClassVar[str]
-    original_date_column_in_raw_data: ClassVar[str] = 'original_date'
+    date_columns_in_raw_data: ClassVar[list[str]]
+    original_date_column_in_raw_data: ClassVar[str] = '_date_raw'
+    _current_request: TimeBasedFeedBaseRequest
 
     def _standardize_date_column(self, df: pd.DataFrame, is_raw_data: bool) -> pd.DataFrame:
-        '''Ensure date column is standardized, "date" column is mandatory for storing data'''
+        '''Standardize the date column so that a 'date' column is always present (mandatory for storage).
+
+        Args:
+            df: DataFrame from the data source, with a source-specific date column (e.g. 'timestamp', 'Datetime').
+            is_raw_data: Whether the df is being stored as raw data.
+                If False (cleaned path): renames the source date column directly to 'date'.
+                If True (raw storage path): keeps the source date column intact and copies it to 'date'.
+                    Special case: if the source already uses 'date', it is copied to
+                    `original_date_column_in_raw_data` ('_date_raw') to avoid collision.
+
+        Returns:
+            DataFrame with a standardized 'date' column.
+        '''
         from pfeed._etl.base import standardize_date_column
         if not is_raw_data:
-            df = df.rename(columns={self.date_column_in_raw_data: 'date'})
-        else:
-            if self.date_column_in_raw_data != 'date':
-                df['date'] = df[self.date_column_in_raw_data]
+            for date_column in self.date_columns_in_raw_data:
+                if date_column not in df.columns:
+                    continue
+                df = df.rename(columns={date_column: 'date'})
+                break
             else:
-                # NOTE: if raw data also uses "date" column, copy it to "original_date" column, 
-                # which will be renamed back to "date" before writing to storage
-                df[self.original_date_column_in_raw_data] = df['date']
+                raise ValueError(f'No date columns ({self.date_columns_in_raw_data}) are found in raw data {df.columns=}')
+        else:
+            for date_column in self.date_columns_in_raw_data:
+                if date_column not in df.columns:
+                    continue
+                if date_column != 'date':
+                    df['date'] = df[date_column]
+                else:
+                    # NOTE: if raw data also uses "date" column, copy it to "original_date" column, 
+                    # which will be renamed back to "date" before writing to storage
+                    df[self.original_date_column_in_raw_data] = df['date']
+                break
+            else:
+                raise ValueError(f'No date columns ({self.date_columns_in_raw_data}) are found in raw data {df.columns=}')
         df = standardize_date_column(df)
         return df
     
@@ -43,7 +72,7 @@ class TimeBasedFeed(BaseFeed):
         self, 
         start_date: str | datetime.date, 
         end_date: str | datetime.date,
-        rollback_period: str | Literal['ytd', 'max'],
+        rollback_period: Resolution | str | Literal['ytd', 'max'],
     ) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.
 
@@ -73,10 +102,10 @@ class TimeBasedFeed(BaseFeed):
         start_date, end_date = parse_date_range(start_date, end_date, rollback_period)
         return start_date, end_date
   
-    def _create_batch_dataflows(self, extract_func: Callable):
+    def _create_batch_dataflows(self, extract_func: Callable[..., Any]):
         self._clear_dataflows()
         request: TimeBasedFeedBaseRequest = self._current_request
-        data_model: TimeBasedDataModel = self._create_data_model_from_request(request)
+        data_model: TimeBasedDataModel = cast(TimeBasedDataModel, self._create_data_model_from_request(request))
         if request.dataflow_per_date:
             # one dataflow per date
             for date in data_model.dates:
@@ -102,14 +131,14 @@ class TimeBasedFeed(BaseFeed):
         
         completed_dataflows, failed_dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
 
-        dfs: list[GenericFrame] = []
+        result_dfs: list[GenericFrame] = []
         missing_dates: list[datetime.date] = []
         
         for dataflow in completed_dataflows + failed_dataflows:
             result: DataFlowResult = dataflow.result
-            _df: GenericFrame | None = result.data
+            _df: GenericFrame | None = cast(GenericFrame | None, result.data)
             if _df is not None:
-                dfs.append(_df)
+                result_dfs.append(_df)
             metadata: TimeBasedMetadata | None = cast(TimeBasedMetadata | None, result.metadata)
             if metadata is not None:
                 missing_dates.extend(metadata.missing_dates_in_storage)
@@ -120,9 +149,9 @@ class TimeBasedFeed(BaseFeed):
                 f'{pformat([str(date) for date in missing_dates])}\n'
             )
 
-        dfs: list[Frame] = [nw.from_native(df) for df in dfs if not is_empty_dataframe(df)]
+        dfs: list[Frame] = [nw.from_native(df) for df in result_dfs if not is_empty_dataframe(df)]
         if dfs:
-            df: Frame = nw.concat(dfs)
+            df: Frame = cast(Frame, nw.concat(dfs))  # pyright: ignore[reportArgumentType]
             schema = df.collect_schema()
             columns = schema.names()
             if 'date' in columns:
@@ -132,7 +161,7 @@ class TimeBasedFeed(BaseFeed):
                     df: Frame = df.sort(by='date', descending=False)
             df: GenericFrame = nw.to_native(df)
         else:
-            df = None
+            df: GenericFrame | None = None
 
         return df
     

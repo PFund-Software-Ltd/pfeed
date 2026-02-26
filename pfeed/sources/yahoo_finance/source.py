@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+import types
+from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund.entities.products.product_ibkr import IBKRProduct
 
 import yfinance
 
@@ -14,18 +15,18 @@ __all__ = ["YahooFinanceSource"]
 
 
 class YahooFinanceSource(TradFiDataProviderSource):
-    name = DataSource.YAHOO_FINANCE
-    # hard-coded mappings for convenience
-    MAPPINGS = {
+    name: ClassVar[DataSource] = DataSource.YAHOO_FINANCE
+    # EXTEND: hard-coded mappings for convenience
+    MAPPINGS: ClassVar[dict[str, str]] = {
         'HYPE_USD_CRYPTO': 'HYPE32196-USD',
     }
     
     def __init__(self):
         super().__init__()
-        self.batch_api = yfinance
+        self.batch_api: types.ModuleType = yfinance
         self.stream_api = StreamAPI()
 
-    def create_product(self, basis: str, symbol='', **specs) -> BaseProduct:
+    def create_product(self, basis: str, symbol: str='', **specs: Any) -> IBKRProduct:
         product = super().create_product(basis, symbol=symbol, **specs)
         if not symbol:
             # if not specified, derive symbol used in yahoo finance
@@ -34,7 +35,7 @@ class YahooFinanceSource(TradFiDataProviderSource):
         return product
     
     # conceptually, this should be put inside sth like YahooFinanceProduct, but since yahoo finance is not a trading venue, put it here instead
-    def _create_symbol(self, product: BaseProduct) -> str:
+    def _create_symbol(self, product: IBKRProduct) -> str:
         if product.is_stock():
             symbol = product.symbol  # using the default symbol created in product creation
         elif product.is_option():

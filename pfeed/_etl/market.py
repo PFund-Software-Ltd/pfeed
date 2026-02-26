@@ -8,14 +8,15 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
 
 
-from pfund.datas.resolution import Resolution, ResolutionUnit
+from pfund.datas.resolution import Resolution
+from pfund.datas.timeframe import Timeframe
 
 
 def standardize_columns(df: pd.DataFrame, product: BaseProduct, resolution: Resolution) -> pd.DataFrame:
     """Standardizes the columns of a DataFrame.
-    Adds columns 'product', 'resolution', 'symbol', and convert 'date' to datetime
+    Adds columns 'resolution', 'symbol'
     """
-    df['product'] = product.name
+    # df['product'] = product.name
     df['resolution'] = repr(resolution)
     df['symbol'] = product.symbol
     return df
@@ -25,11 +26,11 @@ def filter_columns(df: pd.DataFrame, product: BaseProduct | None = None) -> pd.D
     """Filter out unnecessary columns from raw data."""
     is_tick_data = 'price' in df.columns
     if is_tick_data:
-        standard_cols = ['date', 'product', 'resolution', 'symbol', 'side', 'volume', 'price']
+        standard_cols = ['date', 'resolution', 'symbol', 'side', 'volume', 'price']
     else:
-        standard_cols = ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+        standard_cols = ['date', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
     df_cols = df.columns
-    extra_cols = []
+    extra_cols: list[str] = []
     if product:
         if product.is_stock() or product.is_etf():
             extra_cols.extend(['dividends', 'splits'])
@@ -41,8 +42,8 @@ def filter_columns(df: pd.DataFrame, product: BaseProduct | None = None) -> pd.D
 
 
 def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    '''Moves 'date', 'product', 'resolution', 'symbol' to the leftmost side.'''
-    left_cols = ['date', 'product', 'resolution', 'symbol']
+    '''Moves 'date', 'resolution', 'symbol' to the leftmost side.'''
+    left_cols = ['date', 'resolution', 'symbol']
     target_cols = left_cols + [col for col in df.columns if col not in left_cols]
     
     # Only reindex if columns are not already in the target order
@@ -74,15 +75,14 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution, product: BaseP
     df = filter_columns(df, product=product)
         
     # converts to pandas's resolution format
-    eresolution = (
-        repr(resolution)
+    eresolution = {
         # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
-        .replace(ResolutionUnit.MINUTE.value, 'min')
-        .replace(ResolutionUnit.DAY.value, 'D')
-        .replace(ResolutionUnit.MONTH.value, 'MS')  # MS = Month Start
-        .replace(ResolutionUnit.YEAR.value, 'YS')  # YS = Year Start
-        .replace(ResolutionUnit.WEEK.value, 'W-MON')  # W = Week, starting from Monday, otherwise, default is Sunday
-    )
+        Timeframe.MINUTE: 'min',
+        Timeframe.DAY: 'D',
+        Timeframe.WEEK: 'W-MON',  # W = Week, starting from Monday, otherwise, default is Sunday
+        Timeframe.MONTH: 'MS',  # MS = Month Start
+        Timeframe.YEAR: 'YS',  # YS = Year Start
+    }.get(resolution.timeframe, resolution.timeframe.canonical)
     
     is_tick_data = 'price' in df.columns
     assert not df.empty, 'data is empty'
@@ -98,7 +98,7 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution, product: BaseP
         'volume': 'sum',
     }
     
-    for col in ['product', 'resolution', 'symbol']:
+    for col in ['resolution', 'symbol']:
         if col in df.columns:
             resample_logic[col] = 'first'
     if 'dividends' in df.columns:
@@ -115,7 +115,7 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution, product: BaseP
             closed='left',  # closed is only default to be 'right' when resolution is week
             offset=offset,
         )
-        .agg(resample_logic)
+        .agg(resample_logic)  # pyright: ignore[reportArgumentType]
         # drop an unnecessary level created by 'ohlc' in the resample_logic
         .pipe(lambda df: df.droplevel(0, axis=1) if is_tick_data else df)
         .dropna()

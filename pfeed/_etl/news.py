@@ -11,14 +11,14 @@ import pandas as pd
 
 def standardize_columns(df: pd.DataFrame, product: BaseProduct | None=None) -> pd.DataFrame:
     from pfeed._etl.base import standardize_date_column
-    df['product'] = product.name if product else None
+    # df['product'] = product.name if product else None
     df['symbol'] = product.symbol if product else None
     df = standardize_date_column(df)
     return df
 
 
 def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
-    standard_cols = ['date', 'product', 'symbol', 'title', 'content', 'publisher', 'url']
+    standard_cols = ['date', 'symbol', 'title', 'content', 'publisher', 'url']
     df_cols = df.columns
     extra_cols = ['author', 'exchange']
     for extra_col in extra_cols:
@@ -29,7 +29,7 @@ def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    left_cols = ['date', 'product', 'symbol', 'publisher', 'title', 'content', 'url']
+    left_cols = ['date', 'symbol', 'publisher', 'title', 'content', 'url']
     extra_cols = ['author', 'exchange']
     df_cols = df.columns
     for extra_col in extra_cols:

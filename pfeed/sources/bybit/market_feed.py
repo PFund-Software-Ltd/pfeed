@@ -1,7 +1,8 @@
 """High-level API for getting historical/streaming data from Bybit."""
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
+from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     import datetime
     import pandas as pd
     from pfund.brokers.crypto.exchanges.bybit.exchange import ProductCategory
@@ -23,23 +24,21 @@ __all__ = ['BybitMarketFeed']
 
 class BybitMarketFeed(BybitMixin, MarketFeed):
     data_model_class: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
-    date_column_in_raw_data: ClassVar[str] = 'timestamp'
+    date_columns_in_raw_data: ClassVar[list[str]] = ['timestamp']
     
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
-        """Normalize raw data from Bybit API into standardized format.
-
-        This method performs the following normalizations:
-        - Renames columns to standard names (timestamp -> ts, size -> volume)
-        - Maps trade side values from Buy/Sell to 1/-1
-        - Corrects reverse-ordered data if detected
+        '''Normalize raw Bybit DataFrame into a consistent format.
 
         Args:
-            df (pd.DataFrame): Raw DataFrame from Bybit API containing trade data
+            df: DataFrame after `_standardize_date_column` (Bybit's 'timestamp' column renamed to 'date').
 
         Returns:
-            pd.DataFrame: Normalized DataFrame with standardized column names and values
-        """
+            Normalized DataFrame with:
+            - 'size' renamed to 'volume'
+            - 'side' mapped from Buy/Sell (case-insensitive) to 1/-1
+            - volume cast to float64
+        '''
         df['side'] = df['side'].str.lower()  # some products use "Buy"/"Sell" while some use "buy"/"sell"
         MAPPING_COLS = {'buy': 1, 'sell': -1}
         RENAMING_COLS = {'size': 'volume'}
@@ -58,10 +57,27 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
         end_date: datetime.date | str='',
         storage_config: StorageConfig | None=None,
         clean_raw_data: bool=True,
-        **product_specs
+        **product_specs: Any
     ) -> GenericFrame | None | BybitMarketFeed:
-        '''
+        '''Download historical data from Bybit.
+
         Args:
+            product: product basis, e.g. BTC_USDT_PERP, ETH_USDT_OPT.
+                Details of specifications should be specified in `product_specs`.
+            resolution: Data resolution, e.g. '1m', '1h', 'tick'. Default is 'tick'.
+            rollback_period: Period to rollback from today, only used when `start_date` is not specified.
+                Accepts a resolution string, 'ytd', or 'max'. Default is '1d'.
+            start_date: Start date.
+                If not specified, rollback_period is used to determine the start date.
+                Special case: if rollback_period='max', uses the data source's start_date attribute.
+            end_date: End date. If not specified, use today's date.
+            storage_config: Storage configuration.
+                if None, downloaded data will NOT be stored to storage.
+                if provided, downloaded data will be stored to storage based on the storage config.
+            clean_raw_data: Whether to clean raw data after download.
+                If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
+                If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
+                If False, downloaded raw data will be returned as is.
             product_specs: The specifications for the product.
                 if product is "BTC_USDT_OPT", you need to provide the specifications of the option as kwargs:
                 download(
@@ -71,20 +87,24 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
                     option_type='CALL',
                 )
                 The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
+
+        Returns:
+            Downloaded data as a DataFrame, or None if no data is available.
+            Returns self if used in pipeline mode (i.e. after calling `.pipeline()`).
         '''
-        return super().download(
+        return super().download(  # pyright: ignore[reportReturnType]
             product=product,
             resolution=resolution,
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
             dataflow_per_date=True,
-            clean_raw_data=clean_raw_data,
             storage_config=storage_config,
+            clean_raw_data=clean_raw_data,
             **product_specs
         )
 
-    def _download_impl(self, data_model: BybitMarketDataModel) -> bytes | None:
+    def _download_impl(self, data_model: BybitMarketDataModel) -> bytes | pd.DataFrame | None:
         self.logger.debug(f'downloading {data_model}')
         data = self.data_source.batch_api.get_data(data_model.product, data_model.resolution, data_model.date)
         self.logger.debug(f'downloaded {data_model}')
@@ -146,38 +166,3 @@ class BybitMarketFeed(BybitMixin, MarketFeed):
     # TODO: use data_source.batch_api
     def _fetch_impl(self, data_model: BybitMarketDataModel, *args, **kwargs) -> GenericFrame | None:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
-    
-    # DEPRECATED
-    # def get_historical_data(
-    #     self,
-    #     product: str,
-    #     resolution: Resolution | str | Literal['tick', 'second', 'minute', 'hour', 'day']="1tick",
-    #     rollback_period: str="1day",
-    #     start_date: str="",
-    #     end_date: str="",
-    #     data_origin: str='',
-    #     data_layer: DataLayer | None=None,
-    #     data_domain: str='',
-    #     from_storage: DataStorage | None=None,
-    #     to_storage: DataStorage | None=None,
-    #     storage_options: dict | None=None,
-    #     force_download: bool=False,
-    #     retrieve_per_date: bool=False,
-    #     **product_specs
-    # ) -> GenericFrame | None | BybitMarketFeed:
-    #     return super().get_historical_data(
-    #         product=product,
-    #         resolution=resolution,
-    #         rollback_period=rollback_period,
-    #         start_date=start_date,
-    #         end_date=end_date,
-    #         data_origin=data_origin,
-    #         data_layer=data_layer,
-    #         data_domain=data_domain,
-    #         from_storage=from_storage,
-    #         to_storage=to_storage,
-    #         storage_options=storage_options,
-    #         force_download=force_download,
-    #         retrieve_per_date=retrieve_per_date,
-    #         **product_specs
-    #     )

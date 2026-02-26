@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Awaitable, TypeAlias
+from typing import Callable, TYPE_CHECKING, TypeAlias, Any
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfeed.dataflow.dataflow import DataFlow
@@ -25,7 +26,7 @@ class Faucet:
     def __init__(
         self, 
         data_model: BaseDataModel, 
-        extract_func: Callable,  # e.g. _download_impl(), _stream_impl(), _retrieve_impl(), _fetch_impl()
+        extract_func: Callable[..., Any],  # e.g. _download_impl(), _stream_impl(), _retrieve_impl(), _fetch_impl()
         extract_type: ExtractType,
         close_stream: Callable | None=None,
     ):

@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
-    from pfund.typing import tEnvironment
     from pfund.entities.products.product_bybit import BybitProduct
+    from pfund.enums import Environment
 
 from pfeed.sources.data_provider_source import DataProviderSource
 from pfeed.enums import DataSource
@@ -14,7 +14,7 @@ __all__ = ["BybitSource"]
 
 
 class BybitSource(DataProviderSource):
-    name = DataSource.BYBIT
+    name: ClassVar[DataSource] = DataSource.BYBIT
 
     def __init__(self):
         from pfund.brokers.crypto.exchanges import Bybit
@@ -23,11 +23,11 @@ class BybitSource(DataProviderSource):
         self.batch_api: BatchAPI = self.create_batch_api(env='BACKTEST')
         self.stream_api: StreamAPI = self.create_stream_api(env='LIVE')
     
-    def create_batch_api(self, env: tEnvironment) -> BatchAPI:
+    def create_batch_api(self, env: Environment | str) -> BatchAPI:
         self.batch_api = BatchAPI(env)
         return self.batch_api
         
-    def create_stream_api(self, env: tEnvironment) -> StreamAPI:
+    def create_stream_api(self, env: Environment | str) -> StreamAPI:
         self.stream_api = StreamAPI(env=env)
         return self.stream_api
     

@@ -3,8 +3,6 @@ from typing import TYPE_CHECKING, ClassVar, Any
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
 
-from abc import ABC
-
 from pydantic import BaseModel, ConfigDict
 
 from pfeed.enums import DataSource
@@ -18,7 +16,7 @@ class BaseMetadataModel(BaseModel):
     data_origin: str = ""
 
 
-class BaseDataModel(BaseModel, ABC):
+class BaseDataModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
     
     data_handler_class: ClassVar[type[BaseDataHandler]]
@@ -43,7 +41,7 @@ class BaseDataModel(BaseModel, ABC):
         else:
             return f"{self.data_source.name}"
     
-    def to_metadata(self, **fields) -> BaseMetadataModel:
+    def to_metadata(self, **fields: Any) -> BaseMetadataModel:
         """Convert the data model to a metadata model.
 
         Args:

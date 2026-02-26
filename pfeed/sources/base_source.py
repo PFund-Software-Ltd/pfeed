@@ -11,4 +11,3 @@ class BaseSource(ABC):
 
     def __init__(self, data_categories: list[DataCategory | StrEnum]):
         self.data_categories: list[DataCategory | StrEnum] = data_categories
-        

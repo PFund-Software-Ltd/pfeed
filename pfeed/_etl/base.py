@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tDataTool
     from pfeed.typing import GenericFrame, GenericData
     
 
@@ -30,7 +29,7 @@ def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def convert_to_desired_df(data: GenericData, data_tool: DataTool | tDataTool) -> pd.DataFrame | pl.LazyFrame | dd.DataFrame | SparkDataFrame:
+def convert_to_desired_df(data: GenericData, data_tool: DataTool) -> pd.DataFrame | pl.LazyFrame | dd.DataFrame | SparkDataFrame:
     '''Converts the input data to the user's desired data tool.
     Args:
         data: The input data to be converted.

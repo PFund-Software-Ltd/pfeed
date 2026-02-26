@@ -1,12 +1,19 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pfeed.typing import GenericFrame, GenericSeries
+
 import pandas as pd
 import polars as pl
 import narwhals as nw
-from narwhals.typing import IntoFrame, Frame
+from narwhals.typing import Frame
 try:
     import dask.dataframe as dd
 except ImportError:
     class dd:
         class DataFrame:
+            pass
+        class Series:
             pass
 try:
     import pyspark.pandas as ps
@@ -15,11 +22,13 @@ except ImportError:
     class ps:
         class DataFrame:
             pass
+        class Series:
+            pass
     class SparkDataFrame:
         pass
 
 
-def is_dataframe(df: IntoFrame, eagerframe_only=False, include_narwhals=True) -> bool:
+def is_dataframe(df: GenericFrame, eagerframe_only: bool = False, include_narwhals: bool = True) -> bool:
     """
     Returns True if `df` is any known DataFrame type.
     
@@ -36,7 +45,7 @@ def is_dataframe(df: IntoFrame, eagerframe_only=False, include_narwhals=True) ->
     return True
 
 
-def is_lazyframe(df: IntoFrame, include_narwhals=True) -> bool:
+def is_lazyframe(df: GenericFrame, include_narwhals: bool = True) -> bool:
     """
     Returns True if `df` is a lazily evaluated dataframe.
 
@@ -48,14 +57,14 @@ def is_lazyframe(df: IntoFrame, include_narwhals=True) -> bool:
     return isinstance(df, lazy_types + narwhals_types)
 
 
-def is_empty_dataframe(df: IntoFrame) -> bool:
+def is_empty_dataframe(df: GenericFrame) -> bool:
     df: Frame = nw.from_native(df)
     if isinstance(df, nw.LazyFrame):
         df = df.head(1).collect()
     return df.is_empty()
 
 
-def is_series(value, include_narwhals=True) -> bool:
+def is_series(value: GenericSeries, include_narwhals: bool = True) -> bool:
     return (
         isinstance(value, (pd.Series, pl.Series, dd.Series, ps.Series))
         or (include_narwhals and isinstance(value, (nw.Series)))

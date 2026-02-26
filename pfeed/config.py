@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pathlib import Path
 
 from pfund.enums import Environment
@@ -17,7 +19,7 @@ __all__ = [
 
 project_name = 'pfeed'
 _config: PFeedConfig | None = None
-_logging_config: dict | None = None
+_logging_config: dict[str, Any] | None = None
 
 
 def setup_logging(env: Environment | None=None, reset: bool=False):
@@ -30,7 +32,7 @@ def setup_logging(env: Environment | None=None, reset: bool=False):
         clear_logging_handlers()
     
     config: PFeedConfig = get_config()
-    logging_config: dict = get_logging_config()
+    logging_config: dict[str, Any] = get_logging_config()
 
     log_path = config.log_path / env if env else config.log_path
     log_path.mkdir(parents=True, exist_ok=True)
@@ -45,7 +47,6 @@ def setup_logging(env: Environment | None=None, reset: bool=False):
     logging_configurator.configure()
     
     setup_exception_logging(logger_name=project_name)
-    return logging_config
 
 
 def get_config() -> PFeedConfig:
@@ -58,7 +59,7 @@ def get_config() -> PFeedConfig:
     return _config
 
 
-def get_logging_config() -> dict:
+def get_logging_config() -> dict[str, Any]:
     global _logging_config
     if _logging_config is None:
         _logging_config = configure_logging()
@@ -66,10 +67,10 @@ def get_logging_config() -> dict:
 
 
 def configure(
-    data_path: str | None = None,
-    log_path: str | None = None,
-    cache_path: str | None = None,
-    data_tool: DataTool | None = None,
+    data_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
+    log_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
+    cache_path: str | None = None,  # pyright: ignore[reportUnusedParameter]
+    data_tool: DataTool | None = None,  # pyright: ignore[reportUnusedParameter]
     persist: bool = False,
 ) -> PFeedConfig:
     '''
@@ -102,7 +103,7 @@ def configure(
     return config
 
 
-def configure_logging(logging_config: dict | None=None, debug: bool=False) -> dict:
+def configure_logging(logging_config: dict[str, Any] | None=None, debug: bool=False) -> dict[str, Any]:
     '''
     Loads logging config from YAML file and merges with optional user overrides.
 
@@ -146,7 +147,7 @@ class PFeedConfig(Configuration):
         """Initialize PFeedConfig-specific attributes from config data."""
         self.data_tool = DataTool[self._data.get('data_tool', DataTool.polars).lower()]
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             'data_tool': self.data_tool,

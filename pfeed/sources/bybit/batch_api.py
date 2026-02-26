@@ -1,11 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Any
 if TYPE_CHECKING:
     import pandas as pd
     from httpx import Response
     from pfund.entities.products.product_bybit import BybitProduct
+    from pfund.brokers.crypto.exchanges.bybit.rest_api import RESTfulAPI
     from pfund.datas.resolution import Resolution
-    from pfund.typing import tEnvironment
     
 import datetime
 
@@ -30,28 +30,28 @@ BTCUSDH25 = BTC_USD_IFUT
 # https://www.bybit.com/x-api/quote/public/support/download/list-options?bizType={contract_or_spot}&productId={orderbook_or_trade}
 class BatchAPI:
     '''Custom API for downloading data from Bybit'''
-    DATA_NAMING_REGEX_PATTERNS = {
+    DATA_NAMING_REGEX_PATTERNS: ClassVar[dict[str, str]] = {
         CryptoAssetType.PERPETUAL: r'(USDT\/|PERP\/)$',  # USDT perp or USDC perp;
         CryptoAssetType.FUTURE: r'-\d{2}[A-Z]{3}\d{2}\/$',  # USDC futures e.g. BTC-10NOV23/
         AssetTypeModifier.INVERSE + '-' + CryptoAssetType.PERPETUAL: r'USD\/$',  # inverse perps;
         AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUTURE: r'USD[A-Z]\d{2}\/$',  # inverse futures e.g. BTCUSDH24/
         CryptoAssetType.CRYPTO: '.*',  # match everything since everything from https://public.bybit.com/spot is spot
     }
+    _env: Environment
+    _rest_api: RESTfulAPI | None = None
 
-    def __init__(self, env: tEnvironment='BACKTEST'):
-        env = Environment[env.upper()]
-        if env != Environment.BACKTEST:
+    def __init__(self, env: Environment | str=Environment.BACKTEST):
+        self._env = Environment[env.upper()]
+        if self._env != Environment.BACKTEST:
             from pfund.brokers.crypto.exchanges.bybit.rest_api import RESTfulAPI
             # TODO: use rest api to support fetch()?
-            self._rest_api = RESTfulAPI(env)
+            self._rest_api = RESTfulAPI(self._env)
         else:
             self._rest_api = None
     
     @property
     def env(self) -> Environment:
-        if self._rest_api is None:
-            return Environment.BACKTEST
-        return self._rest_api._env
+        return self._env
         
     @staticmethod
     def _get_base_url(product: BybitProduct, resolution: Resolution) -> str:
@@ -69,9 +69,9 @@ class BatchAPI:
                 return 'https://public.bybit.com/trading'
     
     @staticmethod
-    def _create_filename(product: BybitProduct, resolution: Resolution, date: str):
-        from pfund_kit.utils.temporal import convert_to_date
+    def _create_filename(product: BybitProduct, resolution: Resolution, date: str | datetime.date) -> str:
         if resolution.is_quote():
+            from pfund_kit.utils.temporal import convert_to_date
             orderbook_levels = 200
             # NOTE: somehow after this date, the orderbook (non-spot) levels are changed from 500 to 200
             cutoff_date = '2025-08-21'
@@ -87,14 +87,14 @@ class BatchAPI:
                 return f'{product.symbol}{date}.csv.gz'
     
     @staticmethod
-    def _get(url: str, params: dict | None=None):
+    def _get(url: str, params: dict[str, Any] | None=None) -> bytes | None:
         import time
         import httpx
         from pfund_kit.style import cprint, TextStyle, RichColor
         
-        NUM_RETRY = 3
-        while NUM_RETRY:
-            NUM_RETRY -= 1
+        num_retries: int = 3
+        while num_retries:
+            num_retries -= 1
             try:
                 response: Response = httpx.get(url, params=params)
                 result = response.raise_for_status().content
@@ -108,7 +108,7 @@ class BatchAPI:
             cprint(f'Failed to get data from {url}', style=TextStyle.BOLD + RichColor.RED)
             return None
     
-    def _create_url(self, product: BybitProduct, resolution: Resolution, date: str) -> str:
+    def _create_url(self, product: BybitProduct, resolution: Resolution, date: str | datetime.date) -> str:
         base_url = self._get_base_url(product, resolution)
         filename = self._create_filename(product, resolution, date)
         url = f'{base_url}/{product.symbol}/{filename}'
@@ -124,7 +124,7 @@ class BatchAPI:
         df = pd.json_normalize([decoder.decode(item) for item in data_str])
         return df
     
-    def get_data(self, product: BybitProduct, resolution: Resolution, date: str) -> bytes | pd.DataFrame | None:
+    def get_data(self, product: BybitProduct, resolution: Resolution, date: str | datetime.date) -> bytes | pd.DataFrame | None:
         if product.is_option():
             raise NotImplementedError('Bybit does not provide options data')
         # TODO: it's quote_L2 data, need to support converting to quote_L1, converting to different number of levels (e.g. 10quote_L1) etc.
@@ -136,7 +136,8 @@ class BatchAPI:
         url = self._create_url(product, resolution, date)
         if data := self._get(url):
             if resolution.is_quote():
-                data: pd.DataFrame = self._convert_orderbook_data_to_df(data)
+                df: pd.DataFrame = self._convert_orderbook_data_to_df(data)
+                return df
             return data
 
     # def _get_downloadable_symbols(self, ptype: str, epdt: str):

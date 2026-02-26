@@ -17,9 +17,10 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.10.2"
+uv = ">=0.10.4"
 openjdk = "21.*"  # for spark
 libpq = ">=18.1"  # for postgresql
+gh = ">=2.87.2"
 
 [pypi-dependencies]
 # TEMP
@@ -29,11 +30,11 @@ pfund-kit = { path = "../pfund-kit", editable = true }
 # pfund = ">=0.0.2"
 pandas = ">=2.3.3,<3.0.0"
 polars = ">=1.38.1"
-pyarrow = ">=22.0.0"
+pyarrow = ">=23.0.1"
 pandera = ">=0.29.0"
 msgspec = ">=0.20.0"
 pydantic = ">=2.12.5"
-narwhals = ">=2.16.0"
+narwhals = ">=2.17.0"
 zstandard = ">=0.25.0"
 beautifulsoup4 = ">=4.14.3"
 cloudpathlib = { version = ">=0.23.0", extras = ["s3", "gs", "azure"] }
@@ -57,7 +58,7 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 fmp-api-client = { path = "../fmp-api-client", editable = true }
 # fmp-api-client = ">=0.0.1download"
 yfinance = ">=1.2.0"
-prefect = ">=3.6.17"
+prefect = ">=3.6.19"
 huggingface-hub = ">=1.4.1"
 # polars-cloud = ">=0.4.2"
 dask = { version = ">=2026.1.2", extras = ["complete", "dataframe"] }
@@ -65,7 +66,7 @@ coiled = ">=1.131.0"
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
 duckdb = ">=1.4.4"
 lancedb = ">=0.29.2"
-psycopg = { version = ">=3.3.2", extras = ["binary", "pool"] }
+psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 
 # TEMP
 [pypi-options.dependency-overrides]
@@ -76,9 +77,13 @@ pfund-kit = { path = "../pfund-kit", editable = true }
 fmp-api-client = { path = "../fmp-api-client", editable = true }
 
 [feature.dev.pypi-dependencies]
-afterpython = ">=0.2.0"
+pfeed = { path = ".", editable = true }
+afterpython = ">=0.2.1"
+basedpyright = ">=1.38.1"
 pandas-stubs = ">=2.3.3.260113"
+# TEMP
 pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
+financetoolkit = ">=2.0.6"
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"

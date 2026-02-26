@@ -1,9 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Callable
+from typing import TYPE_CHECKING, ClassVar, Callable, Any
 if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
-    from pfeed._io.base_io import StorageMetadata
-    from pfeed.data_models.news_data_model import NewsDataModel
     from pfeed.typing import GenericFrame
     from pfeed.enums import DataStorage
 
@@ -13,8 +11,10 @@ from functools import partial
 from pfund.enums import Environment
 from pfeed.config import setup_logging, get_config
 from pfeed.enums import DataLayer, DataCategory
+from pfeed.data_models.news_data_model import NewsDataModel
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.utils import lambda_with_name
+from pfeed.storages.storage_config import StorageConfig
 
 
 config = get_config()
@@ -33,12 +33,12 @@ class NewsFeed(TimeBasedFeed):
 
     def create_data_model(
         self,
-        env: Environment,
         start_date: str | datetime.date,
         end_date: str | datetime.date | None = None,
         product: str | BaseProduct | None = None,
+        env: Environment = Environment.BACKTEST,
         data_origin: str = '',
-        **product_specs
+        **product_specs: Any
     ) -> NewsDataModel:
         from pfeed.data_models.news_data_model import NewsDataModel
         if isinstance(product, str) and product:
@@ -56,19 +56,23 @@ class NewsFeed(TimeBasedFeed):
             end_date=end_date or start_date,
         )
     
+    # TODO:
+    def _create_data_model_from_request(self, request: NewsFeedBaseRequest) -> NewsDataModel:
+        ...
+    
     def download(
         self, 
         product: str='',
         symbol: str='',
         rollback_period: str ='1w',
-        start_date: str='',
-        end_date: str='',
-        data_layer: DataLayer=DataLayer.CLEANED,
+        start_date: datetime.date | str='',
+        end_date: datetime.date | str='',
         data_origin: str='',
-        to_storage: DataStorage=DataStorage.LOCAL,
         dataflow_per_date: bool=False,
-        **product_specs
-    ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
+        clean_raw_data: bool=True,
+        storage_config: StorageConfig | None=None,
+        **product_specs: Any
+    ) -> GenericFrame | None | NewsFeed:
         '''
         Args:
             product: e.g. 'AAPL_USD_STK'. If not provided, general news will be fetched.
@@ -117,14 +121,14 @@ class NewsFeed(TimeBasedFeed):
         self,
         product: str='',
         rollback_period: str='1w',
-        start_date: str='',
-        end_date: str='',
+        start_date: datetime.date | str='',
+        end_date: datetime.date | str='',
         data_origin: str='',
-        data_layer: DataLayer=DataLayer.CLEANED,
-        from_storage: DataStorage=DataStorage.LOCAL,
-        dataflow_per_date: bool=False,
         env: Environment=Environment.BACKTEST,
-        **product_specs
+        dataflow_per_date: bool=False,
+        clean_raw_data: bool=False,
+        storage_config: StorageConfig | None=None,
+        **product_specs: Any
     ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
         env = Environment[env.upper()]
         setup_logging(env=env)
@@ -141,6 +145,14 @@ class NewsFeed(TimeBasedFeed):
             add_default_transformations=lambda: self._add_default_transformations_to_retrieve(),
             dataflow_per_date=dataflow_per_date,
         )
+    
+    # TODO:
+    def _get_default_transformations_for_retrieve(self):
+        pass
+
+    # TODO
+    def _retrieve_impl(self):
+        pass
 
     # TODO:
     def fetch(self) -> GenericFrame | None | NewsFeed:

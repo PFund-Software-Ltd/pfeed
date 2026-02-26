@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import ClassVar, TYPE_CHECKING
+from typing import Any, ClassVar, TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
 
@@ -50,14 +50,14 @@ class TimeBasedDataModel(BaseDataModel):
         assert isinstance(end_date, datetime.date), f'end_date must be a datetime.date, but got {type(end_date)}'
         self.end_date = end_date
     
-    def __str__(self):
+    def __str__(self) -> str:
         if self.start_date == self.end_date:
             return ':'.join([super().__str__(), str(self.start_date)])
         else:
             return ':'.join([super().__str__(), '(from)' + str(self.start_date), '(to)' + str(self.end_date)])
     
-    def to_metadata(self, **fields) -> TimeBasedMetadataModel:
-        return super().to_metadata(
+    def to_metadata(self, **fields: Any) -> TimeBasedMetadataModel:
+        return cast(TimeBasedMetadataModel, super().to_metadata(
             dates=self.dates,
             **fields,
-        )
+        ))

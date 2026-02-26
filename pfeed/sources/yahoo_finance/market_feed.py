@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, Awaitable, ClassVar
+from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     import pandas as pd
     from yfinance import Ticker
     from pfund.typing import FullDataChannel
@@ -13,38 +14,35 @@ if TYPE_CHECKING:
 import time
 import datetime
 
-from pfeed.feeds.market_feed import MarketFeed
-from pfeed.config import get_config
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 from pfeed.enums import DataLayer
+from pfeed.feeds.market_feed import MarketFeed
 
 
 __all__ = ["YahooFinanceMarketFeed"]
-
-
-config = get_config()
 
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
 class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     data_model_class: ClassVar[type[YahooFinanceMarketDataModel]] = YahooFinanceMarketDataModel
+    # "Date" is used for daily data and "Datetime" is used for other resolutions in yfinance
+    date_columns_in_raw_data: ClassVar[list[str]] = ['Datetime', 'Date']
     
-    _URLS = {
-        "rest": "https://query1.finance.yahoo.com",
-        "ws": "wss://streamer.finance.yahoo.com",
-    }
-    _ADAPTER = {
+    _ADAPTER: ClassVar[dict[str, dict[str, str]]] = {
         "timeframe": {
-            # month
-            "M": "mo",
-            "mo": "M",
             # week
             "w": "wk",
             "wk": "w",
         }
     }
+
+    # _URLS: ClassVar[dict[str, str]] = {
+    #     "rest": "https://query1.finance.yahoo.com",
+    #     "ws": "wss://streamer.finance.yahoo.com",
+    # }
+
     # yfinance's valid periods = pfund's rollback_periods
     # SUPPORTED_ROLLBACK_PERIODS = {
     #     "d": [1, 5],
@@ -63,41 +61,49 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     
     @staticmethod
     def _normalize_raw_data(df: pd.DataFrame) -> pd.DataFrame:
-        # convert to UTC and reset index
-        df.index = df.index.tz_convert("UTC").tz_localize(None)
-        df.reset_index(inplace=True)
-        
+        '''Normalize raw yfinance DataFrame into a consistent format.
+
+        Args:
+            df: DataFrame after `_standardize_date_column` (yfinance date column renamed to 'date').
+
+        Returns:
+            Normalized DataFrame with:
+            - Lowercased column names with spaces replaced by underscores
+            - 'stock_splits' renamed to 'splits'
+            - volume cast to float64
+        '''
         # convert column names to lowercase and replace spaces with underscores
-        # NOTE:
         # if there are spaces in column names, they will be turned into some weird names like "_10" during "for row in df.itertuples()"
         df.columns = [col.replace(" ", "_").lower() for col in df.columns]
 
-        # convert volume (int) to float
-        df['volume'] = df['volume'].astype(float)
-        
-        # somehow different column names "Date" and "Datetime" are used in yfinance depending on the resolution
-        RENAMING_COLS = {'datetime': 'date', 'stock_splits': 'splits'}
+        RENAMING_COLS = {'stock_splits': 'splits'}
         df = df.rename(columns=RENAMING_COLS)
+        
+        # convert volume (int) to float
+        df['volume'] = df['volume'].astype("float64")
         return df
     
-    def _handle_rollback_max_period(self, resolution: Resolution | str | Literal['minute', 'hour', 'day'], start_date: str, end_date: str):
-        from pfeed.enums import MarketDataType
-        resolution: Resolution = self._create_resolution(resolution)
-        dtype = MarketDataType[str(resolution.timeframe)]
-        if dtype == MarketDataType.DAY:
+    def _handle_rollback_max_period(
+        self, 
+        resolution: Resolution | str | Literal['minute', 'hour', 'day'], 
+        start_date: datetime.date | str, 
+        end_date: datetime.date | str
+    ):
+        resolution: Resolution = self.create_resolution(resolution)
+        if resolution.is_day():
             # HACK: use '1900-01-01' as the start date for daily data since we don't know the exact start date when rollback_period == 'max'
             start_date = '1900-01-01'
             end_date = ''
             rollback_period = ''
-        elif dtype == MarketDataType.HOUR:
+        elif resolution.is_hour():
             rollback_period = '2y'  # max is 2 years for hourly data
-        elif dtype == MarketDataType.MINUTE:
+        elif resolution.is_minute():
             rollback_period = '8d'  # max is 8 days for minute data
+        else:
+            raise ValueError(f'{resolution} is not supported')
         return start_date, end_date, rollback_period
 
-    def _check_yfinance_kwargs(self, yfinance_kwargs: dict | None) -> dict:
-        if self._yfinance_kwargs is not None:
-            return self._yfinance_kwargs
+    def _check_yfinance_kwargs(self, yfinance_kwargs: dict[str, Any] | None) -> dict[str, Any]:
         yfinance_kwargs = yfinance_kwargs or {}
         assert "interval" not in yfinance_kwargs, "`interval` duplicates with pfeed's `resolution`, please remove it"
         assert "period" not in yfinance_kwargs, "`period` duplicates with pfeed's `rollback_period`, please remove it"
@@ -109,48 +115,69 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         self,
         product: str,
         symbol: str='',
-        resolution: Resolution | str | Literal['minute', 'hour', 'day']='day',
-        rollback_period: str | Literal["ytd", "max"]='max',
+        resolution: Resolution | Literal['minute', 'hour', 'day'] | str='day',
+        rollback_period: Resolution | str | Literal["ytd", "max"]='1week',
         start_date: datetime.date | str='',
         end_date: datetime.date | str='',
         storage_config: StorageConfig | None=None,
         clean_raw_data: bool=True,
-        yfinance_kwargs: dict | None=None,
-        **product_specs
+        yfinance_kwargs: dict[str, Any] | None=None,
+        **product_specs: Any
     ) -> GenericFrame | None | YahooFinanceMarketFeed:
         '''
         Download historical data from Yahoo Finance.
         Be reminded that if you include today's data, it can be incomplete, this especially applies to the usage of rollback_period.
         e.g. rollback_period='ytd'/'max' includes today's data, and today is not finished, so the data is incomplete.
         start_date and end_date (not including today) should be specified to avoid this issue.
-        
+
         Args:
-            product_specs: The specifications for the product.
-                The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
-            rollback_period: Data resolution or 'ytd' or 'max'
-                Period to rollback from today, only used when `start_date` is not specified.
-                Default is '1M' = 1 month.
+            product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP.
+                Details of specifications should be specified in `product_specs`.
+            symbol: Symbol used by yfinance's Ticker. If not specified, derived from `product`.
+                Note that the derived symbol might NOT be correct, in that case, you should specify it manually.
+            resolution: Data resolution, e.g. '1m', '1h', 'day'. Default is 'day'.
+            rollback_period: Period to rollback from today, only used when `start_date` is not specified.
+                Accepts a resolution string, 'ytd', or 'max'. Default is 'max'.
             start_date: Start date.
-                If not specified:
-                    If the data source has a 'start_date' attribute, use it as the start date.
-                    Otherwise, use rollback_period to determine the start date.
-            end_date: End date.
-                If not specified, use today's date as the end date.
-            yfinance_kwargs: kwargs supported by `yfinance`
+                If not specified, rollback_period is used to determine the start date.
+                Special case: if rollback_period='max', see `_handle_rollback_max_period` for yfinance-specific logic.
+            end_date: End date. If not specified, use today's date.
+            storage_config: Storage configuration.
+                if None, downloaded data will NOT be stored to storage.
+                if provided, downloaded data will be stored to storage based on the storage config.
+            clean_raw_data: Whether to clean raw data after download.
+                If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
+                If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
+                If False, downloaded raw data will be returned as is.
+            yfinance_kwargs: Extra kwargs forwarded directly to yfinance's Ticker.history().
                 refer to kwargs in history() in yfinance/scrapers/history.py
+                Note: interval, period, start, end are managed by pfeed and must not be passed here.
+            product_specs: The specifications for the product.
+                if product is "AAPL_USD_OPT", you need to provide the specifications of the option as kwargs:
+                download(
+                    product='AAPL_USD_OPT',
+                    strike_price=150,
+                    expiration='2024-01-01',
+                    option_type='CALL',
+                )
+                The most straight forward way to know what attributes to specify is leave it empty and read the exception message.
+
+        Returns:
+            Downloaded data as a DataFrame, or None if no data is available.
+            Returns self if used in pipeline mode (i.e. after calling `.pipeline()`).
         '''
-        self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
+        self._yfinance_kwargs: dict[str, Any] = self._check_yfinance_kwargs(yfinance_kwargs)
         if rollback_period == 'max' and not start_date:
             start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
-        return super().download(
+        return super().download(  # pyright: ignore[reportReturnType]
             product=product,
             symbol=symbol,
             resolution=resolution,
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            storage_config=storage_config,
             dataflow_per_date=False,
+            storage_config=storage_config,
             clean_raw_data=clean_raw_data,
             **product_specs
         )
@@ -167,13 +194,13 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
         assert symbol, f'symbol is required for {data_model}'
         ticker = self.batch_api.Ticker(symbol)
         
-        no_df = True
-        NUM_RETRIES = 3
+        df: pd.DataFrame | None = None
+        num_retries = 3
         # NOTE: yfinance's end_date is not inclusive, so we need to add 1 day to the end_date
         yfinance_end_date = data_model.end_date + datetime.timedelta(days=1)
         
-        while no_df and NUM_RETRIES:
-            NUM_RETRIES -= 1
+        while num_retries:
+            num_retries -= 1
             self.logger.debug(f'downloading {data_model}')
             # NOTE: yfinance's period is not used, only use start_date and end_date for data clarity in storage
             df: pd.DataFrame | None = ticker.history(
@@ -182,28 +209,29 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
                 end=str(yfinance_end_date),
                 **self._yfinance_kwargs
             )
-            no_df = (df is None or df.empty)
-            if no_df:
-                self.logger.info(f'failed to download {product.symbol} {resolution} data, retrying...')
-                time.sleep(1)
+            if df is None or df.empty:
+                if num_retries:
+                    self.logger.info(f'failed to download {product.symbol} {resolution} data, retrying...')
+                    time.sleep(1)
             else:
                 self.logger.debug(f'downloaded {data_model}')
+                # convert tz-aware index to UTC naive, then reset to column
+                if hasattr(df.index, 'tz') and df.index.tz is not None:  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                    df.index = df.index.tz_convert("UTC").tz_localize(None)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
                 if str(data_model.start_date) == '1900-01-01':  # rollback_period='max' for daily data
                     actual_start_date = min(df.index).date()
                     data_model.update_start_date(actual_start_date)
-                    self.logger.debug(f'set start_date={actual_start_date} for {data_model}')
+                    self.logger.debug(f'got actual start date, set start_date={actual_start_date} for {data_model}')
+                # NOTE: reset index here so date columns (e.g. 'Datetime', 'Date') are actual columns,
+                # which is required by _standardize_date_column to find and rename them
+                df = df.reset_index()
                 break
         else:
-            self.logger.warning(f'failed to download {product.symbol} {resolution} data, '
-                                f'please check if start_date={data_model.start_date} and end_date={data_model.end_date} is within a valid range')
-        # REVIEW: for some unknown reason, yfinance sometimes returns None or empty DataFrame even start_date and end_date are within a valid range
-        # i.e. same function call, different results, need to remind users to manually retry again
-        if df is None or df.empty:
-            df_msg = 'df=None' if df is None else 'empty df'
             self.logger.warning(
-                f'downloaded {df_msg} {product.symbol} {resolution} data from {self.name}. '
-                'If it happens on trading days, it is possibly due to rate limit, network issue, or bugs in `pfeed` or `yfinance`, '
-                'you may try to modify (extend the time range) `start_date` and `end_date` and avoid using `rollback_period` to try again.'
+                f'failed to download {product.symbol} {resolution} data after all retries, ' +
+                f'please check if start_date={data_model.start_date} and end_date={data_model.end_date} is within a valid range. ' +
+                'If it happens on trading days, it is possibly due to rate limit, network issue, or bugs in `pfeed` or `yfinance`, ' +
+                'you may try to extend the time range or avoid using `rollback_period` to try again.'
             )
         self._yfinance_kwargs.clear()
         return df
@@ -238,7 +266,7 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             ] + default_transformations
         return default_transformations
     
-    def _parse_message(self, product: BaseProduct, msg: dict) -> dict:
+    def _parse_message(self, product: BaseProduct, msg: dict[str, Any]) -> dict[str, Any]:
         '''
         Args:
             msg: raw message from yahoo finance streaming data
@@ -286,83 +314,21 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
     def _add_data_channel(self, data_model: YahooFinanceMarketDataModel) -> None:
         return self.data_source.stream_api._add_data_channel(data_model)
     
-    def add_channel(self, channel: FullDataChannel, channel_type: Literal['public', 'private'], *args, **kwargs):
+    def add_channel(self, channel: FullDataChannel, channel_type: Literal['public', 'private'], *args: Any, **kwargs: Any):
         raise NotImplementedError(f'{self.name} add_channel() is not implemented')
     
     # TODO: use data_source.batch_api
-    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args, **kwargs) -> GenericFrame | None:
+    def _fetch_impl(self, data_model: YahooFinanceMarketDataModel, *args: Any, **kwargs: Any) -> GenericFrame | None:
         raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
 
-    # DEPRECATED
-    # def get_historical_data(
-    #     self,
-    #     product: str,
-    #     symbol: str='',
-    #     resolution: Resolution | str = "1day",
-    #     rollback_period: str | Literal["ytd", "max"] = "max",
-    #     start_date: str = "",
-    #     end_date: str = "",
-    #     data_origin: str='',
-    #     data_layer: DataLayer | None=None,
-    #     data_domain: str='',
-    #     from_storage: DataStorage | None=None,
-    #     to_storage: DataStorage | None=None,
-    #     storage_options: dict | None=None,
-    #     force_download: bool=False,
-    #     retrieve_per_date: bool=False,
-    #     yfinance_kwargs: dict | None=None,
-    #     **product_specs,
-    # ) -> GenericFrame | None:
-    #     """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
-    #     Args:
-    #         product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP
-    #         symbol: symbol that will be used by yfinance's Ticker.history().
-    #             If not specified, it will be derived from `product`, which might be inaccurate.
-    #         rollback_period: Data resolution or 'ytd' or 'max'
-    #             Period to rollback from today, only used when `start_date` is not specified.
-    #             Default is '1M' = 1 month.
-    #             if 'period' in kwargs is specified, it will be used instead of `rollback_period`.
-    #         resolution: Data resolution
-    #             e.g. '1m' = 1 minute as the unit of each data bar/candle.
-    #             Default is '1d' = 1 day.
-    #         force_download: Whether to skip retrieving data from storage.
-    #         yfinance_kwargs: kwargs supported by `yfinance`
-    #             refer to kwargs in history() in yfinance/scrapers/history.py
-    #     """
-    #     self._yfinance_kwargs = self._check_yfinance_kwargs(yfinance_kwargs)
-    #     if rollback_period == 'max' and not start_date:
-    #         start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
-    #         # HACK: for daily data with rollback_period='max', retrieving data from storage takes too long (too many dates), skip it
-    #         if start_date == '1900-01-01':
-    #             force_download = True
-    #     df = super().get_historical_data(
-    #         product,
-    #         resolution,
-    #         symbol=symbol,
-    #         rollback_period=rollback_period,
-    #         start_date=start_date,
-    #         end_date=end_date,
-    #         data_origin=data_origin,
-    #         data_layer=data_layer,
-    #         data_domain=data_domain,
-    #         from_storage=from_storage,
-    #         to_storage=to_storage,
-    #         storage_options=storage_options,
-    #         force_download=force_download,
-    #         retrieve_per_date=retrieve_per_date,
-    #         **product_specs,
-    #     )
-    #     self._yfinance_kwargs.clear()
-    #     return df
 
-
-    ###
-    # Functions using yfinance for convenience
-    ###
-    def get_option_expirations(self, symbol: str) -> tuple[str]:
+    ##############################################################################################
+    # EXTEND: Functions using yfinance for convenience
+    ##############################################################################################
+    def get_option_expirations(self, symbol: str) -> tuple[str, ...]:
         '''Get all available option expirations for a given symbol.'''
         ticker: Ticker = self.batch_api.Ticker(symbol)
-        expirations = ticker.options
+        expirations: tuple[str, ...] = cast(tuple[str, ...], ticker.options)
         return expirations
 
     # TODO: standardize the df? e.g. standardize column names, date format etc.
@@ -372,15 +338,20 @@ class YahooFinanceMarketFeed(YahooFinanceMixin, MarketFeed):
             expiration: e.g. '2024-12-13', it must be one of the values returned by `get_option_expirations`.
             option_type: 'CALL' or 'PUT'
         '''
+        import pandas as pd  # pyright: ignore[reportUnusedImport]
+        from pfeed.typing import GenericFrame  # pyright: ignore[reportUnusedImport]
         from pfeed._etl.base import convert_to_desired_df
+        from pfeed.config import get_config
+        
+        config = get_config()
         
         ticker: Ticker = self.batch_api.Ticker(symbol)
-        option_chain = ticker.option_chain(expiration)
+        option_chain = ticker.option_chain(expiration)  # pyright: ignore[reportUnknownMemberType]
         if option_type.upper() == 'CALL':
-            df = option_chain.calls
+            df: pd.DataFrame = cast(pd.DataFrame, option_chain.calls)
         elif option_type.upper() == 'PUT':
-            df = option_chain.puts
+            df: pd.DataFrame = cast(pd.DataFrame, option_chain.puts)
         else:
             raise ValueError(f"Invalid option type: {option_type}")
-        return convert_to_desired_df(df, config.data_tool)
+        return cast(GenericFrame, convert_to_desired_df(df, config.data_tool))  # pyright: ignore[reportArgumentType]
     

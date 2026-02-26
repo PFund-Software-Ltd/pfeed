@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Coroutine, AsyncGenerator
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import tDataSource, tDataCategory, GenericData
+    from collections.abc import Coroutine, AsyncGenerator
+    from pfeed.typing import GenericData
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.streaming.zeromq import ZeroMQ
 
@@ -68,7 +69,7 @@ class DataEngine:
     def backfill(self):
         raise NotImplementedError('Backfill is not implemented yet')
     
-    def add_feed(self, data_source: tDataSource, data_category: tDataCategory, **ray_kwargs) -> BaseFeed:
+    def add_feed(self, data_source: DataSource | str, data_category: DataCategory | str, **ray_kwargs) -> BaseFeed:
         '''
         Args:
             kwargs: kwargs for the data client to override the default params in the engine
@@ -85,7 +86,7 @@ class DataEngine:
         self._feeds.append(feed)
         return feed
     
-    def get_feeds(self, data_source: tDataSource | None=None, data_category: tDataCategory | None=None) -> list[BaseFeed]:
+    def get_feeds(self, data_source: DataSource | str | None=None, data_category: DataCategory | str | None=None) -> list[BaseFeed]:
         """Filter feeds by source and/or category"""
         filtered_feeds = self._feeds
         if data_source:

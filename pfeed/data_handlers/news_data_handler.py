@@ -57,7 +57,7 @@ class NewsDataHandler(TimeBasedDataHandler):
         df, metadata = super().read(**io_options)
         if df is not None:
             # NOTE: fill null with empty string, otherwise concat will fail when column A in df1 is of type String and column A in df2 is of type null
-            nullable_columns = ['product', 'author', 'exchange', 'symbol']
+            nullable_columns = ['author', 'exchange', 'symbol']
             for col in nullable_columns:
                 if col in df.columns:
                     df = df.with_columns(pl.col(col).cast(pl.String))

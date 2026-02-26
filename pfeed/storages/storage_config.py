@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator, Field
 
+from pfeed.utils.file_path import FilePath
 from pfeed.enums import DataStorage, DataLayer, IOFormat, Compression
 
 
@@ -11,7 +12,7 @@ class StorageConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
     storage: DataStorage | str = DataStorage.LOCAL
-    data_path: Path | str | None = Field(default=None, validate_default=True)
+    data_path: FilePath | Path | str | None = Field(default=None, validate_default=True)
     data_layer: DataLayer | str = DataLayer.CLEANED
     data_domain: str=''
     io_format: IOFormat | str = IOFormat.PARQUET
@@ -26,14 +27,15 @@ class StorageConfig(BaseModel):
     
     @field_validator('data_path', mode='before')
     @classmethod
-    def create_data_path(cls, v: Path | str | None) -> Path:
-        from pfeed import get_config
-        config = get_config()
+    def create_data_path(cls, v: FilePath | Path | str | None) -> FilePath:
         if v is None:
-            return config.data_path
-        if isinstance(v, str):
-            return Path(v)
-        return v
+            from pfeed import get_config
+            config = get_config()
+            return FilePath(config.data_path)
+        elif not isinstance(v, FilePath):
+            return FilePath(v)
+        else:
+            return v
     
     @field_validator('data_layer', mode='before')
     @classmethod

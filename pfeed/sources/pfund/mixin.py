@@ -5,5 +5,5 @@ class PFundMixin:
     data_source: PFundSource
 
     @staticmethod
-    def _create_data_source(*args, **kwargs) -> PFundSource:
+    def _create_data_source() -> PFundSource:
         return PFundSource()

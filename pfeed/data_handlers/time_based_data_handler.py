@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pfeed.utils.file_path import FilePath
 
 import datetime
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
 import polars as pl
 import pyarrow as pa
@@ -35,15 +35,15 @@ class TimeBasedMetadata(BaseMetadata):
     #     description="Dates within the requested data period where no data exists at the source (e.g. non-trading days, holidays)."
     # )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             "missing_dates_in_storage": self.missing_dates_in_storage,
         }
 
 
-class TimeBasedDataHandler(BaseDataHandler):
-    PARTITION_COLUMNS = ["year", "month", "day"]  # used by e.g. Delta Lake for partitioning
+class TimeBasedDataHandler(BaseDataHandler, ABC):
+    PARTITION_COLUMNS: ClassVar[list[str]] = ["year", "month", "day"]  # used by e.g. Delta Lake for partitioning
 
     def __init__(
         self,
@@ -84,7 +84,7 @@ class TimeBasedDataHandler(BaseDataHandler):
         else:
             raise ValueError(f"Streaming is not supported for {self._io.name}")
 
-    def write(self, data: GenericFrame | StreamingData, streaming: bool = False, **io_kwargs):
+    def write(self, data: GenericFrame | StreamingData, streaming: bool = False, **io_kwargs: Any):
         if streaming:
             self._write_stream(data)
         else:
@@ -148,7 +148,7 @@ class TimeBasedDataHandler(BaseDataHandler):
     def _requires_partitioning(self) -> bool:
         return self._io.name == 'DeltaLakeIO'
 
-    def _write_batch(self, df: GenericFrame, **io_kwargs):
+    def _write_batch(self, df: GenericFrame, **io_kwargs: Any):
         import pandas as pd
         from pandas.api.types import is_datetime64_ns_dtype
         from pfeed._etl.base import convert_to_desired_df

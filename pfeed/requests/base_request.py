@@ -1,6 +1,8 @@
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
-from pfeed.enums import ExtractType
+from pfeed.enums import ExtractType, DataLayer
 from pfeed.storages.storage_config import StorageConfig
 
 
@@ -31,3 +33,8 @@ class BaseRequest(BaseModel):
 
     def is_streaming(self) -> bool:
         return False
+
+    def model_post_init(self, __context: Any) -> None:
+        super().model_post_init(__context)
+        if self.storage_config and self.extract_type != ExtractType.retrieve:
+            self.clean_data = self.storage_config.data_layer != DataLayer.RAW

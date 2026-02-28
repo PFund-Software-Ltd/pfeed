@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, TYPE_CHECKING, Any
+from typing import Callable, TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from collections.abc import Awaitable
     from pfeed.feeds.streaming_feed_mixin import ChannelKey, WebSocketName, Message
@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.typing import GenericData
     from pfeed.data_handlers.base_data_handler import BaseMetadata
+    from pfeed.streaming.zeromq import ZeroMQ
 
 import logging    
 import asyncio
@@ -15,12 +16,12 @@ import inspect
 
 from pfeed.enums.extract_type import ExtractType
 
-
 class Faucet:
     '''Faucet is the starting point of a dataflow
     It contains a data model and a flow function to perform the extraction.
     '''
-    STREAMING_QUEUE_MAXSIZE = 1000
+    STREAMING_QUEUE_MAXSIZE: ClassVar[int] = 1000
+
     def __init__(
         self, 
         extract_func: Callable[..., Any],  # e.g. _download_impl(), _stream_impl(), _retrieve_impl(), _fetch_impl()
@@ -37,13 +38,18 @@ class Faucet:
         if self.extract_type == ExtractType.stream:
             assert close_stream is not None, 'close_stream is required for streaming'
         self._data_model: BaseDataModel | None = data_model
+        if data_model is not None:
+            self._logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
+        else:
+            self._logger = logging.getLogger('pfeed')
         self._extract_func = extract_func
         self._close_stream = close_stream
         self._is_stream_opened = False
         self._streaming_queue: asyncio.Queue[tuple[WebSocketName, Message] | None] | None = None
         self._user_streaming_callback: Callable[[WebSocketName, Message], Awaitable[None] | None] | None = None
         self._streaming_bindings: dict[ChannelKey, DataFlow] = {}
-        self._logger: logging.Logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
+        self._msg_queue: ZeroMQ | None = None
+        self._stream_workers: list[str] = []
     
     def __str__(self):
         return f'{self.data_source.name}.{self.extract_type}'
@@ -72,6 +78,22 @@ class Faucet:
             data = self._extract_func(self.data_model)
         return data, metadata
     
+    def _setup_messaging(self):
+        import zmq
+        from pfeed.streaming.zeromq import ZeroMQ
+        self._msg_queue = ZeroMQ(
+            name='Faucet',
+            logger=self._logger, 
+            sender_type=zmq.ROUTER,  # pyright: ignore[reportArgumentType]
+        )
+        self._msg_queue.bind(self._msg_queue.sender)  # pyright: ignore[reportUnknownMemberType]
+    
+    def add_stream_worker(self, worker_name: str):
+        if not self._stream_workers:
+            self._setup_messaging()
+        if worker_name not in self._stream_workers:
+            self._stream_workers.append(worker_name)
+    
     async def open_stream(self):
         # NOTE: streaming dataflows share the same faucet, so we only need to start the extraction once
         if not self._is_stream_opened:
@@ -90,6 +112,10 @@ class Faucet:
             self._streaming_queue = None
             self._user_streaming_callback = None
             self._streaming_bindings.clear()
+        if self._msg_queue:
+            self._msg_queue.terminate(target_identities=self._stream_workers)
+            self._msg_queue = None
+            self._stream_workers.clear()
     
     async def _streaming_callback(self, ws_name: WebSocketName, msg: Message, channel_key: ChannelKey | None) -> None:
         # NOTE: only send raw data (not transformed) to user callback and streaming queue

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, Callable, TypeAlias
 if TYPE_CHECKING:
     from collections.abc import Awaitable
     from pfund.datas.resolution import Resolution
@@ -13,7 +13,7 @@ from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
 from pfund.entities.products.product_bybit import BybitProduct
 
 
-ChannelKey = tuple[ProductCategory, FullDataChannel]
+ChannelKey: TypeAlias = tuple['ProductCategory', FullDataChannel]
 
 
 class StreamAPI:
@@ -38,7 +38,8 @@ class StreamAPI:
     def add_channel(self, data_model: BybitMarketDataModel) -> ChannelKey:
         product: BybitProduct = data_model.product
         resolution: Resolution = data_model.resolution
-        category: ProductCategory = cast(ProductCategory, product.category)
+        category = product.category
+        assert category is not None, 'product.category is not initialized'
         channel: FullDataChannel = self._ws_api._create_public_channel(product, resolution)
         self._ws_api.add_channel(channel, channel_type='public', category=category)
         channel_key: ChannelKey = self.generate_channel_key(category, channel)

@@ -2,13 +2,14 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Coroutine, Iterator
     import pandas as pd
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
     from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
     from pfund.datas.resolution import Resolution
     from pfeed.streaming.streaming_message import StreamingMessage
+    from pfeed.feeds.streaming_feed_mixin import WebSocketName, Message, ChannelKey
     from pfeed.enums import DataSource
     from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
     from pfeed.typing import GenericFrame
@@ -20,8 +21,7 @@ from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfeed.config import setup_logging, get_config
-from pfeed.streaming import BarMessage, TickMessage
-from pfeed.enums import MarketDataType, DataLayer, DataTool, StreamMode, DataCategory
+from pfeed.enums import MarketDataType, DataTool, StreamMode, DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
@@ -214,7 +214,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             end_date=end_date,
             data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
-            clean_data=storage_config.data_layer != DataLayer.RAW if storage_config else clean_data,
+            clean_data=clean_data,
         )
         self._create_batch_dataflows(extract_func=self._download_impl)
         # NOTE: update the data model in faucet to the data resolution
@@ -402,9 +402,9 @@ class MarketFeed(TimeBasedFeed, ABC):
         # no resampling (or no data found) → single dataflow with one scan_parquet
         if dataflow_per_date is None:
             dataflow_per_date = stored_resolution is not None and stored_resolution != resolution
-            if dataflow_per_date and self._num_batch_workers is None:
+            if dataflow_per_date and self._num_workers is None:
                 cprint(
-                    'dataflow_per_date is True but num_batch_workers is None, Ray is NOT being used, retrieving data will be done sequentially', 
+                    'dataflow_per_date is True but num_workers is None, Ray is NOT being used, retrieving data will be done sequentially', 
                     style=TextStyle.BOLD + RichColor.YELLOW
                 )
         self._current_request = MarketFeedRetrieveRequest(
@@ -479,6 +479,9 @@ class MarketFeed(TimeBasedFeed, ABC):
         product: str,
         resolution: Resolution | MarketDataType | str,
         symbol: str='',
+        rollback_period: Resolution | str | Literal['ytd', 'max']='7d',
+        start_date: datetime.date | str='',
+        end_date: datetime.date | str='',
         callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None=None,
         data_origin: str='',
         env: Environment | str=Environment.LIVE,
@@ -488,23 +491,48 @@ class MarketFeed(TimeBasedFeed, ABC):
         storage_config: StorageConfig | None=None,
         **product_specs: Any
     ) -> MarketFeed | None:
-        '''
+        '''Stream market data, either live or by replaying historical data.
+
+        When `start_date`, `end_date`, or `rollback_period` is provided, the stream replays
+        historical data for the specified date range before continuing with live data.
+        When none are provided, only live data is streamed starting from today.
+
         Args:
-            stream_mode: SAFE or FAST
-                if "FAST" is chosen, streaming data will be cached to memory to a certain amount before writing to disk,
-                faster write speed, but data loss risk will increase.
-                if "SAFE" is chosen, streaming data will be written to disk immediately,
-                slower write speed, but data loss risk will be minimized.
+            product: Financial product, e.g. BTC_USDT_PERP, AAPL_USD_STK.
+                Details of specifications should be specified in `product_specs`.
+            resolution: Data resolution, e.g. '1m', '1h', 'tick'.
+            symbol: Symbol used by the data source. If not specified, derived from `product`.
+                Note that the derived symbol might NOT be correct, in that case, specify it manually.
+            rollback_period: Period to rollback from today for historical replay.
+                Only used when `start_date` is not specified. Default is '1d'.
+                Accepts a resolution string (e.g. '7d'), 'ytd' (year to date), or 'max'.
+            start_date: Start date for historical replay.
+                If not specified, `rollback_period` is used to determine the start date.
+            end_date: End date for historical replay. If not specified, uses today's date.
+            callback: Async or sync callable invoked for each incoming message.
+                Receives the raw message dict. If None, messages are handled by the default pipeline.
+            data_origin: Origin label for the data, used to distinguish data from different sources.
+            env: Trading environment. Cannot be BACKTEST. Default is LIVE.
+            stream_mode: SAFE or FAST.
+                If FAST, streaming data is cached in memory before writing to disk —
+                faster write speed but higher data loss risk on crash.
+                If SAFE, streaming data is written to disk immediately —
+                slower write speed but minimal data loss risk.
             flush_interval: Interval in seconds for flushing buffered streaming data to storage. Default is 100 seconds.
                 If using deltalake:
-                Frequent flushes will reduce write performance and generate many small files 
+                Frequent flushes reduce write performance and generate many small files
                 (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
                 Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
-                This is expected to be fine-tuned based on the actual use case.
-            clean_data: Whether to clean raw data after download.
+                Fine-tune based on your actual use case.
+            clean_data: Whether to clean raw streaming data.
                 If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
-                If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
-                If False, downloaded raw data will be returned as is.
+                If True, raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
+                If False, raw data will be passed through as is.
+            storage_config: Storage configuration.
+                If None, streamed data will NOT be persisted to storage.
+                If provided, streamed data will be stored according to the storage config.
+            product_specs: Additional product specifications (e.g. strike_price, expiration for options).
+                E.g. stream(product='BTC_USDT_OPT', strike_price=10000, expiration='2024-01-01', option_type='CALL').
         '''
         from pfund_kit.utils.temporal import get_utc_now
         from pfeed.requests import MarketFeedStreamRequest
@@ -514,25 +542,39 @@ class MarketFeed(TimeBasedFeed, ABC):
         setup_logging(env=env)
         self.data_source.create_stream_api(env=env)
         product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
+        if any([start_date, end_date, rollback_period]):
+            start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
+        else:
+            today = get_utc_now().date()
+            start_date = end_date = today
         resolution: Resolution = self.create_resolution(resolution)
-        today = get_utc_now().date()
         self._current_request = MarketFeedStreamRequest(
             storage_config=storage_config,
             env=env,
             product=product,
             target_resolution=resolution,
-            start_date=today,
-            end_date=today,
+            start_date=start_date,
+            end_date=end_date,
             data_origin=data_origin,
-            clean_data=storage_config.data_layer != DataLayer.RAW if storage_config else clean_data,
+            clean_data=clean_data,
             stream_mode=stream_mode,
             flush_interval=flush_interval,
         )
         self._create_stream_dataflows(callback=callback)  # pyright: ignore[reportAttributeAccessIssue]
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
     
+    async def _stream_impl(
+        self, 
+        faucet_callback: Callable[[WebSocketName, Message, ChannelKey | None], Coroutine[Any, Any, None]]  # pyright: ignore[reportUnusedParameter]
+    ) -> None:
+        raise NotImplementedError(f'{self.name} _stream_impl() is not implemented')
+
+    async def _close_stream(self) -> None:
+        raise NotImplementedError(f'{self.name} _close_stream() is not implemented')
+    
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _get_default_transformations_for_stream(self) -> list[Callable[..., Any]]:
+        from itertools import count
         from pfeed.utils import lambda_with_name
         from pfeed.requests import MarketFeedStreamRequest
         default_transformations: list[Callable[..., Any]] = []
@@ -540,54 +582,62 @@ class MarketFeed(TimeBasedFeed, ABC):
         if request.clean_data:
             # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
             data_source: DataSource = self.data_source.name
+            tick_counter = count()
             default_transformations.append(
                 lambda_with_name(
-                    'standardize_message', 
+                    'standardize_message',
                     lambda msg: MarketFeed._standardize_message(
-                        data_source=data_source, 
-                        product=request.product, 
-                        resolution=request.target_resolution, 
-                        msg=msg
+                        data_source=data_source,
+                        product=request.product,
+                        resolution=request.target_resolution,
+                        msg=msg,
+                        tick_counter=tick_counter,
                     )
                 ),
             )
         return default_transformations
     
     @staticmethod
-    def _standardize_message(data_source: DataSource, product: BaseProduct, resolution: Resolution, msg: dict[str, Any]) -> StreamingMessage:
+    def _standardize_message(
+        data_source: DataSource, 
+        product: BaseProduct, 
+        resolution: Resolution, 
+        msg: dict[str, Any], 
+        tick_counter: Iterator[int] | None = None
+    ) -> StreamingMessage:
+        from msgspec import convert
+        from pfeed.streaming import BarMessage, TickMessage
+        common = {
+            'data_source': data_source.value,
+            'product': product.name,
+            'basis': str(product.basis),
+            'symbol': product.symbol,
+            'specs': product.specs,
+            'resolution': repr(resolution),
+            'extra_data': msg.get('extra_data', {}),
+        }
         if resolution.is_tick():
             data: dict[str, Any] = msg['data']
-            message = TickMessage(
-                data_source=data_source.value,
-                product=product.name,
-                basis=str(product.basis),
-                symbol=product.symbol,
-                specs=product.specs,
-                resolution=repr(resolution),
-                ts=data['ts'],
-                price=data['price'],
-                volume=data['volume'],
-                extra_data=msg.get('extra_data', {}),
-            )
+            message = convert({
+                **common,
+                'index': next(tick_counter) if tick_counter is not None else 0,
+                'ts': data['ts'],
+                'price': data['price'],
+                'volume': data['volume'],
+            }, TickMessage)
         elif resolution.is_bar():
             data: dict[str, Any] = msg['data']
-            message = BarMessage(
-                data_source=data_source.value,
-                product=product.name,
-                basis=str(product.basis),
-                symbol=product.symbol,
-                specs=product.specs,
-                resolution=repr(resolution),
-                msg_ts=msg['ts'],
-                ts=data['ts'],
-                open=data['open'],
-                high=data['high'],
-                low=data['low'],
-                close=data['close'],
-                volume=data['volume'],
-                extra_data=msg.get('extra_data', {}),
-                is_incremental=msg['is_incremental'],
-            )
+            message = convert({
+                **common,
+                'msg_ts': msg['ts'],
+                'ts': data['ts'],
+                'open': data['open'],
+                'high': data['high'],
+                'low': data['low'],
+                'close': data['close'],
+                'volume': data['volume'],
+                'is_incremental': msg['is_incremental'],
+            }, BarMessage)
         else:
             raise NotImplementedError(f'{product.symbol} {resolution} is not supported')
         return message

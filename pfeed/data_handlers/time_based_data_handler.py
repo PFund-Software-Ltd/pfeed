@@ -70,13 +70,17 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
     def _create_file_path(self, date: datetime.date) -> FilePath:
         pass
 
-    def create_stream_buffer(self, mode: StreamMode, flush_interval: int):
+    def create_stream_buffer(self, stream_mode: StreamMode, flush_interval: int):
         if self._is_streaming_io():
             # EXTEND: only support deltalake_io for now
             if self._is_table_io():
                 buffer_path = self._table_path
+                assert buffer_path is not None, 'buffer_path is required for table io'
                 self._stream_buffer = StreamBuffer(
-                    self._io, buffer_path, mode=mode, flush_interval=flush_interval
+                    io=self._io, 
+                    buffer_path=buffer_path, 
+                    stream_mode=stream_mode, 
+                    flush_interval=flush_interval
                 )
             # TODO: writing streaming data to database is not supported yet
             else:
@@ -137,12 +141,14 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
 
     # EXTEND: currently only supports writing for parquet+deltalake (using .arrow for buffering)
     def _write_stream(self, data: StreamingData):
-        data = self._standardize_streaming_msg(data)
-        self._stream_buffer.write(
-            data,
-            metadata=self._data_model.to_metadata(),
-            partition_by=self.PARTITION_COLUMNS,
-        )
+        # TODO: check to ensure data is not raw
+        print(f'***WRITE STREAM GOT*** {data}')
+        # data =I self._standardize_streaming_msg(data)
+        # self._stream_buffer.write(
+        #     data,
+        #     metadata=self._data_model.to_metadata(),
+        #     partition_by=self.PARTITION_COLUMNS,
+        # )
     
     # FIXME: currently hardcoded for deltalake_io, need to generalize
     def _requires_partitioning(self) -> bool:
@@ -286,7 +292,7 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
             ],
         )
 
-    def read(self, **io_kwargs) -> pl.LazyFrame | None:
+    def read(self, **io_kwargs: Any) -> pl.LazyFrame | None:
         lf: pl.LazyFrame | None = None
         if self._is_file_io():
             lf = self._io.read(file_paths=self._file_paths, **io_kwargs)

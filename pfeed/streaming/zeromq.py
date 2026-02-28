@@ -130,15 +130,6 @@ class ZeroMQ:
         assert self._receiver, 'receiver is not initialized'
         return self._receiver
     
-    def set_target_identity(self, identity: str):
-        assert self._sender, 'sender is not initialized'
-        if self._sender.socket_type != zmq.ROUTER:
-            raise ValueError(
-                f'set_target_identity() is only supported for ROUTER socket, '
-                f'but sender socket type is {self._sender.socket_type.name}'
-            )
-        self._target_identity = identity.encode()
-    
     def get_addresses_in_use(self, socket: zmq.Socket) -> list[str]:
         return self._socket_addresses[socket]
     
@@ -154,6 +145,10 @@ class ZeroMQ:
         assert isinstance(socket, zmq.Socket), f'{socket=} is not a zmq.Socket'
         assert socket in self._socket_methods, f'{socket=} has not been initialized'
         assert self._socket_methods[socket] == socket_method, f'{socket=} registered with socket_method={self._socket_methods[socket]}'
+        
+    def _is_sender_support_target_identity(self) -> bool:
+        # EXTEND: only ROUTER socket supports target identity for now
+        return self.sender.socket_type == zmq.ROUTER
     
     def bind(self, socket: zmq.Socket, port: int | None=None, url: str=DEFAULT_URL):
         '''Binds a socket which uses bind method to a port.'''
@@ -191,10 +186,14 @@ class ZeroMQ:
         if address in self._socket_addresses[socket]:
             self._socket_addresses[socket].remove(address)
     
-    def terminate(self):
+    def terminate(self, target_identities: list[str] | None=None):
         # send STOP signal to notice listeners, which probably have a while True loop running
         if self._sender:
-            self.send(channel=ZeroMQDataChannel.signal, topic=self.sender_name, data=ZeroMQSignal.STOP)
+            if target_identities and self._is_sender_support_target_identity():
+                for target_identity in target_identities:
+                    self.send(channel=ZeroMQDataChannel.signal, topic=self.sender_name, data=ZeroMQSignal.STOP, target_identity=target_identity)
+            else:
+                self.send(channel=ZeroMQDataChannel.signal, topic=self.sender_name, data=ZeroMQSignal.STOP)
         
         if self._poller and self._receiver:
             self._poller.unregister(self._receiver)
@@ -214,7 +213,7 @@ class ZeroMQ:
         # terminate context
         self._ctx.term()
 
-    def send(self, channel: str, topic: str, data: Any) -> None:
+    def send(self, channel: str, topic: str, data: Any, target_identity: str | None=None) -> None:
         '''
         Sends message to receivers
         Args:
@@ -224,9 +223,8 @@ class ZeroMQ:
         try:
             msg_ts = time.time()
             msg = [channel.encode(), topic.encode(), self._encoder.encode(data), self._encoder.encode(msg_ts)]
-            # REVIEW: currently only used for ROUTER socket
-            if self._sender.socket_type == zmq.ROUTER:
-                msg.insert(0, self._target_identity)
+            if target_identity and self._is_sender_support_target_identity():
+                msg.insert(0, target_identity.encode())
             self._sender.send_multipart(msg, zmq.NOBLOCK)
         except zmq.error.Again:  # raised when send queue is full and using zmq.NOBLOCK
             hwm = self._sender.getsockopt(zmq.SNDHWM)

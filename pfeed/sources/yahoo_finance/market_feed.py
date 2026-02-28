@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
-    from collections.abc import Coroutine
+    from collections.abc import Coroutine, Awaitable
     import pandas as pd
     from yfinance import Ticker
     from pfund.datas.resolution import Resolution
@@ -13,10 +13,12 @@ if TYPE_CHECKING:
 import time
 import datetime
 
+from pfund.enums import Environment
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 from pfeed.feeds.market_feed import MarketFeed
 from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin, WebSocketName, Message, ChannelKey
+from pfeed.enums import MarketDataType, StreamMode
 
 
 __all__ = ["YahooFinanceMarketFeed"]
@@ -234,6 +236,85 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         self._yfinance_kwargs.clear()
         return df
     
+    def stream(
+        self,
+        product: str,
+        resolution: Resolution | MarketDataType | str='1tick',
+        symbol: str='',
+        rollback_period: Resolution | str | Literal['ytd', 'max']='7d',
+        start_date: datetime.date | str='',
+        end_date: datetime.date | str='',
+        callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None=None,
+        data_origin: str='',
+        env: Environment | str=Environment.LIVE,
+        stream_mode: StreamMode | str=StreamMode.FAST,
+        flush_interval: int=100,  # in seconds
+        clean_data: bool=True,
+        storage_config: StorageConfig | None=None,
+        **product_specs: Any
+    ) -> MarketFeed | None:
+        '''Stream market data, either live or by replaying historical data.
+
+        When `start_date`, `end_date`, or `rollback_period` is provided, the stream replays
+        historical data for the specified date range before continuing with live data.
+        When none are provided, only live data is streamed starting from today.
+
+        Args:
+            product: Financial product, e.g. BTC_USDT_PERP, AAPL_USD_STK.
+                Details of specifications should be specified in `product_specs`.
+            resolution: Data resolution, e.g. '1m', '1h', 'tick'.
+            symbol: Symbol used by the data source. If not specified, derived from `product`.
+                Note that the derived symbol might NOT be correct, in that case, specify it manually.
+            rollback_period: Period to rollback from today for historical replay.
+                Only used when `start_date` is not specified. Default is '1d'.
+                Accepts a resolution string (e.g. '7d'), 'ytd' (year to date), or 'max'.
+            start_date: Start date for historical replay.
+                If not specified, `rollback_period` is used to determine the start date.
+            end_date: End date for historical replay. If not specified, uses today's date.
+            callback: Async or sync callable invoked for each incoming message.
+                Receives the raw message dict. If None, messages are handled by the default pipeline.
+            data_origin: Origin label for the data, used to distinguish data from different sources.
+            env: Trading environment. Cannot be BACKTEST. Default is LIVE.
+            stream_mode: SAFE or FAST.
+                If FAST, streaming data is cached in memory before writing to disk —
+                faster write speed but higher data loss risk on crash.
+                If SAFE, streaming data is written to disk immediately —
+                slower write speed but minimal data loss risk.
+            flush_interval: Interval in seconds for flushing buffered streaming data to storage. Default is 100 seconds.
+                If using deltalake:
+                Frequent flushes reduce write performance and generate many small files
+                (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
+                Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
+                Fine-tune based on your actual use case.
+            clean_data: Whether to clean raw streaming data.
+                If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
+                If True, raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
+                If False, raw data will be passed through as is.
+            storage_config: Storage configuration.
+                If None, streamed data will NOT be persisted to storage.
+                If provided, streamed data will be stored according to the storage config.
+            product_specs: Additional product specifications (e.g. strike_price, expiration for options).
+                E.g. stream(product='BTC_USDT_OPT', strike_price=10000, expiration='2024-01-01', option_type='CALL').
+        '''
+        if rollback_period == 'max' and not start_date:
+            start_date, end_date, rollback_period = self._handle_rollback_max_period(resolution, start_date, end_date)
+        return super().stream(
+            product=product,
+            resolution=resolution,
+            symbol=symbol,
+            rollback_period=rollback_period,
+            start_date=start_date,
+            end_date=end_date,
+            callback=callback,
+            data_origin=data_origin,
+            env=env,
+            stream_mode=stream_mode,
+            flush_interval=flush_interval,
+            clean_data=clean_data,
+            storage_config=storage_config,
+            **product_specs
+        )
+        
     async def _stream_impl(
         self, 
         faucet_callback: Callable[[WebSocketName, Message, ChannelKey | None], Coroutine[Any, Any, None]]
@@ -252,10 +333,9 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         from pfeed.utils import lambda_with_name
         from pfeed.requests import MarketFeedStreamRequest
         request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
-        default_transformations = super()._get_default_transformations_for_stream()
+        default_transformations = MarketFeed._get_default_transformations_for_stream(self)
         # since Ray can't serialize the "self" in self._parse_message, disable it for now
-        # REVIEW
-        assert self._num_stream_workers is None, "Transformations in Yahoo Finance streaming data is not supported with Ray"
+        assert self._num_workers is None, "Transformations in Yahoo Finance streaming data is not supported with Ray"
         if request.clean_data:
             default_transformations = [
                 lambda_with_name(

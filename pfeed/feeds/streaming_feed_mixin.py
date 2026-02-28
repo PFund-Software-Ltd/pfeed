@@ -1,21 +1,22 @@
-# pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false
+# pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false, reportUnknownArgumentType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, Callable, Literal, Any, cast
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable
+    from pfeed.engine import DataEngine
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing import StreamingData, GenericData
     from pfeed.dataflow.sink import Sink
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
-    from pfeed.requests.market_feed_stream_request import MarketFeedStreamRequest
     from pfeed.feeds.market_feed import MarketFeed
 
 import asyncio
 from collections import defaultdict
 
 from pfund_kit.style import cprint, TextStyle, RichColor
+from pfeed.requests.market_feed_stream_request import MarketFeedStreamRequest
 
 
 WebSocketName: TypeAlias = str
@@ -25,25 +26,22 @@ DataFlowName: TypeAlias = str
 ChannelKey: TypeAlias = str | tuple[str, str]
 
 
+def _create_worker_name(worker_num: int) -> str:
+    return f'worker-{worker_num}'
+
+
 # EXTEND: only support market feed for now, if need to support other feeds, fix MarketFeedStreamRequest and MarketDataModel
 class StreamingFeedMixin:
-    def stream(self, *args: Any, **kwargs: Any) -> MarketFeed | None:
-        raise NotImplementedError(f'{self.name} stream() is not implemented')
-    
-    def _stream_impl(self, data_model: MarketDataModel):
-        raise NotImplementedError(f'{self.name} _stream_impl() is not implemented')
+    _engine: DataEngine | None = None
 
-    def _close_stream(self):
-        raise NotImplementedError(f'{self.name} _close_stream() is not implemented')
-    
-    def _get_default_transformations_for_stream(self, *args: Any, **kwargs: Any) -> list[Callable[..., Any]]:
-        raise NotImplementedError(f'{self.name} _get_default_transformations_for_stream() is not implemented')
+    def _set_engine(self, engine: DataEngine) -> None:
+        self._engine = engine
 
     @property
     def streaming_dataflows(self) -> list[DataFlow]:
         return [dataflow for dataflow in self._dataflows if dataflow.is_streaming()]  # pyright: ignore[reportUnknownVariableType]
     
-    def __aiter__(self) -> AsyncGenerator:
+    def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, Message], None]:
         if not self.streaming_dataflows:
             raise RuntimeError("No streaming dataflow to iterate over")
         # get the first dataflow, doesn't matter, they share the same faucet
@@ -57,18 +55,16 @@ class StreamingFeedMixin:
                     try:
                         msg = await queue.get()
                     except asyncio.CancelledError:
-                        producer.cancel()
+                        _ = producer.cancel()
                         break
-                    # FIXME: use another sentinel than just None
                     if msg is None:          # sentinel from faucet.close_stream()
                         break
                     yield msg
-                await producer
         return _iter()
     
     def _create_stream_dataflows(
         self,
-        callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None=None,
+        callback: Callable[[WebSocketName, Message], Awaitable[None] | None] | None=None,
     ) -> None | MarketFeed:
         from pfeed.data_models.market_data_model import MarketDataModel  # pyright: ignore[reportUnusedImport]
         from pfeed.dataflow.faucet import Faucet  # pyright: ignore[reportUnusedImport]
@@ -106,12 +102,13 @@ class StreamingFeedMixin:
                 await asyncio.gather(*[dataflow.run_stream(flow_type='native') for dataflow in self._dataflows])
             except asyncio.CancelledError:
                 self.logger.warning(f'{self.name} dataflows were cancelled, ending streams...')
+            finally:
                 await asyncio.gather(*[dataflow.end_stream() for dataflow in self._dataflows])
-                    
 
         self._prepare_before_run()
 
-        if self._num_stream_workers:
+        is_using_ray = bool(self._num_workers)
+        if is_using_ray:
             import ray
             from ray.util.queue import Queue
             from pfeed.utils.ray import shutdown_ray, setup_logger_in_ray_task, ray_logging_context
@@ -125,9 +122,9 @@ class StreamingFeedMixin:
                 log_queue: Queue,
                 feed_name: str,
                 worker_name: str,
-                transformations_per_dataflow: dict[DataFlowName, list[Callable]],
+                transformations_per_dataflow: dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]],
                 sinks_per_dataflow: dict[DataFlowName, Sink],
-                ports_to_connect: dict[Literal['sender', 'receiver'], list[int]],
+                ports_to_connect: dict[Literal['sender', 'receiver'], set[int]],
                 ready_queue: Queue,
             ):
                 logger = setup_logger_in_ray_task(logger_name, log_queue)
@@ -137,8 +134,8 @@ class StreamingFeedMixin:
                     msg_queue = ZeroMQ(
                         name=f'{feed_name}.stream.{worker_name}',
                         logger=logger,
-                        sender_type=zmq.PUSH,
-                        receiver_type=zmq.DEALER,
+                        sender_type=zmq.PUSH,  # pyright: ignore[reportArgumentType]
+                        receiver_type=zmq.DEALER,  # pyright: ignore[reportArgumentType]
                         sender_method='connect',
                     )
                     msg_queue.receiver.setsockopt(zmq.IDENTITY, worker_name.encode())
@@ -148,7 +145,6 @@ class StreamingFeedMixin:
 
                     ready_queue.put(worker_name)
                     is_data_engine_running = 'sender' in ports_to_connect
-                    num_senders = len(msg_queue.get_ports_in_use(msg_queue.receiver))
                     while True:
                         msg = msg_queue.recv()
                         if msg is None:
@@ -157,12 +153,9 @@ class StreamingFeedMixin:
                         if channel == ZeroMQDataChannel.signal:
                             signal: ZeroMQSignal = data
                             if signal == ZeroMQSignal.STOP:
-                                sender_name = topic
-                                num_senders -= 1
-                                logger.debug(f'Ray {worker_name} received STOP signal from {sender_name}, {num_senders} senders left')
-                                if num_senders == 0:
-                                    logger.debug(f'Ray {worker_name} received STOP signals from all senders, terminating')
-                                    break
+                                # sender_name = topic
+                                logger.debug(f'Ray {worker_name} received STOP signal, terminating...')
+                                break
                         else:
                             dataflow_name, data = data
                             transformations = transformations_per_dataflow[dataflow_name]
@@ -179,41 +172,41 @@ class StreamingFeedMixin:
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
             
+            num_workers = min(self._num_workers, len(self._dataflows))
+            futures: list[ray.ObjectRef[None]] = []
             with ray_logging_context(self.logger) as log_queue:
                 try:
-                    num_workers = min(self._num_stream_workers, len(self._dataflows))
-                    
                     # Distribute dataflows' transformations across workers
-                    def _create_worker_name(worker_num: int) -> str:
-                        return f'worker-{worker_num}'
-                    transformations_per_worker: dict[WorkerName, dict[DataFlowName, list[Callable]]] = defaultdict(dict)
+                    transformations_per_worker: dict[
+                        WorkerName, 
+                        dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]]
+                    ] = defaultdict(dict)
                     sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
-                    ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], list[int]]] = defaultdict(lambda: defaultdict(list))
-                    for i, dataflow in enumerate(self._dataflows):
+                    ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], set[int]]] = defaultdict(lambda: defaultdict(set))
+                    for i, dataflow in enumerate(self._dataflows):  # pyright: ignore[reportUnknownVariableType]
                         worker_num: int = i % num_workers
                         worker_num += 1  # convert to 1-indexed, i.e. starting from 1
                         worker_name = _create_worker_name(worker_num)
-                        dataflow._setup_messaging(worker_name)
+                        dataflow.set_stream_worker(worker_name)
                         transformations_per_worker[worker_name][dataflow.name] = dataflow._transformations
                         sinks_per_worker[worker_name][dataflow.name] = dataflow._sink
                         # get ports in use for dataflow's ZMQ.ROUTER
-                        dataflow_zmq: ZeroMQ = dataflow._msg_queue
-                        ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)
-                        ports_to_connect[worker_name]['receiver'].extend(ports_in_use)
+                        dataflow_zmq: ZeroMQ = dataflow._msg_queue  # pyright: ignore[reportUnknownVariableType]
+                        ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)  # pyright: ignore[reportUnknownVariableType]
+                        ports_to_connect[worker_name]['receiver'].update(ports_in_use)
                         # get ports in use for engine's ZMQ.PULL
-                        # FIXME: this ties streaming dataflows to the data engine, decouple them?
                         if self._engine:
-                            engine_zmq: ZeroMQ = self._engine._msg_queue
+                            engine_zmq: ZeroMQ = cast(ZeroMQ, self._engine._msg_queue)
                             ports_in_use: list[int] = engine_zmq.get_ports_in_use(engine_zmq.receiver)
-                            ports_to_connect[worker_name]['sender'].extend(ports_in_use)
+                            ports_to_connect[worker_name]['sender'].update(ports_in_use)
 
                     worker_names = [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
                     ready_queue = Queue()  # let ray worker notify the main thread that it's ready to receive messages
 
                     # start ray workers
-                    futures = [
+                    futures = cast(list[ray.ObjectRef[None]], [
                         ray_task.remote(
-                            logger_name=self.logger.name,
+                            logger_name=self.logger.name,  # pyright: ignore[reportCallIssue]
                             log_queue=log_queue,
                             feed_name=self.name.value,
                             worker_name=worker_name,
@@ -222,7 +215,7 @@ class StreamingFeedMixin:
                             ports_to_connect=ports_to_connect[worker_name],
                             ready_queue=ready_queue,
                         ) for worker_name in worker_names
-                    ]
+                    ])
 
                     # wait for ray workers to be ready
                     timeout = 10
@@ -243,7 +236,7 @@ class StreamingFeedMixin:
                 except Exception:
                     self.logger.exception(f'Error in running {self.name} dataflows:')
             self.logger.debug('waiting for ray tasks to finish...')
-            ray.get(futures)
+            _ = ray.get(futures)
             self.logger.debug('shutting down ray...')
             shutdown_ray()
         else:

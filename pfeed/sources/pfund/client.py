@@ -22,13 +22,11 @@ class PFund(PFundMixin, DataClient):
         self, 
         env: Environment,
         pipeline_mode: bool=False,
-        num_batch_workers: int | dict[Literal['engine_feed', 'component_feed'], int] | None = None,
-        num_stream_workers: int | dict[Literal['engine_feed', 'component_feed'], int] | None = None,
+        num_workers: int | dict[Literal['engine_feed', 'component_feed'], int] | None = None,
     ):
         super().__init__(
             pipeline_mode=pipeline_mode,
-            num_batch_workers=num_batch_workers,
-            num_stream_workers=num_stream_workers,
+            num_workers=num_workers,
         )
         self._env = Environment[env.upper()]
     

@@ -38,13 +38,13 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
             - volume cast to float64
         '''
         # some products use "Buy"/"Sell" while some use "buy"/"sell"
-        df['side'] = df['side'].str.lower()    # pyright: ignore[reportUnknownMemberType]
+        df['side'] = df['side'].str.lower()
         MAPPING_COLS: dict[str, int] = {'buy': 1, 'sell': -1}
         RENAMING_COLS: dict[str, str] = {'size': 'volume'}
         df = df.rename(columns=RENAMING_COLS)
-        df['side'] = df['side'].map(MAPPING_COLS)  # pyright: ignore[reportArgumentType,reportUnknownMemberType]
+        df['side'] = df['side'].map(MAPPING_COLS)
         # Convert volume column to float64 to pass pandera schema validation, since inverse products have int volume
-        df["volume"] = df["volume"].astype("float64")  # pyright: ignore[reportUnknownMemberType]
+        df["volume"] = df["volume"].astype("float64")
         return df
     
     def download(
@@ -119,6 +119,13 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
                 category = ws_name.split('_')[1]
                 category = BybitProduct.ProductCategory[category.upper()]
                 channel_key: tuple[str, str] = self.stream_api.generate_channel_key(category, channel)
+                # NOTE: Bybit's tick (publicTrade) messages contain multiple trades in a single message,
+                # split them into individual messages so each tick flows through the pipeline separately
+                if channel.startswith('publicTrade') and isinstance(msg.get('data'), list):
+                    for item in msg['data']:
+                        individual_msg = {**msg, 'data': item}
+                        await faucet_callback(ws_name, individual_msg, channel_key)
+                    return
             else:
                 channel_key: tuple[str, str] | None = None
             await faucet_callback(ws_name, msg, channel_key)
@@ -132,7 +139,7 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
         from pfeed.utils import lambda_with_name
         from pfeed.requests import MarketFeedStreamRequest
         request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
-        default_transformations = super()._get_default_transformations_for_stream()
+        default_transformations = MarketFeed._get_default_transformations_for_stream(self)
         if request.clean_data:
             product: BybitProduct = cast(BybitProduct, request.product)
             default_transformations = [

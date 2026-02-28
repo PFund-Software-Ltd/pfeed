@@ -5,7 +5,7 @@ from msgspec import Meta
 from pfeed.streaming.streaming_message import StreamingMessage
 
 
-class BarMessage(StreamingMessage):
+class BarMessage(StreamingMessage, frozen=True):
     open: Annotated[float, Meta(gt=0)]
     high: Annotated[float, Meta(gt=0)]
     low: Annotated[float, Meta(gt=0)]

@@ -41,22 +41,18 @@ class BaseFeed(ABC):
     def __init__(
         self, 
         pipeline_mode: bool=False, 
-        num_batch_workers: int | None = None,
-        num_stream_workers: int | None = None,
+        num_workers: int | None = None,
     ):
         '''
         Args:
             pipeline_mode: whether to run in pipeline mode
-            num_batch_workers: number of Ray tasks to run the batch dataflows in parallel
-                when this is not None, Ray will be automatically initialized with the number of CPUs available if ray.init() hasn't been called yet
-            num_stream_workers: number of Ray tasks to run the streaming dataflows in parallel
+            num_workers: number of Ray tasks to run the batch/streaming dataflows in parallel
                 when this is not None, Ray will be automatically initialized with the number of CPUs available if ray.init() hasn't been called yet
         '''
         from pfeed.config import setup_logging
         setup_logging()
         self.data_source: DataProviderSource = self._create_data_source()
         self.logger: logging.Logger = logging.getLogger(f'pfeed.{self.name.lower()}')
-        self._engine: DataEngine | None = None
         self._pipeline_mode: bool = pipeline_mode
         self._dataflows: list[DataFlow] = []
         self._failed_dataflows: list[DataFlow] = []
@@ -65,9 +61,8 @@ class BaseFeed(ABC):
         self._current_request: BaseRequest | None = None
         self._storage_options: dict[DataStorage, dict[str, Any]] = {}
         self._io_options: dict[IOFormat, dict[str, Any]] = {}
-        self._num_batch_workers: int | None = num_batch_workers
-        self._num_stream_workers: int | None = num_stream_workers
-        if self._num_batch_workers or self._num_stream_workers:
+        self._num_workers: int | None = num_workers
+        if self._num_workers:
             from pfeed.utils.ray import setup_ray
             setup_ray()
             
@@ -112,9 +107,6 @@ class BaseFeed(ABC):
     def is_pipeline(self) -> bool:
         return self._pipeline_mode
     
-    def _set_engine(self, engine: DataEngine) -> None:
-        self._engine = engine
-
     @abstractmethod
     def download(self, *args: Any, **kwargs: Any) -> GenericData | None | BaseFeed:
         pass
@@ -271,8 +263,6 @@ class BaseFeed(ABC):
             **io_kwargs: specific io options for the given storage
                 e.g. in_memory, memory_limit, for DuckDBStorage
         '''
-        from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
-        
         # allowing passing in None is useful for dynamically determining if load() is needed
         if storage is None:
             return self
@@ -286,7 +276,7 @@ class BaseFeed(ABC):
             compression=compression,
         )
         
-        is_using_ray = self._num_batch_workers or self._num_stream_workers
+        is_using_ray = bool(self._num_workers)
         if is_using_ray:
             self._check_if_io_supports_parallel_writes(storage_config.io_format)
         
@@ -371,7 +361,7 @@ class BaseFeed(ABC):
             result: DataFlowResult = dataflow.run_batch(flow_type=flow_type, prefect_kwargs=prefect_kwargs)
             return result.success
         
-        is_using_ray = self._num_batch_workers
+        is_using_ray = bool(self._num_workers)
         if is_using_ray:
             import ray
             from pfeed.utils.ray import shutdown_ray, setup_logger_in_ray_task, ray_logging_context
@@ -393,7 +383,7 @@ class BaseFeed(ABC):
             
             with ray_logging_context(self.logger) as log_queue:
                 try:
-                    batch_size = self._num_batch_workers
+                    batch_size = self._num_workers
                     dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
                     with ProgressBar(total=len(self._dataflows), description=f'Running {self.name} dataflows') as pbar:
                         for dataflow_batch in dataflow_batches:
@@ -444,7 +434,7 @@ class BaseFeed(ABC):
     
     @property
     def dataflows(self) -> list[DataFlow]:
-        is_using_ray = self._num_batch_workers
+        is_using_ray = bool(self._num_workers)
         if is_using_ray and (self._completed_dataflows or self._failed_dataflows):
             cprint(
                 'Accessing `dataflows` after execution with Ray returns the original (pre-execution) dataflows. '

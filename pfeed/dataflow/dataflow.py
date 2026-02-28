@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 
 import logging
 
+from msgspec import ValidationError
+
+from pfund.enums.data_channel import PublicDataChannel
 from pfeed.typing import GenericData, StreamingData
 from pfeed.dataflow.result import DataFlowResult
 from pfeed.enums import ExtractType, FlowType
@@ -27,9 +30,32 @@ class DataFlow:
         self._transformations: list[Callable[..., GenericData | StreamingData]] = []
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
-        self._msg_queue: ZeroMQ | None = None
-        self._zmq_channel: str | None = None
-        self._zmq_topic: str | None = None
+        self._zmq_channel: str = ''
+        self._zmq_topic: PublicDataChannel | None = None
+        self._assigned_stream_worker: str | None = None
+    
+    def _setup_messaging(self):
+        from pfeed.data_models.market_data_model import MarketDataModel
+        from pfeed.streaming.zeromq import ZeroMQDataChannel
+
+        data_model: MarketDataModel = cast(MarketDataModel, self._data_model)
+        self._zmq_channel: str = ZeroMQDataChannel.create_market_data_channel(
+            data_source=self.data_source.name,
+            product=data_model.product,
+            resolution=data_model.resolution
+        )
+        if data_model.resolution.is_quote():
+            self._zmq_topic = PublicDataChannel.orderbook
+        elif data_model.resolution.is_tick():
+            self._zmq_topic = PublicDataChannel.tradebook
+        else:
+            self._zmq_topic = PublicDataChannel.candlestick
+            
+    def set_stream_worker(self, worker_name: str):
+        if self._assigned_stream_worker is None:
+            self._setup_messaging()
+        self._assigned_stream_worker = worker_name
+        self.faucet.add_stream_worker(worker_name)
     
     @property
     def name(self):
@@ -46,6 +72,10 @@ class DataFlow:
     @property
     def faucet(self) -> Faucet:
         return self._faucet
+    
+    @property
+    def _msg_queue(self) -> ZeroMQ | None:
+        return self.faucet._msg_queue
     
     @property
     def sink(self) -> Sink:
@@ -118,35 +148,24 @@ class DataFlow:
         self._result.set_success(data is not None)
         return self._result
     
-    def _setup_messaging(self, worker_name: str):
-        '''
-        Args:
-            worker_name: Ray worker name (e.g. worker-1) thats responsible for handling the dataflow's ETL
-        '''
-        import zmq
-        from pfund.enums.data_channel import PublicDataChannel
-        from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel
-        self._msg_queue = ZeroMQ(name=f'{self.name}', logger=self._logger, sender_type=zmq.ROUTER)
-        self._msg_queue.bind(self._msg_queue.sender)
-        self._msg_queue.set_target_identity(worker_name)  # store zmq.DEALER's identity to send to
-        self._zmq_channel = ZeroMQDataChannel.create_market_data_channel(
-            data_source=self.data_source.name,
-            product=self.data_model.product,
-            resolution=self.data_model.resolution
-        )
-        if self.data_model.resolution.is_quote():
-            self._zmq_topic = PublicDataChannel.orderbook
-        elif self.data_model.resolution.is_tick():
-            self._zmq_topic = PublicDataChannel.tradebook
-        else:
-            self._zmq_topic = PublicDataChannel.candlestick
-    
     def _run_stream_etl(self, msg: Message) -> None:
         # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
         if self._msg_queue:
-            self._msg_queue.send(channel=self._zmq_channel, topic=self._zmq_topic, data=(self.name, msg))  # pyright: ignore[reportArgumentType]
+            self._msg_queue.send(
+                channel=self._zmq_channel, 
+                topic=self._zmq_topic,  # pyright: ignore[reportArgumentType]
+                data=(self.name, msg),
+                target_identity=self._assigned_stream_worker,
+            )
         else:
-            data: StreamingData = cast(StreamingData, self._transform(msg))
+            try:
+                data: StreamingData = cast(StreamingData, self._transform(msg))
+            # ValueError from StreamingMessage.__post_init__ validation, ValidationError from msgspec.convert
+            except (ValueError, ValidationError):
+                self._logger.exception(f'{self.name} failed to transform streaming message:')
+                # REVIEW: we will NOT load the bad data to storage, unless it can handle raw msg, for now, just return
+                # data = msg
+                return
             self._load(data)
     
     async def run_stream(self, flow_type: Literal['native']='native'):
@@ -157,11 +176,9 @@ class DataFlow:
         await self.faucet.open_stream()  # this will trigger _run_stream_etl()
         
     async def end_stream(self):
-        if self._msg_queue:
-            self._msg_queue.terminate()
         await self.faucet.close_stream()
         
-    def _transform(self, data: GenericData | Message) -> GenericData | StreamingData:
+    def _transform(self, data: GenericData | StreamingData) -> GenericData | StreamingData:
         for transform in self._transformations:
             if self.is_streaming():
                 data: StreamingData = transform(data)

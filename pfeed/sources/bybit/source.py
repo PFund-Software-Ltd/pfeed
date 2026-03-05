@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, Any, cast
 if TYPE_CHECKING:
     from pfund.entities.products.product_bybit import BybitProduct
-    from pfund.enums import Environment
 
+from pfund.enums import Environment
 from pfeed.sources.data_provider_source import DataProviderSource
 from pfeed.enums import DataSource
 from pfeed.sources.bybit.batch_api import BatchAPI
@@ -34,11 +34,17 @@ class BybitSource(DataProviderSource):
         return self._stream_api
     
     def create_batch_api(self, env: Environment | str):
-        self._batch_api = BatchAPI(env)
+        '''Creates or reuses existing batch API for the given environment'''
+        env = Environment[env.upper()]
+        if self._batch_api is None or self._batch_api.env != env:
+            self._batch_api = BatchAPI(env=env)
         
     def create_stream_api(self, env: Environment | str):
-        self._stream_api = StreamAPI(env=env)
+        '''Creates or reuses existing stream API for the given environment'''
+        env = Environment[env.upper()]
+        if self._stream_api is None or self._stream_api.env != env:
+            self._stream_api = StreamAPI(env=env)
     
-    def create_product(self, basis: str, symbol: str='', **specs: Any) -> BybitProduct:
+    def create_product(self, basis: str, name: str='', symbol: str='', **specs: Any) -> BybitProduct:
         from pfund.entities.products.product_bybit import BybitProduct  # pyright: ignore[reportUnusedImport]
-        return cast(BybitProduct, self._exchange.create_product(basis, symbol=symbol, **specs))
+        return cast(BybitProduct, self._exchange.create_product(basis, name=name, symbol=symbol, **specs))

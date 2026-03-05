@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from ray.util.queue import Queue
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.sources.data_provider_source import DataProviderSource
-    from pfeed.engine import DataEngine
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import GenericData
     from pfeed.requests.base_request import BaseRequest
@@ -38,16 +37,13 @@ class BaseFeed(ABC):
     data_model_class: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
     
-    def __init__(
-        self, 
-        pipeline_mode: bool=False, 
-        num_workers: int | None = None,
-    ):
+    def __init__(self, pipeline_mode: bool=False, num_workers: int | None = None):
         '''
         Args:
             pipeline_mode: whether to run in pipeline mode
-            num_workers: number of Ray tasks to run the batch/streaming dataflows in parallel
-                when this is not None, Ray will be automatically initialized with the number of CPUs available if ray.init() hasn't been called yet
+            num_workers: number of Ray tasks to run the batch/streaming dataflows in parallel.
+                When provided, Ray will be automatically initialized if ray.init() hasn't been called yet.
+                To customize Ray initialization (e.g. specifying num_cpus), call ray.init() explicitly before using this.
         '''
         from pfeed.config import setup_logging
         setup_logging()
@@ -70,10 +66,10 @@ class BaseFeed(ABC):
     def name(self):
         return self.data_source.name
     
-    def create_product(self, basis: str, symbol: str='', **specs: Any) -> BaseProduct:
+    def create_product(self, basis: str, name: str='', symbol: str='', **specs: Any) -> BaseProduct:
         if not hasattr(self.data_source, 'create_product'):
             raise NotImplementedError(f'{self.data_source.name} does not support creating products')
-        return self.data_source.create_product(basis, symbol=symbol, **specs)
+        return self.data_source.create_product(basis, name=name, symbol=symbol, **specs)
     
     @staticmethod
     @abstractmethod
@@ -180,6 +176,11 @@ class BaseFeed(ABC):
     
     def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
         if isinstance(self._custom_transformations, list):
+            if self._custom_transformations:
+                raise ValueError(
+                    'transform() can only be called once. ' + 
+                    'Use .transform(f1, f2, ...) to add multiple transformations, '
+                )
             self._custom_transformations.extend(funcs)
         # NOTE: self._custom_transformations will be converted to a tuple (conceptually sealed) after calling load()
         elif isinstance(self._custom_transformations, tuple):
@@ -337,14 +338,17 @@ class BaseFeed(ABC):
                 compression=storage_config.compression,
             )
     
-    def _clear_dataflows(self):
+    def _clear_previous_dataflows(self):
         self._completed_dataflows.clear()
         self._failed_dataflows.clear()
+        
+    def _clear_current_dataflows(self):
         self._dataflows.clear()
     
     def _prepare_before_run(self):
         self._auto_load()
         self._add_transformations()
+        self._clear_previous_dataflows()
     
     def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track, ProgressBar
@@ -430,6 +434,8 @@ class BaseFeed(ABC):
             self.logger.warning(
                 f'{self.name} has {len(self._failed_dataflows)} failed dataflows, check {self.logger.name}.log for more details'
             )
+
+        self._clear_current_dataflows()
         return self._completed_dataflows, self._failed_dataflows
     
     @property

@@ -18,6 +18,7 @@ class StreamingMessage(
     # tag=True,
 ):
     data_source: DataSource
+    data_origin: str = ''
     product: str  # product.name
     basis: str
     symbol: str

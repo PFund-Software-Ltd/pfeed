@@ -41,10 +41,12 @@ class YahooFinanceSource(TradFiDataProviderSource):
         self._batch_api = yfinance
     
     def create_stream_api(self, env: Environment | str):
-        self._stream_api = StreamAPI()
+        '''Creates or reuses existing stream API for the given environment'''
+        if self._stream_api is None:
+            self._stream_api = StreamAPI()
 
-    def create_product(self, basis: str, symbol: str='', **specs: Any) -> IBKRProduct:
-        product = super().create_product(basis, symbol=symbol, **specs)
+    def create_product(self, basis: str, name: str='', symbol: str='', **specs: Any) -> IBKRProduct:
+        product = super().create_product(basis, name=name, symbol=symbol, **specs)
         if not symbol:
             # if not specified, derive symbol used in yahoo finance
             symbol = self._create_symbol(product)

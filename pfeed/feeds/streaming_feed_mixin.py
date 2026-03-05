@@ -62,15 +62,14 @@ class StreamingFeedMixin:
                     yield msg
         return _iter()
     
-    def _create_stream_dataflows(
+    def _create_stream_dataflow(
         self,
         callback: Callable[[WebSocketName, Message], Awaitable[None] | None] | None=None,
-    ) -> None | MarketFeed:
+    ) -> DataFlow:
         from pfeed.data_models.market_data_model import MarketDataModel  # pyright: ignore[reportUnusedImport]
         from pfeed.dataflow.faucet import Faucet  # pyright: ignore[reportUnusedImport]
         from pfeed.dataflow.dataflow import DataFlow  # pyright: ignore[reportUnusedImport]
         
-        self._clear_dataflows()
         request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
         self.logger.info(
             f'{request.name}:\n{request}\n',
@@ -95,6 +94,7 @@ class StreamingFeedMixin:
         if callback:
             faucet.set_streaming_callback(callback)
         faucet.bind_channel_key_to_dataflow(channel_key, dataflow)
+        return dataflow
 
     async def _run_stream_dataflows(self):
         async def _run_dataflows():
@@ -241,6 +241,7 @@ class StreamingFeedMixin:
             shutdown_ray()
         else:
             await _run_dataflows()
+        self._clear_current_dataflows()
     
     def run(self, **prefect_kwargs: Any) -> GenericData | None:
         if self.streaming_dataflows:

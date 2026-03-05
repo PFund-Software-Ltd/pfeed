@@ -144,5 +144,15 @@ class Faucet:
         
     def set_streaming_callback(self, callback: Callable[[WebSocketName, Message], Awaitable[None] | None]):
         if self._user_streaming_callback is not None and self._user_streaming_callback != callback:
-            raise ValueError(f'streaming callback is already set, existing callback function: {self._user_streaming_callback}')
+            from pfeed.utils import is_lambda
+            msg = (
+                f'streaming callback is already set, existing callback function: {self._user_streaming_callback}\n' +
+                f'new callback function: {callback}'
+            )
+            if is_lambda(callback) or is_lambda(self._user_streaming_callback):
+                msg += (
+                    '\nNote: lambda functions are always distinct objects even with identical code, ' +
+                    'consider using a named function (def) instead of a lambda to avoid this'
+                )
+            raise ValueError(msg)
         self._user_streaming_callback = callback

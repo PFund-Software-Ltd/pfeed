@@ -140,7 +140,7 @@ def configure_logging(logging_config: dict[str, Any] | None=None, debug: bool=Fa
 class PFeedConfig(Configuration):
     def __init__(self):
         from pfund_kit.utils import load_env_file
-        load_env_file(verbose=False)
+        _ = load_env_file(verbose=False)
         super().__init__(project_name=project_name, source_file=__file__)
 
     def _initialize_from_data(self):

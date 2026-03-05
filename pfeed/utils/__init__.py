@@ -9,6 +9,11 @@ import datetime
 from pfund_kit.utils.temporal import get_utc_now, convert_to_date, get_yesterday
 
 
+def is_lambda(func: Callable[..., Any]) -> bool:
+    import types
+    return isinstance(func, types.LambdaType) and func.__name__ == "<lambda>"
+
+
 def lambda_with_name(name: str, lambda_func: Callable[..., Any]):
     lambda_func.__name__ = name
     return lambda_func

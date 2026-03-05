@@ -8,7 +8,7 @@ from pfeed.sources.data_provider_source import DataProviderSource
 
 
 class TradFiDataProviderSource(DataProviderSource):
-    def create_product(self, basis: str, symbol: str='', **specs: Any) -> IBKRProduct:
+    def create_product(self, basis: str, name: str='', symbol: str='', **specs: Any) -> IBKRProduct:
         from pfund.entities.products import ProductFactory
         from pfund.entities.products.product_ibkr import IBKRProduct  # pyright: ignore[reportUnusedImport]
         # HACK: use 'IB' as trading venue to work around pydantic model's validation
@@ -22,6 +22,7 @@ class TradFiDataProviderSource(DataProviderSource):
             basis=basis,
             specs=specs,
             symbol=symbol,
+            name=name,
         )
         # HACK: write it back to data source's name
         # data_source_name = self.name.value

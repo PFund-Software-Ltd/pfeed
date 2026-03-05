@@ -103,14 +103,14 @@ class TimeBasedFeed(BaseFeed, ABC):
         start_date, end_date = parse_date_range(start_date, end_date, rollback_period)
         return start_date, end_date
   
-    def _create_batch_dataflows(self, extract_func: Callable[..., Any]):
-        self._clear_dataflows()
+    def _create_batch_dataflows(self, extract_func: Callable[..., Any]) -> list[DataFlow]:
         request: TimeBasedFeedBaseRequest = self._current_request
         self.logger.info(
             f'{request.name}:\n{request}\n',
             style=TextStyle.BOLD + RichColor.GREEN  # pyright: ignore[reportCallIssue]
         )
         data_model: TimeBasedDataModel = cast(TimeBasedDataModel, self._create_data_model_from_request(request))
+        dataflows_in_batch: list[DataFlow] = []
         if request.dataflow_per_date:  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
             # one dataflow per date
             for date in data_model.dates:
@@ -121,13 +121,16 @@ class TimeBasedFeed(BaseFeed, ABC):
                 faucet: Faucet = self._create_faucet(data_model=data_model_copy, extract_func=extract_func, extract_type=request.extract_type)
                 # copy data_model_copy again to avoid sharing the same data model with faucet
                 dataflow: DataFlow = self._create_dataflow(data_model_copy.model_copy(deep=False), faucet)
+                dataflows_in_batch.append(dataflow)
                 self._dataflows.append(dataflow)
         else:
             # one dataflow for the entire date range
             faucet: Faucet = self._create_faucet(data_model=data_model, extract_func=extract_func, extract_type=request.extract_type)
             # copy data_model to avoid sharing the same data model with faucet
             dataflow: DataFlow = self._create_dataflow(data_model.model_copy(deep=False), faucet)
+            dataflows_in_batch.append(dataflow)
             self._dataflows.append(dataflow)
+        return dataflows_in_batch
     
     def run(self, **prefect_kwargs: Any) -> GenericFrame | None:
         '''Runs dataflows and handles the results.'''
@@ -167,7 +170,7 @@ class TimeBasedFeed(BaseFeed, ABC):
             df: GenericFrame = nw.to_native(df)
         else:
             df: GenericFrame | None = None
-
+        
         return df
     
     # DEPRECATED: trying to do too much, let users handle it

@@ -4,6 +4,7 @@ from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
     import pandas as pd
+    from pfeed.dataflow.dataflow import DataFlow
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
     from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
@@ -216,10 +217,10 @@ class MarketFeed(TimeBasedFeed, ABC):
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
-        self._create_batch_dataflows(extract_func=self._download_impl)
+        dataflows = self._create_batch_dataflows(extract_func=self._download_impl)
         # NOTE: update the data model in faucet to the data resolution
         # because data model in dataflow uses the target resolution, but the faucet uses the data resolution
-        for dataflow in self._dataflows:
+        for dataflow in dataflows:
             faucet_data_model: MarketDataModel = cast(MarketDataModel, dataflow.faucet.data_model)
             faucet_data_model.update_resolution(self._current_request.data_resolution)
         return self.run() if not self.is_pipeline() else self
@@ -419,7 +420,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
-        self._create_batch_dataflows(
+        _ = self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(
                 data_model=data_model,
                 storage=storage,
@@ -434,6 +435,8 @@ class MarketFeed(TimeBasedFeed, ABC):
         storage: BaseStorage,
         stored_resolution: Resolution | None,
     ) -> tuple[GenericFrame | None, TimeBasedMetadata | None]:
+        from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata  # pyright: ignore[reportUnusedImport]
+        
         df: GenericFrame | None = None
         metadata: TimeBasedMetadata | None = None
         if stored_resolution is not None:
@@ -452,6 +455,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
+        from pfeed.requests import MarketFeedRetrieveRequest  # pyright: ignore[reportUnusedImport]
 
         request: MarketFeedRetrieveRequest = cast(MarketFeedRetrieveRequest, self._current_request)
         if not request.clean_data:
@@ -560,7 +564,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             stream_mode=stream_mode,
             flush_interval=flush_interval,
         )
-        self._create_stream_dataflows(callback=callback)  # pyright: ignore[reportAttributeAccessIssue]
+        _: DataFlow = self._create_stream_dataflow(callback=callback)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
     
     async def _stream_impl(

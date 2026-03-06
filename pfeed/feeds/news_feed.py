@@ -43,8 +43,8 @@ class NewsFeed(TimeBasedFeed):
         from pfeed.data_models.news_data_model import NewsDataModel
         if isinstance(product, str) and product:
             product = self.create_product(product, **product_specs)
-        if len(self._dataflows) > 0:
-            existing_env = self._dataflows[0].data_model.env
+        if len(self.dataflows) > 0:
+            existing_env = self.dataflows[0].data_model.env
             if existing_env != env:
                 raise ValueError(f'{self.name} dataflows have different environments: {existing_env} and {env}')
         return NewsDataModel(

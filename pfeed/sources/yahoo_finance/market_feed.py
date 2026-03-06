@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
+    from pfeed.requests import MarketFeedStreamRequest
 
 import time
 import datetime
@@ -329,11 +330,9 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
     async def _close_stream(self):
         await self.stream_api.disconnect()
     
-    def _get_default_transformations_for_stream(self) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
-        from pfeed.requests import MarketFeedStreamRequest
-        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
-        default_transformations = MarketFeed._get_default_transformations_for_stream(self)
+        default_transformations = MarketFeed._get_default_transformations_for_stream(self, request)
         # since Ray can't serialize the "self" in self._parse_message, disable it for now
         assert self._num_workers is None, "Transformations in Yahoo Finance streaming data is not supported with Ray"
         if request.clean_data:

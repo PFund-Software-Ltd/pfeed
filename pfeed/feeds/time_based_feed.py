@@ -28,8 +28,6 @@ class TimeBasedFeed(BaseFeed, ABC):
     data_model_class: ClassVar[type[TimeBasedDataModel]]
     date_columns_in_raw_data: ClassVar[list[str]]
     original_date_column_in_raw_data: ClassVar[str] = '_date_raw'
-    _current_request: TimeBasedFeedBaseRequest
-
     def _standardize_date_column(self, df: pd.DataFrame, is_raw_data: bool) -> pd.DataFrame:
         '''Standardize the date column so that a 'date' column is always present (mandatory for storage).
 
@@ -122,14 +120,13 @@ class TimeBasedFeed(BaseFeed, ABC):
                 # copy data_model_copy again to avoid sharing the same data model with faucet
                 dataflow: DataFlow = self._create_dataflow(data_model_copy.model_copy(deep=False), faucet)
                 dataflows_in_batch.append(dataflow)
-                self._dataflows.append(dataflow)
         else:
             # one dataflow for the entire date range
             faucet: Faucet = self._create_faucet(data_model=data_model, extract_func=extract_func, extract_type=request.extract_type)
             # copy data_model to avoid sharing the same data model with faucet
             dataflow: DataFlow = self._create_dataflow(data_model.model_copy(deep=False), faucet)
             dataflows_in_batch.append(dataflow)
-            self._dataflows.append(dataflow)
+        self._dataflows[request] = dataflows_in_batch
         return dataflows_in_batch
     
     def run(self, **prefect_kwargs: Any) -> GenericFrame | None:

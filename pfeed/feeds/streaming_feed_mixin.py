@@ -39,7 +39,7 @@ class StreamingFeedMixin:
 
     @property
     def streaming_dataflows(self) -> list[DataFlow]:
-        return [dataflow for dataflow in self._dataflows if dataflow.is_streaming()]  # pyright: ignore[reportUnknownVariableType]
+        return [dataflow for dataflow in self.dataflows if dataflow.is_streaming()]  # pyright: ignore[reportUnknownVariableType]
     
     def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, Message], None]:
         if not self.streaming_dataflows:
@@ -89,21 +89,21 @@ class StreamingFeedMixin:
                 close_stream=self._close_stream,
             ))
         dataflow: DataFlow = cast(DataFlow, self._create_dataflow(data_model=data_model, faucet=faucet))
-        self._dataflows.append(dataflow)
-        
+
         if callback:
             faucet.set_streaming_callback(callback)
         faucet.bind_channel_key_to_dataflow(channel_key, dataflow)
+        self._dataflows[request] = [dataflow]
         return dataflow
 
     async def _run_stream_dataflows(self):
         async def _run_dataflows():
             try:
-                await asyncio.gather(*[dataflow.run_stream(flow_type='native') for dataflow in self._dataflows])
+                await asyncio.gather(*[dataflow.run_stream(flow_type='native') for dataflow in self.dataflows])
             except asyncio.CancelledError:
                 self.logger.warning(f'{self.name} dataflows were cancelled, ending streams...')
             finally:
-                await asyncio.gather(*[dataflow.end_stream() for dataflow in self._dataflows])
+                await asyncio.gather(*[dataflow.end_stream() for dataflow in self.dataflows])
 
         self._prepare_before_run()
 
@@ -172,7 +172,7 @@ class StreamingFeedMixin:
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
             
-            num_workers = min(self._num_workers, len(self._dataflows))
+            num_workers = min(self._num_workers, len(self.dataflows))
             futures: list[ray.ObjectRef[None]] = []
             with ray_logging_context(self.logger) as log_queue:
                 try:
@@ -183,7 +183,7 @@ class StreamingFeedMixin:
                     ] = defaultdict(dict)
                     sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
                     ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], set[int]]] = defaultdict(lambda: defaultdict(set))
-                    for i, dataflow in enumerate(self._dataflows):  # pyright: ignore[reportUnknownVariableType]
+                    for i, dataflow in enumerate(self.dataflows):  # pyright: ignore[reportUnknownVariableType]
                         worker_num: int = i % num_workers
                         worker_num += 1  # convert to 1-indexed, i.e. starting from 1
                         worker_name = _create_worker_name(worker_num)
@@ -241,7 +241,7 @@ class StreamingFeedMixin:
             shutdown_ray()
         else:
             await _run_dataflows()
-        self._clear_current_dataflows()
+        self._reset_request_states()
     
     def run(self, **prefect_kwargs: Any) -> GenericData | None:
         if self.streaming_dataflows:

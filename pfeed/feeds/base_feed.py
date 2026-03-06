@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 import logging
 from pathlib import Path
+from collections import defaultdict
 from abc import ABC, abstractmethod
 
 from pfund_kit.style import cprint
@@ -50,11 +51,11 @@ class BaseFeed(ABC):
         self.data_source: DataProviderSource = self._create_data_source()
         self.logger: logging.Logger = logging.getLogger(f'pfeed.{self.name.lower()}')
         self._pipeline_mode: bool = pipeline_mode
-        self._dataflows: list[DataFlow] = []
+        self._dataflows: dict[BaseRequest, list[DataFlow]] = {}
         self._failed_dataflows: list[DataFlow] = []
         self._completed_dataflows: list[DataFlow] = []
-        self._custom_transformations: Sequence[Callable[..., Any]] = []
-        self._current_request: BaseRequest | None = None
+        self._requests: list[BaseRequest] = []
+        self._custom_transformations: dict[BaseRequest, Sequence[Callable[..., Any]]] = defaultdict(list)
         self._storage_options: dict[DataStorage, dict[str, Any]] = {}
         self._io_options: dict[IOFormat, dict[str, Any]] = {}
         self._num_workers: int | None = num_workers
@@ -62,6 +63,10 @@ class BaseFeed(ABC):
             from pfeed.utils.ray import setup_ray
             setup_ray()
             
+    @property
+    def _current_request(self) -> BaseRequest | None:
+        return self._requests[-1] if self._requests else None
+
     @property
     def name(self):
         return self.data_source.name
@@ -175,40 +180,36 @@ class BaseFeed(ABC):
         return Sink(data_model, storage)
     
     def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
-        if isinstance(self._custom_transformations, list):
-            if self._custom_transformations:
-                raise ValueError(
-                    'transform() can only be called once. ' + 
-                    'Use .transform(f1, f2, ...) to add multiple transformations, '
-                )
-            self._custom_transformations.extend(funcs)
+        assert self._current_request is not None, 'transform() must be called after functions such as stream()/download()/retrieve() in pipeline mode'
+        request = self._current_request
+        transformations = self._custom_transformations[request]
+        if isinstance(transformations, list):
+            transformations.extend(funcs)
         # NOTE: self._custom_transformations will be converted to a tuple (conceptually sealed) after calling load()
-        elif isinstance(self._custom_transformations, tuple):
+        elif isinstance(transformations, tuple):
             raise ValueError('dataflow is sealed, cannot add transformations')
         else:
-            raise ValueError(f'unknown custom transformations type: {type(self._custom_transformations)}')
+            raise ValueError(f'unknown custom transformations type: {type(transformations)}')
         return self
     
-    def _get_default_transformations(self) -> list[Callable[..., Any]]:
-        assert self._current_request is not None, 'current request is not set'
-        request = self._current_request
+    def _get_default_transformations(self, request: BaseRequest) -> list[Callable[..., Any]]:
         if request.extract_type == ExtractType.download:
-            return self._get_default_transformations_for_download()
+            return self._get_default_transformations_for_download(request)
         elif request.extract_type == ExtractType.stream:
-            return self._get_default_transformations_for_stream()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType,reportAttributeAccessIssue]
+            return self._get_default_transformations_for_stream(request)  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType,reportAttributeAccessIssue]
         elif request.extract_type == ExtractType.retrieve:
-            return self._get_default_transformations_for_retrieve()
+            return self._get_default_transformations_for_retrieve(request)
         elif request.extract_type == ExtractType.fetch:
-            return self._get_default_transformations_for_fetch()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType,reportAttributeAccessIssue]
+            return self._get_default_transformations_for_fetch(request)  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType,reportAttributeAccessIssue]
         else:
             raise ValueError(f'Unknown extract type: {request.extract_type}')
-    
-    def _add_transformations(self):
-        default_transformations = self._get_default_transformations()
-        all_transformations = default_transformations + list(self._custom_transformations)
-        for dataflow in self._dataflows:
+
+    def _add_transformations(self, request: BaseRequest):
+        default_transformations = self._get_default_transformations(request)
+        custom_transformations = self._custom_transformations[request]
+        all_transformations = default_transformations + list(custom_transformations)
+        for dataflow in self._dataflows[request]:
             dataflow.add_transformations(*all_transformations)
-        self._custom_transformations = []
 
     # REVIEW: 
     def _check_if_io_supports_parallel_writes(self, io_format: IOFormat) -> None:
@@ -264,10 +265,13 @@ class BaseFeed(ABC):
             **io_kwargs: specific io options for the given storage
                 e.g. in_memory, memory_limit, for DuckDBStorage
         '''
+        assert self._current_request is not None, 'load() must be called after functions such as stream()/download()/retrieve() in pipeline mode'
+        request = self._current_request
+        
         # allowing passing in None is useful for dynamically determining if load() is needed
         if storage is None:
             return self
-
+        
         storage_config = StorageConfig(
             storage=storage,
             data_path=data_path,
@@ -281,12 +285,13 @@ class BaseFeed(ABC):
         if is_using_ray:
             self._check_if_io_supports_parallel_writes(storage_config.io_format)
         
-        if self._custom_transformations and storage_config.data_layer == DataLayer.RAW:
+        custom_transformations = self._custom_transformations[request]
+        if custom_transformations and storage_config.data_layer == DataLayer.RAW:
             raise RuntimeError(
                 'Custom transformations are not allowed when data layer is RAW'
             )
-        
-        for dataflow in self._dataflows:
+
+        for dataflow in self._dataflows[request]:
             data_model = dataflow.data_model
             Storage = storage_config.storage.storage_class
             storage = (
@@ -304,31 +309,30 @@ class BaseFeed(ABC):
                     **io_kwargs
                 )
             )
-            if self._current_request and self._current_request.is_streaming():
+            if request.is_streaming():
                 storage.data_handler.create_stream_buffer(
-                    mode=self._current_request.mode,
-                    flush_interval=self._current_request.flush_interval,
+                    mode=request.mode,
+                    flush_interval=request.flush_interval,
                 )
             sink: Sink = self._create_sink(data_model, storage)
             dataflow.set_sink(sink)
-        
+
         # conceptually seal the custom transformations by converting it to a tuple after calling load()
-        self._custom_transformations = tuple(self._custom_transformations)
-        self._current_request.set_loaded()
+        self._custom_transformations[request] = tuple(custom_transformations)
+        request.set_loaded()
         return self
     
-    def _auto_load(self):
+    def _auto_load(self, request: BaseRequest):
         '''
-        if storage_config is created in e.g. download() during pipeline mode, 
+        if storage_config is created in e.g. download() during pipeline mode,
         automatically call load() if it hasn't been called yet.
         '''
         if (
-            self._current_request and 
-            self._current_request.extract_type == ExtractType.download and
-            self._current_request.storage_config and 
-            not self._current_request.is_loaded
+            request.extract_type == ExtractType.download and
+            request.storage_config and
+            not request.is_loaded
         ):
-            storage_config = self._current_request.storage_config
+            storage_config = request.storage_config
             self.load(
                 storage=storage_config.storage,
                 data_path=storage_config.data_path,
@@ -338,17 +342,20 @@ class BaseFeed(ABC):
                 compression=storage_config.compression,
             )
     
-    def _clear_previous_dataflows(self):
+    def _clear_dataflows(self):
         self._completed_dataflows.clear()
         self._failed_dataflows.clear()
         
-    def _clear_current_dataflows(self):
-        self._dataflows.clear()
+    def _reset_request_states(self):
+        self._requests.clear()
+        self._dataflows = {}
+        self._custom_transformations = defaultdict(list)
     
     def _prepare_before_run(self):
-        self._auto_load()
-        self._add_transformations()
-        self._clear_previous_dataflows()
+        for request in self._requests:
+            self._auto_load(request)
+            self._add_transformations(request)
+        self._clear_dataflows()
     
     def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track, ProgressBar
@@ -388,8 +395,8 @@ class BaseFeed(ABC):
             with ray_logging_context(self.logger) as log_queue:
                 try:
                     batch_size = self._num_workers
-                    dataflow_batches = [self._dataflows[i: i + batch_size] for i in range(0, len(self._dataflows), batch_size)]
-                    with ProgressBar(total=len(self._dataflows), description=f'Running {self.name} dataflows') as pbar:
+                    dataflow_batches = [self.dataflows[i: i + batch_size] for i in range(0, len(self.dataflows), batch_size)]
+                    with ProgressBar(total=len(self.dataflows), description=f'Running {self.name} dataflows') as pbar:
                         for dataflow_batch in dataflow_batches:
                             futures = [
                                 ray_task.remote(
@@ -416,7 +423,7 @@ class BaseFeed(ABC):
             shutdown_ray()
         else:
             try:
-                for dataflow in track(self._dataflows, description=f'Running {self.name} dataflows'):
+                for dataflow in track(self.dataflows, description=f'Running {self.name} dataflows'):
                     success = _run_dataflow(dataflow)
                     if not success:
                         self._failed_dataflows.append(dataflow)
@@ -435,7 +442,7 @@ class BaseFeed(ABC):
                 f'{self.name} has {len(self._failed_dataflows)} failed dataflows, check {self.logger.name}.log for more details'
             )
 
-        self._clear_current_dataflows()
+        self._reset_request_states()
         return self._completed_dataflows, self._failed_dataflows
     
     @property
@@ -443,13 +450,13 @@ class BaseFeed(ABC):
         is_using_ray = bool(self._num_workers)
         if is_using_ray and (self._completed_dataflows or self._failed_dataflows):
             cprint(
-                'Accessing `dataflows` after execution with Ray returns the original (pre-execution) dataflows. '
+                'Accessing `dataflows` after execution with Ray returns the original (pre-execution) dataflows. ' +
                 'Use `completed_dataflows` and `failed_dataflows` for post-execution results.',
                 style='bold'
             )
-        return self._dataflows
-    
-    @property 
+        return [df for dfs in self._dataflows.values() for df in dfs]
+
+    @property
     def failed_dataflows(self) -> list[DataFlow]:
         """Returns list of dataflows that failed in the last run"""
         return self._failed_dataflows
@@ -459,11 +466,11 @@ class BaseFeed(ABC):
         """Returns list of dataflows that completed successfully in the last run"""
         return self._completed_dataflows
     
-    def to_prefect_dataflows(self, **kwargs) -> list[PrefectFlow]:
+    def to_prefect_dataflows(self, **kwargs: Any) -> list[PrefectFlow]:
         '''
         Args:
             kwargs: kwargs specific to prefect @flow decorator
         '''
         self._prepare_before_run()
-        return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self._dataflows]
+        return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
     

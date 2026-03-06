@@ -23,6 +23,12 @@ class BaseRequest(BaseModel):
         """
     )
 
+    def __hash__(self) -> int:
+        return hash(id(self))
+
+    def __eq__(self, other: object) -> bool:
+        return self is other
+
     @property
     def name(self) -> str:
         return self.__class__.__name__

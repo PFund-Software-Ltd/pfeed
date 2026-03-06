@@ -4,10 +4,9 @@ from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
     import pandas as pd
-    from pfeed.dataflow.dataflow import DataFlow
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
-    from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
+    from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest, MarketFeedStreamRequest
     from pfund.datas.resolution import Resolution
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.feeds.streaming_feed_mixin import WebSocketName, Message, ChannelKey
@@ -36,8 +35,6 @@ class MarketFeed(TimeBasedFeed, ABC):
     data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     SUPPORTED_LOWEST_RESOLUTION: ClassVar[Resolution] = Resolution('1d')
-
-    _current_request: MarketFeedBaseRequest
 
     @staticmethod
     @abstractmethod
@@ -105,8 +102,8 @@ class MarketFeed(TimeBasedFeed, ABC):
             if not product:
                 raise ValueError('product must be a non-empty string or a BaseProduct instance')
             product = self.data_source.create_product(product, **product_specs)
-        if len(self._dataflows) > 0:
-            existing_env = cast(MarketDataModel, self._dataflows[0].data_model).env
+        if len(self.dataflows) > 0:
+            existing_env = cast(MarketDataModel, self.dataflows[0].data_model).env
             if existing_env != env:
                 raise ValueError(f'{self.name} dataflows have different environments: {existing_env} and {env}')
         DataModel = self.data_model_class
@@ -205,7 +202,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                 f'{resolution=} is not supported, download data with resolution={data_resolution} instead', 
             )
         self._validate_resolution_bounds(data_resolution)
-        self._current_request = MarketFeedDownloadRequest(
+        request = MarketFeedDownloadRequest(
             storage_config=storage_config,
             env=env,
             product=product,
@@ -217,24 +214,20 @@ class MarketFeed(TimeBasedFeed, ABC):
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
+        self._requests.append(request)
         dataflows = self._create_batch_dataflows(extract_func=self._download_impl)
         # NOTE: update the data model in faucet to the data resolution
         # because data model in dataflow uses the target resolution, but the faucet uses the data resolution
         for dataflow in dataflows:
             faucet_data_model: MarketDataModel = cast(MarketDataModel, dataflow.faucet.data_model)
-            faucet_data_model.update_resolution(self._current_request.data_resolution)
+            faucet_data_model.update_resolution(request.data_resolution)
         return self.run() if not self.is_pipeline() else self
     
-    def _get_default_transformations_for_download(self) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_download(self, request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
         from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest
-        
-        request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest = cast(
-            MarketFeedDownloadRequest | MarketFeedRetrieveRequest, 
-            self._current_request
-        )
 
         if isinstance(request, MarketFeedDownloadRequest):
             clean_data = request.clean_data
@@ -408,7 +401,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                     'dataflow_per_date is True but num_workers is None, Ray is NOT being used, retrieving data will be done sequentially', 
                     style=TextStyle.BOLD + RichColor.YELLOW
                 )
-        self._current_request = MarketFeedRetrieveRequest(
+        request = MarketFeedRetrieveRequest(
             storage_config=storage_config,
             env=env,
             product=product,
@@ -420,6 +413,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
+        self._requests.append(request)
         _ = self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(
                 data_model=data_model,
@@ -451,13 +445,11 @@ class MarketFeed(TimeBasedFeed, ABC):
                 _ = storage.with_data_model(data_model)
         return df, metadata
     
-    def _get_default_transformations_for_retrieve(self) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_retrieve(self, request: MarketFeedRetrieveRequest) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
         from pfeed.utils import lambda_with_name
-        from pfeed.requests import MarketFeedRetrieveRequest  # pyright: ignore[reportUnusedImport]
 
-        request: MarketFeedRetrieveRequest = cast(MarketFeedRetrieveRequest, self._current_request)
         if not request.clean_data:
             default_transformations = [
                 lambda_with_name(
@@ -465,7 +457,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                     lambda df: convert_to_desired_df(df, DataTool.pandas)
                 ),
                 lambda_with_name(
-                    'resample_data_if_necessary', 
+                    'resample_data_if_necessary',
                     lambda df: etl.resample_data(df, request.target_resolution)
                 ),
                 etl.organize_columns,
@@ -475,7 +467,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                 )
             ]
         else:
-            default_transformations = self._get_default_transformations_for_download()
+            default_transformations = self._get_default_transformations_for_download(request)
         return default_transformations
     
     def stream(
@@ -552,7 +544,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             today = get_utc_now().date()
             start_date = end_date = today
         resolution: Resolution = self.create_resolution(resolution)
-        self._current_request = MarketFeedStreamRequest(
+        request = MarketFeedStreamRequest(
             storage_config=storage_config,
             env=env,
             product=product,
@@ -564,7 +556,8 @@ class MarketFeed(TimeBasedFeed, ABC):
             stream_mode=stream_mode,
             flush_interval=flush_interval,
         )
-        _: DataFlow = self._create_stream_dataflow(callback=callback)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+        self._requests.append(request)
+        _ = self._create_stream_dataflow(callback=callback)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
     
     async def _stream_impl(
@@ -577,12 +570,10 @@ class MarketFeed(TimeBasedFeed, ABC):
         raise NotImplementedError(f'{self.name} _close_stream() is not implemented')
     
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
-    def _get_default_transformations_for_stream(self) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
         from itertools import count
         from pfeed.utils import lambda_with_name
-        from pfeed.requests import MarketFeedStreamRequest
         default_transformations: list[Callable[..., Any]] = []
-        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
         if request.clean_data:
             # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
             data_source: DataSource = self.data_source.name

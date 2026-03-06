@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfeed.typing import GenericFrame
     from pfeed.storages.storage_config import StorageConfig
+    from pfeed.requests import MarketFeedStreamRequest
     
 from pfund.entities.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
@@ -135,11 +136,9 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
     async def _close_stream(self):
         await self.stream_api.disconnect()
     
-    def _get_default_transformations_for_stream(self) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
-        from pfeed.requests import MarketFeedStreamRequest
-        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
-        default_transformations = MarketFeed._get_default_transformations_for_stream(self)
+        default_transformations = MarketFeed._get_default_transformations_for_stream(self, request)
         if request.clean_data:
             product: BybitProduct = cast(BybitProduct, request.product)
             default_transformations = [

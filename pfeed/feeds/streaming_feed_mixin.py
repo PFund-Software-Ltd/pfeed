@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from pfeed.typing import StreamingData, GenericData
     from pfeed.dataflow.sink import Sink
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
-    from pfeed.feeds.market_feed import MarketFeed
 
 import asyncio
 from collections import defaultdict
@@ -76,7 +75,7 @@ class StreamingFeedMixin:
             style=TextStyle.BOLD + RichColor.GREEN
         )
         data_model: MarketDataModel = cast(MarketDataModel, self._create_data_model_from_request(request))
-        channel_key: ChannelKey = cast(ChannelKey, self.stream_api.add_channel(data_model))
+        channel_key: ChannelKey = cast(ChannelKey, self.stream_api.add_channel(data_model, data_resolution=request.data_resolution))
         
         # NOTE: reuse existing faucet for streaming dataflows since they share the same extract_func
         if self.streaming_dataflows:

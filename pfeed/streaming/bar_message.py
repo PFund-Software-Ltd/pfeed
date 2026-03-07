@@ -6,14 +6,19 @@ from pfeed.streaming.streaming_message import StreamingMessage
 
 
 class BarMessage(StreamingMessage, frozen=True):
+    start_ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)]  # timestamp of the start of the bar
+    end_ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)]  # timestamp of the end of the bar
     open: Annotated[float, Meta(gt=0)]
     high: Annotated[float, Meta(gt=0)]
     low: Annotated[float, Meta(gt=0)]
     close: Annotated[float, Meta(gt=0)]
     volume: Annotated[float, Meta(ge=0)]
-    is_incremental: bool = True  # if True, the bar update is incremental, otherwise it is a full bar update
+    is_incremental: bool  # if True, the bar update is incremental, otherwise it is a full bar update
     
     def __post_init__(self):
+        if self.is_incremental and self.ts >= self.end_ts:
+            raise ValueError(f"Timestamp {self.ts} is greater than end timestamp {self.end_ts} before the bar is closed")
+        
         # Validate high is highest
         if not (self.high >= self.open and self.high >= self.low and self.high >= self.close):
             raise ValueError(f"High ({self.high}) must be >= open, low, and close")

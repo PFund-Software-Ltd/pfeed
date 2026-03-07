@@ -35,9 +35,9 @@ class StreamAPI:
     async def disconnect(self):
         await self._ws_api.disconnect()
     
-    def add_channel(self, data_model: BybitMarketDataModel) -> ChannelKey:
+    def add_channel(self, data_model: BybitMarketDataModel, data_resolution: Resolution | None = None) -> ChannelKey:
         product: BybitProduct = data_model.product
-        resolution: Resolution = data_model.resolution
+        resolution: Resolution = data_resolution or data_model.resolution  # data model is using target resolution
         category = product.category
         assert category is not None, 'product.category is not initialized'
         channel: FullDataChannel = self._ws_api._create_public_channel(product, resolution)

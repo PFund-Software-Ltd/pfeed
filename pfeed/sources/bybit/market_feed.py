@@ -6,9 +6,11 @@ if TYPE_CHECKING:
     import datetime
     import pandas as pd
     from pfund.datas.resolution import Resolution
+    from pfund.typing import ParsedMessage
     from pfeed.typing import GenericFrame
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.requests import MarketFeedStreamRequest
+    from pfeed.sources.bybit.stream_api import ChannelKey as BybitChannelKey
     
 from pfund.entities.products.product_bybit import BybitProduct
 from pfeed.sources.bybit.mixin import BybitMixin
@@ -119,10 +121,10 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
                 channel: str = msg['topic']
                 category = ws_name.split('_')[1]
                 category = BybitProduct.ProductCategory[category.upper()]
-                channel_key: tuple[str, str] = self.stream_api.generate_channel_key(category, channel)
-                # NOTE: Bybit's tick (publicTrade) messages contain multiple trades in a single message,
-                # split them into individual messages so each tick flows through the pipeline separately
-                if channel.startswith('publicTrade') and isinstance(msg.get('data'), list):
+                channel_key: BybitChannelKey = self.stream_api.generate_channel_key(category, channel)
+                # NOTE: Bybit's tick (publicTrade) messages and bar (kline) messages when it's closed contain multiple trades in a single message,
+                # split them into individual messages so each tick/bar flows through the pipeline separately
+                if isinstance(msg.get('data'), list):
                     for item in msg['data']:
                         individual_msg = {**msg, 'data': item}
                         await faucet_callback(ws_name, individual_msg, channel_key)
@@ -150,7 +152,7 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
         return default_transformations
         
     @staticmethod
-    def _parse_message(product: BybitProduct, msg: Message) -> Message:
+    def _parse_message(product: BybitProduct, msg: Message) -> ParsedMessage:
         from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
         from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
         assert product.category is not None, 'product.category is not initialized'

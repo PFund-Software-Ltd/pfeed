@@ -2,11 +2,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, Callable
 if TYPE_CHECKING:
     from collections.abc import Awaitable
+    from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
     from pfeed.feeds.streaming_feed_mixin import Message
     
-
 ChannelKey: TypeAlias = str
 
 
@@ -18,16 +18,18 @@ class StreamAPI:
         self._channels: list[ChannelKey] = []
         # store the previous 'day_volume' to derive the traded volume, i.e. volume = diff('day_volume' - previous 'day_volume')
         self._last_day_volume: dict[ChannelKey, int] = {}
+        # DEPRECATED
         # store the last 'time' value to detect duplicated 'time', in milliseconds
-        self._last_time_in_mts: dict[ChannelKey, int] = {}  
+        # self._last_time_in_mts: dict[ChannelKey, int] = {}  
         
     @property
     def last_day_volume(self) -> dict[ChannelKey, int]:
         return self._last_day_volume
     
-    @property
-    def last_time_in_mts(self) -> dict[ChannelKey, int]:
-        return self._last_time_in_mts
+    # DEPRECATED
+    # @property
+    # def last_time_in_mts(self) -> dict[ChannelKey, int]:
+    #     return self._last_time_in_mts
     
     async def connect(self):
         from pfund_kit.style import cprint, TextStyle, RichColor
@@ -45,11 +47,13 @@ class StreamAPI:
     def update_last_day_volume(self, channel_key: ChannelKey, day_volume: int):
         self._last_day_volume[channel_key] = day_volume
         
-    def update_last_time_in_mts(self, channel_key: ChannelKey, time_in_mts: int):
-        self._last_time_in_mts[channel_key] = time_in_mts
+    # DEPRECATED
+    # def update_last_time_in_mts(self, channel_key: ChannelKey, time_in_mts: int):
+    #     self._last_time_in_mts[channel_key] = time_in_mts
         
-    def add_channel(self, data_model: YahooFinanceMarketDataModel) -> ChannelKey:
-        assert data_model.resolution.is_tick(), 'Only tick data is supported for Yahoo Finance Streaming, please use .stream(resolution="1tick") instead'
+    def add_channel(self, data_model: YahooFinanceMarketDataModel, data_resolution: Resolution | None = None) -> ChannelKey:
+        resolution: Resolution = data_resolution or data_model.resolution  # data model is using target resolution
+        assert resolution.is_tick(), 'Only tick data is supported for Yahoo Finance Streaming, please use .stream(resolution="1tick") instead'
         product: BaseProduct = data_model.product
         if product.is_option() or product.is_crypto() or product.is_future() or product.is_index():
             raise ValueError(f'{product.symbol} is not supported for Yahoo Finance Streaming, only stocks, forex, mutual funds, etfs are supported')

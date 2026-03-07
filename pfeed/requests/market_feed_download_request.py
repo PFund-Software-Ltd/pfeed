@@ -1,25 +1,14 @@
 from typing import Literal, Any
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
-from pfund.datas.resolution import Resolution
 from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
 from pfeed.enums import ExtractType, DataLayer
 
 
 class MarketFeedDownloadRequest(MarketFeedBaseRequest):
     dataflow_per_date: bool = Field(description='Whether to create a dataflow for each date')
-    data_resolution: Resolution | str = Field(
-        description="Resolution of the raw data to download from source before resampling (if any) to target_resolution"
-    )
     extract_type: Literal[ExtractType.download] = ExtractType.download
-    
-    @field_validator("data_resolution", mode="before")
-    @classmethod
-    def create_data_resolution(cls, v: Resolution | str) -> Resolution:
-        if isinstance(v, str):
-            return Resolution(v)
-        return v
 
     def model_post_init(self, __context: Any) -> None:
         super().model_post_init(__context)

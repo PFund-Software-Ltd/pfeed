@@ -103,7 +103,7 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
         data = msg.to_dict()
 
         # drop empty dicts
-        dict_fields = ["extra_data", "custom_data"]
+        dict_fields = ["extra_data"]
         for field in dict_fields:
             if not data[field]:
                 data.pop(field)

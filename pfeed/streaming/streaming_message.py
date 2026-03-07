@@ -30,7 +30,6 @@ class StreamingMessage(
     msg_ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)] | None = None  # timestamp of the message sent
     _created_at: float = field(default_factory=time.time)  # timestamp of this object creation
     extra_data: dict[str, Any] = field(default_factory=dict)
-    custom_data: dict[str, Any] = field(default_factory=dict)
     
     @property
     def created_at(self) -> float:

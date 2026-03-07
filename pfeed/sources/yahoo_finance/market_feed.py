@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from collections.abc import Coroutine, Awaitable
     import pandas as pd
     from yfinance import Ticker
+    from pfund.typing import ParsedMessage
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.typing import GenericFrame
@@ -344,7 +345,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             ] + default_transformations
         return default_transformations
     
-    def _parse_message(self, product: BaseProduct, msg: dict[str, Any]) -> dict[str, Any]:
+    def _parse_message(self, product: BaseProduct, msg: Message) -> ParsedMessage:
         '''
         Args:
             msg: raw message from yahoo finance streaming data
@@ -370,25 +371,28 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             volume = None
         self.stream_api.update_last_day_volume(channel_key, current_day_volume)
         
+        # DEPRECATED: tick message have an index for uniqueness
         # detect duplicated 'time', if duplicated, add 1 to it to make it unique
-        last_time_in_mts = self.stream_api.last_time_in_mts.get(channel_key, None)
-        current_time_in_mts = int(msg['time'])
-        if last_time_in_mts is not None and current_time_in_mts == last_time_in_mts:
-            current_time_in_mts += 1
-        ts = current_time_in_mts / 1000  # convert to seconds
-        self.stream_api.update_last_time_in_mts(channel_key, current_time_in_mts)
+        # last_time_in_mts = self.stream_api.last_time_in_mts.get(channel_key, None)
+        # current_time_in_mts = int(msg['time'])
+        # if last_time_in_mts is not None and current_time_in_mts == last_time_in_mts:
+        #     current_time_in_mts += 1
+        # ts = current_time_in_mts / 1000  # convert to seconds
+        # self.stream_api.update_last_time_in_mts(channel_key, current_time_in_mts)
         
-        parsed_msg = {
+        parsed_msg: ParsedMessage = {
+            'ts': msg['time'],
+            'channel': channel_key,
             'data': {
-                'ts': ts,
+                'ts': msg['time'],
                 'price': msg['price'],
                 'volume': volume,
+                'extra_data': {
+                    'exchange': msg['exchange'],
+                    'market_hours': msg['market_hours'],
+                    'last_size': msg.get('last_size', None),
+                }
             },
-            'extra_data': {
-                'exchange': msg['exchange'],
-                'market_hours': msg['market_hours'],
-                'last_size': msg.get('last_size', None),
-            }
         }
         return parsed_msg
     

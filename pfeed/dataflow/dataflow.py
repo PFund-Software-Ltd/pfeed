@@ -161,7 +161,7 @@ class DataFlow:
             try:
                 data: StreamingData = cast(StreamingData, self._transform(msg))
             # ValueError from StreamingMessage.__post_init__ validation, ValidationError from msgspec.convert
-            except (ValueError, ValidationError):
+            except Exception:
                 self._logger.exception(f'{self.name} failed to transform streaming message:')
                 # REVIEW: we will NOT load the bad data to storage, unless it can handle raw msg, for now, just return
                 # data = msg

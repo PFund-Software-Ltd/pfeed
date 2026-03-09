@@ -556,24 +556,24 @@ class MarketFeed(TimeBasedFeed, ABC):
             today = get_utc_now().date()
             start_date = end_date = today
         resolution: Resolution = self.create_resolution(resolution)
-        # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
-        # e.g. '1s' is not supported by bybit, '1t' will be used instead
-        data_config = DataConfig(
-            data_source=self.data_source.name,  # pyright: ignore[reportCallIssue]
-            data_origin=data_origin,
-        )
-        data_config.primary_resolution = resolution
-        is_auto_resampled = data_config.auto_resample(
-            supported_resolutions=self.get_supported_resolutions_for_streaming(product),
-        )
-        if is_auto_resampled:
-            data_resolution = cast(Resolution, data_config.resample[resolution])
-            cprint(
-                f'{product.name} {resolution} is not supported in streaming, using {data_resolution} instead', 
-                style=TextStyle.BOLD + RichColor.YELLOW
+        data_resolution = resolution
+        if resolution.is_bar():
+            # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
+            # e.g. '1s' is not supported by bybit, '1t' will be used instead
+            data_config = DataConfig(
+                data_source=self.data_source.name,  # pyright: ignore[reportCallIssue]
+                data_origin=data_origin,
             )
-        else:
-            data_resolution = resolution
+            data_config.primary_resolution = resolution
+            is_auto_resampled = data_config.auto_resample(
+                supported_resolutions=self.get_supported_resolutions_for_streaming(product),
+            )
+            if is_auto_resampled:
+                data_resolution = cast(Resolution, data_config.resample[resolution])
+                cprint(
+                    f'{product.name} {resolution} is not supported in streaming, using {data_resolution} instead', 
+                    style=TextStyle.BOLD + RichColor.YELLOW
+                )
 
         request = MarketFeedStreamRequest(
             storage_config=storage_config,

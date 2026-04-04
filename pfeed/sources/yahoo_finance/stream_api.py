@@ -34,7 +34,7 @@ class StreamAPI:
     async def connect(self):
         from pfund_kit.style import cprint, TextStyle, RichColor
         cprint(
-            "Warning: Yahoo Finance streaming data is not true tick data (every trade) but tick snapshots (aggregated trades)", 
+            "Warning: Yahoo Finance streaming data is not true tick data (individual trades) but rather tick snapshots (aggregated trades)",
             style=TextStyle.BOLD + RichColor.YELLOW
         )
         await self._ws_api.subscribe(self._channels)

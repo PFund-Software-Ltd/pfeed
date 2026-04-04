@@ -4,6 +4,7 @@ import time
 
 from msgspec import Meta, Struct, field, ValidationError, structs
 
+from pfund.datas.resolution import Resolution
 from pfeed.enums import DataSource
 
 
@@ -39,3 +40,11 @@ class StreamingMessage(
         # return {f: getattr(self, f) for f in self.__struct_fields__}
         return structs.asdict(self)
     
+    def is_bar(self) -> bool:
+        return Resolution(self.resolution).is_bar()
+    
+    def is_tick(self) -> bool:
+        return Resolution(self.resolution).is_tick()
+    
+    def is_quote(self) -> bool:
+        return Resolution(self.resolution).is_quote()

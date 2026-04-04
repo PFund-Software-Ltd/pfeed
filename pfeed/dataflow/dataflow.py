@@ -4,15 +4,13 @@ if TYPE_CHECKING:
     from prefect import Flow as PrefectDataFlow
     from pfeed.feeds.streaming_feed_mixin import Message
     from pfeed.dataflow.faucet import Faucet
-    from pfeed.dataflow.sink import Sink
     from pfeed.sources.data_provider_source import DataProviderSource
+    from pfeed.storages.base_storage import BaseStorage
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.data_handlers.base_data_handler import BaseMetadata
     from pfeed.streaming.zeromq import ZeroMQ
 
 import logging
-
-from msgspec import ValidationError
 
 from pfund.enums.data_channel import PublicDataChannel
 from pfeed.typing import GenericData, StreamingData
@@ -26,7 +24,7 @@ class DataFlow:
         self._logger: logging.Logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
         self._is_streaming = faucet.extract_type == ExtractType.stream
         self._faucet: Faucet = faucet
-        self._sink: Sink | None = None
+        self._storage: BaseStorage | None = None
         self._transformations: list[Callable[..., GenericData | StreamingData]] = []
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
@@ -78,8 +76,8 @@ class DataFlow:
         return self.faucet._msg_queue
     
     @property
-    def sink(self) -> Sink:
-        return self._sink
+    def storage(self) -> BaseStorage | None:
+        return self._storage
 
     @property
     def extract_type(self) -> ExtractType:
@@ -94,8 +92,8 @@ class DataFlow:
             raise ValueError('transformations are already added')
         self._transformations.extend(funcs)
     
-    def set_sink(self, sink: Sink):
-        self._sink = sink
+    def set_storage(self, storage: BaseStorage):
+        self._storage = storage
     
     def __str__(self):
         if not self.is_streaming():
@@ -122,7 +120,7 @@ class DataFlow:
         return data, metadata
     
     def run_batch(self, flow_type: FlowType=FlowType.native, prefect_kwargs: dict | None=None) -> DataFlowResult:
-        self._logger.debug(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
+        self._logger.debug(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.storage.data_path if self.storage else None}')
         self._flow_type = FlowType[flow_type.lower()]
         if self._flow_type == FlowType.prefect:
             prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
@@ -131,8 +129,8 @@ class DataFlow:
             data, metadata = self._run_batch_etl()
 
         if self.faucet.extract_type == ExtractType.download:
-            if self.sink:
-                self._result.set_data_loader(self.sink.storage.read_data)
+            if self.storage:
+                self._result.set_data_loader(self.storage.read_data)
             else:
                 self._result.set_data(data)
         elif self.faucet.extract_type == ExtractType.retrieve:
@@ -169,8 +167,8 @@ class DataFlow:
             self._load(data)
     
     async def run_stream(self, flow_type: Literal['native']='native'):
-        self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.sink.storage.data_path if self.sink else None}')
-        if not self.sink:
+        self._logger.info(f'{self.name} {self.extract_type} data={self.data_model} to storage={self.storage.data_path if self.storage else None}')
+        if not self.storage:
             self._logger.debug(f'{self.name} {self.extract_type} has no destination storage (to_storage=None)')
         self._flow_type = FlowType[flow_type.lower()]
         await self.faucet.open_stream()  # this will trigger _run_stream_etl()
@@ -196,17 +194,22 @@ class DataFlow:
         return data
     
     def _load(self, data: GenericData | StreamingData):
-        if self.sink is None:
+        if self._storage is None:
             return
-        if self.is_streaming():
-            self.sink.flush(data, streaming=True)
-        else:
-            if self._flow_type == FlowType.prefect:
-                from prefect import task
-                load = task(self.sink.flush)
+        try:
+            log_level = logging.DEBUG if self.is_streaming() else logging.INFO
+            if self.is_streaming():
+                self._storage.write_data(data, streaming=True)
             else:
-                load = self.sink.flush
-            load(data)
+                if self._flow_type == FlowType.prefect:
+                    from prefect import task
+                    write = task(self._storage.write_data)
+                else:
+                    write = self._storage.write_data
+                write(data)
+            self._logger.log(log_level, f'loaded {self.data_model} data to {self._storage}')
+        except Exception:
+            self._logger.exception(f'failed to load {self.data_model} data to {self._storage}:')
 
     def to_prefect_dataflow(self, **kwargs) -> PrefectDataFlow:
         '''

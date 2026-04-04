@@ -10,5 +10,6 @@ class TickMessage(StreamingMessage, frozen=True):
     # useful when multiple ticks have the same ts
     index: Annotated[int, Meta(ge=0)]
     price: Annotated[float, Meta(gt=0)]
-    volume: Annotated[float, Meta(gt=0)]
+    # NOTE: volume being None is very rare, only a low-quality data source like yahoo finance might not have it
+    volume: Annotated[float, Meta(gt=0)] | None = None
     

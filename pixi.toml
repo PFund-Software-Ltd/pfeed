@@ -17,30 +17,28 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.10.4"
+uv = ">=0.11.2"
 openjdk = "21.*"  # for spark
 libpq = ">=18.1"  # for postgresql
 gh = ">=2.87.2"
 
 [pypi-dependencies]
 # TEMP
-pfeed = { path = ".", editable = true }
 pfund = { path = "../pfund", editable = true }
-pfund-kit = { path = "../pfund-kit", editable = true }
 # pfund = ">=0.0.2"
 pandas = ">=2.3.3,<3.0.0"
-polars = ">=1.38.1"
+polars = ">=1.39.3"
 pyarrow = ">=23.0.1"
-pandera = ">=0.29.0"
+pandera = ">=0.30.1"
 msgspec = ">=0.20.0"
 pydantic = ">=2.12.5"
-narwhals = ">=2.17.0"
+narwhals = ">=2.18.1"
 zstandard = ">=0.25.0"
 beautifulsoup4 = ">=4.14.3"
 cloudpathlib = { version = ">=0.23.0", extras = ["s3", "gs", "azure"] }
-ray = { version = ">=2.54.0", extras = ["default"] }
+ray = { version = ">=2.54.1", extras = ["default"] }
 pyzmq = ">=27.1.0"
-deltalake = ">=1.4.2"
+deltalake = ">=1.5.0"
 
 [environments]
 default = ["py311", "dev", "optional"]
@@ -55,31 +53,27 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 
 [feature.optional.pypi-dependencies]
 # TEMP
-# fmp-api-client = ">=0.0.1download"
+# fmp-api-client = ">=0.0.1"
 yfinance = ">=1.2.0"
-prefect = ">=3.6.21"
-huggingface-hub = ">=1.5.0"
-dask = { version = ">=2026.1.2", extras = ["complete", "dataframe"] }
+prefect = ">=3.6.25"
+huggingface-hub = ">=1.9.0"
+dask = { version = ">=2026.3.0", extras = ["complete", "dataframe"] }
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
-duckdb = ">=1.4.4"
-lancedb = ">=0.29.2"
+duckdb = ">=1.5.1"
+# lancedb = ">=0.30.1"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 
-# TEMP
 [pypi-options.dependency-overrides]
 pfeed = { path = ".", editable = true }
+# TEMP
 pfund = { path = "../pfund", editable = true }
-pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
-pfund-kit = { path = "../pfund-kit", editable = true }
 
 [feature.dev.pypi-dependencies]
-pfeed = { path = ".", editable = true }
 afterpython = ">=0.2.1"
 basedpyright = ">=1.38.1"
 pandas-stubs = ">=2.3.3.260113"
-# TEMP
-pfund-plot = { path = "../pfund-plot", editable = true, extras = ["marimo"] }
-financetoolkit = ">=2.0.6"
+financetoolkit = ">=2.0.7"
+defeatbeta-api = ">=0.0.43"
 
 [feature.test.pypi-dependencies]
 pytest = ">=9.0.2"

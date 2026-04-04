@@ -1,8 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, ClassVar, Literal, overload, Any
+from typing import TYPE_CHECKING, Callable, ClassVar, Literal, overload, Any, cast
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    import polars as pl
     from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue
     from pfund.entities.products.product_base import BaseProduct
@@ -13,10 +12,9 @@ if TYPE_CHECKING:
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
-    from pfeed.dataflow.sink import Sink
     from pfeed.dataflow.result import DataFlowResult
-    from pfeed.data_handlers.base_data_handler import BaseMetadata
 
+import os
 import logging
 from pathlib import Path
 from collections import defaultdict
@@ -59,7 +57,10 @@ class BaseFeed(ABC):
         self._storage_options: dict[DataStorage, dict[str, Any]] = {}
         self._io_options: dict[IOFormat, dict[str, Any]] = {}
         self._num_workers: int | None = num_workers
-        if self._num_workers:
+        self._is_running: bool = False
+        if self._num_workers and self._num_workers > 0:
+            num_cpus: int = cast(int, os.cpu_count())
+            self._num_workers = min(self._num_workers, num_cpus)
             from pfeed.utils.ray import setup_ray
             setup_ray()
             
@@ -70,6 +71,14 @@ class BaseFeed(ABC):
     @property
     def name(self):
         return self.data_source.name
+    
+    def is_running(self) -> bool:
+        return self._is_running
+    
+    def _set_running(self, is_running: bool) -> None:
+        if self.is_running() and is_running:
+            raise RuntimeError(f'{self} is already running')
+        self._is_running = is_running
     
     def create_product(self, basis: str, name: str='', symbol: str='', **specs: Any) -> BaseProduct:
         if not hasattr(self.data_source, 'create_product'):
@@ -109,39 +118,6 @@ class BaseFeed(ABC):
         return self._pipeline_mode
     
     @abstractmethod
-    def download(self, *args: Any, **kwargs: Any) -> GenericData | None | BaseFeed:
-        pass
-
-    @abstractmethod
-    def retrieve(self, *args: Any, **kwargs: Any) -> GenericData | None:
-        pass
-    
-    # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
-    # NOTE: integrate it well with prefect's serve()
-    def fetch(self, *args: Any, **kwargs: Any) -> GenericData | None | BaseFeed:
-        raise NotImplementedError(f'{self.name} fetch() is not implemented')
-    
-    @abstractmethod
-    def _download_impl(self, data_model: BaseDataModel) -> GenericData | None:
-        pass
-
-    @abstractmethod
-    def _get_default_transformations_for_download(self, *args: Any, **kwargs: Any) -> list[Callable[..., Any]]:
-        pass
-    
-    @abstractmethod
-    def _get_default_transformations_for_retrieve(self, *args: Any, **kwargs: Any) -> list[Callable[..., Any]]:
-        pass
-    
-    @abstractmethod
-    def _retrieve_impl(self, data_model: BaseDataModel, *args: Any, **kwargs: Any) -> tuple[pl.LazyFrame | None, BaseMetadata | None]:
-        pass
-
-    # TODO
-    def _fetch_impl(self, data_model: BaseDataModel, *args: Any, **kwargs: Any) -> GenericData | None:
-        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')
-    
-    @abstractmethod
     def run(self, **prefect_kwargs: Any) -> GenericData | None:
         pass
     
@@ -174,10 +150,6 @@ class BaseFeed(ABC):
             close_stream=close_stream,
         )
     
-    @staticmethod
-    def _create_sink(data_model: BaseDataModel, storage: BaseStorage) -> Sink:
-        from pfeed.dataflow.sink import Sink
-        return Sink(data_model, storage)
     
     def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
         assert self._current_request is not None, 'transform() must be called after functions such as stream()/download()/retrieve() in pipeline mode'
@@ -314,8 +286,7 @@ class BaseFeed(ABC):
                     mode=request.mode,
                     flush_interval=request.flush_interval,
                 )
-            sink: Sink = self._create_sink(data_model, storage)
-            dataflow.set_sink(sink)
+            dataflow.set_storage(storage)
 
         # conceptually seal the custom transformations by converting it to a tuple after calling load()
         self._custom_transformations[request] = tuple(custom_transformations)
@@ -346,16 +317,18 @@ class BaseFeed(ABC):
         self._completed_dataflows.clear()
         self._failed_dataflows.clear()
         
-    def _reset_request_states(self):
-        self._requests.clear()
-        self._dataflows = {}
-        self._custom_transformations = defaultdict(list)
-    
     def _prepare_before_run(self):
         for request in self._requests:
             self._auto_load(request)
             self._add_transformations(request)
         self._clear_dataflows()
+        self._set_running(True)
+    
+    def _reset_after_run(self):
+        self._requests.clear()
+        self._dataflows = {}
+        self._custom_transformations = defaultdict(list)
+        self._set_running(False)
     
     def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> tuple[list[DataFlow], list[DataFlow]]:
         from pfund_kit.utils.progress_bar import track, ProgressBar
@@ -363,7 +336,7 @@ class BaseFeed(ABC):
         
         use_prefect = is_prefect_running()
         self._prepare_before_run()
-        
+
         def _run_dataflow(dataflow: DataFlow) -> DataFlowResult:
             if use_prefect:
                 flow_type = FlowType.prefect
@@ -380,8 +353,8 @@ class BaseFeed(ABC):
             @ray.remote
             def ray_task(logger_name: str, dataflow: DataFlow, log_queue: Queue) -> tuple[bool, DataFlow]:
                 success = False
+                logger = setup_logger_in_ray_task(logger_name, log_queue)
                 try:
-                    logger = setup_logger_in_ray_task(logger_name, log_queue)
                     success = _run_dataflow(dataflow)
                 except RuntimeError as err:
                     if use_prefect:
@@ -416,7 +389,7 @@ class BaseFeed(ABC):
                                         self._completed_dataflows.append(dataflow)
                                     pbar.advance(1)
                 except KeyboardInterrupt:
-                    print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
+                    self.logger.warning(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
                 except Exception:
                     self.logger.exception(f'Error in running {self.name} dataflows:')
             self.logger.debug('shutting down ray...')
@@ -438,11 +411,17 @@ class BaseFeed(ABC):
                 self.logger.exception(f'Error in running {self.name} dataflows:')
 
         if self._failed_dataflows:
-            self.logger.warning(
+            only_retrieval_dataflows = all(dataflow.extract_type == ExtractType.retrieve for dataflow in self._failed_dataflows)
+            if only_retrieval_dataflows:
+                log_level = logging.DEBUG
+            else:
+                log_level = logging.WARNING
+            self.logger.log(
+                log_level,
                 f'{self.name} has {len(self._failed_dataflows)} failed dataflows, check {self.logger.name}.log for more details'
             )
 
-        self._reset_request_states()
+        self._reset_after_run()
         return self._completed_dataflows, self._failed_dataflows
     
     @property

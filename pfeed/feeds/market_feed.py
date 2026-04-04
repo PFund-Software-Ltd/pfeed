@@ -1,6 +1,8 @@
 # pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false, reportArgumentType=false
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast
+
+from pfeed.feeds.base_feed import BaseFeed
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
     import pandas as pd
@@ -234,6 +236,10 @@ class MarketFeed(TimeBasedFeed, ABC):
             faucet_data_model.update_resolution(request.data_resolution)
         return self.run() if not self.is_pipeline() else self
     
+    @abstractmethod
+    def _download_impl(self, data_model: MarketDataModel) -> GenericFrame | None:
+        pass
+    
     def _get_default_transformations_for_download(self, request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_to_desired_df
@@ -309,7 +315,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             if not metadata.missing_source_paths:
                 return resolution
         else:
-            self.logger.warning(f'failed to find data {probe_data_model} in {storage}')
+            self.logger.debug(f'failed to find data {probe_data_model} in {storage}')
         return None
 
     def retrieve(
@@ -756,3 +762,12 @@ class MarketFeed(TimeBasedFeed, ABC):
     @abstractmethod
     def _parse_message(product: BaseProduct, msg: dict[str, Any]) -> dict[str, Any]:
         pass
+
+    # TODO: maybe integrate it with llm call? e.g. fetch("get news of AAPL")
+    # NOTE: integrate it well with prefect's serve()
+    def fetch(self, *args: Any, **kwargs: Any) -> GenericFrame | None | MarketFeed:
+        raise NotImplementedError(f'{self.name} fetch() is not implemented')
+    
+    # TODO
+    def _fetch_impl(self, data_model: MarketDataModel, *args: Any, **kwargs: Any) -> GenericFrame | None:
+        raise NotImplementedError(f'{self.name} _fetch_impl() is not implemented')

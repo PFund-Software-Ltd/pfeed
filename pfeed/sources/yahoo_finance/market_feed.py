@@ -355,6 +355,8 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         e.g.
             {'id': 'AAPL', 'price': 230.605, 'time': '1755531691000', 'exchange': 'NMS', 'quote_type': 8, 'market_hours': 1, 'change_percent': -0.42533004, 'day_volume': '14805050', 'change': -0.9850006, 'last_size': '120', 'price_hint': '2'}
             {'id': 'AAPL', 'price': 230.605, 'time': '1755531691000', 'exchange': 'NMS', 'quote_type': 8, 'market_hours': 1, 'change_percent': -0.4253209, 'day_volume': '14805114', 'change': -0.9850006, 'price_hint': '2'}
+            # REVIEW: sometimes it doesn't have 'day_volume', not sure why, could be a bug in yfinance?
+            {'id': 'AAPL', 'price': 249.8712, 'time': '1774047121000', 'exchange': 'NMS', 'quote_type': 8, 'market_hours': 2, 'change_percent': 0.758577, 'change': 1.8811951, 'price_hint': '2'}
         currently interpret it as this is how yahoo finance handles delayed trades
         REVIEW: current solution is, ignore 'last_size', derive volume = diff(day_volume - previous day_volume); +1 to duplicated 'time'
         another more accurate solution to handle duplicated 'time' is, wait for the 'time' to change to get the most accurate volume, 
@@ -364,14 +366,21 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         
         # derive traded volume
         last_day_volume = self.stream_api.last_day_volume.get(channel_key, None)
-        current_day_volume = int(msg['day_volume'])
-        if last_day_volume is not None:
+        # it could be missing for the after-hours messages (market_hours=2)
+        current_day_volume = msg.get('day_volume', None)
+        current_day_volume = int(current_day_volume) if current_day_volume is not None else None
+        if last_day_volume is not None and current_day_volume is not None:
             volume = current_day_volume - last_day_volume
         else:
             volume = None
-        self.stream_api.update_last_day_volume(channel_key, current_day_volume)
+        if current_day_volume is not None:
+            self.stream_api.update_last_day_volume(channel_key, current_day_volume)
         
-        # DEPRECATED: tick message have an index for uniqueness
+        ts = msg.get('time', None)
+        if ts is not None:
+            ts = int(ts) / 1000  # convert to seconds
+        
+        # DEPRECATED: tick message now has an "index" for uniqueness, no need to manually make the ts unique
         # detect duplicated 'time', if duplicated, add 1 to it to make it unique
         # last_time_in_mts = self.stream_api.last_time_in_mts.get(channel_key, None)
         # current_time_in_mts = int(msg['time'])
@@ -381,15 +390,15 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         # self.stream_api.update_last_time_in_mts(channel_key, current_time_in_mts)
         
         parsed_msg: ParsedMessage = {
-            'ts': msg['time'],
+            'ts': cast(float, ts),
             'channel': channel_key,
             'data': {
-                'ts': msg['time'],
+                'ts': ts,
                 'price': msg['price'],
                 'volume': volume,
                 'extra_data': {
-                    'exchange': msg['exchange'],
-                    'market_hours': msg['market_hours'],
+                    'exchange': msg.get('exchange', None),
+                    'market_hours': msg.get('market_hours', None),
                     'last_size': msg.get('last_size', None),
                 }
             },

@@ -103,7 +103,7 @@ class TimeBasedFeed(BaseFeed, ABC):
   
     def _create_batch_dataflows(self, extract_func: Callable[..., Any]) -> list[DataFlow]:
         request: TimeBasedFeedBaseRequest = self._current_request
-        self.logger.info(
+        self.logger.debug(
             f'{request.name}:\n{request}\n',
             style=TextStyle.BOLD + RichColor.GREEN  # pyright: ignore[reportCallIssue]
         )

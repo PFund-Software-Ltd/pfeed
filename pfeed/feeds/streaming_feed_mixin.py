@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.typing import StreamingData, GenericData
-    from pfeed.dataflow.sink import Sink
+    from pfeed.storages.base_storage import BaseStorage
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
 
 import asyncio
@@ -70,7 +70,7 @@ class StreamingFeedMixin:
         from pfeed.dataflow.dataflow import DataFlow  # pyright: ignore[reportUnusedImport]
         
         request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
-        self.logger.info(
+        self.logger.debug(
             f'{request.name}:\n{request}\n',
             style=TextStyle.BOLD + RichColor.GREEN
         )
@@ -122,7 +122,7 @@ class StreamingFeedMixin:
                 feed_name: str,
                 worker_name: str,
                 transformations_per_dataflow: dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]],
-                sinks_per_dataflow: dict[DataFlowName, Sink],
+                storages_per_dataflow: dict[DataFlowName, BaseStorage | None],
                 ports_to_connect: dict[Literal['sender', 'receiver'], set[int]],
                 ready_queue: Queue,
             ):
@@ -165,8 +165,8 @@ class StreamingFeedMixin:
                             if is_data_engine_running:
                                 msg_queue.send(channel=channel, topic=topic, data=data)
                             
-                            if sink := sinks_per_dataflow[dataflow_name]:
-                                sink.flush(data, streaming=True)
+                            if storage := storages_per_dataflow[dataflow_name]:
+                                storage.write_data(data, streaming=True)
                     msg_queue.terminate()
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
@@ -180,7 +180,7 @@ class StreamingFeedMixin:
                         WorkerName, 
                         dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]]
                     ] = defaultdict(dict)
-                    sinks_per_worker: dict[WorkerName, dict[DataFlowName, Sink]] = defaultdict(dict)
+                    storages_per_worker: dict[WorkerName, dict[DataFlowName, BaseStorage | None]] = defaultdict(dict)
                     ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], set[int]]] = defaultdict(lambda: defaultdict(set))
                     for i, dataflow in enumerate(self.dataflows):  # pyright: ignore[reportUnknownVariableType]
                         worker_num: int = i % num_workers
@@ -188,7 +188,7 @@ class StreamingFeedMixin:
                         worker_name = _create_worker_name(worker_num)
                         dataflow.set_stream_worker(worker_name)
                         transformations_per_worker[worker_name][dataflow.name] = dataflow._transformations
-                        sinks_per_worker[worker_name][dataflow.name] = dataflow._sink
+                        storages_per_worker[worker_name][dataflow.name] = dataflow._storage
                         # get ports in use for dataflow's ZMQ.ROUTER
                         dataflow_zmq: ZeroMQ = dataflow._msg_queue  # pyright: ignore[reportUnknownVariableType]
                         ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)  # pyright: ignore[reportUnknownVariableType]
@@ -210,7 +210,7 @@ class StreamingFeedMixin:
                             feed_name=self.name.value,
                             worker_name=worker_name,
                             transformations_per_dataflow=transformations_per_worker[worker_name],
-                            sinks_per_dataflow=sinks_per_worker[worker_name],
+                            storages_per_dataflow=storages_per_worker[worker_name],
                             ports_to_connect=ports_to_connect[worker_name],
                             ready_queue=ready_queue,
                         ) for worker_name in worker_names
@@ -240,7 +240,7 @@ class StreamingFeedMixin:
             shutdown_ray()
         else:
             await _run_dataflows()
-        self._reset_request_states()
+        self._reset_after_run()
     
     def run(self, **prefect_kwargs: Any) -> GenericData | None:
         if self.streaming_dataflows:

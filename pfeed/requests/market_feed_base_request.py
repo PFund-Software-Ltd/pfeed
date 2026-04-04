@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import field_validator, Field
 
 from pfund.datas.resolution import Resolution
@@ -38,7 +40,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
     def __str__(self) -> str:
         from pprint import pformat
 
-        data: dict[str, str | bool] = {
+        data: dict[str, str | bool | dict[str, Any] | None] = {
             "env": str(self.env),
             "start_date": str(self.start_date),
             "end_date": str(self.end_date),
@@ -48,4 +50,6 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
         }
         if self.data_origin:
             data["data_origin"] = self.data_origin
+        if self.storage_config:
+            data["storage_config"] = self.storage_config.model_dump()
         return pformat(data, sort_dicts=False)

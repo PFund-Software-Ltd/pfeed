@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from pfeed.enums import DataStorage
 
 import datetime
+from abc import ABC, abstractmethod
 from functools import partial
 
 from pfund.enums import Environment
@@ -27,7 +28,7 @@ e.g. if getting today's data, the next API call could have more data,
 e.g. if changing the params for the same API call, the data could be different.
 how to handle this? handled by metadata?
 '''
-class NewsFeed(TimeBasedFeed):
+class NewsFeed(TimeBasedFeed, ABC):
     data_model_class: ClassVar[type[NewsDataModel]] = NewsDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.NEWS_DATA
 
@@ -95,6 +96,10 @@ class NewsFeed(TimeBasedFeed):
             add_default_transformations=lambda: self._add_default_transformations_to_download(data_layer, product=product),
             load_to_storage=(lambda: self.load(to_storage, data_layer)) if to_storage else None,
         )
+    
+    @abstractmethod
+    def _download_impl(self, data_model: NewsDataModel) -> GenericFrame | None:
+        pass
     
     def _get_default_transformations_for_download(self, data_layer: DataLayer, product: BaseProduct | None=None) -> list[Callable]:
         from pfeed._etl import news as etl

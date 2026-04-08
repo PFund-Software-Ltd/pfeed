@@ -8,6 +8,7 @@ class DataFrameLike(Protocol):
     def __dataframe__(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
+# FIXME: use narwhals typing directly, for native dataframes, use "from narwhals._native import NativeDataFrame"
 GenericFrame: TypeAlias = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
 GenericSeries = Series[Any]
 GenericData = GenericFrame | bytes

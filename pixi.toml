@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 name = "pfeed"
 platforms = ["osx-arm64", "linux-64"]
 # updating this needs to also update the version in the ci.yml and templates/ci-workflow-template.yml files
-requires-pixi = ">=0.63.2"  # command: pixi workspace requires-pixi set ">=0.63.2"
+requires-pixi = ">=0.66.0"  # command: pixi workspace requires-pixi set ">=0.66.0"
 
 [tasks]
 
@@ -69,6 +69,7 @@ pfeed = { path = ".", editable = true }
 pfund = { path = "../pfund", editable = true }
 
 [feature.dev.pypi-dependencies]
+pfeed = { path = ".", editable = true }
 afterpython = ">=0.2.1"
 basedpyright = ">=1.38.1"
 pandas-stubs = ">=2.3.3.260113"

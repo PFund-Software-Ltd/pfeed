@@ -1,18 +1,19 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
-    from pfund.enums import ComponentType, Environment
-    
+    from pfund.enums import ComponentType
+
+from pfund.enums import Environment
 from pfeed.sources.pfund.mixin import PFundMixin
 from pfeed.sources.pfund.component_data_model import ComponentDataModel
 from pfeed.feeds.base_feed import BaseFeed
+from pfeed.enums import DataCategory
 
 
 class ComponentFeed(PFundMixin, BaseFeed):
-    def __init__(self, env: Environment, engine_name: str, **params):
-        self._env = env
-        self._engine_name = engine_name
-        super().__init__(**params)
+    data_model_class: ClassVar[type[ComponentDataModel]] = ComponentDataModel
+    data_domain: ClassVar[DataCategory] = DataCategory.PFUND_DATA
+
 
     def create_data_model(self, *args, **kwargs) -> ComponentDataModel:
         pass
@@ -28,7 +29,7 @@ class ComponentFeed(PFundMixin, BaseFeed):
     # def _get_default_transformations_for_download(self, *args, **kwargs):
     #     pass
 
-    def retrieve(self, component_name: str, component_type: str | ComponentType):
+    def retrieve(self, component_name: str, component_type: str | ComponentType, engine_name: str='engine'):
         pass
 
     def _retrieve_impl(self, data_model: ComponentDataModel):
@@ -38,7 +39,13 @@ class ComponentFeed(PFundMixin, BaseFeed):
         pass
     
     # TODO: stream component's signals
-    def stream(self, component_name: str, component_type: str | ComponentType):
+    def stream(
+        self, 
+        component_name: str, 
+        component_type: str | ComponentType, 
+        engine_name: str='engine', 
+        env: Environment | str=Environment.BACKTEST,
+    ):
         pass
     
     def _stream_impl(self, data_model: ComponentDataModel):

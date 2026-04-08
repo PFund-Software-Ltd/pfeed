@@ -2,7 +2,6 @@
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast
 
-from pfeed.feeds.base_feed import BaseFeed
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
     import pandas as pd

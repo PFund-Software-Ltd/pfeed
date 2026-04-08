@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.typing import GenericData
     from pfeed.requests.base_request import BaseRequest
-    from pfeed.storages.base_storage import BaseStorage
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult
@@ -103,7 +102,7 @@ class BaseFeed(ABC):
         pass
     
     def configure_io(self, io_format: IOFormat, **io_options: Any) -> BaseFeed:
-        self._io_options[io_format] = io_options
+        self._io_options[IOFormat[io_format.upper()]] = io_options
         return self
     
     def configure_storage(self, storage: DataStorage, storage_options: dict[str, Any]) -> BaseFeed:
@@ -111,7 +110,7 @@ class BaseFeed(ABC):
         Args:
             storage_options: A dictionary containing configuration options that are universally applicable across different storage systems. These options typically include settings such as connection parameters, authentication credentials, and other general configurations that are not specific to a particular storage type.
         '''
-        self._storage_options[storage] = storage_options
+        self._storage_options[DataStorage[storage.upper()]] = storage_options
         return self
 
     def is_pipeline(self) -> bool:

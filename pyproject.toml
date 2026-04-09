@@ -30,9 +30,9 @@ dependencies = [
     "polars>=1.39.3",
     "pyarrow>=23.0.1",
     "pandera>=0.30.1",
-    "msgspec>=0.20.0",
+    "msgspec>=0.21.0",
     "pydantic>=2.12.5",
-    "narwhals>=2.18.1",
+    "narwhals>=2.19.0",
     "zstandard>=0.25.0", # REVIEW: this is included in python 3.14
     "beautifulsoup4>=4.14.3",
     "cloudpathlib[s3,gs,azure]>=0.23.0",
@@ -43,8 +43,8 @@ dependencies = [
 
 [project.optional-dependencies]
 prefect = ["prefect>=3.6.25"]
-yfinance = ["yfinance>=1.2.0"]
-hf = ["huggingface-hub>=1.9.0"]
+yfinance = ["yfinance>=1.2.1"]
+hf = ["huggingface-hub>=1.9.2"]
 dask = ["dask[complete,dataframe]>=2026.3.0"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.1"]
 duckdb = ["duckdb>=1.5.1"]

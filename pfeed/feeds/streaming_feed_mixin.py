@@ -1,6 +1,6 @@
 # pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false, reportUnknownArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias, Callable, Literal, Any, cast
+from typing import TYPE_CHECKING, TypeAlias, Callable, Literal, Any, cast, Self
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable
     from pfeed.engine import DataEngine
@@ -32,13 +32,9 @@ def _create_worker_name(worker_num: int) -> str:
 # EXTEND: only support market feed for now, if need to support other feeds, fix MarketFeedStreamRequest and MarketDataModel
 class StreamingFeedMixin:
     _engine: DataEngine | None = None
-
+    
     def _set_engine(self, engine: DataEngine) -> None:
         self._engine = engine
-
-    @property
-    def streaming_dataflows(self) -> list[DataFlow]:
-        return [dataflow for dataflow in self.dataflows if dataflow.is_streaming()]  # pyright: ignore[reportUnknownVariableType]
     
     def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, Message], None]:
         if not self.streaming_dataflows:
@@ -51,11 +47,11 @@ class StreamingFeedMixin:
             async with asyncio.TaskGroup() as task_group:
                 producer = task_group.create_task(self.run_async())
                 while True:
-                    try:
-                        msg = await queue.get()
-                    except asyncio.CancelledError:
-                        _ = producer.cancel()
-                        break
+                    # try:
+                    msg = await queue.get()
+                    # except asyncio.CancelledError:
+                    #     _ = producer.cancel()
+                    #     break
                     if msg is None:          # sentinel from faucet.close_stream()
                         break
                     yield msg
@@ -256,7 +252,7 @@ class StreamingFeedMixin:
                     style=TextStyle.BOLD + RichColor.YELLOW,
                 )
                 return
-            return asyncio.run(self._run_stream_dataflows())
+            return asyncio.run(self.run_async())
         else:
             return super().run(**prefect_kwargs)  # pyright: ignore[reportUnknownVariableType]
 

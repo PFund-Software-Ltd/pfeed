@@ -30,9 +30,9 @@ pandas = ">=2.3.3,<3.0.0"
 polars = ">=1.39.3"
 pyarrow = ">=23.0.1"
 pandera = ">=0.30.1"
-msgspec = ">=0.20.0"
+msgspec = ">=0.21.0"
 pydantic = ">=2.12.5"
-narwhals = ">=2.18.1"
+narwhals = ">=2.19.0"
 zstandard = ">=0.25.0"
 beautifulsoup4 = ">=4.14.3"
 cloudpathlib = { version = ">=0.23.0", extras = ["s3", "gs", "azure"] }
@@ -54,9 +54,9 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 [feature.optional.pypi-dependencies]
 # TEMP
 # fmp-api-client = ">=0.0.1"
-yfinance = ">=1.2.0"
+yfinance = ">=1.2.1"
 prefect = ">=3.6.25"
-huggingface-hub = ">=1.9.0"
+huggingface-hub = ">=1.9.2"
 dask = { version = ">=2026.3.0", extras = ["complete", "dataframe"] }
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
 duckdb = ">=1.5.1"

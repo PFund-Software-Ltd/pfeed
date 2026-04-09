@@ -20,15 +20,11 @@ from collections import defaultdict
 from abc import ABC, abstractmethod
 
 from pfund_kit.style import cprint
-from pfeed.config import get_config
 from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType, DataCategory
 from pfeed.storages.storage_config import StorageConfig
 
 
 __all__ = ["BaseFeed"]
-
-
-config = get_config()
 
 
 class BaseFeed(ABC):
@@ -73,6 +69,14 @@ class BaseFeed(ABC):
     
     def is_running(self) -> bool:
         return self._is_running
+    
+    def supports_streaming(self) -> bool:
+        from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
+        return isinstance(self, StreamingFeedMixin)
+    
+    @property
+    def streaming_dataflows(self) -> list[DataFlow]:
+        return [dataflow for dataflow in self.dataflows if dataflow.is_streaming()]
     
     def _set_running(self, is_running: bool) -> None:
         if self.is_running() and is_running:

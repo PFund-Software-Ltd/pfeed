@@ -1,3 +1,4 @@
+# pyright: reportArgumentType=false, reportUnknownMemberType=false
 from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
@@ -84,10 +85,10 @@ class Faucet:
         self._msg_queue = ZeroMQ(
             name='Faucet',
             logger=self._logger, 
-            sender_type=zmq.ROUTER,  # pyright: ignore[reportArgumentType]
+            sender_type=zmq.ROUTER,
         )
-        self._msg_queue.bind(self._msg_queue.sender)  # pyright: ignore[reportUnknownMemberType]
-    
+        self._msg_queue.bind(self._msg_queue.sender)
+        
     def add_stream_worker(self, worker_name: str):
         if not self._stream_workers:
             self._setup_messaging()

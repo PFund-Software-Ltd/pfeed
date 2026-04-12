@@ -1,4 +1,3 @@
-# pyright: reportGeneralTypeIssues=false
 from typing import Annotated
 
 from msgspec import Meta
@@ -14,3 +13,5 @@ class TickMessage(MarketDataMessage, frozen=True):
     # NOTE: volume being None is very rare, only a low-quality data source like yahoo finance might not have it
     volume: Annotated[float, Meta(gt=0)] | None = None
     
+    def is_tick(self) -> bool:
+        return True

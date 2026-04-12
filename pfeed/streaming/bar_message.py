@@ -1,4 +1,3 @@
-# pyright: reportGeneralTypeIssues=false
 from typing import Annotated
 
 from msgspec import Meta
@@ -34,3 +33,6 @@ class BarMessage(MarketDataMessage, frozen=True):
             
         if not (self.low <= self.close <= self.high):
             raise ValueError(f"Close ({self.close}) must be between low and high")
+
+    def is_bar(self) -> bool:
+        return True

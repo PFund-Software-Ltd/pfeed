@@ -50,7 +50,7 @@ class DataEngine:
             logger=self._logger,
             io_threads=io_threads,
             sender_type=zmq.XPUB,
-            receiver_type=zmq.PULL,
+            receiver_type=zmq.PULL,  # pull from Ray workers in _run_stream_dataflows()
             receiver_method='bind',
         )
         self._msg_queue.bind(self._msg_queue.sender, port=zmq_sender_port, url=zmq_url)

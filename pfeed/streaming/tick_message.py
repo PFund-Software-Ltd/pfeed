@@ -1,11 +1,12 @@
+# pyright: reportGeneralTypeIssues=false
 from typing import Annotated
 
 from msgspec import Meta
 
-from pfeed.streaming.streaming_message import StreamingMessage
+from pfeed.streaming.market_data_message import MarketDataMessage
 
 
-class TickMessage(StreamingMessage, frozen=True):
+class TickMessage(MarketDataMessage, frozen=True):
     # monotonically increasing index to preserve tick order within the same timestamp
     # useful when multiple ticks have the same ts
     index: Annotated[int, Meta(ge=0)]

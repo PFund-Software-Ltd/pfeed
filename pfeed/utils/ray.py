@@ -24,8 +24,8 @@ def setup_ray():
     import atexit
     from pfund_kit.style import cprint, TextStyle, RichColor
     if not ray.is_initialized():
+        cprint(f'Auto-initializing Ray with {os.cpu_count()} CPUs', style=TextStyle.BOLD + RichColor.YELLOW)
         ray.init(num_cpus=os.cpu_count())
-        cprint(f'Auto-initialized Ray with {os.cpu_count()} CPUs', style=TextStyle.BOLD + RichColor.YELLOW)
         atexit.register(lambda: ray.shutdown())  # useful in jupyter notebook environment
 
 

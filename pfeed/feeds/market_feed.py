@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
     from pfeed.requests import MarketFeedDownloadRequest, MarketFeedRetrieveRequest, MarketFeedStreamRequest
     from pfund.datas.resolution import Resolution
-    from pfeed.streaming.streaming_message import StreamingMessage
+    from pfeed.streaming.market_data_message import MarketDataMessage
     from pfeed.feeds.streaming_feed_mixin import WebSocketName, Message, ChannelKey
     from pfeed.enums import DataSource
     from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
@@ -653,7 +653,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         msg: ParsedMessage, 
         data_bar: BarData | None = None,
         tick_counter: Iterator[int] | None = None
-    ) -> StreamingMessage:
+    ) -> MarketDataMessage:
         from msgspec import convert
         from pfeed.streaming import BarMessage, TickMessage
         common = {

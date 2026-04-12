@@ -36,9 +36,9 @@ dependencies = [
     "zstandard>=0.25.0", # REVIEW: this is included in python 3.14
     "beautifulsoup4>=4.14.3",
     "cloudpathlib[s3,gs,azure]>=0.23.0",
-    "ray[default]>=2.54.1",
-    "pyzmq>=27.1.0",
-    "deltalake>=1.5.0",
+    "ray[default]>=2.54.1 ; sys_platform != 'emscripten'",
+    "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
+    "deltalake>=1.5.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]

@@ -1,11 +1,12 @@
+# pyright: reportGeneralTypeIssues=false
 from typing import Annotated
 
 from msgspec import Meta
 
-from pfeed.streaming.streaming_message import StreamingMessage
+from pfeed.streaming.market_data_message import MarketDataMessage
 
 
-class BarMessage(StreamingMessage, frozen=True):
+class BarMessage(MarketDataMessage, frozen=True):
     start_ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)]  # timestamp of the start of the bar
     end_ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)]  # timestamp of the end of the bar
     open: Annotated[float, Meta(gt=0)]

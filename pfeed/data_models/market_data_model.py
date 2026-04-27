@@ -3,7 +3,7 @@ from typing import Any, ClassVar, cast
 
 from pydantic import field_validator, field_serializer
 
-from pfund.enums import TradingVenue, Environment
+from pfund.enums import Environment
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel, TimeBasedMetadataModel
@@ -11,7 +11,6 @@ from pfeed.data_handlers.market_data_handler import MarketDataHandler
 
 
 class MarketMetadataModel(TimeBasedMetadataModel):
-    trading_venue: TradingVenue
     exchange: str
     product_name: str
     product_basis: str
@@ -57,7 +56,6 @@ class MarketDataModel(TimeBasedDataModel):
     
     def to_metadata(self, **fields: Any) -> MarketMetadataModel:
         return cast(MarketMetadataModel, super().to_metadata(
-            trading_venue=self.product.trading_venue,
             exchange=self.product.exchange,
             product_name=self.product.name,
             product_basis=str(self.product.basis),

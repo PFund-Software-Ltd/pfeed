@@ -27,11 +27,11 @@ class ZeroMQDataChannel(StrEnum):
 
     @staticmethod
     def create_private_channel(account: BaseAccount, channel: PrivateDataChannel):
-        return f'{account.trading_venue}.{account.name}.{channel}'
+        return f'{account.venue}.{account.name}.{channel}'
 
     @staticmethod
-    def create_market_data_channel(data_source: DataSource, product: BaseProduct, resolution: Resolution) -> str:
-        return f'{product.trading_venue}.{data_source}.{repr(resolution)}.{product.name}'
+    def create_market_data_channel(product: BaseProduct, resolution: Resolution) -> str:
+        return f'{product.source}.{repr(resolution)}.{product.name}'
 
 
 class ZeroMQSignal(StrEnum):

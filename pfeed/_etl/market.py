@@ -14,11 +14,11 @@ from pfund.datas.timeframe import Timeframe
 
 def standardize_columns(df: pd.DataFrame, product: BaseProduct, resolution: Resolution) -> pd.DataFrame:
     """Standardizes the columns of a DataFrame.
-    Adds columns 'resolution', 'symbol'
+    Adds columns 'product', 'resolution'
     """
-    # df['product'] = product.name
+    df['product'] = product.name
     df['resolution'] = repr(resolution)
-    df['symbol'] = product.symbol
+    # df['symbol'] = product.symbol
     return df
 
 
@@ -26,9 +26,9 @@ def filter_columns(df: pd.DataFrame, product: BaseProduct | None = None) -> pd.D
     """Filter out unnecessary columns from raw data."""
     is_tick_data = 'price' in df.columns
     if is_tick_data:
-        standard_cols = ['date', 'resolution', 'symbol', 'side', 'volume', 'price']
+        standard_cols = ['date', 'product', 'resolution', 'side', 'volume', 'price']
     else:
-        standard_cols = ['date', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+        standard_cols = ['date', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']
     df_cols = df.columns
     extra_cols: list[str] = []
     if product:
@@ -42,8 +42,8 @@ def filter_columns(df: pd.DataFrame, product: BaseProduct | None = None) -> pd.D
 
 
 def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    '''Moves 'date', 'resolution', 'symbol' to the leftmost side.'''
-    left_cols = ['date', 'resolution', 'symbol']
+    '''Moves 'date', 'product', 'resolution' to the leftmost side.'''
+    left_cols = ['date', 'product', 'resolution']
     target_cols = left_cols + [col for col in df.columns if col not in left_cols]
     
     # Only reindex if columns are not already in the target order
@@ -98,7 +98,7 @@ def resample_data(df: pd.DataFrame, resolution: str | Resolution, product: BaseP
         'volume': 'sum',
     }
     
-    for col in ['resolution', 'symbol']:
+    for col in ['product', 'resolution']:
         if col in df.columns:
             resample_logic[col] = 'first'
     if 'dividends' in df.columns:

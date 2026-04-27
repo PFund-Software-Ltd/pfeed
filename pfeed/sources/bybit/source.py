@@ -45,6 +45,6 @@ class BybitSource(DataProviderSource):
         if self._stream_api is None or self._stream_api.env != env:
             self._stream_api = StreamAPI(env=env)
     
-    def create_product(self, basis: str, name: str='', symbol: str='', **specs: Any) -> BybitProduct:
+    def create_product(self, basis: str, symbol: str='', **specs: Any) -> BybitProduct:
         from pfund.entities.products.product_bybit import BybitProduct  # pyright: ignore[reportUnusedImport]
-        return cast(BybitProduct, self._exchange.create_product(basis, name=name, symbol=symbol, **specs))
+        return cast(BybitProduct, self._exchange.create_product(basis, symbol=symbol, **specs))

@@ -32,7 +32,7 @@ class DataProviderSource(BaseSource):
     def create_stream_api(self, env: Environment | str):  # pyright: ignore[reportUnusedParameter, reportUnknownParameterType]
         raise NotImplementedError(f'{self.name} does not support creating stream APIs')
     
-    def create_product(self, basis: str, name: str='', symbol: str='', **specs: Any) -> BaseProduct:  # pyright: ignore[reportUnusedParameter]
+    def create_product(self, basis: str, symbol: str='', **specs: Any) -> BaseProduct:  # pyright: ignore[reportUnusedParameter]
         raise NotImplementedError(f'{self.name} does not support creating products')
 
     def _get_api_key(self) -> str | None:

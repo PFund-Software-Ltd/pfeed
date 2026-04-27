@@ -39,7 +39,9 @@ class BaseFeed(ABC):
                 When provided, Ray will be automatically initialized if ray.init() hasn't been called yet.
                 To customize Ray initialization (e.g. specifying num_cpus), call ray.init() explicitly before using this.
         '''
+        from pfeed import get_config
         from pfeed.config import setup_logging
+        config = get_config()
         setup_logging()
         self.data_source: DataProviderSource = self._create_data_source()
         self.logger: logging.Logger = logging.getLogger(f'pfeed.{self.name.lower()}')
@@ -49,8 +51,8 @@ class BaseFeed(ABC):
         self._completed_dataflows: list[DataFlow] = []
         self._requests: list[BaseRequest] = []
         self._custom_transformations: dict[BaseRequest, Sequence[Callable[..., Any]]] = defaultdict(list)
-        self._storage_options: dict[DataStorage, dict[str, Any]] = {}
-        self._io_options: dict[IOFormat, dict[str, Any]] = {}
+        self._storage_options: dict[DataStorage, dict[str, Any]] = {} or config.storage_options
+        self._io_options: dict[IOFormat, dict[str, Any]] = {} or config.io_options
         self._num_workers: int | None = num_workers
         self._is_running: bool = False
         if self._num_workers and self._num_workers > 0:
@@ -83,10 +85,10 @@ class BaseFeed(ABC):
             raise RuntimeError(f'{self} is already running')
         self._is_running = is_running
     
-    def create_product(self, basis: str, name: str='', symbol: str='', **specs: Any) -> BaseProduct:
+    def create_product(self, basis: str, symbol: str='', **specs: Any) -> BaseProduct:
         if not hasattr(self.data_source, 'create_product'):
             raise NotImplementedError(f'{self.data_source.name} does not support creating products')
-        return self.data_source.create_product(basis, name=name, symbol=symbol, **specs)
+        return self.data_source.create_product(basis, symbol=symbol, **specs)
     
     @staticmethod
     @abstractmethod
@@ -395,8 +397,9 @@ class BaseFeed(ABC):
                     self.logger.warning(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
                 except Exception:
                     self.logger.exception(f'Error in running {self.name} dataflows:')
-            self.logger.debug('shutting down ray...')
-            shutdown_ray()
+            self.logger.debug('ray tasks finished')
+            # NOTE: Do NOT shut down Ray here to avoid interfering with Ray's control in higher-level frameworks that might also be using Ray.
+            # shutdown_ray()
         else:
             try:
                 for dataflow in track(self.dataflows, description=f'Running {self.name} dataflows'):

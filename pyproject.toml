@@ -27,27 +27,27 @@ dependencies = [
     "pfund>=0.0.2",
     # TODO: upgrade to pandas 3.0.0 when other libraries support it (currently it breaks pandera etc.)
     "pandas>=2.3.3,<3.0.0",
-    "polars>=1.39.3",
+    "polars>=1.40.1",
     "pyarrow>=23.0.1",
-    "pandera>=0.30.1",
-    "msgspec>=0.21.0",
-    "pydantic>=2.12.5",
-    "narwhals>=2.19.0",
+    "pandera>=0.31.1",
+    "msgspec>=0.21.1",
+    "pydantic>=2.13.3",
+    "narwhals>=2.20.0",
     "zstandard>=0.25.0", # REVIEW: this is included in python 3.14
     "beautifulsoup4>=4.14.3",
     "cloudpathlib[s3,gs,azure]>=0.23.0",
-    "ray[default]>=2.54.1 ; sys_platform != 'emscripten'",
+    "ray[default]>=2.55.1 ; sys_platform != 'emscripten'",
     "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
-    "deltalake>=1.5.0 ; sys_platform != 'emscripten'",
+    "deltalake>=1.5.1 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]
-prefect = ["prefect>=3.6.25"]
-yfinance = ["yfinance>=1.2.1"]
-hf = ["huggingface-hub>=1.9.2"]
+prefect = ["prefect>=3.6.28"]
+yfinance = ["yfinance>=1.3.0"]
+hf = ["huggingface-hub>=1.12.0"]
 dask = ["dask[complete,dataframe]>=2026.3.0"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.1"]
-duckdb = ["duckdb>=1.5.1"]
+duckdb = ["duckdb>=1.5.2"]
 # lancedb = ["lancedb>=0.30.1"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # fmp = ["fmp-api-client>=0.0.1"]
@@ -74,7 +74,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.11.2,<0.12.0"]
+requires = ["uv_build>=0.11.7,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

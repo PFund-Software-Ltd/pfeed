@@ -232,8 +232,9 @@ class StreamingFeedMixin:
                     self.logger.exception(f'Error in running {self.name} dataflows:')
             self.logger.debug('waiting for ray tasks to finish...')
             _ = ray.get(futures)
-            self.logger.debug('shutting down ray...')
-            shutdown_ray()
+            self.logger.debug('ray tasks finished')
+            # NOTE: Do NOT shut down Ray here to avoid interfering with Ray's control in higher-level frameworks that might also be using Ray.
+            # shutdown_ray()
         else:
             await _run_dataflows()
         self._reset_after_run()

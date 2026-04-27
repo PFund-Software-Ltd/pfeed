@@ -38,7 +38,7 @@ class DataFlow:
 
         data_model: MarketDataModel = cast(MarketDataModel, self._data_model)
         self._zmq_channel: str = ZeroMQDataChannel.create_market_data_channel(
-            data_source=self.data_source.name,
+            # data_source=self.data_source.name,
             product=data_model.product,
             resolution=data_model.resolution
         )

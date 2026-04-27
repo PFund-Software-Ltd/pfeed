@@ -8,10 +8,10 @@ from pfund.datas.resolution import Resolution
 
 
 class MarketDataSchema(TimeBasedDataSchema):
+    product: Series[str] | None
     resolution: Series[str] = pa.Field(isin=
         set(repr(Resolution('1'+dtype)) for dtype in MarketDataType.__members__.keys())
     )
-    symbol: Series[str] | None
 
     @pa.dataframe_check
     def validate_index_reset(cls, df: pd.DataFrame) -> bool:
@@ -25,6 +25,6 @@ class MarketDataSchema(TimeBasedDataSchema):
     def validate_unique_resolution(cls, resolution: Series[str]) -> bool:
         return resolution.nunique() == 1
 
-    @pa.check('symbol')
-    def validate_unique_symbol(cls, symbol: Series[str]) -> bool:
-        return symbol.nunique() == 1
+    @pa.check('product')
+    def validate_unique_product(cls, product: Series[str]) -> bool:
+        return product.nunique() == 1

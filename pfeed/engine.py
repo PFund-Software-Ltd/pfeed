@@ -149,12 +149,10 @@ class DataEngine:
             return
         self._logger.debug('Data Engine is ending')
         self._is_running = False
-        if self._zmq_thread:
+        if self._zmq_thread and self._zmq_thread.is_alive():
+            self._logger.debug("waiting for ZMQ thread to finish")
             self._zmq_thread.join(timeout=10)
-            if self._zmq_thread.is_alive():
-                self._logger.debug("ZMQ thread is still running after timeout")
-            else:
-                self._logger.debug("ZMQ thread finished")
+            self._logger.debug(f"ZMQ thread finished (alive={self._zmq_thread.is_alive()})")
         self._zmq_thread = None
         self._msg_queue = None
         self._is_setup_done = False

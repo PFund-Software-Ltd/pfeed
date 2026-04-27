@@ -1,14 +1,15 @@
 from enum import StrEnum
 
 from pfund_kit.utils.text import to_camel_case
+from pfund.enums import TradingVenue
 
 
 class DataSource(StrEnum):
     YAHOO_FINANCE = YF = 'YAHOO_FINANCE'
     FINANCIAL_MODELING_PREP = FMP = 'FINANCIAL_MODELING_PREP'
-    BYBIT = 'BYBIT'
-    # BINANCE = 'BINANCE'
-    # INTERACTIVE_BROKERS = IB = 'INTERACTIVE_BROKERS'
+    BYBIT = TradingVenue.BYBIT
+    IBKR = TradingVenue.IBKR
+    # BINANCE = TradingVenue.BINANCE
     # DATABENTO = 'DATABENTO'
 
     @property
@@ -21,3 +22,7 @@ class DataSource(StrEnum):
         import importlib
         return getattr(importlib.import_module(f'pfeed.sources.{self.lower()}.source'), f'{to_camel_case(self)}Source')
     
+    @property
+    def product_class(self):
+        import importlib
+        return getattr(importlib.import_module(f'pfeed.sources.{self.lower()}.product'), f'{to_camel_case(self)}Product')

@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import ClassVar, Any
 
 from pathlib import Path
 
@@ -17,6 +17,7 @@ class StorageConfig(BaseModel):
     data_domain: str=''
     io_format: IOFormat | str = IOFormat.PARQUET
     compression: Compression | str=Compression.SNAPPY
+    storage_options: dict[str, Any] | None = Field(default=None)
     
     @field_validator('storage', mode='before')
     @classmethod

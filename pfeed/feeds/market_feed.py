@@ -50,14 +50,6 @@ class MarketFeed(TimeBasedFeed, ABC):
         market_data_types_or_resolutions: list[str] = self.data_source.generic_metadata['data_categories']['market_data']
         return [Resolution(dtype_or_resol) for dtype_or_resol in market_data_types_or_resolutions]
     
-    def get_supported_resolutions_for_streaming(self, product: BaseProduct) -> dict[Timeframe, list[int]]:
-        from pfund.utils import get_supported_resolutions
-        try:
-            return get_supported_resolutions(product)
-        # EXTEND: pfund's get_supported_resolutions only handles broker/exchange apis, pfeed should extend to handle data source apis
-        except NotImplementedError:
-            raise NotImplementedError(f'{self.data_source.name} has not implemented get_supported_resolutions for streaming')
-    
     def get_highest_resolution(self) -> Resolution:
         '''Get the highest (e.g. 1second > 1minute) resolution for batch processing for the data source.'''
         return sorted(self.get_supported_resolutions(), reverse=True)[0]
@@ -381,17 +373,13 @@ class MarketFeed(TimeBasedFeed, ABC):
         )
         for _resolution in search_resolutions:
             self._validate_resolution_bounds(_resolution)
-        storage_config = storage_config or StorageConfig()
+        storage_config = storage_config or StorageConfig(data_domain=self.data_domain.value)
         # NOTE: Create storage in main thread to avoid Ray process config loss.
         # Ray workers reload config via get_config(), losing pe.configure(data_path=...) changes.
         Storage = cast(type[BaseStorage], storage_config.storage.storage_class)  # pyright: ignore[reportAttributeAccessIssue]
         storage = (
-            Storage(
-                data_path=storage_config.data_path,
-                data_layer=storage_config.data_layer,
-                data_domain=storage_config.data_domain or self.data_domain.value,
-                storage_options=self._storage_options.get(storage_config.storage, {}),  # pyright: ignore[reportCallIssue]
-            )
+            Storage
+            .from_storage_config(storage_config)
             .with_io(
                 io_options=self._io_options.get(storage_config.io_format, {}),  # pyright: ignore[reportCallIssue]
                 io_format=storage_config.io_format,
@@ -563,20 +551,18 @@ class MarketFeed(TimeBasedFeed, ABC):
         resolution: Resolution = self.create_resolution(resolution)
         data_resolution = resolution
         if resolution.is_bar():
+            from pfund.components.mixin import ComponentMixin
             # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
-            # e.g. '1s' is not supported by bybit, '1t' will be used instead
-            data_config = DataConfig(
-                data_source=self.data_source.name,  # pyright: ignore[reportCallIssue]
-                data_origin=data_origin,
+            # e.g. '1s' is not supported by bybit, '1t' will be used instead to resample data
+            data_config = DataConfig(data_source=self.data_source.name, data_origin=data_origin)
+            data_config.data_resolutions = [data_resolution]
+            resampled_data_config = data_config.auto_resample(
+                supported_resolutions=ComponentMixin.get_supported_resolutions(product),
             )
-            data_config.primary_resolution = resolution
-            is_auto_resampled = data_config.auto_resample(
-                supported_resolutions=self.get_supported_resolutions_for_streaming(product),
-            )
-            if is_auto_resampled:
-                data_resolution = cast(Resolution, data_config.resample[resolution])
+            if resampled_data_config.resample != data_config.resample:
+                data_resolution = resampled_data_config.resample[resolution]
                 cprint(
-                    f'{product.name} {resolution} is not supported in streaming, using {data_resolution} instead', 
+                    f'{product.name} {resolution} is not supported in streaming, using {data_resolution} instead to resample data', 
                     style=TextStyle.BOLD + RichColor.YELLOW
                 )
 

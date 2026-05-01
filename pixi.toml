@@ -71,7 +71,7 @@ pfund = { path = "../pfund", editable = true }
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
 afterpython = ">=0.2.1"
-basedpyright = ">=1.38.1"
+basedpyright = ">=1.39.3"
 pandas-stubs = ">=2.3.3.260113"
 financetoolkit = ">=2.0.7"
 defeatbeta-api = ">=0.0.43"

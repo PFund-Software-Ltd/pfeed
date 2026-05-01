@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Any
 
 from pathlib import Path
 
@@ -18,7 +18,7 @@ class CacheStorage(LocalStorage):
         data_path: Path | str | None = None,
         data_layer: DataLayer=DataLayer.CLEANED,
         data_domain: str | Literal['MARKET_DATA', 'NEWS_DATA'] = 'MARKET_DATA',
-        storage_options: dict | None = None,
+        storage_options: dict[str, Any] | None = None,
         num_retained_days: int = DEFAULT_NUM_RETAINED_DAYS,
     ):
         super().__init__(

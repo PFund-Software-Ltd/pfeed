@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Any, Literal, overload
+from typing import TYPE_CHECKING, ClassVar, Any, Literal, overload, Self
 
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO
     from pfeed.streaming.streaming_message import StreamingMessage
+    from pfeed.storages.storage_config import StorageConfig
 
 from abc import ABC, abstractmethod
 from pprint import pformat
@@ -102,6 +103,15 @@ class BaseStorage(ABC):
         if not self._io:
             raise AttributeError(f"No IO has been set for storage: {self.name}")
         return self._io
+    
+    @classmethod
+    def from_storage_config(cls, storage_config: StorageConfig) -> Self:
+        return cls(
+            data_path=storage_config.data_path,
+            data_layer=storage_config.data_layer,
+            data_domain=storage_config.data_domain,
+            storage_options=storage_config.storage_options,
+        )
 
     def with_data_model(self, data_model: BaseDataModel) -> BaseStorage:
         self._data_model = data_model

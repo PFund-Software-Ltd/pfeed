@@ -3,30 +3,27 @@ from typing import TYPE_CHECKING, ClassVar, Any, Callable
 if TYPE_CHECKING:
     from pfund.enums import ComponentType
     from pfund.typing import Component
+    from pfeed.sources.pfund.component_data_model import BaseArtifact, ModelArtifact, DataArtifact, SourceArtifact
 
 from pathlib import Path
 
 from pfund.enums import Environment, ArtifactType
 from pfeed.sources.pfund.mixin import PFundMixin
-from pfeed.sources.pfund.component_data_model import ComponentDataModel
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.enums.data_storage import FileBasedDataStorage
-from pfeed.enums import DataCategory, DataLayer, IOFormat, Compression
+from pfeed.enums import IOFormat, DataLayer
 
 
 # REVIEW: currently skip BaseFeed's request->dataflow structure.
 # e.g. in load(), there is no dataflow or request created in ComponentFeed.
 # if it were to be implemented, add back num_workers parameter to __init__()
-class ComponentFeed(PFundMixin, BaseFeed):
-    data_model_class: ClassVar[type[ComponentDataModel]] = ComponentDataModel
-    data_domain: ClassVar[DataCategory] = DataCategory.PFUND_DATA
-    
+class ComponentFeed(PFundMixin, BaseFeed):  # pyright: ignore[reportImplicitAbstractClass]
     def __init__(self):
         # NOTE: no pipeline mode support for now
         super().__init__(pipeline_mode=False)
         self._component: Component | None = None
         
-    def with_component(self, component: Component) -> ComponentFeed:
+    def __call__(self, component: Component) -> ComponentFeed:
         self._component = component
         return self
     
@@ -43,13 +40,62 @@ class ComponentFeed(PFundMixin, BaseFeed):
         raise NotImplementedError(f'{self.name} transform() is not implemented')
         return self
     
-    def create_data_model(self, *args, **kwargs) -> ComponentDataModel:
-        pass
+    def _create_data_artifact(self) -> DataArtifact:
+        from pfeed.sources.pfund.component_data_model import DataArtifact
+        component_metadata = self.component.to_dict()
+        return DataArtifact(
+            artifact_type=ArtifactType.data,
+            component_type=self.component_type,
+            class_name=component_metadata['class_name'],
+            extension='.delta',
+        )
     
-    def _create_data_model_from_request(self, request):
-        pass
-
+    def _create_source_artifact(self) -> SourceArtifact:
+        from pfeed.sources.pfund.component_data_model import SourceArtifact
+        component_metadata = self.component.to_dict()
+        return SourceArtifact(
+            artifact_type=ArtifactType.source,
+            component_type=self.component_type,
+            class_name=component_metadata['class_name'],
+            extension='.py',
+        )
+    
+    def _create_model_artifact(self) -> ModelArtifact:
+        from pfeed.sources.pfund.component_data_model import ModelArtifact
+        from pfund.components.models.sklearn_model import SklearnModel
+        from pfund.components.models.pytorch_model import PytorchModel
+        assert self.component.is_model(), f'{self.component} is not a model'
+        if isinstance(self.component, SklearnModel):
+            extension = '.joblib'
+        elif isinstance(self.component, PytorchModel):
+            extension = '.pth'
+        else:
+            raise ValueError(f'{self.component} is not a supported model')
+        component_metadata = self.component.to_dict()
+        return ModelArtifact(
+            artifact_type=artifact_type,
+            component_type=self.component_type,
+            # TODO:
+            # size_bytes=...  
+            class_name=component_metadata['class_name'],
+            extension=extension,
+        )
+    
+    def create_data_model(self, artifact_type: ArtifactType | str) -> BaseArtifact:
+        artifact_type = ArtifactType[artifact_type.upper()]
+        if artifact_type == ArtifactType.model:
+            artifact = self._create_model_artifact()
+        elif artifact_type == ArtifactType.data:
+            artifact = self._create_data_artifact()
+        elif artifact_type == ArtifactType.source:
+            artifact = self._create_source_artifact()
+        else:
+            raise ValueError(f'{artifact_type} is not supported')
+        return artifact
+    
     # TODO: download component's artifacts that are stored in cloud?
+    # def _create_data_model_from_request(self, request):
+    #     pass
     # def download(self, *args, **kwargs):
     #     raise NotImplementedError(f'{self.name} download() is not implemented')
     # def _download_impl(self, data_model: ComponentDataModel):
@@ -57,10 +103,16 @@ class ComponentFeed(PFundMixin, BaseFeed):
     # def _get_default_transformations_for_download(self, *args, **kwargs):
     #     pass
 
-    def retrieve(self):
+    def retrieve(self, label: str=''):
+        '''
+        Retrieve component artifacts from storage.
+        Args:
+            label: Unique label to identify the component.
+                It MUST be provided when env is PAPER/LIVE to make sure the correct component is retrieved.
+        '''
         pass
 
-    def _retrieve_impl(self, data_model: ComponentDataModel):
+    def _retrieve_impl(self, data_model: BaseArtifact):
         pass
 
     def _get_default_transformations_for_retrieve(self, *args, **kwargs):
@@ -76,7 +128,7 @@ class ComponentFeed(PFundMixin, BaseFeed):
     ):
         pass
     
-    def _stream_impl(self, data_model: ComponentDataModel):
+    def _stream_impl(self, data_model: BaseArtifact):
         pass
     
     def _create_batch_dataflows(self, *args, **kwargs):
@@ -90,33 +142,23 @@ class ComponentFeed(PFundMixin, BaseFeed):
         data_path: Path | str | None = None,
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = '',
+        storage_options: dict[str, Any] | None = None,
         **io_kwargs: Any,
     ) -> ComponentFeed:
         from pfeed.storages.storage_config import StorageConfig
-
-        # NOTE: default to parquet for data artifacts, no other options
-        io_format: IOFormat = IOFormat.PARQUET
-        compression: Compression = Compression.SNAPPY
         storage_config = StorageConfig(
-            storage=storage,
+            storage=storage, 
             data_path=data_path,
             data_layer=data_layer,
             data_domain=data_domain,
-            io_format=io_format,
-            compression=compression,
+            io_format=IOFormat.DELTALAKE,  # NOTE: only used to write data artifacts
+            storage_options=storage_options,
         )
-        # TODO: create data model
-        data_model = self.create_data_model(
-            artifact_type=artifact_type,
-        )
+        data_model = self.create_data_model(artifact_type)
         Storage = storage_config.storage.storage_class
         storage = (
-            Storage(
-                data_path=storage_config.data_path,
-                data_layer=storage_config.data_layer,
-                data_domain=storage_config.data_domain or self.data_domain.value,
-                storage_options=self._storage_options.get(storage_config.storage, {}),
-            )
+            Storage
+            .from_storage_config(storage_config)
             .with_data_model(data_model)
             .with_io(
                 io_options=self._io_options.get(storage_config.io_format, {}),
@@ -135,7 +177,6 @@ class ComponentFeed(PFundMixin, BaseFeed):
         )
         
         if artifact_type == ArtifactType.data:
-            # TODO: write parquet
             pass
         elif artifact_type == ArtifactType.model:
             if self.component_type != ComponentType.model:
@@ -158,7 +199,8 @@ class ComponentFeed(PFundMixin, BaseFeed):
                 with fs.open_output_stream(file_path) as f:
                     joblib.dump(self.component.model, f, compress=3)
                 
-                self.logger.debug(f'Dumped sklearn model {self.component.name} to {file_path}')
+                # TEMP
+                self.logger.warning(f'Dumped sklearn model {self.component.name} to {file_path}')
                 
                 # write metadata
                 # metadata = self.component.to_dict()

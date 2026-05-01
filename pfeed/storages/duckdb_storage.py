@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
     from pathlib import Path
     from pfeed._io.duckdb_io import DuckDBIO
@@ -25,7 +25,7 @@ class DuckDBStorage(DatabaseStorage):
         data_layer: DataLayer=DataLayer.CLEANED,
         data_domain: str | Literal['MARKET_DATA', 'NEWS_DATA'] = 'MARKET_DATA',
         data_storage: FileBasedDataStorage | str = FileBasedDataStorage.LOCAL,
-        storage_options: dict | None = None,
+        storage_options: dict[str, Any] | None = None,
     ):
         super().__init__(
             data_path=data_path,

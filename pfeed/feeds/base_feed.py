@@ -51,7 +51,6 @@ class BaseFeed(ABC):
         self._completed_dataflows: list[DataFlow] = []
         self._requests: list[BaseRequest] = []
         self._custom_transformations: dict[BaseRequest, Sequence[Callable[..., Any]]] = defaultdict(list)
-        self._storage_options: dict[DataStorage, dict[str, Any]] = {} or config.storage_options
         self._io_options: dict[IOFormat, dict[str, Any]] = {} or config.io_options
         self._num_workers: int | None = num_workers
         self._is_running: bool = False
@@ -111,14 +110,6 @@ class BaseFeed(ABC):
         self._io_options[IOFormat[io_format.upper()]] = io_options
         return self
     
-    def configure_storage(self, storage: DataStorage, storage_options: dict[str, Any]) -> BaseFeed:
-        '''Configure storage kwargs for the given storage
-        Args:
-            storage_options: A dictionary containing configuration options that are universally applicable across different storage systems. These options typically include settings such as connection parameters, authentication credentials, and other general configurations that are not specific to a particular storage type.
-        '''
-        self._storage_options[DataStorage[storage.upper()]] = storage_options
-        return self
-
     def is_pipeline(self) -> bool:
         return self._pipeline_mode
     
@@ -235,6 +226,7 @@ class BaseFeed(ABC):
         data_domain: str = '',
         io_format: IOFormat = IOFormat.PARQUET,
         compression: Compression = Compression.SNAPPY,
+        storage_options: dict[str, Any] | None = None,
         **io_kwargs: Any,
     ) -> BaseFeed:
         '''
@@ -253,9 +245,10 @@ class BaseFeed(ABC):
             storage=storage,
             data_path=data_path,
             data_layer=data_layer,
-            data_domain=data_domain,
+            data_domain=data_domain or self.data_domain.value,
             io_format=io_format,
             compression=compression,
+            storage_options=storage_options,
         )
         
         is_using_ray = bool(self._num_workers)
@@ -272,12 +265,8 @@ class BaseFeed(ABC):
             data_model = dataflow.data_model
             Storage = storage_config.storage.storage_class
             storage = (
-                Storage(
-                    data_path=storage_config.data_path,
-                    data_layer=storage_config.data_layer,
-                    data_domain=storage_config.data_domain or self.data_domain.value,
-                    storage_options=self._storage_options.get(storage_config.storage, {}),
-                )
+                Storage
+                .from_storage_config(storage_config)
                 .with_data_model(data_model)
                 .with_io(
                     io_options=self._io_options.get(storage_config.io_format, {}),
@@ -316,6 +305,7 @@ class BaseFeed(ABC):
                 data_domain=storage_config.data_domain,
                 io_format=storage_config.io_format,
                 compression=storage_config.compression,
+                storage_options=storage_config.storage_options,
             )
     
     def _clear_dataflows(self):

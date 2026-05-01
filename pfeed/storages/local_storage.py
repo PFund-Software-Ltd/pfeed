@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
     from pfeed.enums import DataLayer
     from pathlib import Path
@@ -20,7 +20,7 @@ class LocalStorage(FileBasedStorage):
         data_path: Path | str | None = None,
         data_layer: DataLayer=DataLayer.CLEANED,
         data_domain: str | Literal['MARKET_DATA', 'NEWS_DATA'] = 'MARKET_DATA',
-        storage_options: dict | None = None,
+        storage_options: dict[str, Any] | None = None,
     ):
         super().__init__(
             data_path=data_path or config.data_path,

@@ -48,6 +48,7 @@ class MarketDataModel(TimeBasedDataModel):
     def serialize_resolution(self, value: Resolution) -> str:
         return repr(value)
 
+    # REVIEW: better way to handle mutation?
     def update_resolution(self, resolution: Resolution | str) -> None:
         if isinstance(resolution, str):
             resolution = Resolution(resolution)

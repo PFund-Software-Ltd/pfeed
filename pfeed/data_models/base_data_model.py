@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 from pydantic import BaseModel, ConfigDict
 
 from pfeed.enums import DataSource
-from pfeed.sources.data_provider_source import DataProviderSource
+from pfeed.sources.base_source import BaseSource
 
 
 class BaseMetadataModel(BaseModel):
@@ -22,7 +22,7 @@ class BaseDataModel(BaseModel):
     data_handler_class: ClassVar[type[BaseDataHandler]]
     metadata_class: ClassVar[type[BaseMetadataModel]]
 
-    data_source: DataProviderSource
+    data_source: BaseSource
     data_origin: str
 
     def model_post_init(self, __context: Any) -> None:

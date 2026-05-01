@@ -17,6 +17,7 @@ import inspect
 
 from pfeed.enums.extract_type import ExtractType
 
+
 class Faucet:
     '''Faucet is the starting point of a dataflow
     It contains a data model and a flow function to perform the extraction.

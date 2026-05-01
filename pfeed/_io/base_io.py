@@ -13,19 +13,22 @@ class BaseIO(ABC):
     SUPPORTS_STREAMING: bool = False
     SUPPORTS_PARALLEL_WRITES: bool = False
 
-    def __init__(self, storage_options: dict | None = None, io_options: dict | None = None):
-        """
-        Args:
-            storage_options: storage options to use
-            io_options: additional kwargs to pass to the IO class
-        """
-        self._storage_options: dict = storage_options or {}
-        self._io_options: dict = io_options or {}
+    def __init__(
+        self, 
+        storage_options: dict[str, Any] | None = None,
+        connect_options: dict[str, Any] | None = None,
+        read_options: dict[str, Any] | None = None,
+        write_options: dict[str, Any] | None = None,
+    ):
+        self._storage_options: dict[str, Any] = storage_options or {}
+        self._connect_options: dict[str, Any] = connect_options or {}
+        self._read_options: dict[str, Any] = read_options or {}
+        self._write_options: dict[str, Any] = write_options or {}
     
     @property
     def name(self) -> str:
         return self.__class__.__name__
-
+    
     @abstractmethod
     def write(self, *args, **kwargs):
         pass

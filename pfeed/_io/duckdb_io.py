@@ -1,9 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Self
 if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfeed.data_models.base_data_model import BaseMetadataModel
     from pfeed._io.base_io import MetadataModelAsDict
+    from pfeed._io.io_config import IOConfig
     from duckdb import DuckDBPyConnection
 
 import json
@@ -15,7 +16,6 @@ import duckdb
 from pfeed._io.database_io import DatabaseIO, DBPath
 from pfeed._io.file_io import FileIO
 from pfeed.enums import TimestampPrecision
-from pfeed.storages.duckdb_storage import DuckDBStorage
 
 
 class DuckDBIO(DatabaseIO, FileIO):
@@ -27,20 +27,34 @@ class DuckDBIO(DatabaseIO, FileIO):
 
     def __init__(
         self,
-        in_memory: bool=DuckDBStorage.DEFAULT_IN_MEMORY,
-        memory_limit: str=DuckDBStorage.DEFAULT_MEMORY_LIMIT,
+        storage_options: dict[str, Any] | None = None,
+        connect_options: dict[str, Any] | None = None,
+        read_options: dict[str, Any] | None = None,
+        write_options: dict[str, Any] | None = None,
         filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(),
-        storage_options: dict | None = None,
-        io_options: dict | None = None,
+        **kwargs: Any,  # for compatibility with other IO classes
     ):
-        DatabaseIO.__init__(self, storage_options=storage_options, io_options=io_options)
-        FileIO.__init__(self, filesystem=filesystem, storage_options=storage_options, io_options=io_options)
-        self._in_memory = in_memory
-        self._memory_limit = memory_limit
+        DatabaseIO.__init__(
+            self, 
+            storage_options=storage_options, 
+            connect_options=connect_options, 
+            read_options=read_options, 
+            write_options=write_options,
+        )
+        FileIO.__init__(
+            self, 
+            storage_options=storage_options, 
+            connect_options=connect_options, 
+            read_options=read_options, 
+            write_options=write_options,
+            filesystem=filesystem,
+        )
+        self._in_memory = self._storage_options['in_memory']
+        self._memory_limit = self._storage_options['memory_limit']
     
     def _open_connection(self, uri: str):
         self._conn_uri = uri
-        self._conn: DuckDBPyConnection = duckdb.connect(uri, **self._io_options)
+        self._conn: DuckDBPyConnection = duckdb.connect(uri, **self._connect_options)
         if self._in_memory:
             if ";" in self._memory_limit or "'" in self._memory_limit:
                 raise ValueError(f"Invalid memory_limit: {self._memory_limit!r}")

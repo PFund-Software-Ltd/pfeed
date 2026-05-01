@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow as pa
     from lancedb import LanceDBConnection
@@ -28,17 +28,33 @@ class LanceDBIO(DatabaseIO, TableIO):
 
     def __init__(
         self,
+        storage_options: dict[str, Any] | None = None,
+        connect_options: dict[str, Any] | None = None,
+        read_options: dict[str, Any] | None = None,
+        write_options: dict[str, Any] | None = None,
         filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(),
-        storage_options: dict | None = None,
-        io_options: dict | None = None,
+        **kwargs: Any,  # for compatibility with other IO classes
     ):
-        DatabaseIO.__init__(self, storage_options=storage_options, io_options=io_options)
-        TableIO.__init__(self, filesystem=filesystem, storage_options=storage_options, io_options=io_options)
+        DatabaseIO.__init__(
+            self, 
+            storage_options=storage_options, 
+            connect_options=connect_options, 
+            read_options=read_options, 
+            write_options=write_options,
+        )
+        TableIO.__init__(
+            self, 
+            storage_options=storage_options, 
+            connect_options=connect_options, 
+            read_options=read_options, 
+            write_options=write_options,
+            filesystem=filesystem,
+        )
 
     def _open_connection(self, uri: str):
         self._conn_uri = uri
         self._conn: LanceDBConnection = lancedb.connect(
-            uri, storage_options=self._storage_options, **self._io_options
+            uri, storage_options=self._storage_options, **self._connect_options
         )
     
     def _close_connection(self):
@@ -55,17 +71,17 @@ class LanceDBIO(DatabaseIO, TableIO):
         table = self.get_table(db_path)
         return table.count_rows() == 0
 
-    def get_table(self, db_path: DBPath) -> LanceTable:
+    def get_table(self, db_path: DBPath, **io_kwargs: Any) -> LanceTable:
         conn: LanceDBConnection = self.connect(db_path.db_uri)
-        return conn.open_table(db_path.table_name, storage_options=self._storage_options)
+        return conn.open_table(db_path.table_name, storage_options=self._storage_options, **io_kwargs)
 
     def write(
         self,
-        data: list[dict] | pa.Table,
+        data: list[dict[str, Any]] | pa.Table,
         db_path: DBPath,
         delete_where: str | None = None,
         schema: pa.Schema | LanceModel | None = None,
-        **io_kwargs,
+        **io_kwargs: Any,
     ):
         """Write data to LanceDB table.
 
@@ -77,6 +93,7 @@ class LanceDBIO(DatabaseIO, TableIO):
                 before new data is inserted (e.g., "date >= '2024-01-15' AND date <= '2024-01-20'").
             schema: Optional schema for table creation.
         """
+        io_kwargs = io_kwargs or self._write_options
         conn: LanceDBConnection = self.connect(db_path.db_uri)
         if not self.exists(db_path):
             table = conn.create_table(db_path.table_name, data, schema=schema, mode="overwrite", **io_kwargs)
@@ -88,11 +105,14 @@ class LanceDBIO(DatabaseIO, TableIO):
             table.add(data)
 
     def read(
-        self, db_path: DBPath
+        self, 
+        db_path: DBPath, 
+        **io_kwargs: Any
     ) -> pl.LazyFrame | None:
+        io_kwargs = io_kwargs or self._read_options
         lf: pl.LazyFrame | None = None
         if self.exists(db_path):
-            table = self.get_table(db_path)
+            table = self.get_table(db_path, **io_kwargs)
             lf = table.to_polars()
         return lf
     

@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     import pfund_plot as plot
     from pfeed.utils.aliases import ALIASES as alias
     from pfeed.storages.storage_config import StorageConfig
+    from pfeed._io.io_config import IOConfig
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
         YahooFinance as YF,
@@ -45,6 +46,9 @@ def __getattr__(name: str):
     elif name == 'StorageConfig':
         from pfeed.storages.storage_config import StorageConfig
         return StorageConfig
+    elif name == 'IOConfig':
+        from pfeed._io.io_config import IOConfig
+        return IOConfig
     elif name == 'DataEngine':
         from pfeed.engine import DataEngine
         return DataEngine
@@ -90,6 +94,7 @@ __all__ = (
     'get_config',
     'configure_logging',
     "StorageConfig",
+    "IOConfig",
     # plot
     "plot",
     # engine

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import polars as pl
     from pyarrow.parquet import FileMetaData as PyArrowParquetFileMetaData
@@ -28,10 +28,13 @@ class FileIO(BaseIO):
 
     def __init__(
         self,
+        storage_options: dict[str, Any] | None = None,
+        connect_options: dict[str, Any] | None = None,
+        read_options: dict[str, Any] | None = None,
+        write_options: dict[str, Any] | None = None,
         filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(),
         compression: Compression | str = Compression.SNAPPY,
-        storage_options: dict | None = None,
-        io_options: dict | None = None,
+        **kwargs: Any,  # for compatibility with other IO classes
     ):
         '''
         Args:
@@ -39,25 +42,30 @@ class FileIO(BaseIO):
             storage_options: storage options to use
             compression: compression to use
         '''
-        super().__init__(storage_options=storage_options, io_options=io_options)
+        super().__init__(
+            storage_options=storage_options,
+            connect_options=connect_options,
+            read_options=read_options,
+            write_options=write_options,
+        )
         self._filesystem = filesystem
         self._compression = Compression[compression.upper()]
     
     @abstractmethod
-    def write(self, data: pa.Table, file_path: FilePath, *args, **kwargs):
+    def write(self, data: pa.Table, file_path: FilePath, *args: Any, **kwargs: Any):
         pass
 
     @abstractmethod
-    def read(self, file_paths: list[FilePath], *args, **kwargs) -> pl.LazyFrame | None:
+    def read(self, file_paths: list[FilePath], *args: Any, **kwargs: Any) -> pl.LazyFrame | None:
         pass
 
-    def exists(self, file_path: FilePath, *args, **kwargs) -> bool:
+    def exists(self, file_path: FilePath, *args: Any, **kwargs: Any) -> bool:
         """Check if a file exists at this path."""
         file_info = self._filesystem.get_file_info(file_path.schemeless)
         return file_info.type == pa_fs.FileType.File
 
     @abstractmethod
-    def is_empty(self, file_path: FilePath, *args, **kwargs) -> bool:
+    def is_empty(self, file_path: FilePath, *args: Any, **kwargs: Any) -> bool:
         pass
     
     @property
@@ -87,10 +95,10 @@ class FileIO(BaseIO):
         schema = table.schema.with_metadata({b"metadata_json": metadata_json})
         return table.replace_schema_metadata(schema.metadata)
     
-    def _write_pyarrow_table(self, table: pa.Table, file_path: FilePath, **io_options):
+    def _write_pyarrow_table(self, table: pa.Table, file_path: FilePath, **io_kwargs):
         self._mkdir(file_path)
         with self._filesystem.open_output_stream(file_path.schemeless) as f:
-            pq.write_table(table, f, compression=self._compression, **io_options)
+            pq.write_table(table, f, compression=self._compression, **io_kwargs)
 
     def read_metadata(self, file_paths: list[FilePath]) -> dict[FilePath, MetadataModelAsDict]:
         """Read custom application metadata embedded in parquet schema."""

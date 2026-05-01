@@ -35,9 +35,11 @@ class ParquetIO(FileIO):
         return self._get_pyarrow_file_metadata(file_path).num_rows == 0
     
     def write(self, data: pa.Table, file_path: FilePath, **io_kwargs: Any):
+        io_kwargs = io_kwargs or self._write_options
         self._write_pyarrow_table(data, file_path, **io_kwargs)
 
     def read(self, file_paths: list[FilePath], **io_kwargs: Any) -> pl.LazyFrame | None:
+        io_kwargs = io_kwargs or self._read_options
         lf: pl.LazyFrame | None = None
         non_empty_file_paths = [str(file_path) for file_path in file_paths if self.exists(file_path) and not self.is_empty(file_path)]
         if non_empty_file_paths:

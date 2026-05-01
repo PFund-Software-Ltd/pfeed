@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias, NamedTuple
+from typing import TYPE_CHECKING, TypeAlias, NamedTuple, Any
 if TYPE_CHECKING:
     import polars as pl
     from pfeed._io.duckdb_io import DuckDBPyConnection
@@ -30,8 +30,20 @@ class DatabaseIO(BaseIO):
     TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
     METADATA_TABLE_NAME: str = "metadata"
 
-    def __init__(self, storage_options: dict | None = None, io_options: dict | None = None):
-        super().__init__(storage_options=storage_options, io_options=io_options)
+    def __init__(
+        self, 
+        storage_options: dict[str, Any] | None = None,
+        connect_options: dict[str, Any] | None = None,
+        read_options: dict[str, Any] | None = None,
+        write_options: dict[str, Any] | None = None,
+        **kwargs: Any,  # for compatibility with other IO classes
+    ):
+        super().__init__(
+            storage_options=storage_options, 
+            connect_options=connect_options, 
+            read_options=read_options, 
+            write_options=write_options,
+        )
         self._conn: DBConnection | None = None
         self._conn_uri: str | None = None
     

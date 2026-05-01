@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, Any
 if TYPE_CHECKING:
     import polars as pl
     from deltalake import DeltaTable
@@ -25,24 +25,24 @@ class TablePath(FilePath):
 
 
 class TableIO(FileIO):
-    def exists(self, table_path: TablePath, *args, **kwargs) -> bool:
+    def exists(self, table_path: TablePath, *args: Any, **kwargs: Any) -> bool:
         file_info = self._filesystem.get_file_info(table_path.schemeless)
         return file_info.type == pa_fs.FileType.Directory
 
     @abstractmethod
-    def is_empty(self, table_path: TablePath, *args, **kwargs) -> bool:
+    def is_empty(self, table_path: TablePath, *args: Any, **kwargs: Any) -> bool:
         pass
 
     @abstractmethod
-    def get_table(self, table_path: TablePath, *args, **kwargs) -> Table:
+    def get_table(self, table_path: TablePath, *args: Any, **kwargs: Any) -> Table:
         pass
     
     @abstractmethod
-    def write(self, data: pa.Table, table_path: TablePath, *args, **kwargs):
+    def write(self, data: pa.Table, table_path: TablePath, *args: Any, **kwargs: Any):
         pass
 
     @abstractmethod
-    def read(self, table_path: TablePath, *args, **kwargs) -> pl.LazyFrame | None:
+    def read(self, table_path: TablePath, *args: Any, **kwargs: Any) -> pl.LazyFrame | None:
         pass
     
     # NOTE: delta-rs, lancedb doesn't support writing metadata, so create an empty df and use pyarrow to write metadata

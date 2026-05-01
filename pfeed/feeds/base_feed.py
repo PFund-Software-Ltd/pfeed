@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, ClassVar, Literal, overload, Any, cast
+from typing import TYPE_CHECKING, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from prefect import Flow as PrefectFlow
@@ -22,6 +22,7 @@ from abc import ABC, abstractmethod
 from pfund_kit.style import cprint
 from pfeed.enums import DataStorage, ExtractType, IOFormat, Compression, DataLayer, FlowType, DataCategory
 from pfeed.storages.storage_config import StorageConfig
+from pfeed._io.io_config import IOConfig
 
 
 __all__ = ["BaseFeed"]
@@ -39,9 +40,7 @@ class BaseFeed(ABC):
                 When provided, Ray will be automatically initialized if ray.init() hasn't been called yet.
                 To customize Ray initialization (e.g. specifying num_cpus), call ray.init() explicitly before using this.
         '''
-        from pfeed import get_config
         from pfeed.config import setup_logging
-        config = get_config()
         setup_logging()
         self.data_source: DataProviderSource = self._create_data_source()
         self.logger: logging.Logger = logging.getLogger(f'pfeed.{self.name.lower()}')
@@ -51,7 +50,6 @@ class BaseFeed(ABC):
         self._completed_dataflows: list[DataFlow] = []
         self._requests: list[BaseRequest] = []
         self._custom_transformations: dict[BaseRequest, Sequence[Callable[..., Any]]] = defaultdict(list)
-        self._io_options: dict[IOFormat, dict[str, Any]] = {} or config.io_options
         self._num_workers: int | None = num_workers
         self._is_running: bool = False
         if self._num_workers and self._num_workers > 0:
@@ -105,10 +103,6 @@ class BaseFeed(ABC):
     @abstractmethod
     def _create_batch_dataflows(self, *args: Any, **kwargs: Any):
         pass
-    
-    def configure_io(self, io_format: IOFormat, **io_options: Any) -> BaseFeed:
-        self._io_options[IOFormat[io_format.upper()]] = io_options
-        return self
     
     def is_pipeline(self) -> bool:
         return self._pipeline_mode
@@ -189,67 +183,20 @@ class BaseFeed(ABC):
         if not IO.SUPPORTS_PARALLEL_WRITES and IO.__bases__[0] is not FileIO:
             raise RuntimeError(f'{IO.__name__} does not support parallel writes, cannot be used with Ray')
     
-    @overload
-    def load(
-        self,
-        *,
-        storage: Literal[DataStorage.LOCAL] = DataStorage.LOCAL,
-        data_path: Path | str | None = None,
-        data_layer: DataLayer = DataLayer.CLEANED,
-        data_domain: str = '',
-        io_format: IOFormat = IOFormat.PARQUET,
-        compression: Compression = Compression.SNAPPY,
-        **io_kwargs: Any,
-    ) -> BaseFeed:
-        ...
-        
-    @overload
     def load(
         self, 
         *,
-        storage: Literal[DataStorage.DUCKDB] = DataStorage.DUCKDB,
-        data_path: Path | str | None = None,
-        data_layer: DataLayer = DataLayer.CLEANED,
-        data_domain: str = '',
-        in_memory: bool = False,
-        memory_limit: str = '4GB',
-        **io_kwargs: Any,
+        storage_config: StorageConfig | None = None,
+        io_config: IOConfig | None = None,
     ) -> BaseFeed:
-        ...
-
-    def load(  
-        self,
-        *,
-        storage: DataStorage | None = DataStorage.LOCAL,
-        data_path: Path | str | None = None,
-        data_layer: DataLayer = DataLayer.CLEANED,
-        data_domain: str = '',
-        io_format: IOFormat = IOFormat.PARQUET,
-        compression: Compression = Compression.SNAPPY,
-        storage_options: dict[str, Any] | None = None,
-        **io_kwargs: Any,
-    ) -> BaseFeed:
-        '''
-        Args:
-            **io_kwargs: specific io options for the given storage
-                e.g. in_memory, memory_limit, for DuckDBStorage
-        '''
         assert self._current_request is not None, 'load() must be called after functions such as stream()/download()/retrieve() in pipeline mode'
         request = self._current_request
         
         # allowing passing in None is useful for dynamically determining if load() is needed
-        if storage is None:
+        if storage_config is None:
             return self
         
-        storage_config = StorageConfig(
-            storage=storage,
-            data_path=data_path,
-            data_layer=data_layer,
-            data_domain=data_domain or self.data_domain.value,
-            io_format=io_format,
-            compression=compression,
-            storage_options=storage_options,
-        )
+        io_config = io_config or IOConfig()
         
         is_using_ray = bool(self._num_workers)
         if is_using_ray:
@@ -262,18 +209,12 @@ class BaseFeed(ABC):
             )
 
         for dataflow in self._dataflows[request]:
-            data_model = dataflow.data_model
             Storage = storage_config.storage.storage_class
             storage = (
                 Storage
                 .from_storage_config(storage_config)
-                .with_data_model(data_model)
-                .with_io(
-                    io_options=self._io_options.get(storage_config.io_format, {}),
-                    io_format=storage_config.io_format,
-                    compression=storage_config.compression,
-                    **io_kwargs
-                )
+                .with_data_model(dataflow.data_model)
+                .with_io(io_config)
             )
             if request.is_streaming():
                 storage.data_handler.create_stream_buffer(
@@ -297,16 +238,7 @@ class BaseFeed(ABC):
             request.storage_config and
             not request.is_loaded
         ):
-            storage_config = request.storage_config
-            self.load(
-                storage=storage_config.storage,
-                data_path=storage_config.data_path,
-                data_layer=storage_config.data_layer,
-                data_domain=storage_config.data_domain,
-                io_format=storage_config.io_format,
-                compression=storage_config.compression,
-                storage_options=storage_config.storage_options,
-            )
+            self.load(storage_config=request.storage_config)
     
     def _clear_dataflows(self):
         self._completed_dataflows.clear()

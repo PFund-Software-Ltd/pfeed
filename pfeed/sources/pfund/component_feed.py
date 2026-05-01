@@ -160,12 +160,7 @@ class ComponentFeed(PFundMixin, BaseFeed):  # pyright: ignore[reportImplicitAbst
             Storage
             .from_storage_config(storage_config)
             .with_data_model(data_model)
-            .with_io(
-                io_options=self._io_options.get(storage_config.io_format, {}),
-                io_format=storage_config.io_format,
-                compression=storage_config.compression,
-                **io_kwargs
-            )
+            .with_io(io_config)
         )
         fs = storage.get_filesystem()
         engine_name = self.component.context.name

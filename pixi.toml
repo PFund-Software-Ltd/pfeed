@@ -60,7 +60,7 @@ huggingface-hub = ">=1.12.0"
 dask = { version = ">=2026.3.0", extras = ["complete", "dataframe"] }
 pyspark = { version = ">=4.1.1", extras = ["connect", "pandas-on-spark", "sql"] }
 duckdb = ">=1.5.2"
-# lancedb = ">=0.30.1"
+lancedb = ">=0.30.1"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 
 [pypi-options.dependency-overrides]

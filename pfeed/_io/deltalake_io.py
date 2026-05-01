@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import pyarrow as pa
     from deltalake.table import FilterConjunctionType
@@ -43,7 +43,7 @@ class DeltaLakeIO(TableIO):
         dt = self.get_table(table_path)
         return len(dt.file_uris(partition_filters=partition_filters)) == 0
     
-    def get_table(self, table_path: TablePath, **io_kwargs) -> DeltaTable:
+    def get_table(self, table_path: TablePath, **io_kwargs: Any) -> DeltaTable:
         return DeltaTable(str(table_path), storage_options=self._storage_options, **io_kwargs)
 
     def write(
@@ -54,7 +54,7 @@ class DeltaLakeIO(TableIO):
         partition_by: list[str] | None=None,
         max_retries: int=5,
         base_delay: float=0.1,
-        **io_kwargs,
+        **io_kwargs: Any,
     ):
         """Write data to Delta Lake with retry logic for concurrent write conflicts.
 
@@ -77,6 +77,7 @@ class DeltaLakeIO(TableIO):
         import time
         import random
 
+        io_kwargs = io_kwargs or self._write_options
         last_exception = None
         for attempt in range(max_retries):
             try:
@@ -105,7 +106,7 @@ class DeltaLakeIO(TableIO):
             # All retries exhausted
             raise last_exception
 
-    def read(self, table_path: TablePath, **io_kwargs) -> pl.LazyFrame | None:
+    def read(self, table_path: TablePath, **io_kwargs: Any) -> pl.LazyFrame | None:
         """Read data from a Delta Lake table.
 
         Args:
@@ -121,6 +122,7 @@ class DeltaLakeIO(TableIO):
         Returns:
             LazyFrame with table data, or None if table doesn't exist.
         """
+        io_kwargs = io_kwargs or self._read_options
         lf: pl.LazyFrame | None = None
         if self.exists(table_path):
             dt = self.get_table(table_path, **io_kwargs)

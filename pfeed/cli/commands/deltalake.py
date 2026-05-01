@@ -7,6 +7,7 @@ from deltalake import DeltaTable
 from pfund_kit.style import cprint, TextStyle, RichColor
 from pfeed.enums import DataStorage, IOFormat
 from pfeed.storages.file_based_storage import FileBasedStorage
+from pfeed._io.io_config import IOConfig
 
 
 # Supported partition filter operators (order matters: check multi-char operators first)
@@ -99,7 +100,7 @@ def vacuum(storage: DataStorage, no_dry_run: bool, retention_hours: int = None, 
     Storage = storage.storage_class
     assert issubclass(Storage, FileBasedStorage), f'{Storage} is not a subclass of {FileBasedStorage}, which doesn\'t support Delta Lake'
     storage = Storage()
-    storage.with_io(io_format=IOFormat.DELTALAKE)
+    storage.with_io(IOConfig(io_format=IOFormat.DELTALAKE))
     data_path = storage.data_path
 
     # Discover all delta tables under this storage
@@ -169,7 +170,7 @@ def optimize(storage: DataStorage, partition_filter: tuple, target_size: int = N
     Storage = storage.storage_class
     assert issubclass(Storage, FileBasedStorage), f'{Storage} is not a subclass of {FileBasedStorage}, which doesn\'t support Delta Lake'
     storage = Storage()
-    storage.with_io(io_format=IOFormat.DELTALAKE)
+    storage.with_io(IOConfig(io_format=IOFormat.DELTALAKE))
     data_path = storage.data_path
 
     # Discover all delta tables under this storage

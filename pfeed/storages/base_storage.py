@@ -9,29 +9,28 @@ if TYPE_CHECKING:
     from pfeed._io.base_io import BaseIO
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.storages.storage_config import StorageConfig
+    from pfeed._io.io_config import IOConfig
 
-from abc import ABC, abstractmethod
 from pprint import pformat
 
 from pfeed.enums import DataLayer, IOFormat
 from pfeed.utils.file_path import FilePath
 
 
-class BaseStorage(ABC):
+class BaseStorage:
     SUPPORTED_IO_FORMATS: ClassVar[list[IOFormat]] = []
     
     def __init__(
         self,
         data_path: FilePath | DatabaseURI,
-        data_layer: DataLayer,
-        data_domain: str,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        data_domain: str = 'MARKET_DATA',
         storage_options: dict[str, Any] | None = None,
     ):
         '''
         Args:
             data_layer: Data layer to store the data.
             data_domain: Data domain of the data, used for grouping data inside a data layer.
-            # NOTE: NOT IMPLEMENTED YET, storage_options should be compatible with other libraries like polars, etc.
             storage_options: Storage options
         '''
         self.data_path = data_path
@@ -43,9 +42,8 @@ class BaseStorage(ABC):
         self._io: BaseIO | None = None
         self._is_data_handler_stale: bool = False
     
-    @abstractmethod
-    def _create_io(self, *args: Any, io_options: dict[str, Any] | None = None, **kwargs: Any) -> BaseIO:
-        pass
+    def _get_io_kwargs(self) -> dict[str, Any]:
+        return {}
 
     @property
     def name(self) -> str:
@@ -75,7 +73,7 @@ class BaseStorage(ABC):
             "data_domain": self.data_domain,
             "storage_options": self.storage_options,
             "data_model": str(self._data_model),
-            "io": self._io.name,
+            "io": self._io.name if self._io else None,
             "data_handler": self._data_handler,
         }
         return f"{self.name}(\n{pformat(data, sort_dicts=False)}\n)"
@@ -106,20 +104,20 @@ class BaseStorage(ABC):
     
     @classmethod
     def from_storage_config(cls, storage_config: StorageConfig) -> Self:
-        return cls(
-            data_path=storage_config.data_path,
-            data_layer=storage_config.data_layer,
-            data_domain=storage_config.data_domain,
-            storage_options=storage_config.storage_options,
-        )
+        return cls(**storage_config.model_dump())
 
     def with_data_model(self, data_model: BaseDataModel) -> BaseStorage:
         self._data_model = data_model
         self._is_data_handler_stale = True
         return self
 
-    def with_io(self, *, io_options: dict[str, Any] | None = None, **kwargs: Any) -> BaseStorage:
-        self._io = self._create_io(io_options=io_options, **kwargs)
+    def with_io(self, io_config: IOConfig) -> BaseStorage:
+        IO = io_config.io_format.io_class
+        self._io = IO(
+            storage_options=self.storage_options,
+            **io_config.model_dump(),
+            **self._get_io_kwargs(),  # io kwargs specific to the storage, e.g filesystem from a file-based storage
+        )
         self._is_data_handler_stale = True
         return self
 

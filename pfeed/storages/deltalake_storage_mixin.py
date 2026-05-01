@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from deltalake.writer.properties import WriterProperties
 
 from datetime import timedelta
-from pathlib import Path
 
 from rich.pretty import Pretty
 from rich.panel import Panel

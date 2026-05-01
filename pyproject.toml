@@ -25,18 +25,18 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pfund>=0.0.2",
-    # TODO: upgrade to pandas 3.0.0 when other libraries support it (currently it breaks pandera etc.)
-    "pandas>=2.3.3,<3.0.0",
     "polars>=1.40.1",
     "pyarrow>=23.0.1",
     "pandera>=0.31.1",
-    "msgspec>=0.21.1",
     "pydantic>=2.13.3",
     "narwhals>=2.20.0",
     "zstandard>=0.25.0", # REVIEW: this is included in python 3.14
     "beautifulsoup4>=4.14.3",
     "cloudpathlib[s3,gs,azure]>=0.23.0",
+    "pandas>=2.3.3,<3.0.0",  # TODO: to be replaced by polars
+    # TODO: move to optional
     "ray[default]>=2.55.1 ; sys_platform != 'emscripten'",
+    "msgspec>=0.21.1",
     "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
     "deltalake>=1.5.1 ; sys_platform != 'emscripten'",
 ]
@@ -48,7 +48,7 @@ hf = ["huggingface-hub>=1.12.0"]
 dask = ["dask[complete,dataframe]>=2026.3.0"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.1"]
 duckdb = ["duckdb>=1.5.2"]
-# lancedb = ["lancedb>=0.30.1"]
+lancedb = ["lancedb>=0.30.1"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # fmp = ["fmp-api-client>=0.0.1"]
 # "databento>=0.63.0",

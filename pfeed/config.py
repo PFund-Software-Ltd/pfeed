@@ -6,7 +6,7 @@ from typing import Any
 from pathlib import Path
 
 from pfund.enums import Environment
-from pfeed.enums import DataTool, IOFormat
+from pfeed.enums import DataTool
 from pfund_kit.config import Configuration
 
 
@@ -72,7 +72,6 @@ def configure(
     log_path: str | None = None,
     cache_path: str | None = None,
     data_tool: DataTool | str | None = None,
-    io_options: dict[IOFormat | str, dict[str, Any]] | None = None,
     persist: bool = False,
 ) -> PFeedConfig:
     '''
@@ -82,7 +81,6 @@ def configure(
         log_path: Path to the log directory.
         cache_path: Path to the cache directory.
         data_tool: Data tool to use, e.g. pandas, polars, etc.
-        io_options: IO options for the given IO format.
         persist: If True, the config will be saved to the config file.
     '''
     config = get_config()
@@ -97,8 +95,6 @@ def configure(
                 v = Path(v)
             elif k == 'data_tool':
                 v = DataTool[v.lower()]
-            elif k == 'io_options':
-                v = { IOFormat[k.upper()]: v for k, v in v.items() }
             setattr(config, k, v)
     
     config.ensure_dirs()
@@ -152,13 +148,11 @@ class PFeedConfig(Configuration):
     def _initialize_from_data(self):
         """Initialize PFeedConfig-specific attributes from config data."""
         self.data_tool = DataTool[self._data.get('data_tool', DataTool.polars).lower()]
-        self.io_options = self._data.get('io_options', {})
     
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             'data_tool': self.data_tool,
-            'io_options': self.io_options,
         }
     
     def prepare_docker_context(self):

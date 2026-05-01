@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
     import pandas as pd
     from pfund.typing import ParsedMessage
-    from pfund.datas.timeframe import Timeframe
     from pfund.datas.data_bar import BarData
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
@@ -29,6 +28,7 @@ from pfeed.enums import MarketDataType, DataTool, StreamMode, DataCategory
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
+from pfeed._io.io_config import IOConfig
 from pfeed.storages.base_storage import BaseStorage
 
 
@@ -322,6 +322,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         dataflow_per_date: bool | None=None,
         clean_data: bool=False,
         storage_config: StorageConfig | None=None,
+        io_config: IOConfig | None=None,
         **product_specs: Any
     ) -> GenericFrame | None | MarketFeed:
         '''Retrieve data from storage.
@@ -374,17 +375,14 @@ class MarketFeed(TimeBasedFeed, ABC):
         for _resolution in search_resolutions:
             self._validate_resolution_bounds(_resolution)
         storage_config = storage_config or StorageConfig(data_domain=self.data_domain.value)
+        io_config = io_config or IOConfig()
         # NOTE: Create storage in main thread to avoid Ray process config loss.
         # Ray workers reload config via get_config(), losing pe.configure(data_path=...) changes.
         Storage = cast(type[BaseStorage], storage_config.storage.storage_class)  # pyright: ignore[reportAttributeAccessIssue]
         storage = (
             Storage
             .from_storage_config(storage_config)
-            .with_io(
-                io_options=self._io_options.get(storage_config.io_format, {}),  # pyright: ignore[reportCallIssue]
-                io_format=storage_config.io_format,
-                compression=storage_config.compression,
-            )
+            .with_io(io_config)
         )
         # Auto-determine dataflow_per_date if not explicitly set
         probe_data_model = self.create_data_model(

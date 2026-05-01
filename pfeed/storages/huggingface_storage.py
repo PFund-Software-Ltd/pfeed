@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    pass
+    from pathlib import Path
 
 import os
 
@@ -26,10 +26,11 @@ class HuggingFaceStorage(FileBasedStorage):
 
     def __init__(
         self,
-        data_path: str,
+        data_path: Path | str,
         data_layer: DataLayer = DataLayer.CLEANED,
-        data_domain: str | Literal['MARKET_DATA', 'NEWS_DATA'] = 'MARKET_DATA',
-        storage_options: dict | None = None,
+        data_domain: str = 'MARKET_DATA',
+        storage_options: dict[str, Any] | None = None,
+        **kwargs: Any,  # additional kwargs for compatibility with other storages
     ):
         """
         Args:
@@ -48,6 +49,7 @@ class HuggingFaceStorage(FileBasedStorage):
             data_layer=data_layer,
             data_domain=data_domain,
             storage_options=storage_options,
+            **kwargs,
         )
         
         # Ensure storage_options has token
@@ -55,7 +57,7 @@ class HuggingFaceStorage(FileBasedStorage):
             token = os.getenv("HF_TOKEN")
             if not token:
                 raise ValueError(
-                    "HuggingFace token not found. "
+                    "HuggingFace token not found. " +
                     "Set HF_TOKEN environment variable or pass token in storage_options."
                 )
             self.storage_options["token"] = token

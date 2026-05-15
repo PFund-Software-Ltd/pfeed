@@ -26,7 +26,6 @@ class DataFlow:
         self._data_model: BaseDataModel = data_model
         self._logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
         self._faucet: Faucet = faucet
-        self._faucet.set_logger(self._logger)
         self._transformations: list[Callable[..., IntoFrame | StreamingData]] = []
         self._storage: BaseStorage | None = None
         self._result = DataFlowResult()

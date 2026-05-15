@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
     from narwhals.typing import IntoFrame
     from pfund.datas.data_bar import BarData
+    from pfeed.sources.data_provider_source import DataProviderSource
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.typing import ParsedMessage
     from pfeed.dataflow.result import RunResult
@@ -17,7 +18,6 @@ if TYPE_CHECKING:
     )
     from pfeed.streaming.market_data_message import MarketDataMessage
     from pfeed.feeds.streaming_feed_mixin import WebSocketName, Message, ChannelKey
-    from pfeed.enums import DataSource
 
 import datetime
 from abc import ABC, abstractmethod
@@ -28,7 +28,7 @@ from pfund.enums.env import Environment
 from pfund.datas.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfeed.config import setup_logging
-from pfeed.enums import DataLayer, MarketDataType, DataTool, StreamMode, DataCategory, DataStorage
+from pfeed.enums import DataLayer, MarketDataType, DataTool, StreamMode, DataCategory, DataStorage, DataSource
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
@@ -42,6 +42,7 @@ __all__ = []
 class MarketFeed(TimeBasedFeed, ABC):
     data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
+    data_source: DataProviderSource
     SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = False
 
     @staticmethod
@@ -541,9 +542,6 @@ class MarketFeed(TimeBasedFeed, ABC):
         ],
     ) -> None:
         raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
-
-    async def _close_stream(self) -> None:
-        raise NotImplementedError(f"{self.name} _close_stream() is not implemented")
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _get_default_transformations_for_stream(

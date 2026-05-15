@@ -3,11 +3,11 @@ from __future__ import annotations
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 if TYPE_CHECKING:
-    from pfund.enums.env import Environment
     from pfeed.sources.yahoo_finance.product import YahooFinanceProduct
 
 import yfinance
 
+from pfund.enums.env import Environment
 from pfeed.enums import DataSource, DataCategory, DataType, DataProviderType, DataAccessType
 from pfeed.sources.data_provider_source import DataProviderSource
 from pfeed.sources.source_metadata import SourceMetadata
@@ -44,6 +44,7 @@ class YahooFinanceSource(DataProviderSource):
         '''Creates or reuses existing stream API for the given environment'''
         if self._stream_api is None:
             assert env is not None, "env must be provided when creating stream API"
+            assert env == Environment.LIVE, "stream API is only available in live environment"
             self._stream_api = StreamAPI()
         return self._stream_api
 

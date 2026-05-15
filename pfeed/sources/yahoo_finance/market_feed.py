@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any, cast, Self
 if TYPE_CHECKING:
@@ -36,6 +37,8 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
     # "Date" is used for daily data and "Datetime" is used for other resolutions in yfinance
     date_columns_in_raw_data: ClassVar[list[str]] = ['Datetime', 'Date']
     SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = True
+    # HACK: use '1900-01-01' as the start date for daily data since we don't know the exact start date when rollback_period == 'max'
+    DAILY_DATA_ROLLBACK_MAX_START_DATE: ClassVar[str] = '1900-01-01'
 
     _ADAPTER: ClassVar[dict[str, dict[str, str]]] = {
         "timeframe": {
@@ -70,7 +73,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         '''Normalize raw yfinance DataFrame into a consistent format.
 
         Args:
-            df: DataFrame after `_standardize_date_column` (yfinance date column renamed to 'date').
+            df: DataFrame after `_standardize_date_column`
 
         Returns:
             Normalized DataFrame with:
@@ -78,22 +81,18 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             - 'stock_splits' renamed to 'splits'
             - volume cast to float64
         '''
-        # convert column names to lowercase and replace spaces with underscores
-        # if there are spaces in column names, they will be turned into some weird names like "_10" during "for row in df.itertuples()"
-        df.columns = [col.replace(" ", "_").lower() for col in df.columns]
-
         RENAMING_COLS = {'stock_splits': 'splits'}
-        df = df.rename(columns=RENAMING_COLS)
-
+        # convert column names to lowercase and replace spaces with underscores
+        df = df.rename({col: col.replace(" ", "_").lower() for col in df.collect_schema().names()})
+        df = df.rename(RENAMING_COLS)
         # convert volume (int) to float
-        df['volume'] = df['volume'].astype("float64")  # pyright: ignore[reportUnknownMemberType]
+        df = df.with_columns(pl.col('volume').cast(pl.Float64))
         return df
 
     def _rollback_max_period(self, resolution: Resolution) -> tuple[datetime.date | str | None, datetime.date | str | None, str]:
         resolution = Resolution(resolution)
         if resolution.is_day():
-            # HACK: use '1900-01-01' as the start date for daily data since we don't know the exact start date when rollback_period == 'max'
-            start_date = '1900-01-01'
+            start_date = self.DAILY_DATA_ROLLBACK_MAX_START_DATE
             end_date = None
             rollback_period = 'max'
         elif resolution.is_hour():
@@ -186,13 +185,16 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
 
     def _download_impl(self, data_model: YahooFinanceMarketDataModel, data_resolution: Resolution) -> pl.LazyFrame | None:
         # convert pfund's resolution format to yfinance's interval
-        timeframe = repr(resolution.timeframe)
-        etimeframe = self._ADAPTER["timeframe"].get(timeframe, timeframe)
-        eresolution = str(resolution.period) + etimeframe
+        timeframe = repr(data_resolution.timeframe)
+        etimeframe = self._ADAPTER["timeframe"].get(timeframe, timeframe)  # external timeframe
+        eresolution = str(data_resolution.period) + etimeframe  # external resolution
 
+        product = data_model.product
         symbol = product.symbol
         assert symbol, f'symbol is required for {product}'
-        batch_api = self.data_source.get_batch_api(env=data_model.env)
+        start_date, end_date = data_model.start_date, data_model.end_date
+
+        batch_api = self.data_source.get_batch_api()
         ticker = batch_api.Ticker(symbol)
 
         df: pd.DataFrame | None = None
@@ -202,7 +204,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
 
         while num_retries:
             num_retries -= 1
-            self.logger.debug(f'downloading {product} {resolution} from {start_date} to {end_date}')
+            self.logger.debug(f'downloading {product} {data_resolution} from {start_date} to {end_date}')
             # NOTE: yfinance's period is not used, only use start_date and end_date for data clarity in storage
             df: pd.DataFrame | None = ticker.history(
                 interval=eresolution,
@@ -212,15 +214,14 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             )
             if df is None or df.empty:
                 if num_retries:
-                    self.logger.info(f'failed to download {product.symbol} {resolution} data, retrying...')
+                    self.logger.info(f'failed to download {symbol} {data_resolution} data, retrying...')
                     time.sleep(1)
             else:
                 # convert tz-aware index to UTC naive, then reset to column
-                if hasattr(df.index, 'tz') and df.index.tz is not None:  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-                    df.index = df.index.tz_convert("UTC").tz_localize(None)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-                if str(start_date) == '1900-01-01':  # rollback_period='max' for daily data
-                    # NOTE: this MUTATES the input start_date
-                    start_date = min(df.index).date()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                if hasattr(df.index, 'tz') and df.index.tz is not None:
+                    df.index = df.index.tz_convert("UTC").tz_localize(None)
+                if str(start_date) == self.DAILY_DATA_ROLLBACK_MAX_START_DATE:
+                    start_date = min(df.index).date()
                     self.logger.debug(f'got actual start date, set start_date={start_date}')
                 # NOTE: reset index here so date columns (e.g. 'Datetime', 'Date') are actual columns,
                 # which is required by _standardize_date_column to find and rename them
@@ -228,7 +229,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
                 break
         else:
             self.logger.warning(
-                f'failed to download {product.symbol} {resolution} data after all retries, ' +
+                f'failed to download {symbol} {data_resolution} data after all retries, ' +
                 f'please check if start_date={start_date} and end_date={end_date} is within a valid range. ' +
                 'If it happens on trading days, it is possibly due to rate limit, network issue, or bugs in `pfeed` or `yfinance`, ' +
                 'you may try to extend the time range or avoid using `rollback_period` to try again.'
@@ -245,13 +246,10 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         async def _callback(msg: Message):
             symbol: str = msg['id']
             channel_key: ChannelKey = stream_api.generate_channel_key(symbol)
-            await faucet_callback(self.name.value, msg, channel_key)
+            ws_name = self.name.value
+            await faucet_callback(ws_name, msg, channel_key)
         stream_api.set_callback(_callback)
         await stream_api.connect()
-
-    async def _close_stream(self):
-        stream_api = self.data_source.get_stream_api()
-        await stream_api.disconnect()
 
     def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
@@ -284,10 +282,11 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         another more accurate solution to handle duplicated 'time' is, wait for the 'time' to change to get the most accurate volume,
         but it might not be worth it due the quality of yahoo finance streaming data
         '''
-        channel_key: ChannelKey = self.stream_api.generate_channel_key(product.symbol)
+        stream_api = self.data_source.get_stream_api()
+        channel_key: ChannelKey = stream_api.generate_channel_key(product.symbol)
 
         # derive traded volume
-        last_day_volume = self.stream_api.last_day_volume.get(channel_key, None)
+        last_day_volume = stream_api.last_day_volume.get(channel_key, None)
         # it could be missing for the after-hours messages (market_hours=2)
         current_day_volume = msg.get('day_volume', None)
         current_day_volume = int(current_day_volume) if current_day_volume is not None else None
@@ -296,7 +295,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         else:
             volume = None
         if current_day_volume is not None:
-            self.stream_api.update_last_day_volume(channel_key, current_day_volume)
+            stream_api.update_last_day_volume(channel_key, current_day_volume)
 
         ts = msg.get('time', None)
         if ts is not None:
@@ -357,4 +356,4 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             df: pd.DataFrame = cast(pd.DataFrame, option_chain.puts)
         else:
             raise ValueError(f"Invalid option type: {option_type}")
-        return cast(IntoFrame, convert_dataframe(df))
+        return convert_dataframe(df)

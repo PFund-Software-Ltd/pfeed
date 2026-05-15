@@ -1,8 +1,9 @@
-# pyright: reportArgumentType=false, reportUnknownMemberType=false, reportCallIssue=false
+# pyright: reportArgumentType=false, reportUnknownMemberType=false, reportCallIssue=false, reportUnknownVariableType=false
 from __future__ import annotations
 from typing import Callable, TYPE_CHECKING, Any, ClassVar, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable
+    from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.feeds.streaming_feed_mixin import ChannelKey, WebSocketName, Message
     from pfeed.dataflow.dataflow import DataFlow
@@ -25,16 +26,14 @@ class Faucet:
 
     def __init__(
         self,
+        data_source: BaseSource,
         extract_func: Callable[[BaseDataModel], Any],  # e.g. _download_impl(), _stream_impl(), _retrieve_impl(), _fetch_impl()
         extract_type: ExtractType,
-        close_stream: Callable[..., Awaitable[None]] | None=None,
     ):
+        self.data_source = data_source
+        self._logger = logging.getLogger(f'pfeed.{self.data_source.name.lower()}')
         self.extract_type = ExtractType[extract_type.lower()] if isinstance(extract_type, str) else extract_type
-        if self.extract_type == ExtractType.stream:
-            assert close_stream is not None, 'close_stream is required for streaming'
-        self._logger: logging.Logger | None = None
         self._extract_func = extract_func
-        self._close_stream = close_stream
         self._is_stream_opened = False
         self._streaming_queue: asyncio.Queue[tuple[WebSocketName, Message] | None] | None = None
         self._user_streaming_callback: Callable[[WebSocketName, Message], Awaitable[None] | None] | None = None
@@ -47,9 +46,6 @@ class Faucet:
         if self._streaming_queue is None:
             self._streaming_queue = asyncio.Queue(maxsize=self.STREAMING_QUEUE_MAXSIZE)
         return self._streaming_queue
-
-    def set_logger(self, logger: logging.Logger):
-        self._logger = logger
 
     def _setup_messaging(self):
         import zmq
@@ -85,8 +81,8 @@ class Faucet:
             # Signal that streaming is ending
             if self._streaming_queue:
                 await self._streaming_queue.put(None)
-            assert self._close_stream is not None, 'close_stream is required for streaming'
-            await self._close_stream()
+            stream_api = self.data_source.get_stream_api()
+            await stream_api.disconnect()
             # reset the states for streaming
             self._is_stream_opened = False
             self._streaming_queue = None

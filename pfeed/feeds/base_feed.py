@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Callable, ClassVar, Any, cast
 if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue
-    from pfeed.sources.data_provider_source import DataProviderSource
+    from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.requests.base_request import BaseRequest
     from pfeed.storages.base_storage import BaseStorage
@@ -39,7 +39,7 @@ class BaseFeed(ABC):
         '''
         from pfeed.config import setup_logging
         setup_logging()
-        self.data_source: DataProviderSource = self._create_data_source()
+        self.data_source: BaseSource = self._create_data_source()
         self.logger: logging.Logger = logging.getLogger(f'pfeed.{self.name.lower()}')
         self._pipeline_mode = pipeline_mode
         self._dataflows: dict[BaseRequest, list[DataFlow]] = {}
@@ -57,7 +57,7 @@ class BaseFeed(ABC):
 
     @staticmethod
     @abstractmethod
-    def _create_data_source() -> DataProviderSource:
+    def _create_data_source() -> BaseSource:
         pass
 
     @abstractmethod
@@ -157,21 +157,21 @@ class BaseFeed(ABC):
 
     @staticmethod
     def _create_faucet(
+        data_source: BaseSource,
         extract_func: Callable[..., Any],
         extract_type: ExtractType,
-        close_stream: Callable[..., Any] | None=None,
     ) -> Faucet:
         '''
         Args:
+            data_source: the data source to extract from
             extract_func: the function to perform the extraction, e.g. _download_impl(), _stream_impl(), _retrieve_impl()
             extract_type: the type of the extraction, e.g. download, stream, retrieve
-            close_stream: a function that closes the streaming dataflow after running the extract_func
         '''
         from pfeed.dataflow.faucet import Faucet
         return Faucet(
+            data_source=data_source,
             extract_func=extract_func,
             extract_type=extract_type,
-            close_stream=close_stream,
         )
 
     def _get_current_request(self) -> BaseRequest:

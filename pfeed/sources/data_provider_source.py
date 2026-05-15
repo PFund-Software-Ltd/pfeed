@@ -13,21 +13,14 @@ from pfeed.enums import DataCategory
 
 class DataProviderSource(BaseSource):
     METADATA: ClassVar[SourceMetadata]
-    
+
     def __init__(self):
-        self._batch_api: Any | None = None
-        self._stream_api: Any | None = None
+        super().__init__()
         self._api_key: str | None = self._get_api_key()
-    
+
     def get_data_categories(self) -> list[DataCategory]:
         return list(self.METADATA.data_categories.keys())
-    
-    def get_batch_api(self, *args: Any, **kwargs: Any):
-        raise NotImplementedError(f'{self.name} does not support getting batch API')
-    
-    def get_stream_api(self, *args: Any, **kwargs: Any):
-        raise NotImplementedError(f'{self.name} does not support getting stream API')
-    
+
     def create_product(self, basis: str, symbol: str='', **specs: Any) -> BaseProduct:
         raise NotImplementedError(f'{self.name} does not support creating products')
 

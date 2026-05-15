@@ -35,7 +35,7 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
         '''Normalize raw Bybit DataFrame into a consistent format.
 
         Args:
-            df: DataFrame after `_standardize_date_column` (Bybit's 'timestamp' column renamed to 'date').
+            df: DataFrame after `_standardize_date_column`
 
         Returns:
             Normalized DataFrame with:
@@ -117,11 +117,13 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
     def _download_impl(self, data_model: BybitMarketDataModel, data_resolution: Resolution) -> pl.LazyFrame | None:
         batch_api = self.data_source.get_batch_api()
         assert data_model.start_date == data_model.end_date, f'{self.name} download() only supports downloading data for a single day'
-        self.logger.debug(f'downloading {data_model.product} {data_resolution} on {data_model.start_date}')
+        product = data_model.product
+        start_date = data_model.start_date
+        self.logger.debug(f'downloading {product} {data_resolution} on {start_date}')
         data = batch_api.get_data(
-            product=data_model.product,
+            product=product,
             resolution=data_resolution,
-            date=data_model.start_date,
+            date=start_date,
         )
         return data
 
@@ -149,10 +151,6 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
             await faucet_callback(ws_name, msg, channel_key)
         stream_api.set_callback(_callback)
         await stream_api.connect()
-
-    async def _close_stream(self):
-        stream_api = self.data_source.get_stream_api()
-        await stream_api.disconnect()
 
     def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name

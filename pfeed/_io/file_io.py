@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pfeed.enums import Compression
     from pfeed.utils.file_path import FilePath
     from pfeed.data_models.base_data_model import BaseMetadataModel
-    from pfeed._io.base_io import MetadataModelAsDict
+    from pfeed._io.base_io import MetadataDict
 
 import json
 from abc import abstractmethod
@@ -20,8 +20,6 @@ from pfeed._io.base_io import BaseIO
 
 
 class FileIO(BaseIO):
-    FILE_EXTENSION: str | None = None
-    SUPPORTS_PARTITIONING: bool = False
     # when it's empty, it means metadata is stored alongside the data file
     # when it's not empty, it means metadata is stored in a separate file
     METADATA_FILENAME: str = ""
@@ -50,7 +48,7 @@ class FileIO(BaseIO):
         )
         self._filesystem = filesystem
         self._compression = Compression[compression.upper()]
-    
+
     @abstractmethod
     def write(self, data: pa.Table, file_path: FilePath, *args: Any, **kwargs: Any):
         pass
@@ -67,7 +65,7 @@ class FileIO(BaseIO):
     @abstractmethod
     def is_empty(self, file_path: FilePath, *args: Any, **kwargs: Any) -> bool:
         pass
-    
+
     @property
     def is_local_fs(self) -> bool:
         return isinstance(self._filesystem, pa_fs.LocalFileSystem)
@@ -85,7 +83,7 @@ class FileIO(BaseIO):
     ) -> PyArrowParquetFileMetaData:
         """Get file metadata created by pyarrow (e.g. rows, schema, row groups, etc.)."""
         return pq.read_metadata(file_path.schemeless, filesystem=self._filesystem)
-    
+
     def write_metadata(self, table: pa.Table, metadata: BaseMetadataModel) -> pa.Table:
         '''This only writes metadata to the table schema, not to the file.
         You must call _write_pyarrow_table to actually write the metadata to the file.
@@ -94,16 +92,16 @@ class FileIO(BaseIO):
         metadata_json = json.dumps(metadata)
         schema = table.schema.with_metadata({b"metadata_json": metadata_json})
         return table.replace_schema_metadata(schema.metadata)
-    
+
     def _write_pyarrow_table(self, table: pa.Table, file_path: FilePath, **io_kwargs):
         self._mkdir(file_path)
         with self._filesystem.open_output_stream(file_path.schemeless) as f:
             pq.write_table(table, f, compression=self._compression, **io_kwargs)
 
-    def read_metadata(self, file_paths: list[FilePath]) -> dict[FilePath, MetadataModelAsDict]:
+    def read_metadata(self, file_paths: list[FilePath]) -> dict[FilePath, MetadataDict]:
         """Read custom application metadata embedded in parquet schema."""
-        metadata: dict[FilePath, MetadataModelAsDict] = {}
-        
+        metadata: dict[FilePath, MetadataDict] = {}
+
         for file_path in file_paths:
             if not FileIO.exists(self, file_path):
                 continue
@@ -113,5 +111,5 @@ class FileIO(BaseIO):
                 if b"metadata_json" in parquet_file_metadata:
                     metadata_json = parquet_file_metadata[b"metadata_json"]
                     metadata[file_path] = json.loads(metadata_json)
-                    
+
         return metadata

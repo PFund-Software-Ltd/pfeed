@@ -1,71 +1,103 @@
+# pyright: reportUnknownVariableType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
-    from pfeed.typing import GenericFrame, GenericSeries
+    from narwhals.typing import Frame
 
-import pandas as pd
-import polars as pl
 import narwhals as nw
-from narwhals.typing import Frame
-try:
-    import dask.dataframe as dd
-except ImportError:
-    class dd:
-        class DataFrame:
-            pass
-        class Series:
-            pass
-try:
-    import pyspark.pandas as ps
-    from pyspark.sql import DataFrame as SparkDataFrame
-except ImportError:
-    class ps:
-        class DataFrame:
-            pass
-        class Series:
-            pass
-    class SparkDataFrame:
-        pass
+from narwhals.dependencies import (
+    is_pandas_dataframe,
+    is_polars_dataframe,
+    is_polars_lazyframe,
+    is_dask_dataframe,
+    is_pyspark_dataframe,
+)
 
 
-def is_dataframe(df: GenericFrame, eagerframe_only: bool = False, include_narwhals: bool = True) -> bool:
-    """
-    Returns True if `df` is any known DataFrame type.
-    
-    Args:
-        eagerframe_only: If True, only eager dataframes (e.g., pd.DataFrame, pl.DataFrame) are considered.
-        include_narwhals: Whether to include Narwhals' frame types in the check.
-    """
-    df_types = (pd.DataFrame, pl.DataFrame, pl.LazyFrame, dd.DataFrame, ps.DataFrame, SparkDataFrame)
-    narwhals_types = (nw.DataFrame, nw.LazyFrame) if include_narwhals else ()
-    if not isinstance(df, df_types + narwhals_types):
-        return False
-    if eagerframe_only and is_lazyframe(df, include_narwhals=include_narwhals):
-        return False
-    return True
+__all__ = [
+    "is_lazyframe",
+    "is_eagerframe",
+    "is_dataframe",
+    "is_empty_dataframe",
+    "from_native",
+]
 
 
-def is_lazyframe(df: GenericFrame, include_narwhals: bool = True) -> bool:
-    """
-    Returns True if `df` is a lazily evaluated dataframe.
-
-    Args:
-        include_narwhals: Whether to include Narwhals' lazyframes in the check.
-    """
-    lazy_types = (pl.LazyFrame, dd.DataFrame, ps.DataFrame, SparkDataFrame)
-    narwhals_types = (nw.LazyFrame,) if include_narwhals else ()
-    return isinstance(df, lazy_types + narwhals_types)
+# narwhals' dependency helpers don't cover these two — fall back to
+# class/module sniffing, which also avoids importing the packages.
+def _is_pyspark_pandas_dataframe(df: Any) -> bool:
+    """pyspark.pandas.DataFrame. Narwhals doesn't process it directly —
+    callers must convert via `.to_spark()` first."""
+    cls = type(df)
+    return cls.__name__ == "DataFrame" and cls.__module__.startswith("pyspark.pandas")
 
 
-def is_empty_dataframe(df: GenericFrame) -> bool:
-    df: Frame = nw.from_native(df)
+def _is_daft_dataframe(df: Any) -> bool:
+    cls = type(df)
+    return cls.__name__ == "DataFrame" and cls.__module__.startswith("daft")
+
+
+def is_lazyframe(df: Any) -> bool:
     if isinstance(df, nw.LazyFrame):
-        df = df.head(1).collect()
-    return df.is_empty()
-
-
-def is_series(value: GenericSeries, include_narwhals: bool = True) -> bool:
+        return True
+    if is_pandas_dataframe(df):
+        return False
     return (
-        isinstance(value, (pd.Series, pl.Series, dd.Series, ps.Series))
-        or (include_narwhals and isinstance(value, (nw.Series)))
+        is_polars_lazyframe(df)
+        or is_dask_dataframe(df)
+        or is_pyspark_dataframe(df)
+        or _is_pyspark_pandas_dataframe(df)  # lazy under the hood
+        or _is_daft_dataframe(df)            # lazy by default
     )
+
+
+def is_eagerframe(df: Any) -> bool:
+    if isinstance(df, nw.DataFrame):
+        return True
+    if is_polars_lazyframe(df):
+        return False
+    return (
+        is_pandas_dataframe(df) 
+        or is_polars_dataframe(df)
+    )
+
+
+def is_dataframe(df: Any) -> bool:
+    """
+    Returns True if the input is recognized as a supported DataFrame or LazyFrame.
+
+    This checks for Pandas, Polars (eager and lazy), Dask, PySpark, pyspark.pandas,
+    Daft, and any Narwhals DataFrame/LazyFrame types.
+
+    Args:
+        df: The object to check.
+
+    Returns:
+        bool: True if `df` is a supported dataframe type, otherwise False.
+    """
+    if isinstance(df, (nw.DataFrame, nw.LazyFrame)):
+        return True
+    if is_pandas_dataframe(df) or is_polars_dataframe(df):
+        return True
+    return (
+        is_polars_lazyframe(df)
+        or is_dask_dataframe(df)
+        or is_pyspark_dataframe(df)
+        or _is_pyspark_pandas_dataframe(df)
+        or _is_daft_dataframe(df)
+    )
+
+
+def from_native(df: Any) -> Frame:
+    """Wraps `nw.from_native` with a `.to_spark()` step for pyspark.pandas.
+    Prefer this over `nw.from_native` anywhere in pfeed."""
+    if _is_pyspark_pandas_dataframe(df):
+        df = df.to_spark()
+    return nw.from_native(df)
+
+
+def is_empty_dataframe(df: Any) -> bool:
+    nwdf = from_native(df)
+    if isinstance(nwdf, nw.LazyFrame):
+        nwdf = nwdf.head(1).collect()
+    return nwdf.is_empty()

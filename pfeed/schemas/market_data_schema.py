@@ -1,6 +1,5 @@
-import pandas as pd
-import pandera.pandas as pa
-from pandera.typing import Series
+import polars as pl
+import pandera.polars as pa
 
 from pfeed.schemas.time_based_data_schema import TimeBasedDataSchema
 from pfeed.enums import MarketDataType
@@ -8,23 +7,15 @@ from pfund.datas.resolution import Resolution
 
 
 class MarketDataSchema(TimeBasedDataSchema):
-    product: Series[str] | None
-    resolution: Series[str] = pa.Field(isin=
-        set(repr(Resolution('1'+dtype)) for dtype in MarketDataType.__members__.keys())
+    product: str = pa.Field(nullable=True)
+    resolution: str = pa.Field(isin=
+        set(repr(Resolution(dtype)) for dtype in MarketDataType.__members__.keys())
     )
 
-    @pa.dataframe_check
-    def validate_index_reset(cls, df: pd.DataFrame) -> bool:
-        return (
-            isinstance(df.index, pd.RangeIndex) and 
-            df.index.start == 0 and 
-            df.index.step == 1
-        )
-
     @pa.check('resolution')
-    def validate_unique_resolution(cls, resolution: Series[str]) -> bool:
-        return resolution.nunique() == 1
+    def validate_unique_resolution(cls, data: pa.PolarsData) -> pl.LazyFrame:
+        return data.lazyframe.select(pl.col(data.key).n_unique() <= 1)
 
     @pa.check('product')
-    def validate_unique_product(cls, product: Series[str]) -> bool:
-        return product.nunique() == 1
+    def validate_unique_product(cls, data: pa.PolarsData) -> pl.LazyFrame:
+        return data.lazyframe.select(pl.col(data.key).n_unique() <= 1)

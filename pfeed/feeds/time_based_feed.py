@@ -1,81 +1,100 @@
+# pyright: reportCallIssue=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, ClassVar, Callable, Any, cast
 if TYPE_CHECKING:
-    import pandas as pd
+    from narwhals.typing import Frame, IntoFrame
+    from pfund.datas.resolution import Resolution
     from pfeed.dataflow.dataflow import DataFlow
-    from pfeed.dataflow.result import DataFlowResult
+    from pfeed.dataflow.result import DataFlowResult, RunResult
     from pfeed.dataflow.faucet import Faucet
     from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
-    from pfund.datas.resolution import Resolution
+    from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 import datetime
-from pprint import pformat
 from abc import ABC
 
-from narwhals.typing import Frame
+import polars as pl
 
 from pfund_kit.style import TextStyle, RichColor
-from pfeed.typing import GenericFrame
 from pfeed.feeds.base_feed import BaseFeed
-from pfeed.data_models.time_based_data_model import TimeBasedDataModel
-from pfeed.data_handlers.time_based_data_handler import TimeBasedMetadata
 
 
-__all__ = ["TimeBasedFeed"]
+__all__ = []
 
 
 class TimeBasedFeed(BaseFeed, ABC):
     data_model_class: ClassVar[type[TimeBasedDataModel]]
     date_columns_in_raw_data: ClassVar[list[str]]
-    original_date_column_in_raw_data: ClassVar[str] = '_date_raw'
-    def _standardize_date_column(self, df: pd.DataFrame, is_raw_data: bool) -> pd.DataFrame:
-        '''Standardize the date column so that a 'date' column is always present (mandatory for storage).
+    DATE_COL_IN_CLEANED_DATA: ClassVar[str] = 'date'
+    DATE_COL_IN_RAW_DATA: ClassVar[str] = '_pfeed_date'
+
+    @classmethod
+    def _standardize_date_column(cls, df: pl.LazyFrame, is_raw_data: bool) -> pl.LazyFrame:
+        '''Materialize a uniform date column for downstream filtering and dedup.
+
+        Sources expose their date under different column names (e.g. Bybit: 'timestamp',
+        Yahoo Finance: 'Datetime'/'Date'). `date_columns_in_raw_data` lists the candidates
+        to look for in the input. Handling differs by data layer so raw data stays a
+        faithful mirror of the source:
+            - Cleaned: the source's date column is renamed to 'date'.
+            - Raw: the source schema is left untouched and a '_pfeed_date' column is
+            added as a copy, used by the storage handler for date-based filtering
+            and dedup.
 
         Args:
-            df: DataFrame from the data source, with a source-specific date column (e.g. 'timestamp', 'Datetime').
-            is_raw_data: Whether the df is being stored as raw data.
-                If False (cleaned path): renames the source date column directly to 'date'.
-                If True (raw storage path): keeps the source date column intact and copies it to 'date'.
-                    Special case: if the source already uses 'date', it is copied to
-                    `original_date_column_in_raw_data` ('_date_raw') to avoid collision.
+            df: Input LazyFrame containing one of the source's date columns listed in
+                `date_columns_in_raw_data`.
+            is_raw_data: If True, preserve the source schema and add '_pfeed_date'.
+                If False, rename the source's date column to 'date'.
 
         Returns:
-            DataFrame with a standardized 'date' column.
+            A LazyFrame with a normalized date column ('date' for cleaned data,
+            '_pfeed_date' for raw data).
+
+        Raises:
+            ValueError: If none of the candidate source date columns are present in `df`.
         '''
         from pfeed._etl.base import standardize_date_column
+
+        cols = df.columns
+        raw_date_col = next(
+            (c for c in cls.date_columns_in_raw_data if c in cols),
+            None,
+        )
+        if raw_date_col is None:
+            raise ValueError(
+                f"no date column ({cls.date_columns_in_raw_data}) found in {cols}"
+            )
+
         if not is_raw_data:
-            for date_column in self.date_columns_in_raw_data:
-                if date_column not in df.columns:
-                    continue
-                df = df.rename(columns={date_column: 'date'})
-                break
-            else:
-                raise ValueError(f'No date columns ({self.date_columns_in_raw_data}) are found in raw data {df.columns=}')
+            date_col = cls.DATE_COL_IN_CLEANED_DATA
+            df = df.rename({raw_date_col: date_col})
         else:
-            for date_column in self.date_columns_in_raw_data:
-                if date_column not in df.columns:
-                    continue
-                if date_column != 'date':
-                    df['date'] = df[date_column]
-                else:
-                    # NOTE: if raw data also uses "date" column, copy it to "original_date" column, 
-                    # which will be renamed back to "date" before writing to storage
-                    df[self.original_date_column_in_raw_data] = df['date']
-                break
-            else:
-                raise ValueError(f'No date columns ({self.date_columns_in_raw_data}) are found in raw data {df.columns=}')
-        df = standardize_date_column(df)
-        return df
-    
+            date_col = cls.DATE_COL_IN_RAW_DATA
+            df = df.with_columns(pl.col(raw_date_col).alias(date_col))
+        return standardize_date_column(df, date_col)
+
+    def _rollback_max_period(self, _: Resolution) -> tuple[datetime.date | str | None, datetime.date | str | None, str]:
+        data_source_start_date = self.data_source.METADATA.start_date
+        if data_source_start_date:
+            start_date = data_source_start_date
+            end_date = None
+            rollback_period = 'max'
+        else:
+            raise ValueError(f'{self.name} has no data source start_date, cannot use rollback_period="max"')
+        return start_date, end_date, rollback_period
+
     def _standardize_dates(
-        self, 
-        start_date: str | datetime.date, 
-        end_date: str | datetime.date,
+        self,
+        resolution: Resolution,
+        start_date: str | datetime.date | None,
+        end_date: str | datetime.date | None,
         rollback_period: Resolution | str | Literal['ytd', 'max'],
     ) -> tuple[datetime.date, datetime.date]:
         '''Standardize start_date and end_date based on input parameters.
 
         Args:
+            resolution: The resolution of the data, only used when rollback_period is 'max'.
             start_date: Start date string in YYYY-MM-DD format.
                 If not provided, will be determined by rollback_period.
             end_date: End date string in YYYY-MM-DD format.
@@ -92,221 +111,77 @@ class TimeBasedFeed(BaseFeed, ABC):
         Raises:
             ValueError: If rollback_period='max' but data source has no start_date attribute
         '''
-        from pfeed.utils import parse_date_range
-        if rollback_period == 'max' and not start_date:
-            if hasattr(self.data_source, 'start_date') and self.data_source.start_date:
-                start_date = self.data_source.start_date
-            else:
-                raise ValueError(f'{self.name} {rollback_period=} is not supported')        
+        from pfeed.utils.temporal import parse_date_range
+        if rollback_period.lower() == 'max' and not start_date:
+            if not self.SUPPORTS_ROLLBACK_MAX_PERIOD:
+                raise ValueError(f"rollback_period='max' is not supported by {self.name}")
+            start_date, end_date, rollback_period = self._rollback_max_period(resolution)
         start_date, end_date = parse_date_range(start_date, end_date, rollback_period)
         return start_date, end_date
-  
-    def _create_batch_dataflows(self, extract_func: Callable[..., Any]) -> list[DataFlow]:
-        request: TimeBasedFeedBaseRequest = self._current_request
+
+    def _create_batch_dataflows(self, extract_func: Callable[[TimeBasedDataModel], Any]) -> list[DataFlow]:
+        request = cast("TimeBasedFeedBaseRequest", self._get_current_request())
         self.logger.debug(
             f'{request.name}:\n{request}\n',
-            style=TextStyle.BOLD + RichColor.GREEN  # pyright: ignore[reportCallIssue]
+            style=TextStyle.BOLD + RichColor.GREEN
         )
-        data_model: TimeBasedDataModel = cast(TimeBasedDataModel, self._create_data_model_from_request(request))
-        dataflows_in_batch: list[DataFlow] = []
-        if request.dataflow_per_date:  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
-            # one dataflow per date
-            for date in data_model.dates:
-                # NOTE: update data_model to a single date since it is one dataflow per date
-                data_model_copy = data_model.model_copy(deep=False)
-                data_model_copy.update_start_date(date)
-                data_model_copy.update_end_date(date)
-                faucet: Faucet = self._create_faucet(data_model=data_model_copy, extract_func=extract_func, extract_type=request.extract_type)
-                # copy data_model_copy again to avoid sharing the same data model with faucet
-                dataflow: DataFlow = self._create_dataflow(data_model_copy.model_copy(deep=False), faucet)
-                dataflows_in_batch.append(dataflow)
+        data_model = cast("TimeBasedDataModel", self._create_data_model_from_request(request))
+        faucet: Faucet = self._create_faucet(extract_func=extract_func, extract_type=request.extract_type)
+        if request.dataflow_per_date:
+            data_models = [
+                data_model.model_copy(update={'start_date': d, 'end_date': d})
+                for d in data_model.dates
+            ]
         else:
-            # one dataflow for the entire date range
-            faucet: Faucet = self._create_faucet(data_model=data_model, extract_func=extract_func, extract_type=request.extract_type)
-            # copy data_model to avoid sharing the same data model with faucet
-            dataflow: DataFlow = self._create_dataflow(data_model.model_copy(deep=False), faucet)
-            dataflows_in_batch.append(dataflow)
-        self._dataflows[request] = dataflows_in_batch
-        return dataflows_in_batch
-    
-    def run(self, **prefect_kwargs: Any) -> GenericFrame | None:
-        '''Runs dataflows and handles the results.'''
+            data_models = [data_model]
+        dataflows = [self._create_dataflow(faucet=faucet, data_model=dm) for dm in data_models]
+        self._dataflows[request] = dataflows
+        return dataflows
+
+    def _validate_before_run(self) -> None:
+        super()._validate_before_run()
+        if self._is_using_ray():
+            for request, dataflows in self._dataflows.items():
+                if not request.dataflow_per_date:
+                    continue   # single dataflow, no concurrent writes anyway
+                for dataflow in dataflows:
+                    storage = dataflow.storage
+                    if storage:
+                        data_handler = storage.data_handler
+                        # NOTE: this condition _is_file_io(strict=True) allows ParquetIO for parallel writes using Ray
+                        # because TimeBasedFeed writes data per date (writing to separate files for each date), instead of writing to a single file.
+                        if not data_handler._supports_parallel_writes() and not data_handler._is_file_io(strict=True):
+                            raise RuntimeError(f'{data_handler._io} does not support parallel writes, cannot be used with Ray')
+
+    def run(self, **prefect_kwargs: Any) -> RunResult:
+        '''Runs dataflows and returns a RunResult exposing the combined frame,
+        per-flow successes/failures, and any dates that produced no data.'''
         import narwhals as nw
         from pfeed.utils.dataframe import is_empty_dataframe
-        
-        completed_dataflows, failed_dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
+        from pfeed.dataflow.result import RunResult
 
-        result_dfs: list[GenericFrame] = []
-        missing_dates: list[datetime.date] = []
-        
-        for dataflow in completed_dataflows + failed_dataflows:
+        result_dfs: list[IntoFrame] = []
+
+        dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
+        for dataflow in dataflows:
             result: DataFlowResult = dataflow.result
-            _df: GenericFrame | None = cast(GenericFrame | None, result.data)
+            _df: IntoFrame | None = result.data
             if _df is not None:
                 result_dfs.append(_df)
-            metadata: TimeBasedMetadata | None = cast(TimeBasedMetadata | None, result.metadata)
-            if metadata is not None:
-                missing_dates.extend(metadata.missing_dates_in_storage)
-        
-        if missing_dates:
-            self.logger.warning(
-                f'No data found for the following dates in {self._current_request.name}:\n' +
-                f'{pformat([str(date) for date in missing_dates])}\n'
-            )
 
         dfs: list[Frame] = [nw.from_native(df) for df in result_dfs if not is_empty_dataframe(df)]
         if dfs:
+            from pfeed._etl.base import convert_dataframe
             df: Frame = cast(Frame, nw.concat(dfs))  # pyright: ignore[reportArgumentType]
             schema = df.collect_schema()
             columns = schema.names()
-            if 'date' in columns:
-                date_dtype = schema['date']
-                # Check if 'date' column is a temporal type (Date or Datetime) before sorting
-                if 'Date' in str(date_dtype) or 'Datetime' in str(date_dtype):
-                    df: Frame = df.sort(by='date', descending=False)
-            df: GenericFrame = nw.to_native(df)
+            if 'date' in columns and schema['date'].is_temporal():
+                df: Frame = df.sort(by='date', descending=False)
+            # Storage-backed flows return raw pl.LazyFrame from storage.read_data,
+            # bypassing the per-flow `convert_to_user_df` transformation. Convert
+            # once here so the aggregated frame matches the user's data_tool.
+            combined: IntoFrame | None = convert_dataframe(nw.to_native(df))
         else:
-            df: GenericFrame | None = None
-        
-        return df
-    
-    # DEPRECATED: trying to do too much, let users handle it
-    # def _get_historical_data_impl(
-    #     self,
-    #     product: str,
-    #     symbol: str,
-    #     rollback_period: str | Literal['ytd', 'max'],
-    #     start_date: str,
-    #     end_date: str,
-    #     data_origin: str,
-    #     data_layer: DataLayer | None,
-    #     data_domain: str,
-    #     from_storage: DataStorage | None,
-    #     to_storage: DataStorage | None,
-    #     storage_options: dict | None,
-    #     force_download: bool,
-    #     retrieve_per_date: bool,
-    #     product_specs: dict | None,
-    #     **feed_kwargs
-    # ) -> GenericFrame | None:
-    #     '''
-    #     """Gets historical data from Yahoo Finance using yfinance's Ticker.history().
-    #     Args:
-    #         product: product basis, e.g. AAPL_USD_STK, BTC_USDT_PERP
-    #         symbol: symbol that will be used by yfinance's Ticker.history().
-    #             If not specified, it will be derived from `product`, which might be inaccurate.
-    #         rollback_period: Data resolution or 'ytd' or 'max'
-    #             Period to rollback from today, only used when `start_date` is not specified.
-    #             Default is '1M' = 1 month.
-    #             if 'period' in kwargs is specified, it will be used instead of `rollback_period`.
-    #         force_download: Whether to skip retrieving data from storage.
-    #         feed_kwargs: kwargs specific to the feed, e.g. "resolution" for MarketFeed
-    #     """
-    #     '''
-    #     import pandas as pd
-    #     import narwhals as nw
-    #     from pfeed.enums import DataAccessType
-        
-    #     assert not self._pipeline_mode, 'pipeline mode is not supported in get_historical_data()'
-    #     kwargs = product_specs or {}
-    #     kwargs.update(feed_kwargs)
-        
-    #     is_download_required = force_download
+            combined = None
 
-    #     if not force_download:
-    #         search_data_layers = [DataLayer.CURATED, DataLayer.CLEANED] if data_layer is None else [DataLayer[data_layer.upper()]]
-    #         dfs_from_storage: list[Frame] = []
-    #         start_missing_date = start_date
-    #         end_missing_date = end_date
-    #         for search_data_layer in search_data_layers:
-    #             df_from_storage, metadata_from_storage = self.retrieve(
-    #                 product=product,
-    #                 rollback_period=rollback_period,
-    #                 start_date=start_missing_date,
-    #                 end_date=end_missing_date,
-    #                 data_origin=data_origin,
-    #                 data_layer=search_data_layer.name,
-    #                 data_domain=data_domain,
-    #                 dataflow_per_date=retrieve_per_date,
-    #                 from_storage=from_storage,
-    #                 storage_options=storage_options,
-    #                 include_metadata=True,
-    #                 env=Environment.BACKTEST,
-    #                 **kwargs
-    #             )
-
-    #             if missing_dates := metadata_from_storage['missing_dates']:
-    #                 is_download_required = True
-    #                 # fill gaps between missing dates 
-    #                 start_missing_date = str(min(missing_dates))
-    #                 end_missing_date = str(max(missing_dates))
-    #                 missing_dates = pd.date_range(start_missing_date, end_missing_date).date.tolist()
-    #             else:
-    #                 is_download_required = False
-                
-    #             if df_from_storage is not None:
-    #                 # REVIEW
-    #                 if isinstance(df_from_storage, pd.DataFrame):
-    #                     # convert to pyarrow's dtypes to avoid narwhals error: Accessing `date` on the default pandas backend will return a Series of type `object`. 
-    #                     # This differs from polars API and will prevent `.dt` chaining. Please switch to the `pyarrow` backend
-    #                     df_from_storage = df_from_storage.convert_dtypes(dtype_backend="pyarrow")
-                        
-    #                 df_from_storage: Frame = nw.from_native(df_from_storage)
-    #                 if missing_dates:
-    #                     # remove missing dates in df_from_storage to avoid duplicates between data from retrieve() and download() since downloads will include all dates in range
-    #                     df_from_storage: Frame = df_from_storage.filter(~nw.col('date').dt.date().is_in(missing_dates))
-    #                 dfs_from_storage.append(df_from_storage)
-
-    #             # no missing data, stop searching different data layers
-    #             if not missing_dates:
-    #                 break
-
-    #         dfs: list[Frame] = [df for df in dfs_from_storage if not is_empty_dataframe(df)] if dfs_from_storage else []
-    #         df_from_storage: Frame | None = nw.concat(dfs) if dfs else None
-    #     else:
-    #         df_from_storage: Frame | None = None
-    #         start_missing_date = start_date
-    #         end_missing_date = end_date
-        
-    #     if is_download_required:
-    #         # REVIEW: check if the condition here is correct, can't afford casually downloading paid data and incur charges
-    #         if self.data_source.access_type == DataAccessType.PAID_BY_USAGE and \
-    #             (to_storage is None or DataStorage[to_storage.upper()] == DataStorage.CACHE):
-    #             raise Exception(f'downloading PAID data to {to_storage=} is not allowed')
-                
-    #         df_from_source = self.download(
-    #             product,
-    #             symbol=symbol,
-    #             rollback_period=rollback_period,
-    #             start_date=start_missing_date,
-    #             end_date=end_missing_date,
-    #             data_origin=data_origin,
-    #             to_storage=to_storage,
-    #             storage_options=storage_options,
-    #             **kwargs
-    #         )
-    #         if df_from_source is not None:
-    #             df_from_source: Frame = nw.from_native(df_from_source)
-    #     else:
-    #         df_from_source: Frame | None = None
-            
-    #     if df_from_storage is not None and df_from_source is not None:
-    #         df: Frame = nw.concat([df_from_storage, df_from_source])
-    #     elif df_from_storage is not None:
-    #         df: Frame = df_from_storage
-    #     elif df_from_source is not None:
-    #         df: Frame = df_from_source
-    #     else:
-    #         df = None
-
-    #     if df is not None:
-    #         df: Frame = df.sort(by='date', descending=False)
-    #         df: GenericFrame = df.to_native()
-            
-    #         # REVIEW
-    #         if isinstance(df, pd.DataFrame):
-    #             # convert pyarrow's "timestamp[ns]" back to pandas' "datetime64[ns]" for consistency
-    #             df['date'] = df['date'].astype('datetime64[ns]')
-            
-    #     return df
-    
+        return RunResult(data=combined, dataflows=dataflows)

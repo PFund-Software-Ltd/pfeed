@@ -1,11 +1,14 @@
 from typing import Any
 
-from pydantic import field_validator, Field
+from pydantic import field_validator, Field, model_validator
 
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
-from pfund.enums import Environment
+from pfund.enums.env import Environment
 from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
+
+
+MIN_TARGET_RESOLUTION = Resolution("1d")
 
 
 class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
@@ -18,25 +21,43 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
 
     @field_validator("env", mode="before")
     @classmethod
-    def create_env(cls, v: Environment | str) -> Environment:
+    def _create_env(cls, v: Environment | str) -> Environment:
         if isinstance(v, str):
             return Environment[v.upper()]
         return v
 
+    @field_validator("target_resolution", mode="after")
+    @classmethod
+    def _enforce_min_resolution(cls, v: Resolution) -> Resolution:
+        if v < MIN_TARGET_RESOLUTION:
+            raise ValueError(
+                f"target_resolution {v} is below the minimum supported resolution {MIN_TARGET_RESOLUTION}"
+            )
+        return v
+
     @field_validator("target_resolution", mode="before")
     @classmethod
-    def create_target_resolution(cls, v: Resolution | str) -> Resolution:
+    def _create_target_resolution(cls, v: Resolution | str) -> Resolution:
         if isinstance(v, str):
             return Resolution(v)
         return v
 
     @field_validator("data_resolution", mode="before")
     @classmethod
-    def create_data_resolution(cls, v: Resolution | str) -> Resolution:
+    def _create_data_resolution(cls, v: Resolution | str) -> Resolution:
         if isinstance(v, str):
             return Resolution(v)
         return v
-    
+
+    @model_validator(mode="after")
+    def _check_resampleable(self):
+        if self.data_resolution < self.target_resolution:
+            raise ValueError(
+                f"data_resolution ({self.data_resolution}) must be >= " +
+                f"target_resolution ({self.target_resolution}) for resampling"
+            )
+        return self
+
     def __str__(self) -> str:
         from pprint import pformat
 

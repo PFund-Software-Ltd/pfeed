@@ -5,14 +5,15 @@ if TYPE_CHECKING:
     from deltalake import DeltaTable
     from lancedb.table import LanceTable
     from pfeed.data_models.base_data_model import BaseMetadataModel
-    from pfeed._io.file_io import MetadataModelAsDict
-    
+    from pfeed._io.file_io import MetadataDict
+
     Table: TypeAlias = DeltaTable | LanceTable
 
 import time
 import random
 from abc import abstractmethod
 
+import polars as pl
 import pyarrow as pa
 import pyarrow.fs as pa_fs
 
@@ -36,7 +37,7 @@ class TableIO(FileIO):
     @abstractmethod
     def get_table(self, table_path: TablePath, *args: Any, **kwargs: Any) -> Table:
         pass
-    
+
     @abstractmethod
     def write(self, data: pa.Table, table_path: TablePath, *args: Any, **kwargs: Any):
         pass
@@ -44,22 +45,21 @@ class TableIO(FileIO):
     @abstractmethod
     def read(self, table_path: TablePath, *args: Any, **kwargs: Any) -> pl.LazyFrame | None:
         pass
-    
+
     # NOTE: delta-rs, lancedb doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
     def write_metadata(self, table_path: TablePath, metadata: BaseMetadataModel):
-        import pandas as pd
-        empty_df_with_metadata = pd.DataFrame()
-        table = pa.Table.from_pandas(empty_df_with_metadata, preserve_index=False)
+        empty_df_with_metadata = pl.DataFrame()
+        table = empty_df_with_metadata.to_arrow()
         table_with_metadata = super().write_metadata(table, metadata)
         metadata_file_path = table_path / self.METADATA_FILENAME
         self._write_pyarrow_table(table_with_metadata, metadata_file_path)
-    
+
     def read_metadata(
-        self, 
+        self,
         table_path: TablePath,
         max_retries: int=5,
         base_delay: float=0.1,
-    ) -> dict[TablePath, MetadataModelAsDict]:
+    ) -> dict[TablePath, MetadataDict]:
         """Read custom application metadata embedded in parquet schema.
 
         Handles race condition for table formats where metadata files may not exist immediately

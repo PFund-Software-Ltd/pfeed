@@ -1,15 +1,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, Any
 if TYPE_CHECKING:
-    import pandas as pd
     from httpx import Response
     from pfund.entities.products.product_bybit import BybitProduct
-    from pfund.brokers.crypto.exchanges.bybit.rest_api import RESTfulAPI
     from pfund.datas.resolution import Resolution
     
 import datetime
+import polars as pl
 
-from pfund.enums import Environment, CryptoAssetType, AssetTypeModifier
+from pfund.enums import CryptoAssetType, AssetTypeModifier
 
 
 # NOTE: do NOT trust the catalog in https://public.bybit.com/trading/, BTC_USDT_FUTs are missing, 
@@ -37,21 +36,6 @@ class BatchAPI:
         AssetTypeModifier.INVERSE + '-' + CryptoAssetType.FUTURE: r'USD[A-Z]\d{2}\/$',  # inverse futures e.g. BTCUSDH24/
         CryptoAssetType.CRYPTO: '.*',  # match everything since everything from https://public.bybit.com/spot is spot
     }
-    _env: Environment
-    _rest_api: RESTfulAPI | None = None
-
-    def __init__(self, env: Environment | str=Environment.BACKTEST):
-        self._env = Environment[env.upper()]
-        if self._env != Environment.BACKTEST:
-            from pfund.brokers.crypto.exchanges.bybit.rest_api import RESTfulAPI
-            # TODO: use rest api to support fetch()?
-            self._rest_api = RESTfulAPI(self._env)
-        else:
-            self._rest_api = None
-    
-    @property
-    def env(self) -> Environment:
-        return self._env
         
     @staticmethod
     def _get_base_url(product: BybitProduct, resolution: Resolution) -> str:
@@ -114,31 +98,35 @@ class BatchAPI:
         url = f'{base_url}/{product.symbol}/{filename}'
         return url
     
-    def _convert_orderbook_data_to_df(self, zipped_data: bytes) -> pd.DataFrame:
-        import pandas as pd
-        from msgspec import json
+    def _convert_orderbook_data_to_df(self, zipped_data: bytes) -> pl.DataFrame:
         from pfeed.enums.compression import Compression
-        decoder = json.Decoder()
         data = Compression.decompress(zipped_data)
-        data_str = data.decode("utf-8").strip().split('\n')
-        df = pd.json_normalize([decoder.decode(item) for item in data_str])
+        df = pl.read_ndjson(data)
+        # flatten nested structs (one level) to mimic pd.json_normalize
+        struct_cols = [name for name, dtype in df.schema.items() if isinstance(dtype, pl.Struct)]
+        if struct_cols:
+            df = df.unnest(struct_cols)
         return df
-    
-    def get_data(self, product: BybitProduct, resolution: Resolution, date: str | datetime.date) -> bytes | pd.DataFrame | None:
+
+    def get_data(self, product: BybitProduct, resolution: Resolution, date: str | datetime.date) -> pl.LazyFrame | None:
         if product.is_option():
             raise NotImplementedError('Bybit does not provide options data')
-        # TODO: it's quote_L2 data, need to support converting to quote_L1, converting to different number of levels (e.g. 10quote_L1) etc.
-        # NOTE for the 'data.u' field in data:
-        # Update ID. Is a sequence. Occasionally, you'll receive "u"=1, which is a snapshot data due to the restart of the service. 
-        # So please overwrite your local orderbook
-        if resolution.is_quote():
-            raise NotImplementedError('orderbook data is not supported yet')
         url = self._create_url(product, resolution, date)
-        if data := self._get(url):
-            if resolution.is_quote():
-                df: pd.DataFrame = self._convert_orderbook_data_to_df(data)
-                return df
-            return data
+        zipped_data = self._get(url)
+        if zipped_data is None:
+            return None
+        if not resolution.is_quote():
+            import io
+            # pl.read_csv handles gzip via magic bytes — no manual decompress
+            return pl.read_csv(io.BytesIO(zipped_data)).lazy()
+        else:
+            raise NotImplementedError('orderbook data is not supported yet')
+            # TODO: it's quote_L2 data, need to support converting to quote_L1, converting to different number of levels (e.g. 10quote_L1) etc.
+            # NOTE for the 'data.u' field in data:
+            # Update ID. Is a sequence. Occasionally, you'll receive "u"=1, which is a snapshot data due to the restart of the service. 
+            # So please overwrite your local orderbook
+            # df: pl.DataFrame = self._convert_orderbook_data_to_df(zipped_data)
+            # return df
 
     # def _get_downloadable_symbols(self, ptype: str, epdt: str):
     #     '''Get external file names (e.g. BTCUSDT2022-10-04.csv.gz)'''

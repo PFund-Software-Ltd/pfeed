@@ -19,7 +19,7 @@ from pfeed.storages.base_storage import BaseStorage
 class FileBasedStorage(BaseStorage):
     # EXTEND: add more file-based formats, iceberg, etc.
     SUPPORTED_IO_FORMATS = [IOFormat.PARQUET, IOFormat.DELTALAKE]
-    
+
     def __init__(
         self,
         data_path: Path | str,
@@ -35,7 +35,7 @@ class FileBasedStorage(BaseStorage):
             storage_options=storage_options,
             **kwargs,
         )
-    
+
     @abstractmethod
     def get_filesystem(self) -> pa_fs.FileSystem:
         pass

@@ -15,7 +15,7 @@ class TimeBasedFeedBaseRequest(BaseRequest):
         if isinstance(v, str):
             return datetime.date.fromisoformat(v)
         return v
-    
+
     @field_validator("end_date", mode="before")
     @classmethod
     def create_end_date(cls, v: datetime.date | str) -> datetime.date:

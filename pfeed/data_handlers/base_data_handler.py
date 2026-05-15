@@ -1,70 +1,31 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, Any, ClassVar, assert_never
 
 if TYPE_CHECKING:
-    from pfeed.typing import GenericData
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.database_storage import DatabaseURI
-    from pfeed._io.base_io import BaseIO, MetadataModelAsDict
+    from pfeed._io.base_io import BaseIO, MetadataDict
+    from pfeed.utils.file_path import FilePath
+    from pfeed._io.table_io import TablePath
+    from pfeed._io.database_io import DBPath
+    SourcePath: TypeAlias = FilePath | TablePath | DBPath
 
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, ConfigDict
 
-from pfeed.enums import DataLayer
-from pfeed.data_models.base_data_model import BaseMetadataModel
-
-from pfeed.utils.file_path import FilePath
-from pfeed._io.table_io import TablePath
-from pfeed._io.database_io import DBPath
-SourcePath: TypeAlias = FilePath | TablePath | DBPath
+from pfeed.enums import DataLayer, DataSource, IOType
 
 
-class BaseMetadata(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+class BaseDataMetadata(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="ignore")
 
-    source_metadata: dict[SourcePath, BaseMetadataModel]
-    missing_source_paths: list[SourcePath]
-
-    def to_dict(self) -> dict:
-        return {
-            "source_metadata": self.source_metadata,
-            "missing_source_paths": self.missing_source_paths,
-        }
-    
-    # VIBE-CODED
-    def __str__(self) -> str:
-        from pprint import pformat
-        data = self.to_dict()
-        lines = [f"{self.__class__.__name__}("]
-        for key, value in data.items():
-            if key == "source_metadata":
-                lines.append(f"  {key}={{")
-                items = list(value.items())
-                for i, (source_path, metadata) in enumerate(items):
-                    lines.append(f"    [{i}] '{source_path}':")
-                    formatted = pformat(metadata, sort_dicts=False, indent=6)
-                    lines.append(f"        {formatted.replace(chr(10), chr(10) + '        ')}")
-                    if i < len(items) - 1:
-                        lines.append("")  # blank line between entries
-                lines.append("  }")
-            elif isinstance(value, list):
-                if not value:
-                    lines.append(f"  {key}=[]")
-                else:
-                    lines.append(f"  {key}=[")
-                    for item in value:
-                        lines.append(f"    {item},")
-                    lines.append("  ]")
-            else:
-                formatted = pformat(value, sort_dicts=False, indent=4)
-                lines.append(f"  {key}={formatted}")
-        lines.append(")")
-        return "\n".join(lines)
-    
-    __repr__ = __str__
+    data_source: DataSource
+    data_origin: str = ""
 
 
 class BaseDataHandler(ABC):
+    metadata_class: ClassVar[type[BaseDataMetadata]]
+
     def __init__(self, data_path: FilePath | DatabaseURI, data_layer: DataLayer, data_domain: str, data_model: BaseDataModel, io: BaseIO):
         self._data_path = data_path
         self._data_layer = data_layer
@@ -74,44 +35,42 @@ class BaseDataHandler(ABC):
         self._file_paths: list[FilePath] = []
         self._table_path: TablePath | None = self._create_table_path() if self._is_table_io() else None
         self._db_path: DBPath | None = self._create_db_path() if self._is_database_io() else None
-    
-    @abstractmethod
-    def write(self, data: GenericData, *args, **kwargs):
-        pass
-
-    @abstractmethod
-    def read(self, **kwargs) -> GenericData | None:
-        pass
-
-    @abstractmethod
-    def _validate_schema(self, data: GenericData) -> GenericData:
-        pass
-
-    def _create_file_path(self, *args, **kwargs) -> FilePath:
-        raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
-
-    def _create_table_path(self, *args, **kwargs) -> TablePath:
-        raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
-
-    def _create_db_path(self, *args, **kwargs) -> DBPath:
-        raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
-    
-    def read_metadata(self) -> BaseMetadata:
         if self._is_file_io():
-            source_metadata_dict: dict[FilePath, MetadataModelAsDict] = self._io.read_metadata(file_paths=self._file_paths)
-            missing_source_paths=[fp for fp in self._file_paths if not self._io.exists(fp)]
-        elif self._is_table_io() or self._is_database_io():
-            source_path = self._table_path if self._is_table_io() else self._db_path
-            source_metadata_dict: dict[SourcePath, MetadataModelAsDict] = self._io.read_metadata(source_path)
-            missing_source_paths = [source_path] if not self._io.exists(source_path) else []
+            self._io_type = IOType.FILE
+        elif self._is_table_io():
+            self._io_type = IOType.TABLE
+        elif self._is_database_io():
+            self._io_type = IOType.DATABASE
         else:
-            raise ValueError(f'Unsupported IO format: {self._io.name}')
-        MetadataModel: type[BaseMetadataModel] = self._data_model.metadata_class
-        source_metadata: dict[SourcePath, BaseMetadataModel] = {
-            source_path: MetadataModel(**metadata_model_as_dict)
-            for source_path, metadata_model_as_dict in source_metadata_dict.items()
-        }
-        return BaseMetadata(source_metadata=source_metadata, missing_source_paths=missing_source_paths)
+            raise ValueError(f"Unsupported IO type: {self._io}")
+
+    @abstractmethod
+    def write(self, data: Any, *args: Any, **kwargs: Any):
+        pass
+
+    @abstractmethod
+    def read(self, **kwargs: Any) -> Any | None:
+        pass
+
+    @abstractmethod
+    def _validate_schema(self, data: Any) -> Any:
+        pass
+
+    @abstractmethod
+    def _create_file_path(self, *args: Any, **kwargs: Any) -> FilePath:
+        pass
+
+    @abstractmethod
+    def _create_table_path(self, *args: Any, **kwargs: Any) -> TablePath:
+        pass
+
+    @abstractmethod
+    def _create_db_path(self, *args: Any, **kwargs: Any) -> DBPath:
+        pass
+
+    @abstractmethod
+    def _create_metadata(self, *args: Any, **kwargs: Any) -> BaseDataMetadata:
+        pass
 
     def _is_streaming_io(self) -> bool:
         return self._io.SUPPORTS_STREAMING
@@ -158,10 +117,41 @@ class BaseDataHandler(ABC):
 
     def _get_file_extension(self) -> str:
         if self._io.FILE_EXTENSION is None:
-            raise ValueError(f'{self._io.__class__.__name__} does not support file extension, cannot get file extension')
+            raise ValueError(f'{self._io.__class__.__name__} does not have a file extension')
         return self._io.FILE_EXTENSION
-    
+
     def _supports_partitioning(self) -> bool:
-        if self._is_file_io(strict=False):
-            return self._io.SUPPORTS_PARTITIONING
-        return False
+        return self._io.SUPPORTS_PARTITIONING
+
+    def _supports_parallel_writes(self) -> bool:
+        return self._io.SUPPORTS_PARALLEL_WRITES
+
+    def read_metadata(self) -> dict[SourcePath, BaseDataMetadata]:
+        match self._io_type:
+            case IOType.FILE:
+                source_paths = self._file_paths
+            case IOType.TABLE:
+                source_paths = self._table_path
+            case IOType.DATABASE:
+                source_paths = self._db_path
+            case _:
+                assert_never(self._io_type)
+        metadata_dict: dict[SourcePath, MetadataDict] = self._io.read_metadata(source_paths)
+        Metadata = self.metadata_class
+        metadata = {
+            source_path: Metadata(**metadata_value)
+            for source_path, metadata_value in metadata_dict.items()
+        }
+        return metadata
+
+    def find_missing_source_paths(self):
+        match self._io_type:
+            case IOType.FILE:
+                missing_source_paths=[fp for fp in self._file_paths if not self._io.exists(fp)]
+            case (IOType.TABLE | IOType.DATABASE) as io_type:
+                source_path = self._table_path if io_type == IOType.TABLE else self._db_path
+                assert source_path is not None, f'source_path is not set for {self._io.name}'
+                missing_source_paths = [source_path] if not self._io.exists(source_path) else []
+            case _:
+                assert_never(self._io_type)
+        return missing_source_paths

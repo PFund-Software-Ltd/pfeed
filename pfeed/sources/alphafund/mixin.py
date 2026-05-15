@@ -1,3 +1,4 @@
+# pyright: reportUninitializedInstanceVariable=false, reportUnusedParameter=false
 from pfeed.sources.alphafund.source import AlphaFundSource
 
 

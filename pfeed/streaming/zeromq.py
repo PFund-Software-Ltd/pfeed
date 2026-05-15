@@ -1,12 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Any, Union
+from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
-    from zmq import SocketType, SocketOption
+    from zmq import SocketType
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.entities.products.product_base import BaseProduct
     from pfund.datas.resolution import Resolution
     from pfund.enums import PrivateDataChannel
-    from pfeed.enums import DataSource
 
 import time
 import logging
@@ -22,6 +21,7 @@ class SocketMethod(StrEnum):
     connect = "connect"
 
 
+# REVIEW
 class ZeroMQDataChannel(StrEnum):
     signal = 'signal'
 
@@ -74,7 +74,7 @@ class ZeroMQ:
                 Use when you only care about the most recent data and not the message history.
         '''
         from pfeed.streaming import BarMessage
-        
+
         assert any([sender_type, receiver_type]), 'Either sender_type or receiver_type must be provided'
         self._name = name
         self._logger = logger
@@ -104,52 +104,52 @@ class ZeroMQ:
             self._poller.register(self._receiver, zmq.POLLIN)
             if recv_latest_only:
                 self._receiver.setsockopt(zmq.CONFLATE, 1)
-            
+
     @property
     def name(self) -> str:
         if 'zeromq' not in self._name.lower() or 'zmq' not in self._name.lower():
             return self._name + '_zmq'
         else:
             return self._name
-    
+
     @property
     def sender_name(self) -> str:
         return '.'.join([self.name, self._sender.socket_type.name, 'sender'])
-    
+
     @property
     def receiver_name(self) -> str:
         return '.'.join([self.name, self._receiver.socket_type.name, 'receiver'])
-    
+
     @property
     def sender(self) -> zmq.Socket:
         assert self._sender, 'sender is not initialized'
         return self._sender
-    
+
     @property
     def receiver(self) -> zmq.Socket:
         assert self._receiver, 'receiver is not initialized'
         return self._receiver
-    
+
     def get_addresses_in_use(self, socket: zmq.Socket) -> list[str]:
         return self._socket_addresses[socket]
-    
+
     def get_urls_in_use(self, socket: zmq.Socket) -> list[str]:
         addresses = self.get_addresses_in_use(socket)
         return [addr.split(':')[0] for addr in addresses]
-    
+
     def get_ports_in_use(self, socket: zmq.Socket) -> list[int]:
         addresses = self.get_addresses_in_use(socket)
         return [int(addr.split(':')[-1]) for addr in addresses]
-    
+
     def _assert_socket_initialized(self, socket: zmq.Socket, socket_method: SocketMethod):
         assert isinstance(socket, zmq.Socket), f'{socket=} is not a zmq.Socket'
         assert socket in self._socket_methods, f'{socket=} has not been initialized'
         assert self._socket_methods[socket] == socket_method, f'{socket=} registered with socket_method={self._socket_methods[socket]}'
-        
+
     def _is_sender_support_target_identity(self) -> bool:
         # EXTEND: only ROUTER socket supports target identity for now
         return self.sender.socket_type == zmq.ROUTER
-    
+
     def bind(self, socket: zmq.Socket, port: int | None=None, url: str=DEFAULT_URL):
         '''Binds a socket which uses bind method to a port.'''
         self._assert_socket_initialized(socket, SocketMethod.bind)
@@ -163,13 +163,13 @@ class ZeroMQ:
             self._socket_addresses[socket].append(address)
         else:
             raise ValueError(f'{address=} is already bound')
-    
+
     def unbind(self, socket: zmq.Socket, address: str):
         self._assert_socket_initialized(socket, SocketMethod.bind)
         socket.unbind(address)
         if address in self._socket_addresses[socket]:
             self._socket_addresses[socket].remove(address)
-    
+
     def connect(self, socket: zmq.Socket, port: int, url: str=DEFAULT_URL):
         '''Connects to a port which uses connect method.'''
         self._assert_socket_initialized(socket, SocketMethod.connect)
@@ -179,13 +179,13 @@ class ZeroMQ:
             self._socket_addresses[socket].append(address)
         else:
             raise ValueError(f'{address=} is already subscribed')
-    
+
     def disconnect(self, socket: zmq.Socket, address: str):
         self._assert_socket_initialized(socket, SocketMethod.connect)
         socket.disconnect(address)
         if address in self._socket_addresses[socket]:
             self._socket_addresses[socket].remove(address)
-    
+
     def terminate(self, target_identities: list[str] | None=None):
         # send STOP signal to notice listeners, which probably have a while True loop running
         if self._sender:
@@ -194,7 +194,7 @@ class ZeroMQ:
                     self.send(channel=ZeroMQDataChannel.signal, topic=self.sender_name, data=ZeroMQSignal.STOP, target_identity=target_identity)
             else:
                 self.send(channel=ZeroMQDataChannel.signal, topic=self.sender_name, data=ZeroMQSignal.STOP)
-        
+
         if self._poller and self._receiver:
             self._poller.unregister(self._receiver)
 
@@ -245,7 +245,7 @@ class ZeroMQ:
                 except ValidationError:
                     return False  # Not a dict at the top level
                 # if 'specs' and '_created_at' is also present, it is a streaming message
-                if outer.get("_created_at") and outer.get('specs'):  
+                if outer.get("_created_at") and outer.get('specs'):
                     return True
                 else:
                     return False
@@ -270,4 +270,3 @@ class ZeroMQ:
             self._logger.exception(f'{self.receiver_name} recv() exception (errno={err.errno}):')
         except Exception:
             self._logger.exception(f'{self.receiver_name} recv() unhandled exception:')
-    

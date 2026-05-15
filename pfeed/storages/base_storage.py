@@ -1,25 +1,71 @@
+# pyright: reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Any, Literal, overload, Self
+from typing import TYPE_CHECKING, ClassVar, Any, Self, cast
 
 if TYPE_CHECKING:
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseMetadata
+    from narwhals.typing import IntoFrame
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.typing import GenericData, GenericFrame
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.storages.storage_config import StorageConfig
     from pfeed._io.io_config import IOConfig
 
+import datetime
 from pprint import pformat
 
+import polars as pl
+
+from pydantic import Field, BaseModel, ConfigDict
+
+from pfeed.data_handlers.base_data_handler import SourcePath
 from pfeed.enums import DataLayer, IOFormat
 from pfeed.utils.file_path import FilePath
+from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+
+
+class StorageMetadata(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    data: dict[SourcePath, BaseDataMetadata]
+    missing_dates_in_storage: list[datetime.date] | None = Field(
+        default=None,
+        description="Dates within the requested data period that have data at the source but do not exist in local storage."
+    )
+    missing_source_paths: list[SourcePath]
+    # missing_dates_at_source: list[datetime.date] = Field(
+    #     description="Dates within the requested data period where no data exists at the source (e.g. non-trading days, holidays)."
+    # )
+
+    def __str__(self) -> str:
+        from textwrap import indent
+        lines: list[str] = [f"{type(self).__name__}("]
+        for key, value in self.model_dump().items():
+            if isinstance(value, dict):
+                lines.append(f"  {key}={{")
+                items = list(value.items())
+                for i, (k, v) in enumerate(items):
+                    lines.append(f"    [{i}] '{k}':")
+                    lines.append(indent(pformat(v, sort_dicts=False), "        "))
+                    if i < len(items) - 1:
+                        lines.append("")
+                lines.append("  }")
+            elif isinstance(value, list) and value:
+                lines.append(f"  {key}=[")
+                lines.extend(f"    {item}," for item in value)
+                lines.append("  ]")
+            else:
+                lines.append(f"  {key}={pformat(value, sort_dicts=False)}")
+        lines.append(")")
+        return "\n".join(lines)
+
+    __repr__ = __str__
 
 
 class BaseStorage:
     SUPPORTED_IO_FORMATS: ClassVar[list[IOFormat]] = []
-    
+
     def __init__(
         self,
         data_path: FilePath | DatabaseURI,
@@ -41,14 +87,14 @@ class BaseStorage:
         self._data_handler: BaseDataHandler | None = None
         self._io: BaseIO | None = None
         self._is_data_handler_stale: bool = False
-    
+
     def _get_io_kwargs(self) -> dict[str, Any]:
         return {}
 
     @property
     def name(self) -> str:
         return self.__class__.__name__
-    
+
     def __str__(self) -> str:
         parts = []
         if self._io:
@@ -65,7 +111,7 @@ class BaseStorage:
         if self.storage_options:
             parts.append(f"storage_options={self.storage_options}")
         return f"{self.__class__.__name__} (" + " | ".join(parts) + ")"
-    
+
     def __repr__(self) -> str:
         data = {
             "data_path": self.data_path,
@@ -101,7 +147,7 @@ class BaseStorage:
         if not self._io:
             raise AttributeError(f"No IO has been set for storage: {self.name}")
         return self._io
-    
+
     @classmethod
     def from_storage_config(cls, storage_config: StorageConfig) -> Self:
         return cls(**storage_config.model_dump())
@@ -112,7 +158,7 @@ class BaseStorage:
         return self
 
     def with_io(self, io_config: IOConfig) -> BaseStorage:
-        IO = io_config.io_format.io_class
+        IO = cast(type[BaseIO], io_config.io_format.io_class)
         self._io = IO(
             storage_options=self.storage_options,
             **io_config.model_dump(),
@@ -131,38 +177,21 @@ class BaseStorage:
             io=self.io,
         )
 
-    def write_data(
-        self, data: GenericData | StreamingMessage, streaming: bool = False, **io_kwargs: Any
-    ):
-        self.data_handler.write(data=data, streaming=streaming, **io_kwargs)
-    
-    @overload
-    def read_data(self, include_metadata: Literal[True], **io_kwargs: Any) -> tuple[GenericFrame | None, BaseMetadata]: ...
-    
-    @overload
-    def read_data(self, include_metadata: Literal[False] = ..., **io_kwargs: Any) -> GenericFrame | None: ...
+    def write_data(self, data: IntoFrame | StreamingMessage, streaming: bool = False):
+        self.data_handler.write(data=data, streaming=streaming)
 
-    def read_data(self, include_metadata: bool = False, **io_kwargs: Any) -> GenericFrame | None | tuple[GenericFrame | None, BaseMetadata]:
-        """Read data from storage.
+    def read_data(self) -> pl.LazyFrame | None:
+        """Read data from storage."""
+        return self.data_handler.read()
 
-        Args:
-            **io_kwargs: Format-specific read options passed to the underlying IO implementation.
-
-                For DeltaLake IO, for example, there are options like:
-                    version (int | str | datetime | None): Delta table version to read.
-                        If None, reads the latest version.
-                    storage_options (dict): Additional options passed to delta-rs.
-                        See delta-rs documentation for available options.
-
-                For Parquet IO:
-                    No additional options currently supported.
-
-        Returns:
-            Tuple of (data, metadata)
-        """
-        data: GenericFrame | None = self.data_handler.read(**io_kwargs)
-        if include_metadata:
-            metadata: BaseMetadata = self.data_handler.read_metadata()
-            return data, metadata
+    def read_metadata(self) -> StorageMetadata:
+        from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
+        if isinstance(self.data_handler, TimeBasedDataHandler):
+            missing_dates_in_storage = self.data_handler.find_missing_dates_in_storage()
         else:
-            return data
+            missing_dates_in_storage = None
+        return StorageMetadata(
+            data=self.data_handler.read_metadata(),
+            missing_source_paths=cast(list[SourcePath], self.data_handler.find_missing_source_paths()),
+            missing_dates_in_storage=missing_dates_in_storage
+        )

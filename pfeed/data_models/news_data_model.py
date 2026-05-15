@@ -4,7 +4,7 @@ from typing import Any, ClassVar, cast
 from pydantic import field_validator
 
 from pfund.entities.products.product_base import BaseProduct
-from pfund.enums import Environment
+from pfund.enums.env import Environment
 from pfeed.data_models.time_based_data_model import TimeBasedDataModel, TimeBasedMetadataModel
 from pfeed.data_handlers.news_data_handler import NewsDataHandler
 

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Self
 if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
     from pfeed.data_models.base_data_model import BaseMetadataModel
-    from pfeed._io.base_io import MetadataModelAsDict
+    from pfeed._io.base_io import MetadataDict
     from pfeed._io.io_config import IOConfig
     from duckdb import DuckDBPyConnection
 
@@ -21,6 +21,7 @@ from pfeed.enums import TimestampPrecision
 class DuckDBIO(DatabaseIO, FileIO):
     # TODO: support streaming
     # SUPPORTS_STREAMING: bool = True
+    # TODO: integrate with DuckDB's QUACK protocol to allow parallel writes
     SUPPORTS_PARALLEL_WRITES: bool = False
     FILE_EXTENSION = ".duckdb"
     TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
@@ -35,23 +36,23 @@ class DuckDBIO(DatabaseIO, FileIO):
         **kwargs: Any,  # for compatibility with other IO classes
     ):
         DatabaseIO.__init__(
-            self, 
-            storage_options=storage_options, 
-            connect_options=connect_options, 
-            read_options=read_options, 
+            self,
+            storage_options=storage_options,
+            connect_options=connect_options,
+            read_options=read_options,
             write_options=write_options,
         )
         FileIO.__init__(
-            self, 
-            storage_options=storage_options, 
-            connect_options=connect_options, 
-            read_options=read_options, 
+            self,
+            storage_options=storage_options,
+            connect_options=connect_options,
+            read_options=read_options,
             write_options=write_options,
             filesystem=filesystem,
         )
         self._in_memory = self._storage_options['in_memory']
         self._memory_limit = self._storage_options['memory_limit']
-    
+
     def _open_connection(self, uri: str):
         self._conn_uri = uri
         self._conn: DuckDBPyConnection = duckdb.connect(uri, **self._connect_options)
@@ -59,25 +60,25 @@ class DuckDBIO(DatabaseIO, FileIO):
             if ";" in self._memory_limit or "'" in self._memory_limit:
                 raise ValueError(f"Invalid memory_limit: {self._memory_limit!r}")
             self._conn.execute(f"SET memory_limit = '{self._memory_limit}'")
-    
+
     def _close_connection(self):
         if self._conn:
             self._conn.close()
-    
+
     def exists(self, db_path: DBPath) -> bool:
         try:
             conn = self.connect(db_path.db_uri)
             schema_qualified_table_name = self._get_schema_qualified_table_name(db_path)
             schema_name, table_name = schema_qualified_table_name.split('.')
             return conn.execute("""
-                SELECT 1 
-                FROM information_schema.tables 
+                SELECT 1
+                FROM information_schema.tables
                 WHERE table_schema = ?
                 AND table_name = ?
             """, (schema_name, table_name)).fetchone() is not None
         except Exception:
             return False
-    
+
     def is_empty(self, db_path: DBPath) -> bool:
         schema_qualified_table_name = self._get_schema_qualified_table_name(db_path)
         try:
@@ -109,28 +110,28 @@ class DuckDBIO(DatabaseIO, FileIO):
             conn = self.connect(db_path.db_uri)
             schema_qualified_table_name = self._get_schema_qualified_table_name(db_path)
             schema_name, table_name = schema_qualified_table_name.split('.')
-            
+
             conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
-            
+
             # Create a table with the same structure as df but without data by using WHERE 1=0 trick
             conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {schema_qualified_table_name} AS 
+                CREATE TABLE IF NOT EXISTS {schema_qualified_table_name} AS
                 SELECT * FROM data WHERE 1=0
             """)
-            
+
             # Delete any overlapping data before inserting
             if delete_where:
                 conn.execute(f"""
-                    DELETE FROM {schema_qualified_table_name} 
+                    DELETE FROM {schema_qualified_table_name}
                     WHERE {delete_where}
                 """)
-            
+
             conn.execute(f"INSERT INTO {schema_qualified_table_name} SELECT * FROM data")
         except Exception as exc:
             raise Exception(
                 f'Failed to write data (type={type(data)}) ({db_path=}): {exc}'
             ) from exc
-    
+
     def write_metadata(self, db_path: DBPath, metadata: BaseMetadataModel) -> None:
         try:
             conn = self.connect(db_path.db_uri)
@@ -157,7 +158,7 @@ class DuckDBIO(DatabaseIO, FileIO):
             raise Exception(
                 f'Failed to write metadata (type={type(metadata)}) ({db_path=}): {exc}'
             ) from exc
-       
+
     def read(self, db_path: DBPath) -> pl.LazyFrame | None:
         lf: pl.LazyFrame | None = None
         try:
@@ -165,7 +166,7 @@ class DuckDBIO(DatabaseIO, FileIO):
             schema_qualified_table_name = self._get_schema_qualified_table_name(db_path)
             if self.exists(db_path):
                 result = conn.execute(f"""
-                    SELECT * FROM {schema_qualified_table_name} 
+                    SELECT * FROM {schema_qualified_table_name}
                 """)
                 # REVIEW: .pl(lazy=True) will lead to: INTERNAL Error: Attempted to dereference shared_ptr that is NULL!
                 # when using narwhals to call nw.from_native(lf).head(1).collect()
@@ -177,9 +178,9 @@ class DuckDBIO(DatabaseIO, FileIO):
             raise Exception(
                 f'Failed to read data ({db_path=}): {exc}'
             ) from exc
-    
-    def read_metadata(self, db_path: DBPath) -> dict[DBPath, MetadataModelAsDict]:
-        metadata: dict[DBPath, MetadataModelAsDict] = {}
+
+    def read_metadata(self, db_path: DBPath) -> dict[DBPath, MetadataDict]:
+        metadata: dict[DBPath, MetadataDict] = {}
         try:
             conn = self.connect(db_path.db_uri)
             schema_qualified_table_name = self._get_schema_qualified_table_name(db_path)

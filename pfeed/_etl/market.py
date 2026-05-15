@@ -4,123 +4,126 @@ ETL for market data.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    import pandas as pd
     from pfund.entities.products.product_base import BaseProduct
 
+import polars as pl
 
 from pfund.datas.resolution import Resolution
 from pfund.datas.timeframe import Timeframe
 
 
-def standardize_columns(df: pd.DataFrame, product: BaseProduct, resolution: Resolution) -> pd.DataFrame:
+def standardize_columns(df: pl.LazyFrame, product: BaseProduct, resolution: Resolution) -> pl.LazyFrame:
     """Standardizes the columns of a DataFrame.
     Adds columns 'product', 'resolution'
     """
-    df['product'] = product.name
-    df['resolution'] = repr(resolution)
-    # df['symbol'] = product.symbol
-    return df
+    return df.with_columns(
+        pl.lit(product.name).alias('product'),
+        pl.lit(repr(resolution)).alias('resolution'),
+    )
 
 
-def filter_columns(df: pd.DataFrame, product: BaseProduct | None = None) -> pd.DataFrame:
+def filter_columns(df: pl.LazyFrame, product: BaseProduct) -> pl.LazyFrame:
     """Filter out unnecessary columns from raw data."""
-    is_tick_data = 'price' in df.columns
+    cols = df.collect_schema().names()
+    is_tick_data = 'price' in cols
     if is_tick_data:
         standard_cols = ['date', 'product', 'resolution', 'side', 'volume', 'price']
     else:
         standard_cols = ['date', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']
-    df_cols = df.columns
     extra_cols: list[str] = []
-    if product:
-        if product.is_stock() or product.is_etf():
-            extra_cols.extend(['dividends', 'splits'])
+    if product.is_stock() or product.is_etf():
+        extra_cols.extend(['dividends', 'splits'])
     for extra_col in extra_cols:
-        if extra_col in df_cols:
+        if extra_col in cols:
             standard_cols.append(extra_col)
-    df = df.loc[:, standard_cols]
-    return df
+    return df.select(standard_cols)
 
 
-def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
+def organize_columns(df: pl.LazyFrame) -> pl.LazyFrame:
     '''Moves 'date', 'product', 'resolution' to the leftmost side.'''
     left_cols = ['date', 'product', 'resolution']
-    target_cols = left_cols + [col for col in df.columns if col not in left_cols]
-    
-    # Only reindex if columns are not already in the target order
-    if list(df.columns) != target_cols:
-        df = df.reindex(target_cols, axis=1)
-    
-    return df
-    
+    current_cols = df.collect_schema().names()
+    target_cols = left_cols + [c for c in current_cols if c not in left_cols]
+    if current_cols == target_cols:
+        return df
+    return df.select(target_cols)
 
-def resample_data(df: pd.DataFrame, resolution: str | Resolution, product: BaseProduct | None = None, offset: str | None = None) -> pd.DataFrame:
-    '''Resamples the input dataframe based on the target resolution.
+
+def resample_data(
+    df: pl.LazyFrame,
+    resolution: str | Resolution,
+    product: BaseProduct,
+    offset: str | None = None,
+) -> pl.LazyFrame:
+    '''Resamples the input lazyframe based on the target resolution.
     Args:
-        df: The input dataframe to be resampled.
+        df: The input lazyframe to be resampled.
         resolution: The target resolution to resample the data to.
-        offset: Optional time offset string (e.g., '30min') to shift the resampling window.
-               For example, with '1h' resolution and '30min' offset, timestamps will be XX:30:00.
+        offset: Optional polars duration string (e.g., '30m') to shift the resampling window.
+               For example, with '1h' resolution and '30m' offset, timestamps will be XX:30:00.
     Returns:
-        The resampled dataframe.
+        The resampled lazyframe.
     '''
     if isinstance(resolution, str):
         resolution = Resolution(resolution)
-        
-    if 'resolution' in df.columns:
-        df_resolution = Resolution(df['resolution'][0])
+
+    cols = df.collect_schema().names()
+    if 'resolution' in cols:
+        df_resolution_str = df.select(pl.col('resolution').first()).collect().item()
+        df_resolution = Resolution(df_resolution_str)
         is_resample_required = resolution < df_resolution
         if not is_resample_required:
             return df
-    
-    df = filter_columns(df, product=product)
-        
-    # converts to pandas's resolution format
-    eresolution = {
-        # 'min' means minute in pandas, please refer to https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
-        Timeframe.MINUTE: 'min',
-        Timeframe.DAY: 'D',
-        Timeframe.WEEK: 'W-MON',  # W = Week, starting from Monday, otherwise, default is Sunday
-        Timeframe.MONTH: 'MS',  # MS = Month Start
-        Timeframe.YEAR: 'YS',  # YS = Year Start
-    }.get(resolution.timeframe, resolution.timeframe.canonical)
-    
-    is_tick_data = 'price' in df.columns
-    assert not df.empty, 'data is empty'
-    
-    resample_logic = {
-        'price': 'ohlc',
-        'volume': 'sum',
-    } if is_tick_data else {
-        'open': 'first',
-        'high': 'max',
-        'low': 'min',
-        'close': 'last',
-        'volume': 'sum',
-    }
-    
-    for col in ['product', 'resolution']:
-        if col in df.columns:
-            resample_logic[col] = 'first'
-    if 'dividends' in df.columns:
-        resample_logic['dividends'] = 'sum'
-    if 'splits' in df.columns:
-        resample_logic['splits'] = 'prod'
-          
-    resampled_df = (
-        df
-        .set_index('date')
-        .resample(
-            eresolution,
-            label='left',
-            closed='left',  # closed is only default to be 'right' when resolution is week
-            offset=offset,
-        )
-        .agg(resample_logic)  # pyright: ignore[reportArgumentType]
-        # drop an unnecessary level created by 'ohlc' in the resample_logic
-        .pipe(lambda df: df.droplevel(0, axis=1) if is_tick_data else df)
-        .dropna()
-        .reset_index()
-    )
-    resampled_df['resolution'] = repr(resolution)
-    return resampled_df
 
+    df = filter_columns(df, product)
+
+    eresolution = {
+        Timeframe.MINUTE: '1m',
+        Timeframe.DAY: '1d',
+        Timeframe.WEEK: '1w',
+        Timeframe.MONTH: '1mo',
+        Timeframe.YEAR: '1y',
+    }.get(resolution.timeframe, f'1{resolution.timeframe.canonical}')
+
+    cols = df.collect_schema().names()
+    is_tick_data = 'price' in cols
+
+    aggs: list[pl.Expr] = []
+    if is_tick_data:
+        aggs.extend([
+            pl.col('price').first().alias('open'),
+            pl.col('price').max().alias('high'),
+            pl.col('price').min().alias('low'),
+            pl.col('price').last().alias('close'),
+            pl.col('volume').sum().alias('volume'),
+        ])
+    else:
+        aggs.extend([
+            pl.col('open').first().alias('open'),
+            pl.col('high').max().alias('high'),
+            pl.col('low').min().alias('low'),
+            pl.col('close').last().alias('close'),
+            pl.col('volume').sum().alias('volume'),
+        ])
+    for c in ('product', 'resolution'):
+        if c in cols:
+            aggs.append(pl.col(c).first().alias(c))
+    if 'dividends' in cols:
+        aggs.append(pl.col('dividends').sum().alias('dividends'))
+    if 'splits' in cols:
+        aggs.append(pl.col('splits').product().alias('splits'))
+
+    resampled = (
+        df
+        .sort('date')
+        .group_by_dynamic(
+            'date',
+            every=eresolution,
+            offset=offset,
+            label='left',
+            closed='left',
+        )
+        .agg(aggs)
+        .with_columns(pl.lit(repr(resolution)).alias('resolution'))
+    )
+    return resampled

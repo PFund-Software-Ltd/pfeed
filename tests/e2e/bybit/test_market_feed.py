@@ -2,7 +2,7 @@ import pytest
 
 import pfeed as pe
 from pfund.datas.resolution import Resolution
-from pfeed._etl.base import convert_to_desired_df
+from pfeed._etl.base import convert_dataframe
 from pfeed.enums import DataTool
 
 
@@ -20,7 +20,7 @@ def test_download_and_retrieve(tmp_path, bybit, product, resolution):
 
     def _assert_df(df, start_date, end_date):
         assert df is not None
-        df = convert_to_desired_df(df, DataTool.pandas)
+        df = convert_dataframe(df, DataTool.pandas)
         _resolution = Resolution(resolution)
         if _resolution.is_bar():
             assert df.columns.tolist() == ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
@@ -79,7 +79,7 @@ def test_download_and_retrieve_mixed(tmp_path, bybit_mixed, product, resolution)
     
     def _assert_df(df, start_date, end_date):
         assert df is not None
-        df = convert_to_desired_df(df, DataTool.pandas)
+        df = convert_dataframe(df, DataTool.pandas)
         print(df.head())
         
     pe.configure(data_path=tmp_path / 'data')

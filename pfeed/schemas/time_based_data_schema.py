@@ -1,14 +1,16 @@
 import datetime
 
-import pandera.pandas as pa
-from pandera.typing import Series
+import polars as pl
+import pandera.polars as pa
 
 
 class TimeBasedDataSchema(pa.DataFrameModel):
     """Base schema for all time-based data with monotonically increasing date validation."""
 
-    date: Series[datetime.datetime]
+    date: datetime.datetime
 
     @pa.check('date', error='date is not monotonic increasing')
-    def validate_date(cls, date: Series[datetime.datetime]) -> bool:
-        return date.is_monotonic_increasing
+    def validate_date(cls, data: pa.PolarsData) -> pl.LazyFrame:
+        return data.lazyframe.select(
+            pl.col(data.key).cast(pl.Int64).diff().fill_null(0) >= 0
+        )

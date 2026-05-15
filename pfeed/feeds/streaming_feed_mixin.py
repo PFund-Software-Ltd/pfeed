@@ -32,10 +32,10 @@ def _create_worker_name(worker_num: int) -> str:
 # EXTEND: only support market feed for now, if need to support other feeds, fix MarketFeedStreamRequest and MarketDataModel
 class StreamingFeedMixin:
     _engine: DataEngine | None = None
-    
+
     def _set_engine(self, engine: DataEngine) -> None:
         self._engine = engine
-    
+
     def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, Message], None]:
         if not self.streaming_dataflows:
             raise RuntimeError("No streaming dataflow to iterate over")
@@ -56,7 +56,7 @@ class StreamingFeedMixin:
                         break
                     yield msg
         return _iter()
-    
+
     def _create_stream_dataflow(
         self,
         callback: Callable[[WebSocketName, Message], Awaitable[None] | None] | None=None,
@@ -64,15 +64,15 @@ class StreamingFeedMixin:
         from pfeed.data_models.market_data_model import MarketDataModel  # pyright: ignore[reportUnusedImport]
         from pfeed.dataflow.faucet import Faucet  # pyright: ignore[reportUnusedImport]
         from pfeed.dataflow.dataflow import DataFlow  # pyright: ignore[reportUnusedImport]
-        
-        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._current_request)
+
+        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._get_current_request())
         self.logger.debug(
             f'{request.name}:\n{request}\n',
             style=TextStyle.BOLD + RichColor.GREEN
         )
         data_model: MarketDataModel = cast(MarketDataModel, self._create_data_model_from_request(request))
         channel_key: ChannelKey = cast(ChannelKey, self.stream_api.add_channel(data_model, data_resolution=request.data_resolution))
-        
+
         # NOTE: reuse existing faucet for streaming dataflows since they share the same extract_func
         if self.streaming_dataflows:
             existing_dataflow = self.streaming_dataflows[0]
@@ -83,7 +83,7 @@ class StreamingFeedMixin:
                 extract_type=request.extract_type,
                 close_stream=self._close_stream,
             ))
-        dataflow: DataFlow = cast(DataFlow, self._create_dataflow(data_model=data_model, faucet=faucet))
+        dataflow: DataFlow = cast(DataFlow, self._create_dataflow(faucet=faucet, data_model=data_model))
 
         if callback:
             faucet.set_streaming_callback(callback)
@@ -107,7 +107,7 @@ class StreamingFeedMixin:
             import ray
             from ray.util.queue import Queue
             from pfeed.utils.ray import shutdown_ray, setup_logger_in_ray_task, ray_logging_context
-            
+
             import zmq
             from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel, ZeroMQSignal
 
@@ -157,23 +157,23 @@ class StreamingFeedMixin:
                             for transform in transformations:
                                 data: StreamingData = transform(data)
                                 assert data is not None, f'transform function {transform} should return transformed data, but got None'
-                            
+
                             if is_data_engine_running:
                                 msg_queue.send(channel=channel, topic=topic, data=data)
-                            
+
                             if storage := storages_per_dataflow[dataflow_name]:
                                 storage.write_data(data, streaming=True)
                     msg_queue.terminate()
                 except Exception:
                     logger.exception(f'Error in streaming Ray {worker_name}:')
-            
+
             num_workers = min(self._num_workers, len(self.dataflows))
             futures: list[ray.ObjectRef[None]] = []
             with ray_logging_context(self.logger) as log_queue:
                 try:
                     # Distribute dataflows' transformations across workers
                     transformations_per_worker: dict[
-                        WorkerName, 
+                        WorkerName,
                         dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]]
                     ] = defaultdict(dict)
                     storages_per_worker: dict[WorkerName, dict[DataFlowName, BaseStorage | None]] = defaultdict(dict)
@@ -223,7 +223,7 @@ class StreamingFeedMixin:
                             break
                     else:
                         raise RuntimeError("Timeout: Not all workers reported ready")
-                    
+
                     # start streaming
                     await _run_dataflows()
                 except KeyboardInterrupt:
@@ -237,8 +237,8 @@ class StreamingFeedMixin:
             # shutdown_ray()
         else:
             await _run_dataflows()
-        self._reset_after_run()
-    
+        self._cleanup_after_run()
+
     def run(self, **prefect_kwargs: Any) -> GenericData | None:
         if self.streaming_dataflows:
             try:
@@ -248,7 +248,7 @@ class StreamingFeedMixin:
                 pass
             else:
                 cprint(
-                    "Cannot call feed.run() from within a running event loop.\n" + 
+                    "Cannot call feed.run() from within a running event loop.\n" +
                     "Did you mean to call feed.run_async() or forget to set 'pipeline_mode=True'?",
                     style=TextStyle.BOLD + RichColor.YELLOW,
                 )

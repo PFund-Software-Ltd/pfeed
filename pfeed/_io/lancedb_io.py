@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from lancedb.pydantic import LanceModel
     from lancedb.table import LanceTable
     from pfeed.data_models.base_data_model import BaseMetadataModel
-    from pfeed._io.base_io import MetadataModelAsDict
+    from pfeed._io.base_io import MetadataDict
     from pfeed._io.table_io import TablePath
 
 from pfeed.utils.file_path import FilePath
@@ -25,6 +25,7 @@ class LanceDBIO(DatabaseIO, TableIO):
     SUPPORTS_PARALLEL_WRITES: bool = True
     METADATA_FILENAME: str = "lancedb_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
     TIMESTAMP_PRECISION = TimestampPrecision.NANOSECOND
+    DATE_FILTER_PREDICATE: str = "{date_col} >= cast('{start_ts}' as timestamp) AND {date_col} <= cast('{end_ts}' as timestamp)"
 
     def __init__(
         self,
@@ -128,9 +129,9 @@ class LanceDBIO(DatabaseIO, TableIO):
         db_path: DBPath,
         max_retries: int=5,
         base_delay: float=0.1,
-    ) -> dict[DBPath, MetadataModelAsDict]:
+    ) -> dict[DBPath, MetadataDict]:
         table_path = FilePath(db_path.db_uri)
-        metadata: dict[TablePath, MetadataModelAsDict] = TableIO.read_metadata(
+        metadata: dict[TablePath, MetadataDict] = TableIO.read_metadata(
             self,
             table_path=table_path,
             max_retries=max_retries,

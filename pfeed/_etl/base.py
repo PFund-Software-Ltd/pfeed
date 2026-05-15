@@ -1,104 +1,85 @@
+# pyright: reportReturnType=false, reportUnknownMemberType=false, reportUnknownVariableType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from pfeed.typing import GenericFrame, GenericData
-    
+    from narwhals.typing import IntoFrame
 
-import numpy as np
-import pandas as pd
 import polars as pl
 import narwhals as nw
 
 from pfeed.enums import DataTool
-from pfeed.utils.dataframe import is_dataframe, dd, ps, SparkDataFrame
 
 
-def standardize_date_column(df: pd.DataFrame) -> pd.DataFrame:
-    from pandas.api.types import is_datetime64_any_dtype
-    from pfeed.utils import determine_timestamp_integer_unit_and_scaling_factor
-    if not is_datetime64_any_dtype(df['date']):
-        first_date = df.loc[0, 'date']
-        if isinstance(first_date, str):
-            df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
-        elif isinstance(first_date, (float, int, np.floating, np.integer)):
-            ts_unit, scaling_factor = determine_timestamp_integer_unit_and_scaling_factor(first_date)
-            df['date'] = pd.to_datetime(df['date'] * scaling_factor, unit=ts_unit)
-        else:
-            raise ValueError(f'{type(first_date)=}, {first_date=}')
-    df.sort_values(by='date', inplace=True)
-    return df
+def standardize_date_column(df: pl.LazyFrame, date_col: str) -> pl.LazyFrame:
+    from pfeed.utils.temporal import infer_ts_unit
+
+    date_dtype = df.collect_schema()[date_col]
+
+    if date_dtype.is_temporal():
+        return df.sort(date_col)
+
+    if date_dtype == pl.String:
+        return df.with_columns(
+            pl.col(date_col).str.to_datetime().dt.replace_time_zone(None)
+        ).sort(date_col)
+
+    if date_dtype.is_numeric():
+        first_date = df.select(pl.col(date_col).first()).collect().item()
+        ts_unit = infer_ts_unit(first_date)
+        return df.with_columns(
+            pl.from_epoch(pl.col(date_col), time_unit=ts_unit).alias(date_col)
+        ).sort(date_col)
+
+    raise ValueError(f'{date_dtype=}')
 
 
-def convert_to_desired_df(data: GenericData, data_tool: DataTool) -> pd.DataFrame | pl.LazyFrame | dd.DataFrame | SparkDataFrame:
-    '''Converts the input data to the user's desired data tool.
-    Args:
-        data: The input data to be converted.
-        data_tool: The data tool to convert the dataframe to.
-            e.g. if data_tool is 'pandas', the returned the dataframe is a pandas dataframe.
-    Returns:
-        The converted dataframe.
+def convert_dataframe(df: Any, data_tool: DataTool | str | None = None) -> IntoFrame:
+    '''Convert `df` to the native dataframe type of `data_tool`.
+
+    Polars output is always returned as a LazyFrame; dask/spark/daft return their
+    native lazy type. Only pandas returns eager.
     '''
-    import io
-    from pfeed.enums.compression import Compression
-    from pfeed.enums.io_format import IOFormat
-
-    if isinstance(data, bytes):
-        data = Compression.decompress(data)
-        io_format = IOFormat.detect(data)
-        if io_format == IOFormat.PARQUET:
-            df = pd.read_parquet(io.BytesIO(data))
-        elif io_format == IOFormat.CSV:
-            df = pd.read_csv(io.BytesIO(data))
-        else:
-            raise ValueError(f'{io_format=}')
-    elif is_dataframe(data):
-        df: GenericFrame = data
-    else:
-        raise ValueError(f'{type(data)=}')
-
+    from pfeed.config import get_config
+    from pfeed.utils.dataframe import is_dataframe, from_native
+    if not is_dataframe(df):
+        raise ValueError(f'{type(df)=}')
+    config = get_config()
+    data_tool = data_tool or config.data_tool
     data_tool = DataTool[data_tool.lower()]
 
-    def _narwhalify(_df: GenericFrame) -> nw.DataFrame:
-        # narwhals only supports SparkDataFrame, not ps.DataFrame, so convert to SparkDataFrame first
-        if isinstance(_df, ps.DataFrame):
-            _df = _df.to_spark()
-        nwdf = nw.from_native(_df)
+    def _to_pandas():
+        nwdf = from_native(df)
         if isinstance(nwdf, nw.LazyFrame):
             nwdf = nwdf.collect()
-        return nwdf
-    
-    # if the input dataframe is already in the desired data tool, return it directly
+        return nwdf.to_pandas()
+
     if data_tool == DataTool.pandas:
-        if isinstance(df, pd.DataFrame):
-            return df
-        else:
-            nwdf = _narwhalify(df)
-            return nwdf.to_pandas()
+        import pandas as pd
+        return df if isinstance(df, pd.DataFrame) else _to_pandas()
     elif data_tool == DataTool.polars:
-        if isinstance(df, (pl.LazyFrame, pl.DataFrame)):
+        if isinstance(df, pl.LazyFrame):
+            return df
+        elif isinstance(df, pl.DataFrame):
             return df.lazy()
-        else:
-            nwdf = _narwhalify(df)
-            return nwdf.to_polars().lazy()
+        nwdf = from_native(df)
+        if isinstance(nwdf, nw.LazyFrame):
+            nwdf = nwdf.collect()
+        return nwdf.to_polars().lazy()
     elif data_tool == DataTool.dask:
-        if isinstance(df, pd.DataFrame):
-            pass
-        elif isinstance(df, dd.DataFrame):
+        import dask.dataframe as dd
+        if isinstance(df, dd.DataFrame):
             return df
-        else:
-            nwdf = _narwhalify(df)
-            df = nwdf.to_pandas()
-        return dd.from_pandas(df, npartitions=1)
+        return dd.from_pandas(_to_pandas(), npartitions=1)
     elif data_tool == DataTool.spark:
-        if isinstance(df, pd.DataFrame):
-            pass
-        elif isinstance(df, SparkDataFrame):
+        from pyspark.sql import DataFrame as SparkDataFrame, SparkSession
+        if isinstance(df, SparkDataFrame):
             return df
-        else:
-            nwdf = _narwhalify(df)
-            df = nwdf.to_pandas()
-        from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
-        return spark.createDataFrame(df)
+        return spark.createDataFrame(_to_pandas())
+    elif data_tool == DataTool.daft:
+        import daft
+        if isinstance(df, daft.DataFrame):
+            return df
+        return daft.from_pandas(_to_pandas())
     else:
         raise ValueError(f'{data_tool=}')

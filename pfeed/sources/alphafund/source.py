@@ -1,24 +1,11 @@
 from typing import ClassVar
 
-from enum import StrEnum
-
+from pfeed.enums import DataSource, DataCategory
 from pfeed.sources.base_source import BaseSource
 
 
-class AlphaFundDataSource(StrEnum):
-    AlphaFund = 'AlphaFund'
-
-
-class AlphaFundDataCategory(StrEnum):
-    CHAT_DATA = 'CHAT_DATA'
-    
-    @property
-    def feed_name(self) -> str:
-        return self.lower().replace('_data', '_feed')
-
-        
 class AlphaFundSource(BaseSource):
-    name: ClassVar[AlphaFundDataSource | StrEnum] = AlphaFundDataSource.AlphaFund
+    NAME: ClassVar[DataSource] = DataSource.ALPHAFUND
 
-    def __init__(self):
-        super().__init__(data_categories=list(AlphaFundDataCategory))
+    def get_data_categories(self) -> list[DataCategory]:
+        return [DataCategory.CHAT_DATA]

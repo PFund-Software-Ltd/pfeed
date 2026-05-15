@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pfeed.enums import ExtractType, DataLayer
 from pfeed.storages.storage_config import StorageConfig
+from pfeed._io.io_config import IOConfig
 
 
 class BaseRequest(BaseModel):
@@ -12,7 +13,7 @@ class BaseRequest(BaseModel):
     data_origin: str = ''
     extract_type: ExtractType
     storage_config: StorageConfig | None = None
-    is_loaded: bool = Field(default=False, description='Whether load() has been called for the request')
+    io_config: IOConfig | None = None
     clean_data: bool = Field(
         default=True,
         description="""
@@ -32,10 +33,6 @@ class BaseRequest(BaseModel):
     @property
     def name(self) -> str:
         return self.__class__.__name__
-
-    def set_loaded(self) -> None:
-        '''Set the request as loaded'''
-        self.is_loaded = True
 
     def is_streaming(self) -> bool:
         return False

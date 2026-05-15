@@ -5,7 +5,7 @@ if TYPE_CHECKING:
 
 import datetime
 
-from pfund.enums import Environment
+from pfund.enums.env import Environment
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.pfund.mixin import PFundMixin
 from pfeed.sources.pfund.engine_data_model import EngineDataModel
@@ -15,7 +15,7 @@ from pfeed.sources.pfund.engine_data_model import EngineDataModel
 # this feed should be able to get backtesting data from pfund's BacktestEngine for monitoring and analysis puporse
 # some functions require api calls (e.g. get dynamic backtest results) and some do not (e.g. load backtest hisory)
 # TODO: need to specify which engine if there are multiple engines running
-class EngineFeed(PFundMixin, BaseFeed):
+class PFundEngineFeed(PFundMixin, BaseFeed):
     data_model_class: ClassVar[type[EngineDataModel]] = EngineDataModel
 
     def create_data_model(

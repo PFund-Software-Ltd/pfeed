@@ -6,34 +6,38 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
 
-import pandas as pd
+import polars as pl
 
 
-def standardize_columns(df: pd.DataFrame, product: BaseProduct | None=None) -> pd.DataFrame:
-    from pfeed._etl.base import standardize_date_column
-    df['product'] = product.name if product else None
-    # df['symbol'] = product.symbol if product else None
-    df = standardize_date_column(df)
-    return df
+def standardize_columns(df: pl.LazyFrame, product: BaseProduct | None = None) -> pl.LazyFrame:
+    """Standardizes the columns of a DataFrame.
+    Adds column 'product'.
+    """
+    return df.with_columns(
+        pl.lit(product.name if product else None).alias('product'),
+    )
 
 
-def filter_columns(df: pd.DataFrame) -> pd.DataFrame:
+def filter_columns(df: pl.LazyFrame) -> pl.LazyFrame:
+    """Filter out unnecessary columns from raw data."""
+    cols = df.collect_schema().names()
     standard_cols = ['date', 'product', 'title', 'content', 'publisher', 'url']
-    df_cols = df.columns
     extra_cols = ['author', 'exchange']
     for extra_col in extra_cols:
-        if extra_col in df_cols:
+        if extra_col in cols:
             standard_cols.append(extra_col)
-    df = df.loc[:, standard_cols]
-    return df
+    return df.select(standard_cols)
 
 
-def organize_columns(df: pd.DataFrame) -> pd.DataFrame:
+def organize_columns(df: pl.LazyFrame) -> pl.LazyFrame:
+    '''Moves 'date', 'product', 'publisher', 'title', 'content', 'url' to the leftmost side.'''
     left_cols = ['date', 'product', 'publisher', 'title', 'content', 'url']
     extra_cols = ['author', 'exchange']
-    df_cols = df.columns
+    current_cols = df.collect_schema().names()
     for extra_col in extra_cols:
-        if extra_col in df_cols:
+        if extra_col in current_cols:
             left_cols.append(extra_col)
-    df = df.reindex(left_cols + [col for col in df.columns if col not in left_cols], axis=1)
-    return df
+    target_cols = left_cols + [c for c in current_cols if c not in left_cols]
+    if current_cols == target_cols:
+        return df
+    return df.select(target_cols)

@@ -5,7 +5,7 @@ import pytz
 import datetime
 
 import pfeed as pe
-from pfeed._etl.base import convert_to_desired_df
+from pfeed._etl.base import convert_dataframe
 from pfeed.enums import DataTool
 
 
@@ -30,7 +30,7 @@ def is_trading_hours():
 def test_download_and_retrieve(tmp_path, yahoo_finance, product, resolution):
     def _assert_df(df):
         assert df is not None
-        df = convert_to_desired_df(df, DataTool.pandas)
+        df = convert_dataframe(df, DataTool.pandas)
         assert df.columns.tolist() == ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'dividends', 'splits']
         is_strictly_increasing = df["date"].is_monotonic_increasing and df["date"].is_unique
         assert is_strictly_increasing is True
@@ -65,7 +65,7 @@ def test_download_and_retrieve(tmp_path, yahoo_finance, product, resolution):
 def test_download_and_retrieve_mixed(tmp_path, yahoo_finance_mixed, product, resolution):
     def _assert_df(df):
         assert df is not None
-        df = convert_to_desired_df(df, DataTool.pandas)
+        df = convert_dataframe(df, DataTool.pandas)
         assert set(['Open', 'High', 'Low', 'Close', 'Volume']).issubset(df.columns.tolist())
         assert len(df) >= 1  # or > 0 to ensure we got data
     pe.configure(data_path=tmp_path / 'data')

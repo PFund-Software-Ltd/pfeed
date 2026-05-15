@@ -5,22 +5,13 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, ConfigDict
 
-from pfeed.enums import DataSource
 from pfeed.sources.base_source import BaseSource
-
-
-class BaseMetadataModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
-
-    data_source: DataSource
-    data_origin: str = ""
 
 
 class BaseDataModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
     
     data_handler_class: ClassVar[type[BaseDataHandler]]
-    metadata_class: ClassVar[type[BaseMetadataModel]]
 
     data_source: BaseSource
     data_origin: str
@@ -40,21 +31,3 @@ class BaseDataModel(BaseModel):
             return f"{self.data_source.name}:{self.data_origin}"
         else:
             return f"{self.data_source.name}"
-    
-    def to_metadata(self, **fields: Any) -> BaseMetadataModel:
-        """Convert the data model to a metadata model.
-
-        Args:
-            **fields: Internal use only. Used to pass metadata fields up the 
-                inheritance chain. Do not pass arguments directly when calling 
-                this method.
-        
-        Returns:
-            A metadata model instance containing the relevant metadata fields.
-        """
-        MetadataModel = self.metadata_class
-        return MetadataModel(
-            data_source=self.data_source.name,
-            data_origin=self.data_origin,
-            **fields,
-        )

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfund.typing import tEnvironment
     
-from pfund.enums import Environment
+from pfund.enums.env import Environment
 
 
 # useful when using pfund's engine as an aggreagated data source of multiple trading venues with standardized data format

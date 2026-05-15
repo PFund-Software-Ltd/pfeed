@@ -1,10 +1,12 @@
 from enum import StrEnum
 
 from pfund_kit.utils.text import to_camel_case
-from pfund.enums import TradingVenue
+from pfund.enums.trading_venue import TradingVenue
 
 
 class DataSource(StrEnum):
+    PFUND = 'PFUND'
+    ALPHAFUND = 'ALPHAFUND'
     YAHOO_FINANCE = YF = 'YAHOO_FINANCE'
     FINANCIAL_MODELING_PREP = FMP = 'FINANCIAL_MODELING_PREP'
     BYBIT = TradingVenue.BYBIT

@@ -1,16 +1,11 @@
 from typing import ClassVar
 
-from enum import StrEnum
-
 from pfeed.sources.base_source import BaseSource
+from pfeed.enums import DataSource, DataCategory
 
 
-class PFundDataSource(StrEnum):
-    PFund = 'PFund'
-
-    
 class PFundSource(BaseSource):
-    name: ClassVar[PFundDataSource | StrEnum] = PFundDataSource.PFund
-    
-    def __init__(self):
-        super().__init__(data_categories=[])
+    NAME: ClassVar[DataSource] = DataSource.PFUND
+
+    def get_data_categories(self) -> list[DataCategory]:
+        return [DataCategory.ENGINE_DATA, DataCategory.COMPONENT_DATA]

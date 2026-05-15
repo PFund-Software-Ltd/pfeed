@@ -1,26 +1,16 @@
-from typing import Any, Protocol, TypeAlias
-from narwhals.series import Series
-from narwhals.dataframe import DataFrame, LazyFrame
+from __future__ import annotations
+from typing import Any, TypedDict
+
 from pfeed.streaming.streaming_message import StreamingMessage
 
-
-class DataFrameLike(Protocol):
-    def __dataframe__(self, *args: Any, **kwargs: Any) -> Any: ...
-
-
-# FIXME: use narwhals typing directly, for native dataframes, use "from narwhals._native import NativeDataFrame"
-GenericFrame: TypeAlias = DataFrame[Any] | LazyFrame[Any] | DataFrameLike
-GenericSeries = Series[Any]
-GenericData = GenericFrame | bytes
 StreamingData = dict[str, Any] | StreamingMessage
-
+class ParsedMessage(TypedDict):
+    ts: float
+    channel: str
+    data: dict[str, Any]
+    
 
 __all__ = [
-    "DataFrame",
-    "LazyFrame",
-    "DataFrameLike",
-    "GenericFrame",
-    "GenericSeries",
-    "GenericData",
+    "ParsedMessage",
     "StreamingData",
 ]

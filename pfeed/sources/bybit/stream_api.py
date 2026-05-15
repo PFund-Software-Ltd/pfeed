@@ -3,17 +3,16 @@ from typing import TYPE_CHECKING, Callable, TypeAlias
 if TYPE_CHECKING:
     from collections.abc import Awaitable
     from pfund.datas.resolution import Resolution
-    from pfund.brokers.crypto.exchanges.bybit.exchange import ProductCategory
     from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
     from pfeed.feeds.streaming_feed_mixin import WebSocketName, Message
 
-from pfund.enums import Environment
+from pfund.enums.env import Environment
 from pfund.typing import FullDataChannel
 from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
 from pfund.entities.products.product_bybit import BybitProduct
 
 
-ChannelKey: TypeAlias = tuple['ProductCategory', FullDataChannel]
+ChannelKey: TypeAlias = tuple[BybitProduct.Category, FullDataChannel]
 
 
 class StreamAPI:
@@ -46,7 +45,7 @@ class StreamAPI:
         return channel_key
         
     @staticmethod
-    def generate_channel_key(category: ProductCategory, channel: FullDataChannel) -> ChannelKey:
+    def generate_channel_key(category: BybitProduct.Category, channel: FullDataChannel) -> ChannelKey:
         return (category, channel)
     
     def set_callback(self, callback: Callable[[WebSocketName, Message], Awaitable[None] | None]):

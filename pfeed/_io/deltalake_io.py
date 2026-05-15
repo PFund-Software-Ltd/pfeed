@@ -15,6 +15,7 @@ class DeltaLakeIO(TableIO):
     SUPPORTS_PARALLEL_WRITES: bool = True
     SUPPORTS_PARTITIONING: bool = True
     METADATA_FILENAME: str = "deltalake_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
+    DATE_FILTER_PREDICATE: str = "{date_col} >= '{start_ts}' AND {date_col} <= '{end_ts}'"
     
     def exists(self, table_path: TablePath) -> bool:
         """Check if a Delta Lake table exists at this path."""

@@ -9,13 +9,14 @@ import datetime
 from abc import ABC, abstractmethod
 from functools import partial
 
-from pfund.enums import Environment
+from pfund.enums.env import Environment
 from pfeed.config import setup_logging, get_config
 from pfeed.enums import DataLayer, DataCategory
 from pfeed.data_models.news_data_model import NewsDataModel
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.utils import lambda_with_name
 from pfeed.storages.storage_config import StorageConfig
+from pfeed._io.io_config import IOConfig
 
 
 config = get_config()
@@ -43,7 +44,7 @@ class NewsFeed(TimeBasedFeed, ABC):
     ) -> NewsDataModel:
         from pfeed.data_models.news_data_model import NewsDataModel
         if isinstance(product, str) and product:
-            product = self.create_product(product, **product_specs)
+            product = self.data_source.create_product(product, **product_specs)
         if len(self.dataflows) > 0:
             existing_env = self.dataflows[0].data_model.env
             if existing_env != env:
@@ -72,6 +73,7 @@ class NewsFeed(TimeBasedFeed, ABC):
         dataflow_per_date: bool=False,
         clean_data: bool=True,
         storage_config: StorageConfig | None=None,
+        io_config: IOConfig | None=None,
         **product_specs: Any
     ) -> GenericFrame | None | NewsFeed:
         '''
@@ -84,7 +86,7 @@ class NewsFeed(TimeBasedFeed, ABC):
             assert not symbol, 'symbol should not be provided if product is not provided'
             product = None
         else:
-            product: BaseProduct = self.create_product(product, symbol=symbol, **product_specs)
+            product: BaseProduct = self.data_source.create_product(product, symbol=symbol, **product_specs)
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         data_layer = DataLayer[data_layer.upper()]
         return self._run_download(
@@ -103,7 +105,7 @@ class NewsFeed(TimeBasedFeed, ABC):
     
     def _get_default_transformations_for_download(self, data_layer: DataLayer, product: BaseProduct | None=None) -> list[Callable]:
         from pfeed._etl import news as etl
-        from pfeed._etl.base import convert_to_desired_df
+        from pfeed._etl.base import convert_dataframe
         default_transformations = []
         if data_layer != DataLayer.RAW:
             default_transformations.extend([
@@ -117,7 +119,7 @@ class NewsFeed(TimeBasedFeed, ABC):
         default_transformations.append(
             lambda_with_name(
                 'convert_to_user_df',
-                lambda df: convert_to_desired_df(df, config.data_tool)
+                lambda df: convert_dataframe(df)
             ),
         )
         return default_transformations
@@ -137,7 +139,7 @@ class NewsFeed(TimeBasedFeed, ABC):
     ) -> GenericFrame | None | tuple[GenericFrame | None, StorageMetadata] | NewsFeed:
         env = Environment[env.upper()]
         setup_logging(env=env)
-        product: BaseProduct | None = self.create_product(product, **product_specs) if product else None
+        product: BaseProduct | None = self.data_source.create_product(product, **product_specs) if product else None
         start_date, end_date = self._standardize_dates(start_date, end_date, rollback_period)
         env = Environment[env.upper()]
         return self._run_retrieve(

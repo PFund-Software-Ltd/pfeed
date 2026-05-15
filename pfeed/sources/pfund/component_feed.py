@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Any, Callable
+from typing import TYPE_CHECKING, ClassVar, Any, Callable, Self
 if TYPE_CHECKING:
     from pfund.enums import ComponentType
     from pfund.typing import Component
@@ -7,7 +7,8 @@ if TYPE_CHECKING:
 
 from pathlib import Path
 
-from pfund.enums import Environment, ArtifactType
+from pfund.enums.env import Environment
+from pfund.enums.artifact_type import ArtifactType
 from pfeed.sources.pfund.mixin import PFundMixin
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.enums.data_storage import FileBasedDataStorage
@@ -17,13 +18,13 @@ from pfeed.enums import IOFormat, DataLayer
 # REVIEW: currently skip BaseFeed's request->dataflow structure.
 # e.g. in load(), there is no dataflow or request created in ComponentFeed.
 # if it were to be implemented, add back num_workers parameter to __init__()
-class ComponentFeed(PFundMixin, BaseFeed):  # pyright: ignore[reportImplicitAbstractClass]
+class PFundComponentFeed(PFundMixin, BaseFeed):  # pyright: ignore[reportImplicitAbstractClass]
     def __init__(self):
         # NOTE: no pipeline mode support for now
         super().__init__(pipeline_mode=False)
         self._component: Component | None = None
         
-    def __call__(self, component: Component) -> ComponentFeed:
+    def __call__(self, component: Component) -> Self:
         self._component = component
         return self
     

@@ -211,6 +211,12 @@ class MarketFeed(TimeBasedFeed, ABC):
         for dataflow in dataflows:
             dataflow.add_transformations(*default_transformations)
         _ = self.load(storage_config=storage_config, io_config=io_config)
+        if not request.clean_data and resolution < data_resolution:
+            cprint(
+                "Skipping resampling because clean_data=False/data_layer=RAW;\n" +
+                f"download() will return {data_resolution} data, not requested {resolution} data.",
+                style=TextStyle.BOLD + RichColor.YELLOW
+            )
         return self.run() if not self.is_pipeline() else self
 
     def _get_default_transformations_for_download(

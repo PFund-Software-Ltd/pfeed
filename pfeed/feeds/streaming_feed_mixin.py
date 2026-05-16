@@ -79,9 +79,9 @@ class StreamingFeedMixin:
             faucet: Faucet = existing_dataflow.faucet
         else:
             faucet: Faucet = cast(Faucet, self._create_faucet(
+                data_source=data_model.data_source,
                 extract_func=self._stream_impl,
                 extract_type=request.extract_type,
-                close_stream=self._close_stream,
             ))
         dataflow: DataFlow = cast(DataFlow, self._create_dataflow(faucet=faucet, data_model=data_model))
 

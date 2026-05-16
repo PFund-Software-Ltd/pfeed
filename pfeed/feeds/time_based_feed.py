@@ -126,7 +126,7 @@ class TimeBasedFeed(BaseFeed, ABC):
             style=TextStyle.BOLD + RichColor.GREEN
         )
         data_model = cast("TimeBasedDataModel", self._create_data_model_from_request(request))
-        faucet: Faucet = self._create_faucet(extract_func=extract_func, extract_type=request.extract_type)
+        faucet: Faucet = self._create_faucet(data_source=data_model.data_source, extract_func=extract_func, extract_type=request.extract_type)
         if request.dataflow_per_date:
             data_models = [
                 data_model.model_copy(update={'start_date': d, 'end_date': d})

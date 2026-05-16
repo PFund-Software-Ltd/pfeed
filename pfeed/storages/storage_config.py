@@ -16,8 +16,8 @@ class StorageConfig(BaseModel):
     data_path: FilePath | Path | str | None = Field(default=None, validate_default=True)
     data_layer: DataLayer | str = DataLayer.CLEANED
     data_domain: str = ''
-    file_backend: FileBasedDataStorage | None = Field(
-        default=None,
+    file_backend: FileBasedDataStorage | str = Field(
+        default=FileBasedDataStorage.LOCAL,
         description='''
         File-based storage backend, only applicable for file-based storages,
         e.g. storage=duckdb, file_backend=local or huggingface etc.
@@ -30,6 +30,13 @@ class StorageConfig(BaseModel):
     def create_storage(cls, v: DataStorage | str) -> DataStorage:
         if not isinstance(v, DataStorage):
             return DataStorage[v.upper()]
+        return v
+
+    @field_validator('file_backend', mode='before')
+    @classmethod
+    def create_file_backend(cls, v: FileBasedDataStorage | str) -> FileBasedDataStorage:
+        if not isinstance(v, FileBasedDataStorage):
+            return FileBasedDataStorage[v.upper()]
         return v
 
     @field_validator('data_path', mode='before')

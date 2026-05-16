@@ -59,4 +59,4 @@ class FileBasedStorage(BaseStorage):
                     {'__module__': self.__class__.__module__}
                 )
                 self.__class__ = new_cls
-        return super().with_io(io_config=io_config)
+        return super().with_io(io_config=io_config)  # pyright: ignore[reportReturnType]

@@ -24,7 +24,7 @@ class LanceDBIO(DatabaseIO, TableIO):
     SUPPORTS_PARALLEL_WRITES: bool = True
     METADATA_FILENAME: str = "lancedb_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
     TIMESTAMP_PRECISION = TimestampPrecision.NANOSECOND
-    DATE_FILTER_PREDICATE: str = "{date_col} >= cast('{start_ts}' as timestamp) AND {date_col} <= cast('{end_ts}' as timestamp)"
+    DATE_FILTER_PREDICATE: str = "{date_col} >= cast('{start_date}' as timestamp) AND {date_col} <= cast('{end_date}' as timestamp)"
 
     def __init__(
         self,

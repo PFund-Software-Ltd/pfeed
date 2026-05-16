@@ -27,6 +27,7 @@ class DuckDBIO(DatabaseIO, FileIO):
     SUPPORTS_PARALLEL_WRITES: bool = False
     FILE_EXTENSION = ".duckdb"
     TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
+    DATE_FILTER_PREDICATE = "{date_col} >= '{start_date}' AND {date_col} <= '{end_date}'"
 
     def __init__(
         self,

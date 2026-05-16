@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
     from pfeed.storages.storage_config import StorageConfig
+    from pfeed._io.database_io import DatabaseIO
+    from pfeed._io.io_config import IOConfig
 
 from abc import ABC
 
@@ -45,3 +47,12 @@ class FileBackedDatabaseStorage(DatabaseStorage, ABC):
     @classmethod
     def from_storage_config(cls, storage_config: StorageConfig) -> Self:
         return cls(**storage_config.model_dump(exclude={'storage'}))
+
+    def with_io(self, io_config: IOConfig) -> DatabaseIO:
+        supports_only_one_io_format = len(self.SUPPORTED_IO_FORMATS) == 1
+        # e.g. DuckDB only supports DuckDBIO, always use it, regardless of the input io_config
+        if supports_only_one_io_format:
+            io_config = io_config.model_copy(update={'io_format': self.SUPPORTED_IO_FORMATS[0]})
+        else:
+            raise NotImplementedError(f"Multiple IO formats are not supported for {self.__class__.__name__}")
+        return super().with_io(io_config=io_config)  # pyright: ignore[reportReturnType]

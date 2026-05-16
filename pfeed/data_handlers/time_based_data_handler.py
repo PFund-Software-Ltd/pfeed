@@ -169,11 +169,11 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
 
                 # Replace any overlapping data within the date range
                 if not df.is_empty():
-                    start_ts = df[date_col].min()
-                    end_ts = df[date_col].max()
+                    start_date = df[date_col].min()
+                    end_date = df[date_col].max()
                     if not self._io.DATE_FILTER_PREDICATE:
                         raise ValueError(f"IO {self._io.name} has no DATE_FILTER_PREDICATE")
-                    delete_where = self._io.DATE_FILTER_PREDICATE.format(date_col=date_col, start_ts=start_ts, end_ts=end_ts)
+                    delete_where = self._io.DATE_FILTER_PREDICATE.format(date_col=date_col, start_date=start_date, end_date=end_date)
                 else:
                     delete_where = None
 

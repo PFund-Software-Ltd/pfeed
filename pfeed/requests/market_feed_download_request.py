@@ -1,20 +1,11 @@
-from typing import Literal, Any
+from typing import Literal
 
 from pydantic import Field
 
 from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
-from pfeed.enums import ExtractType, DataLayer
+from pfeed.enums import ExtractType
 
 
 class MarketFeedDownloadRequest(MarketFeedBaseRequest):
     dataflow_per_date: bool = Field(description='Whether to create a dataflow for each date')
     extract_type: Literal[ExtractType.download] = ExtractType.download
-
-    def model_post_init(self, __context: Any) -> None:
-        super().model_post_init(__context)
-        storage_config = self.storage_config
-        if storage_config:
-            if storage_config.data_domain and storage_config.data_layer != DataLayer.CURATED:
-                raise ValueError(f'Custom data_domain={storage_config.data_domain} is only allowed when data layer is CURATED, but got data_layer={storage_config.data_layer}')
-            if storage_config.data_layer == DataLayer.RAW and self.target_resolution != self.data_resolution:
-                raise ValueError(f'No raw data for {self.product.name} with such resolution {self.target_resolution}')

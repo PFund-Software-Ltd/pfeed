@@ -15,15 +15,15 @@ if TYPE_CHECKING:
     from pfeed.storages.cache_storage import CacheStorage
     from pfeed.storages.duckdb_storage import DuckDBStorage
     from pfeed.storages.lancedb_storage import LanceDBStorage
-    from pfeed.storages.huggingface_storage import HuggingFaceStorage
     from pfeed.sources.bybit import Bybit
-    from pfeed.sources.financial_modeling_prep import (
-        FinancialModelingPrep,
-        FinancialModelingPrep as FMP,
-    )
     from pfeed.engine import DataEngine
     from pfeed.sources.pfund import PFund
     from pfeed.sources.alphafund import AlphaFund
+    # from pfeed.storages.huggingface_storage import HuggingFaceStorage
+    # from pfeed.sources.financial_modeling_prep import (
+    #     FinancialModelingPrep,
+    #     FinancialModelingPrep as FMP,
+    # )
 
 import os
 from importlib.metadata import version
@@ -79,12 +79,12 @@ def __getattr__(name: str):
     elif name == 'LanceDBStorage':
         from pfeed.storages.lancedb_storage import LanceDBStorage
         return LanceDBStorage
-    elif name == 'HuggingFaceStorage':
-        from pfeed.storages.huggingface_storage import HuggingFaceStorage
-        return HuggingFaceStorage
+    # elif name == 'HuggingFaceStorage':
+    #     from pfeed.storages.huggingface_storage import HuggingFaceStorage
+    #     return HuggingFaceStorage
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
-    
-    
+
+
 __version__ = version("pfeed")
 __all__ = (
     "__version__",
@@ -104,13 +104,13 @@ __all__ = (
     "CacheStorage",
     "DuckDBStorage",
     "LanceDBStorage",
-    "HuggingFaceStorage",
+    # "HuggingFaceStorage",
     # data sources
     "PFund",
     "AlphaFund",
     "YahooFinance", "YFinance", "YF",
     "Bybit",
-    "FinancialModelingPrep", "FMP",
+    # "FinancialModelingPrep", "FMP",
 )
 def __dir__():
     return sorted(__all__)

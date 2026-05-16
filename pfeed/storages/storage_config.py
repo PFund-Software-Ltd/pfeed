@@ -15,7 +15,7 @@ class StorageConfig(BaseModel):
     storage: DataStorage | str = DataStorage.LOCAL
     data_path: FilePath | Path | str | None = Field(default=None, validate_default=True)
     data_layer: DataLayer | str = DataLayer.CLEANED
-    data_domain: str=''
+    data_domain: str = ''
     file_backend: FileBasedDataStorage | None = Field(
         default=None,
         description='''

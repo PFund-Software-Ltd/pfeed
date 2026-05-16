@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.data_handlers.base_data_handler import SourcePath
     from pfeed.storages.database_storage import DatabaseURI
-    ProductSymbol: TypeAlias = str
 
 import datetime
 
@@ -19,6 +18,9 @@ from pfeed._io.database_io import DBPath
 from pfeed.enums import StreamMode, DataSource
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler, TimeBasedDataMetadata
 from pfeed.data_handlers.streaming_data_handler_mixin import StreamingDataHandlerMixin
+
+
+ProductSymbol: TypeAlias = str
 
 
 class ProductMetadata(BaseModel):

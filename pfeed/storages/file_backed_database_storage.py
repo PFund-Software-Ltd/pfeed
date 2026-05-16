@@ -4,19 +4,23 @@ from typing import TYPE_CHECKING, Any, Self
 if TYPE_CHECKING:
     from pfeed.storages.storage_config import StorageConfig
 
+from abc import ABC
+
 from pfeed.enums import DataLayer, DataStorage
 from pfeed.enums.data_storage import FileBasedDataStorage
 from pfeed.storages.database_storage import DatabaseStorage
 
 
-class FileBackedDatabaseStorage(DatabaseStorage):
+class FileBackedDatabaseStorage(DatabaseStorage, ABC):
     """Database storage that sits on top of a file-based backend (e.g. DuckDB, LanceDB)."""
 
     def __new__(
         cls,
-        *args: Any,
+        data_path: str | None = None,
+        data_layer: DataLayer = DataLayer.CLEANED,
+        data_domain: str = 'MARKET_DATA',
+        storage_options: dict[str, Any] | None = None,
         file_backend: FileBasedDataStorage | str = FileBasedDataStorage.LOCAL,
-        **kwargs: Any,
     ):
         FileBasedStorage = DataStorage[str(file_backend).upper()].storage_class
         new_cls = type(cls.__name__, (cls, FileBasedStorage), {'__module__': cls.__module__})

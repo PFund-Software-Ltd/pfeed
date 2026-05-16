@@ -28,7 +28,7 @@ from pfund.enums.env import Environment
 from pfund.datas.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfeed.config import setup_logging
-from pfeed.enums import DataLayer, MarketDataType, DataTool, StreamMode, DataCategory, DataStorage, DataSource
+from pfeed.enums import MarketDataType, DataTool, StreamMode, DataCategory, DataStorage, DataSource
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
@@ -197,6 +197,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             data_origin=data_origin,
+            data_domain=self.data_domain,
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
@@ -359,6 +360,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             data_origin=data_origin,
+            data_domain=self.data_domain,
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
@@ -531,9 +533,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
-    def _get_default_transformations_for_stream(
-        self, request: MarketFeedStreamRequest
-    ) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
         from itertools import count
         from pfund.datas.data_bar import BarData
         from pfeed.utils import lambda_with_name

@@ -11,6 +11,7 @@ class BaseRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
     data_origin: str = ''
+    data_domain: str
     extract_type: ExtractType
     storage_config: StorageConfig | None = None
     io_config: IOConfig | None = None
@@ -53,3 +54,8 @@ class BaseRequest(BaseModel):
                         style=TextStyle.BOLD + RichColor.YELLOW
                     )
                     self.clean_data = False
+            if not storage_config.data_domain:
+                storage_config.data_domain = self.data_domain
+            else:
+                if storage_config.data_layer != DataLayer.CURATED:
+                    raise ValueError(f'Custom data_domain={storage_config.data_domain} is only allowed when data layer is CURATED, but got data_layer={storage_config.data_layer}')

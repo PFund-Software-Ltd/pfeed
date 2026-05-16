@@ -80,7 +80,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
         super().model_post_init(__context)
         if not self.clean_data and self.target_resolution < self.data_resolution:
             cprint(
-                "Skipping resampling because clean_data=False/data_layer=RAW;\n" +
+                "Skipping resampling because clean_data=False/data_layer=RAW, i.e.\n" +
                 f"{self.name} {self.product.name} will return {self.data_resolution} data, not requested {self.target_resolution} data.",
                 style=TextStyle.BOLD + RichColor.YELLOW
             )

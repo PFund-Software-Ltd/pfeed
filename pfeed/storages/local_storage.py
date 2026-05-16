@@ -22,14 +22,12 @@ class LocalStorage(FileBasedStorage):
         data_layer: DataLayer=DataLayer.CLEANED,
         data_domain: str = 'MARKET_DATA',
         storage_options: dict[str, Any] | None = None,
-        **kwargs: Any,  # additional kwargs for compatibility with other storages
     ):
         super().__init__(
             data_path=data_path or config.data_path,
             data_layer=data_layer,
             data_domain=data_domain,
             storage_options=storage_options,
-            **kwargs,
         )
     
     def get_filesystem(self) -> pa_fs.LocalFileSystem:

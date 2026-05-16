@@ -30,7 +30,6 @@ class HuggingFaceStorage(FileBasedStorage):
         data_layer: DataLayer = DataLayer.CLEANED,
         data_domain: str = 'MARKET_DATA',
         storage_options: dict[str, Any] | None = None,
-        **kwargs: Any,  # additional kwargs for compatibility with other storages
     ):
         """
         Args:
@@ -49,7 +48,6 @@ class HuggingFaceStorage(FileBasedStorage):
             data_layer=data_layer,
             data_domain=data_domain,
             storage_options=storage_options,
-            **kwargs,
         )
         
         # Ensure storage_options has token

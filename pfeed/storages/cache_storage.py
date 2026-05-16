@@ -21,14 +21,12 @@ class CacheStorage(LocalStorage):
         data_domain: str = 'MARKET_DATA',
         storage_options: dict[str, Any] | None = None,
         num_retained_days: int = DEFAULT_NUM_RETAINED_DAYS,
-        **kwargs: Any,  # additional kwargs for compatibility with other storages
     ):
         super().__init__(
             data_path=data_path or config.cache_path,
             data_layer=data_layer,
             data_domain=data_domain,
             storage_options=storage_options,
-            **kwargs,
         )
         self.num_retained_days = num_retained_days
         self._clear_caches()

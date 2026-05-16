@@ -18,7 +18,6 @@ class PostgreSQLStorage(DatabaseStorage):
         self,
         data_path: str | None,
         storage_options: dict[str, Any] | None = None,
-        **kwargs: Any,  # additional kwargs for compatibility with other storages
     ):
         '''
         Args:
@@ -41,7 +40,7 @@ class PostgreSQLStorage(DatabaseStorage):
             self.port = parsed.port      # already int, or None
             # TODO: where to pass in database name?
             # self.database = parsed.path.lstrip('/') or None
-        super().__init__(data_path=data_path, storage_options=storage_options, **kwargs)
+        super().__init__(data_path=data_path, storage_options=storage_options)
 
     # e.g. postgresql://pfunder:password@localhost:5432
     def _create_uri(self) -> str:

@@ -19,19 +19,19 @@ class StorageConfig(BaseModel):
     file_backend: FileBasedDataStorage | None = Field(
         default=None,
         description='''
-        File-based storage backend, only applicable for file-based storages, 
+        File-based storage backend, only applicable for file-based storages,
         e.g. storage=duckdb, file_backend=local or huggingface etc.
         ''',
     )
     storage_options: dict[str, Any] = Field(default_factory=dict)
-    
+
     @field_validator('storage', mode='before')
     @classmethod
     def create_storage(cls, v: DataStorage | str) -> DataStorage:
         if not isinstance(v, DataStorage):
             return DataStorage[v.upper()]
         return v
-    
+
     @field_validator('data_path', mode='before')
     @classmethod
     def create_data_path(cls, v: FilePath | Path | str | None) -> FilePath:
@@ -43,14 +43,14 @@ class StorageConfig(BaseModel):
             return FilePath(v)
         else:
             return v
-    
+
     @field_validator('data_layer', mode='before')
     @classmethod
     def create_data_layer(cls, v: DataLayer | str) -> DataLayer:
         if isinstance(v, str):
             return DataLayer[v.upper()]
         return v
-    
+
     @field_validator('data_domain', mode='before')
     @classmethod
     def uppercase_data_domain(cls, v: str) -> str:

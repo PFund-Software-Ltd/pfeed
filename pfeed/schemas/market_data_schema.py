@@ -9,7 +9,7 @@ from pfund.datas.resolution import Resolution
 class MarketDataSchema(TimeBasedDataSchema):
     product: str = pa.Field(nullable=True)
     resolution: str = pa.Field(isin=
-        set(repr(Resolution(dtype)) for dtype in MarketDataType.__members__.keys())
+        set(str(Resolution(dtype)) for dtype in MarketDataType.__members__.keys())
     )
 
     @pa.check('resolution')

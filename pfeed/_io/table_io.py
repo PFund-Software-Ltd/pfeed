@@ -60,11 +60,13 @@ class TableIO(FileIO, ABC):
         max_retries: int = 5,
         base_delay: float = 0.1,
     ) -> dict[TablePath, MetadataDict]:
-        """Read metadata for a table, retrying while the sidecar file hasn't landed.
+        """Read custom application metadata embedded in parquet schema.
 
-        Concurrent-writer race: writer A commits the table (e.g. Delta transaction log)
-        before writing the sidecar metadata file. Writer B can see the table exists
-        but the sidecar is still missing. Retry with exponential backoff until it appears.
+        Handles race condition for table formats where metadata files may not exist immediately
+        after table creation. This occurs when concurrent writers race:
+        - Writer A creates the table structure
+        - Writer B sees the table exists and tries to read metadata
+        - Writer A hasn't finished writing the metadata file yet → FileNotFoundError
 
         Args:
             table_path: Path to the table.
@@ -86,17 +88,14 @@ class TableIO(FileIO, ABC):
         for attempt in range(max_retries):
             try:
                 file_metadata = super().read_metadata(file_paths=[metadata_file_path])
-            except FileNotFoundError:
-                file_metadata = {}
-
-            if file_metadata:
-                return {table_path: file_metadata[metadata_file_path]}
-
-            if attempt < max_retries - 1:
-                delay = base_delay * (2 ** attempt) + random.uniform(0, base_delay)
-                time.sleep(delay)
-
-        raise FileNotFoundError(
-            f"Table exists at {table_path} but metadata sidecar " +
-            f"{metadata_file_path} did not appear after {max_retries} retries."
-        )
+                if not file_metadata:
+                    return {}
+                else:
+                    return {table_path: file_metadata[metadata_file_path]}
+            except FileNotFoundError as e:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, base_delay)
+                    time.sleep(delay)
+                else:
+                    raise e
+        return {}

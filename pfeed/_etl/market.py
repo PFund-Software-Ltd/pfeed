@@ -18,7 +18,7 @@ def standardize_columns(df: pl.LazyFrame, product: BaseProduct, resolution: Reso
     """
     return df.with_columns(
         pl.lit(product.name).alias('product'),
-        pl.lit(repr(resolution)).alias('resolution'),
+        pl.lit(str(resolution)).alias('resolution'),
     )
 
 
@@ -124,6 +124,6 @@ def resample_data(
             closed='left',
         )
         .agg(aggs)
-        .with_columns(pl.lit(repr(resolution)).alias('resolution'))
+        .with_columns(pl.lit(str(resolution)).alias('resolution'))
     )
     return resampled

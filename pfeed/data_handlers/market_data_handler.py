@@ -140,7 +140,7 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
             data_origin=self._data_model.data_origin,
             dates=dates,
             products=products,
-            resolution=repr(self._data_model.resolution),
+            resolution=str(self._data_model.resolution),
             asset_type=str(self._data_model.product.asset_type),
         )
 

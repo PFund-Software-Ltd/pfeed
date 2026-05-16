@@ -122,5 +122,6 @@ class DeltaLakeIO(TableIO):
         lf: pl.LazyFrame | None = None
         if self.exists(table_path):
             dt = self.get_table(table_path, **io_kwargs)
-            lf = pl.scan_delta(dt, use_pyarrow=False)
+            # NOTE: use_pyarrow=False doesn't work well with narwhals, e.g. narwhals.exceptions.NarwhalsError: path contains column not present in the given Hive schema: "env"
+            lf = pl.scan_delta(dt, use_pyarrow=True)
         return lf

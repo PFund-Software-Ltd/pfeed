@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfeed.streaming.streaming_message import StreamingMessage
+    from pfeed.typing import StreamingData
 
 from abc import ABC, abstractmethod
 
@@ -21,5 +21,5 @@ class StreamingDataHandlerMixin(ABC):
         pass
 
     @abstractmethod
-    def _write_stream(self, data: dict[str, Any] | StreamingMessage):
+    def _write_stream(self, data: StreamingData):
         pass

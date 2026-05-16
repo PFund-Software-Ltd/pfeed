@@ -52,15 +52,12 @@ def __getattr__(name: str):
     elif name == 'DataEngine':
         from pfeed.engine import DataEngine
         return DataEngine
-    elif name in ('YahooFinance', 'YFinance', 'YF'):
+    elif name.lower() in ('yahoofinance', 'yfinance', 'yf'):
         from pfeed.sources.yahoo_finance import YahooFinance
         return YahooFinance
     elif name.lower() == 'bybit':
         from pfeed.sources.bybit import Bybit
         return Bybit
-    elif name in ('FinancialModelingPrep', 'FMP'):
-        from pfeed.sources.financial_modeling_prep import FinancialModelingPrep
-        return FinancialModelingPrep
     elif name.lower() == 'pfund':
         from pfeed.sources.pfund import PFund
         return PFund
@@ -79,6 +76,9 @@ def __getattr__(name: str):
     elif name == 'LanceDBStorage':
         from pfeed.storages.lancedb_storage import LanceDBStorage
         return LanceDBStorage
+    # elif name in ('FinancialModelingPrep', 'FMP'):
+    #     from pfeed.sources.financial_modeling_prep import FinancialModelingPrep
+    #     return FinancialModelingPrep
     # elif name == 'HuggingFaceStorage':
     #     from pfeed.storages.huggingface_storage import HuggingFaceStorage
     #     return HuggingFaceStorage

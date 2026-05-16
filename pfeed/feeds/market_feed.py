@@ -383,9 +383,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             self.logger.debug(f"found data {data_model} in {storage}")
         return df
 
-    def _get_default_transformations_for_retrieve(
-        self, request: MarketFeedRetrieveRequest
-    ) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_retrieve(self, request: MarketFeedRetrieveRequest) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
         from pfeed.utils import lambda_with_name
@@ -393,18 +391,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         storage_config = request.storage_config
         assert storage_config is not None, "storage_config is required for retrieving data"
 
-        clean_data = request.clean_data
-        is_raw_data = storage_config.data_layer == DataLayer.RAW
-        # if it's not raw data, there's nothing to clean, clean_data is always False
-        if not is_raw_data:
-            clean_data = False
-            if request.clean_data:
-                cprint(
-                    f'"clean_data" parameter is ignored when data layer is not RAW (got data layer={storage_config.data_layer})',
-                    style=TextStyle.BOLD + RichColor.YELLOW
-                )
-
-        if not clean_data:
+        if not request.clean_data:
             default_transformations = [
                 lambda_with_name("convert_to_polars_df",
                     lambda df: convert_dataframe(df, DataTool.polars)),
@@ -532,7 +519,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             flush_interval=flush_interval,
         )
         self._requests.append(request)
-        self._create_stream_dataflow(callback=callback)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+        self._create_stream_dataflow(callback=callback)  # pyright: ignore[reportAttributeAccessIssue]
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
 
     async def _stream_impl(

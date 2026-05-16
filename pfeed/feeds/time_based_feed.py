@@ -56,7 +56,7 @@ class TimeBasedFeed(BaseFeed, ABC):
         '''
         from pfeed._etl.base import standardize_date_column
 
-        cols = df.columns
+        cols = df.collect_schema().names()
         raw_date_col = next(
             (c for c in cls.date_columns_in_raw_data if c in cols),
             None,

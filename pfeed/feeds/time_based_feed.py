@@ -172,7 +172,7 @@ class TimeBasedFeed(BaseFeed, ABC):
         dfs: list[Frame] = [nw.from_native(df) for df in result_dfs if not is_empty_dataframe(df)]
         if dfs:
             from pfeed._etl.base import convert_dataframe
-            df: Frame = cast(Frame, nw.concat(dfs))  # pyright: ignore[reportArgumentType]
+            df: Frame = cast("Frame", nw.concat(dfs))  # pyright: ignore[reportArgumentType]
             schema = df.collect_schema()
             columns = schema.names()
             if 'date' in columns and schema['date'].is_temporal():

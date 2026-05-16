@@ -187,7 +187,7 @@ class BaseFeed(ABC):
 
     def load(self, storage_config: StorageConfig | None = None, io_config: IOConfig | None = None) -> BaseFeed:
         from pfeed._io.io_config import IOConfig
-        request = self._check_current_request('load')
+        request = self._get_current_request()
         # allowing passing in None is useful for dynamically determining if load() is needed
         if storage_config is None:
             return self

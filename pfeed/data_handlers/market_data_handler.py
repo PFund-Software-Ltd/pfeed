@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast
 if TYPE_CHECKING:
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfeed.data_handlers.base_data_handler import SourcePath
     from pfeed.storages.database_storage import DatabaseURI
 
 import datetime
@@ -15,6 +14,7 @@ from pfund.datas.resolution import Resolution
 from pfeed.utils.file_path import FilePath
 from pfeed._io.table_io import TablePath
 from pfeed._io.database_io import DBPath
+from pfeed.data_handlers.base_data_handler import SourcePath
 from pfeed.enums import StreamMode, DataSource
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler, TimeBasedDataMetadata
 from pfeed.data_handlers.streaming_data_handler_mixin import StreamingDataHandlerMixin

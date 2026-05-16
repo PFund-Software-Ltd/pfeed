@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, Any, Self, cast
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata, SourcePath
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO
@@ -21,7 +21,7 @@ from pydantic import Field, BaseModel, ConfigDict
 
 from pfeed.enums import DataLayer, IOFormat
 from pfeed.utils.file_path import FilePath
-from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+from pfeed.data_handlers.base_data_handler import SourcePath, BaseDataMetadata
 
 
 class StorageMetadata(BaseModel):

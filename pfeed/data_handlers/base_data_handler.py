@@ -5,15 +5,15 @@ if TYPE_CHECKING:
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO, MetadataDict
-    from pfeed.utils.file_path import FilePath
-    from pfeed._io.table_io import TablePath
-    from pfeed._io.database_io import DBPath
-    SourcePath: TypeAlias = FilePath | TablePath | DBPath
 
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, ConfigDict
 
 from pfeed.enums import DataLayer, DataSource, IOType
+from pfeed.utils.file_path import FilePath
+from pfeed._io.table_io import TablePath
+from pfeed._io.database_io import DBPath
+SourcePath: TypeAlias = FilePath | TablePath | DBPath
 
 
 class BaseDataMetadata(BaseModel):

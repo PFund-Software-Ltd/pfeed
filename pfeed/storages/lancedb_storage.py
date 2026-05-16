@@ -12,7 +12,7 @@ from pfeed.storages.file_backed_database_storage import FileBackedDatabaseStorag
 class LanceDBStorage(FileBackedDatabaseStorage):
     SUPPORTED_IO_FORMATS: ClassVar[list[Literal[IOFormat.LANCEDB]]] = [IOFormat.LANCEDB]
 
-    io: LanceDBIO
+    _io: LanceDBIO
     conn: LanceDBConnection | None
 
     def _create_uri(self) -> str:

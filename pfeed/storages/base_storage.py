@@ -74,6 +74,14 @@ class BaseStorage:
     ):
         '''
         Args:
+            data_path: Root location where data lives. Its concrete type depends on the storage backend:
+                - File-based storages (local, S3, HuggingFace): a filesystem path (`FilePath` wrapping a `Path`
+                  or URI string) pointing to the root directory under which data is organized by
+                  data_layer / data_domain / source / etc. Subclasses pass `Path | str` and `FileBasedStorage`
+                  wraps it in `FilePath`.
+                - Database storages (PostgreSQL, DuckDB): a database URI string used to connect to the server
+                  (e.g. `postgresql://user:pass@host:5432/db`, a DuckDB file path, or `:memory:`). When `None`
+                  is passed to a `DatabaseStorage` subclass, it falls back to `_create_uri()`.
             data_layer: Data layer to store the data.
             data_domain: Data domain of the data, used for grouping data inside a data layer.
             storage_options: Storage options

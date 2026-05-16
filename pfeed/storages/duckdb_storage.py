@@ -1,45 +1,19 @@
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
     from pfeed._io.duckdb_io import DuckDBIO
 
-from pfeed.enums import IOFormat, DataLayer
-from pfeed.enums.data_storage import FileBasedDataStorage
+from pfeed.enums import IOFormat
 from pfeed.storages.file_backed_database_storage import FileBackedDatabaseStorage
 
 
 class DuckDBStorage(FileBackedDatabaseStorage):
     SUPPORTED_IO_FORMATS: ClassVar[list[Literal[IOFormat.DUCKDB]]] = [IOFormat.DUCKDB]
-    DEFAULT_IN_MEMORY: ClassVar[bool] = False
-    DEFAULT_MEMORY_LIMIT: ClassVar[str] = '4GB'
 
-    io: DuckDBIO
+    _io: DuckDBIO
     conn: DuckDBPyConnection | None
-
-    def __init__(
-        self,
-        data_path: str | None = None,
-        data_layer: DataLayer = DataLayer.CLEANED,
-        data_domain: str = 'MARKET_DATA',
-        storage_options: dict[str, Any] | None = None,
-        file_backend: FileBasedDataStorage | str = FileBasedDataStorage.LOCAL,
-    ):
-        storage_options = {
-            'in_memory': self.DEFAULT_IN_MEMORY,
-            'memory_limit': self.DEFAULT_MEMORY_LIMIT,
-            **(storage_options or {}),
-        }
-        super().__init__(
-            data_path=data_path,
-            data_layer=data_layer,
-            data_domain=data_domain,
-            storage_options=storage_options,
-            file_backend=file_backend,
-        )
-        if self.storage_options['in_memory']:
-            self.data_path = ':memory:'
 
     def _create_uri(self) -> str:
         return ''

@@ -83,7 +83,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             resolution: Data resolution string (e.g. '1m', '1h') or a Resolution instance.
             start_date: Start date as a string ('YYYY-MM-DD') or datetime.date.
             end_date: End date as a string ('YYYY-MM-DD') or datetime.date.
-                If not provided (empty string ''), defaults to start_date, creating a single-day model.
+                If None, defaults to start_date, creating a single-day model.
             env: Trading environment.
             data_origin: Origin label for the data.
             product_specs: Additional product specifications (e.g. strike_price, expiration for options).

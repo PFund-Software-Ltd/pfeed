@@ -9,11 +9,12 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 
 from pfeed.storages.base_storage import BaseStorage
+from pfeed._io.io_config import IOConfig
 from pfeed.enums import DataLayer
 
 
 class DatabaseStorage(BaseStorage, ABC):
-    io: DatabaseIO
+    _io: DatabaseIO
 
     def __init__(
         self,
@@ -38,10 +39,23 @@ class DatabaseStorage(BaseStorage, ABC):
         assert self.data_handler._db_path is not None
         return self.data_handler._db_path
 
+    def _has_only_one_io_format(self) -> bool:
+        return len(self.SUPPORTED_IO_FORMATS) == 1
+
+    @property
+    def io(self) -> DatabaseIO:
+        if not self._io:
+            _ = self.with_io(io_config=IOConfig())
+        return self._io
+
     @property
     def conn(self) -> DBConnection | None:
-        if self.io:
-            db_path = self._get_db_path()
-            return self.io.connect(db_path.db_uri)
+        db_path = self._get_db_path()
+        return self.io.connect(db_path.db_uri)
+
+    def with_io(self, io_config: IOConfig) -> DatabaseIO:
+        if self._has_only_one_io_format():  # database storage should only support one IO format
+            io_config = io_config.model_copy(update={'io_format': self.SUPPORTED_IO_FORMATS[0]})
         else:
-            return None
+            raise NotImplementedError(f"Unhandled case: Multiple IO formats in {self.__class__.__name__}")
+        return super().with_io(io_config=io_config)  # pyright: ignore[reportReturnType]

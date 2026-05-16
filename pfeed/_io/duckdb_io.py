@@ -53,16 +53,16 @@ class DuckDBIO(DatabaseIO, FileIO):
             write_options=write_options,
             filesystem=filesystem,
         )
-        self._in_memory = self._storage_options['in_memory']
-        self._memory_limit = self._storage_options['memory_limit']
+        # self._in_memory = self._storage_options['in_memory']
+        # self._memory_limit = self._storage_options['memory_limit']
 
     def _open_connection(self, uri: str):
         self._conn: DuckDBPyConnection = duckdb.connect(uri, **self._connect_options)
         self._conn_uri = uri
-        if self._in_memory:
-            if ";" in self._memory_limit or "'" in self._memory_limit:
-                raise ValueError(f"Invalid memory_limit: {self._memory_limit!r}")
-            _ = self._conn.execute(f"SET memory_limit = '{self._memory_limit}'")
+        # if self._in_memory:
+        #     if ";" in self._memory_limit or "'" in self._memory_limit:
+        #         raise ValueError(f"Invalid memory_limit: {self._memory_limit!r}")
+        #     _ = self._conn.execute(f"SET memory_limit = '{self._memory_limit}'")
 
     def _close_connection(self):
         if self._conn:

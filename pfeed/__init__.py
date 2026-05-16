@@ -11,15 +11,10 @@ if TYPE_CHECKING:
         YahooFinance as YF,
         YahooFinance as YFinance,
     )
-    from pfeed.storages.local_storage import LocalStorage
-    from pfeed.storages.cache_storage import CacheStorage
-    from pfeed.storages.duckdb_storage import DuckDBStorage
-    from pfeed.storages.lancedb_storage import LanceDBStorage
     from pfeed.sources.bybit import Bybit
     from pfeed.engine import DataEngine
     from pfeed.sources.pfund import PFund
     from pfeed.sources.alphafund import AlphaFund
-    # from pfeed.storages.huggingface_storage import HuggingFaceStorage
     # from pfeed.sources.financial_modeling_prep import (
     #     FinancialModelingPrep,
     #     FinancialModelingPrep as FMP,
@@ -64,24 +59,9 @@ def __getattr__(name: str):
     elif name.lower() == 'alphafund':
         from pfeed.sources.alphafund import AlphaFund
         return AlphaFund
-    elif name == 'LocalStorage':
-        from pfeed.storages.local_storage import LocalStorage
-        return LocalStorage
-    elif name == 'CacheStorage':
-        from pfeed.storages.cache_storage import CacheStorage
-        return CacheStorage
-    elif name == 'DuckDBStorage':
-        from pfeed.storages.duckdb_storage import DuckDBStorage
-        return DuckDBStorage
-    elif name == 'LanceDBStorage':
-        from pfeed.storages.lancedb_storage import LanceDBStorage
-        return LanceDBStorage
     # elif name in ('FinancialModelingPrep', 'FMP'):
     #     from pfeed.sources.financial_modeling_prep import FinancialModelingPrep
     #     return FinancialModelingPrep
-    # elif name == 'HuggingFaceStorage':
-    #     from pfeed.storages.huggingface_storage import HuggingFaceStorage
-    #     return HuggingFaceStorage
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
@@ -99,12 +79,6 @@ __all__ = (
     "plot",
     # engine
     "DataEngine",
-    # storages
-    "LocalStorage",
-    "CacheStorage",
-    "DuckDBStorage",
-    "LanceDBStorage",
-    # "HuggingFaceStorage",
     # data sources
     "PFund",
     "AlphaFund",

@@ -74,3 +74,13 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
         if self.storage_config:
             data["storage_config"] = self.storage_config.model_dump()
         return pformat(data, sort_dicts=False)
+
+    def model_post_init(self, __context: Any) -> None:
+        from pfund_kit.style import RichColor, TextStyle, cprint
+        super().model_post_init(__context)
+        if not self.clean_data and self.target_resolution < self.data_resolution:
+            cprint(
+                "Skipping resampling because clean_data=False/data_layer=RAW;\n" +
+                f"{self.name} {self.product.name} will return {self.data_resolution} data, not requested {self.target_resolution} data.",
+                style=TextStyle.BOLD + RichColor.YELLOW
+            )

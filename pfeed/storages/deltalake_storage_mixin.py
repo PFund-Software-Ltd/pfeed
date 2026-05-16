@@ -1,7 +1,11 @@
+# pyright: reportUninitializedInstanceVariable=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
+
 if TYPE_CHECKING:
+    from pfeed._io.deltalake_io import DeltaLakeIO
     from pfeed.storages.file_based_storage import FileBasedStorage
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from deltalake.table import FilterConjunctionType
     from deltalake.transaction import (
         CommitProperties,
@@ -19,10 +23,14 @@ from pfund_kit.style import cprint, TextStyle, RichColor
 
 
 class DeltaLakeStorageMixin:
+    io: DeltaLakeIO
+    data_handler: BaseDataHandler
+
     def get_delta_table(self: FileBasedStorage | DeltaLakeStorageMixin) -> DeltaTable:
         table_path = self.data_handler._table_path
-        return self.io.get_table(table_path)
-    
+        assert table_path is not None, "table_path is None"
+        return cast('DeltaLakeIO', self.io).get_table(table_path)
+
     @staticmethod
     def vacuum_delta_table(
         delta_table: DeltaTable,
@@ -50,7 +58,7 @@ class DeltaLakeStorageMixin:
         """
         cprint('Vacuuming Delta Lake...', style=TextStyle.BOLD + RichColor.YELLOW)
         files_deleted = delta_table.vacuum(
-            dry_run=dry_run, 
+            dry_run=dry_run,
             retention_hours=retention_hours,
             enforce_retention_duration=enforce_retention_duration,
             post_commithook_properties=post_commithook_properties,
@@ -60,25 +68,19 @@ class DeltaLakeStorageMixin:
         )
         table_uri = delta_table.table_uri
         verb = 'Going to delete' if dry_run else 'Deleted'
-        style = TextStyle.BOLD + RichColor.RED if dry_run else TextStyle.BOLD + RichColor.GREEN
+        color = RichColor.RED if dry_run else RichColor.GREEN
         if files_deleted:
-            # Print the table URI with appropriate style
-            cprint(f"{verb} {len(files_deleted)} files from {table_uri}:", style=style)
-            
-            # Create a pretty-formatted version of the files list
-            pretty_files = Pretty(files_deleted, expand_all=True)
-            
-            # Display the files in a panel with a border
+            cprint(f"{verb} {len(files_deleted)} files from {table_uri}:", style=TextStyle.BOLD + color)
             cprint(Panel(
-                pretty_files,
-                border_style=style.replace(TextStyle.BOLD+' ', ''),
+                Pretty(files_deleted, expand_all=True),
+                border_style=color,
                 title="Files to be deleted" if dry_run else "Deleted files",
-                title_align="left"
+                title_align="left",
             ))
         else:
             cprint(f'No files to delete from {table_uri}', style=TextStyle.BOLD + RichColor.BLUE)
         return files_deleted
-    
+
     @staticmethod
     def optimize_delta_table(
         delta_table: DeltaTable,
@@ -138,7 +140,7 @@ class DeltaLakeStorageMixin:
             ```
         """
         cprint('Optimizing Delta Lake...', style=TextStyle.BOLD + RichColor.YELLOW)
-        
+
         # Run optimization
         result = delta_table.optimize.compact(
             partition_filters=partition_filters,
@@ -151,23 +153,23 @@ class DeltaLakeStorageMixin:
             post_commithook_properties=post_commithook_properties,
             commit_properties=commit_properties,
         )
-        
+
         cprint(f"Table: {delta_table.table_uri}", style=TextStyle.BOLD + RichColor.GREEN)
-    
+
         # Extract the most important metrics
         files_added = result.get('numFilesAdded', 0)
         files_removed = result.get('numFilesRemoved', 0)
         partitions_optimized = result.get('partitionsOptimized', 0)
-        
+
         # Create a summary panel
         cprint(Panel(
-            f"Files added: {files_added}\n"
-            f"Files removed: {files_removed}\n"
+            f"Files added: {files_added}\n" +
+            f"Files removed: {files_removed}\n" +
             f"Partitions optimized: {partitions_optimized}",
             title="Optimization Summary",
             border_style=RichColor.GREEN
         ))
-        
+
         # Show detailed metrics in a collapsible panel if requested
         pretty_output = Pretty(result, expand_all=True)
         cprint(Panel(
@@ -175,5 +177,5 @@ class DeltaLakeStorageMixin:
             title="Detailed Metrics",
             border_style=RichColor.BLUE
         ))
-            
+
         return result

@@ -20,8 +20,7 @@ import polars as pl
 from pfeed.utils.file_path import FilePath
 from pfeed._io.table_io import TablePath
 from pfeed._io.database_io import DBPath
-from pfund_kit.style import cprint, TextStyle
-from pfeed.enums import DataLayer, TimestampPrecision, DataTool, IOType
+from pfeed.enums import DataLayer, DataTool, IOType
 from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
 
 
@@ -107,8 +106,6 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
         return TimeBasedFeed.DATE_COL_IN_CLEANED_DATA if self._data_layer != DataLayer.RAW else TimeBasedFeed.DATE_COL_IN_RAW_DATA
 
     def _write_batch(self, lf: pl.LazyFrame):
-        from pfeed.feeds.time_based_feed import TimeBasedFeed
-
         is_raw_data = self._data_layer == DataLayer.RAW
         date_col = self._get_date_col()
 
@@ -162,20 +159,11 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
                             stacklevel=2,
                         )
                         return
-                    # convert datetime64[ns] to lower precision if db doesn't support nanosecond precision
-                    date_dtype = df.schema[date_col]
+                    # IO owns the precision policy (e.g. DuckDB stores at microsecond).
+                    # conform() casts datetime columns to the IO's TIMESTAMP_PRECISION so
+                    # the start/end ts we derive below match what will actually be stored.
                     io = cast("DatabaseIO", self._io)
-                    if (
-                        io.TIMESTAMP_PRECISION < TimestampPrecision.NANOSECOND
-                        and isinstance(date_dtype, pl.Datetime)
-                        and date_dtype.time_unit == "ns"
-                    ):
-                        df = df.with_columns(pl.col(date_col).cast(pl.Datetime("us")))
-                        if date_col == TimeBasedFeed.DATE_COL_IN_CLEANED_DATA:
-                            cprint(
-                                f"Converting '{date_col}' column from NANOSECOND precision to {io.TIMESTAMP_PRECISION} for compatibility in {io.name}",
-                                style=TextStyle.BOLD
-                            )
+                    df = cast(pl.DataFrame, io.conform(df))
                 else:
                     raise ValueError(f'Unsupported IO format: {self._io.name}')
 

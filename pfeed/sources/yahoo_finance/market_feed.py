@@ -344,16 +344,15 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             expiration: e.g. '2024-12-13', it must be one of the values returned by `get_option_expirations`.
             option_type: 'CALL' or 'PUT'
         '''
-        import pandas as pd  # pyright: ignore[reportUnusedImport]
         from pfeed._etl.base import convert_dataframe
 
         batch_api = self.data_source.get_batch_api()
         ticker: Ticker = batch_api.Ticker(symbol)
-        option_chain = ticker.option_chain(expiration)  # pyright: ignore[reportUnknownMemberType]
+        option_chain = ticker.option_chain(expiration)
         if option_type.upper() == 'CALL':
-            df: pd.DataFrame = cast(pd.DataFrame, option_chain.calls)
+            df: pd.DataFrame = option_chain.calls
         elif option_type.upper() == 'PUT':
-            df: pd.DataFrame = cast(pd.DataFrame, option_chain.puts)
+            df: pd.DataFrame = option_chain.puts
         else:
             raise ValueError(f"Invalid option type: {option_type}")
         return convert_dataframe(df)

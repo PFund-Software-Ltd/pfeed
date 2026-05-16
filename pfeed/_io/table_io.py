@@ -1,17 +1,17 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, Any
 if TYPE_CHECKING:
     import polars as pl
     from deltalake import DeltaTable
     from lancedb.table import LanceTable
-    from pfeed.data_models.base_data_model import BaseMetadataModel
-    from pfeed._io.file_io import MetadataDict
-
+    from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+    from pfeed._io.base_io import MetadataDict
     Table: TypeAlias = DeltaTable | LanceTable
 
 import time
 import random
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
 import polars as pl
 import pyarrow as pa
@@ -25,7 +25,7 @@ class TablePath(FilePath):
     pass
 
 
-class TableIO(FileIO):
+class TableIO(FileIO, ABC):
     def exists(self, table_path: TablePath, *args: Any, **kwargs: Any) -> bool:
         file_info = self._filesystem.get_file_info(table_path.schemeless)
         return file_info.type == pa_fs.FileType.Directory
@@ -47,7 +47,7 @@ class TableIO(FileIO):
         pass
 
     # NOTE: delta-rs, lancedb doesn't support writing metadata, so create an empty df and use pyarrow to write metadata
-    def write_metadata(self, table_path: TablePath, metadata: BaseMetadataModel):
+    def write_metadata(self, table_path: TablePath, metadata: BaseDataMetadata):
         empty_df_with_metadata = pl.DataFrame()
         table = empty_df_with_metadata.to_arrow()
         table_with_metadata = super().write_metadata(table, metadata)
@@ -57,41 +57,46 @@ class TableIO(FileIO):
     def read_metadata(
         self,
         table_path: TablePath,
-        max_retries: int=5,
-        base_delay: float=0.1,
+        max_retries: int = 5,
+        base_delay: float = 0.1,
     ) -> dict[TablePath, MetadataDict]:
-        """Read custom application metadata embedded in parquet schema.
+        """Read metadata for a table, retrying while the sidecar file hasn't landed.
 
-        Handles race condition for table formats where metadata files may not exist immediately
-        after table creation. This occurs when concurrent writers race:
-        - Writer A creates the table structure
-        - Writer B sees the table exists and tries to read metadata
-        - Writer A hasn't finished writing the metadata file yet → FileNotFoundError
-
-        Solution: Retry with exponential backoff, waiting for the write to complete.
+        Concurrent-writer race: writer A commits the table (e.g. Delta transaction log)
+        before writing the sidecar metadata file. Writer B can see the table exists
+        but the sidecar is still missing. Retry with exponential backoff until it appears.
 
         Args:
             table_path: Path to the table.
-            max_retries: Maximum number of retry attempts for each file.
-            base_delay: Initial delay in seconds, doubles with each retry (exponential backoff).
+            max_retries: Maximum number of retry attempts.
+            base_delay: Initial delay in seconds; doubles each retry (exponential backoff).
 
         Returns:
-            Dictionary mapping file paths to their metadata.
+            `{table_path: metadata}` if the sidecar is found, or `{}` if the table
+            itself does not exist (no retry in that case).
+
+        Raises:
+            FileNotFoundError: The table exists but the sidecar metadata file did
+                not appear within `max_retries` attempts.
         """
+        if not self.exists(table_path):
+            return {}
+
         metadata_file_path = table_path / self.METADATA_FILENAME
         for attempt in range(max_retries):
             try:
                 file_metadata = super().read_metadata(file_paths=[metadata_file_path])
-                if not file_metadata:
-                    return {}
-                else:
-                    # use table_path as dict key
-                    return { table_path: file_metadata[metadata_file_path] }
-            except FileNotFoundError as e:
-                if attempt < max_retries - 1:
-                    # Exponential backoff with jitter
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, base_delay)
-                    time.sleep(delay)
-                else:
-                    # After all retries, re-raise the exception
-                    raise e
+            except FileNotFoundError:
+                file_metadata = {}
+
+            if file_metadata:
+                return {table_path: file_metadata[metadata_file_path]}
+
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt) + random.uniform(0, base_delay)
+                time.sleep(delay)
+
+        raise FileNotFoundError(
+            f"Table exists at {table_path} but metadata sidecar " +
+            f"{metadata_file_path} did not appear after {max_retries} retries."
+        )

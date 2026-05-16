@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportUnknownArgumentType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
@@ -5,11 +6,11 @@ if TYPE_CHECKING:
     from pyarrow.parquet import FileMetaData as PyArrowParquetFileMetaData
     from pfeed.enums import Compression
     from pfeed.utils.file_path import FilePath
-    from pfeed.data_models.base_data_model import BaseMetadataModel
+    from pfeed.data_handlers.base_data_handler import BaseDataMetadata
     from pfeed._io.base_io import MetadataDict
 
 import json
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
 import pyarrow as pa
 import pyarrow.fs as pa_fs
@@ -19,7 +20,7 @@ from pfeed.enums import Compression
 from pfeed._io.base_io import BaseIO
 
 
-class FileIO(BaseIO):
+class FileIO(BaseIO, ABC):
     # when it's empty, it means metadata is stored alongside the data file
     # when it's not empty, it means metadata is stored in a separate file
     METADATA_FILENAME: str = ""
@@ -30,15 +31,23 @@ class FileIO(BaseIO):
         connect_options: dict[str, Any] | None = None,
         read_options: dict[str, Any] | None = None,
         write_options: dict[str, Any] | None = None,
-        filesystem: pa_fs.FileSystem=pa_fs.LocalFileSystem(),
+        filesystem: pa_fs.FileSystem | None= None,
         compression: Compression | str = Compression.SNAPPY,
         **kwargs: Any,  # for compatibility with other IO classes
     ):
         '''
         Args:
-            filesystem: filesystem to use
-            storage_options: storage options to use
-            compression: compression to use
+            storage_options: Filesystem-level credentials/config (e.g. S3 keys, endpoint, region).
+                Forwarded to readers/writers that hit the underlying filesystem
+                (e.g. `pl.scan_parquet(storage_options=...)`). Ignored for local filesystem.
+            connect_options: Kwargs for opening a database connection. Not used by pure
+                file-based IO; accepted only for interface symmetry with `DatabaseIO`.
+            read_options: Kwargs forwarded to the subclass's read call
+                (e.g. `pl.scan_parquet(**read_options)`).
+            write_options: Kwargs forwarded to the subclass's write call
+                (e.g. `pq.write_table(**write_options)`).
+            filesystem: PyArrow filesystem used for IO. Defaults to `LocalFileSystem`.
+            compression: Parquet compression codec applied when writing.
         '''
         super().__init__(
             storage_options=storage_options,
@@ -46,7 +55,7 @@ class FileIO(BaseIO):
             read_options=read_options,
             write_options=write_options,
         )
-        self._filesystem = filesystem
+        self._filesystem = filesystem or pa_fs.LocalFileSystem()
         self._compression = Compression[compression.upper()]
 
     @abstractmethod
@@ -74,26 +83,25 @@ class FileIO(BaseIO):
         if self.is_local_fs:
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
+
     # === Parquet Metadata Helpers ===
     # Shared methods for reading/writing metadata using parquet format.
     # Used by all IO classes regardless of their primary data format.
-
-    def _get_pyarrow_file_metadata(
-        self, file_path: FilePath
-    ) -> PyArrowParquetFileMetaData:
+    def _get_pyarrow_file_metadata(self, file_path: FilePath) -> PyArrowParquetFileMetaData:
         """Get file metadata created by pyarrow (e.g. rows, schema, row groups, etc.)."""
         return pq.read_metadata(file_path.schemeless, filesystem=self._filesystem)
 
-    def write_metadata(self, table: pa.Table, metadata: BaseMetadataModel) -> pa.Table:
+    def write_metadata(self, table: pa.Table, metadata: BaseDataMetadata) -> pa.Table:
         '''This only writes metadata to the table schema, not to the file.
         You must call _write_pyarrow_table to actually write the metadata to the file.
         '''
-        metadata = metadata.model_dump(mode='json') if metadata else {}
-        metadata_json = json.dumps(metadata)
+        metadata_json = json.dumps(
+            metadata.model_dump(mode='json') if metadata else {}
+        )
         schema = table.schema.with_metadata({b"metadata_json": metadata_json})
         return table.replace_schema_metadata(schema.metadata)
 
-    def _write_pyarrow_table(self, table: pa.Table, file_path: FilePath, **io_kwargs):
+    def _write_pyarrow_table(self, table: pa.Table, file_path: FilePath, **io_kwargs: Any):
         self._mkdir(file_path)
         with self._filesystem.open_output_stream(file_path.schemeless) as f:
             pq.write_table(table, f, compression=self._compression, **io_kwargs)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, Any
+
 if TYPE_CHECKING:
+    from pfeed._io.database_io import DatabaseIO
     from pfeed._io.database_io import DBConnection, DBPath
     DatabaseURI: TypeAlias = str
 
@@ -11,6 +13,8 @@ from pfeed.enums import DataLayer
 
 
 class DatabaseStorage(BaseStorage, ABC):
+    io: DatabaseIO
+
     def __init__(
         self,
         data_path: str | None,
@@ -33,13 +37,13 @@ class DatabaseStorage(BaseStorage, ABC):
         pass
 
     def _get_db_path(self) -> DBPath:
+        assert self.data_handler._db_path is not None
         return self.data_handler._db_path
 
     @property
     def conn(self) -> DBConnection | None:
         if self.io:
             db_path = self._get_db_path()
-            self.io.connect(db_path.db_uri)
-            return self.io._conn
+            return self.io.connect(db_path.db_uri)
         else:
             return None

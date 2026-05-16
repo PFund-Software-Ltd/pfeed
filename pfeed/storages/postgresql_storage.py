@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
-    
+
 import os
 
 from pfeed.storages.database_storage import DatabaseStorage
@@ -29,7 +29,8 @@ class PostgreSQLStorage(DatabaseStorage):
             self.password = os.getenv("POSTGRES_PASSWORD", "password")
             self.host = os.getenv("POSTGRES_HOST", "localhost")
             self.port = os.getenv("POSTGRES_PORT", "5432")
-            self.database = os.getenv("POSTGRES_DATABASE", "postgres")
+            # TODO: where to pass in database name?
+            # self.database = os.getenv("POSTGRES_DATABASE", "postgres")
         else:
             from urllib.parse import urlparse, unquote
             parsed = urlparse(data_path)
@@ -38,9 +39,10 @@ class PostgreSQLStorage(DatabaseStorage):
             self.password = unquote(parsed.password) if parsed.password else None
             self.host = parsed.hostname  # already lowercased, IPv6-safe
             self.port = parsed.port      # already int, or None
-            self.database = parsed.path.lstrip('/') or None
+            # TODO: where to pass in database name?
+            # self.database = parsed.path.lstrip('/') or None
         super().__init__(data_path=data_path, storage_options=storage_options, **kwargs)
-    
+
     # e.g. postgresql://pfunder:password@localhost:5432
     def _create_uri(self) -> str:
-        return f"{self.SCHEME}://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+        return f"{self.SCHEME}://{self.user}:{self.password}@{self.host}:{self.port}"

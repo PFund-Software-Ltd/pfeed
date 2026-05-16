@@ -10,6 +10,7 @@ from pfeed._io.database_io import DatabaseIO
 from pfeed.enums import TimestampPrecision
 
 
+# TODO
 class PostgreSQLIO(DatabaseIO):
     SUPPORTS_PARALLEL_WRITES: bool = True
     TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
@@ -19,6 +20,6 @@ class PostgreSQLIO(DatabaseIO):
         self._conn_uri = uri
         self._conn: PostgresConnection | AsyncPostgresConnection = psycopg.connect(uri, **self._io_options)
         return self._conn
-    
+
     def _close_connection(self):
         self._conn.close()

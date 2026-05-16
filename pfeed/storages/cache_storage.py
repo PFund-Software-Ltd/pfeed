@@ -32,7 +32,7 @@ class CacheStorage(LocalStorage):
         )
         self.num_retained_days = num_retained_days
         self._clear_caches()
-    
+
     def _clear_caches(self):
         '''Clear old caches except the current date'''
         import shutil
@@ -43,7 +43,7 @@ class CacheStorage(LocalStorage):
 
         cache_path = config.cache_path
         today = get_today()
-        
+
         if not cache_path.exists():
             return
         for file_dir in cache_path.iterdir():

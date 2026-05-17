@@ -5,6 +5,7 @@ from pydantic import field_validator, Field, model_validator
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
 from pfund.enums.env import Environment
+from pfeed.enums import DataLayer, ExtractType
 from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
 
 
@@ -14,10 +15,11 @@ MIN_TARGET_RESOLUTION = Resolution("1d")
 class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
     env: Environment | str
     product: BaseProduct
-    data_resolution: Resolution | str = Field(
+    target_resolution: Resolution | str = Field(description="Final resolution of the output data")
+    data_resolution: Resolution | str | None = Field(
+        default=None,
         description="Resolution of the data extracted from source before being resampled (if any) to target_resolution"
     )
-    target_resolution: Resolution | str = Field(description="Final resolution of the output data")
 
     @field_validator("env", mode="before")
     @classmethod
@@ -76,11 +78,11 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
         return pformat(data, sort_dicts=False)
 
     def model_post_init(self, __context: Any) -> None:
-        from pfund_kit.style import RichColor, TextStyle, cprint
         super().model_post_init(__context)
-        if not self.clean_data and self.data_resolution and self.target_resolution < self.data_resolution:
-            cprint(
-                "Skipping default transformations (e.g. resampling) because clean_data=False/data_layer=RAW, i.e.\n" +
-                f"{self.name} {self.product.name} will return {self.data_resolution} data, not requested {self.target_resolution} data.",
-                style=TextStyle.BOLD + RichColor.YELLOW
-            )
+        if self.storage_config:
+            is_raw_data = self.storage_config.data_layer == DataLayer.RAW
+            # raw data but clean_data is False = no auto-resampling when target_resolution < data_resolution
+            # e.g. download 1minute (target_resolution) raw data from 1tick (data_resolution) source -> FAIL
+            # e.g. retrieve 1minute (target_resolution) raw data from 1tick (data_resolution) storage -> FAIL
+            if is_raw_data and not self.clean_data and self.data_resolution and self.target_resolution < self.data_resolution:
+                raise ValueError(f"Cannot {self.extract_type} {self.target_resolution} raw data")

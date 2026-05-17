@@ -38,7 +38,6 @@ class BaseRequest(BaseModel):
         return False
 
     def model_post_init(self, __context: Any) -> None:
-        from pfund_kit.style import RichColor, TextStyle, cprint
         super().model_post_init(__context)
         storage_config = self.storage_config
         if storage_config:
@@ -47,9 +46,5 @@ class BaseRequest(BaseModel):
                 self.clean_data = not is_raw_data
             else:
                 # if it's not retrieving raw data, there's nothing to clean, clean_data is always False
-                if not is_raw_data and self.clean_data:
-                    cprint(
-                        f'"clean_data" parameter is ignored when data layer is not RAW (got data layer={storage_config.data_layer})',
-                        style=TextStyle.BOLD + RichColor.YELLOW
-                    )
+                if not is_raw_data:
                     self.clean_data = False

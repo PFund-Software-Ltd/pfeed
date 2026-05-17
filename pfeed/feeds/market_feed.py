@@ -28,7 +28,7 @@ from pfund.enums.env import Environment
 from pfund.datas.resolution import Resolution
 from pfund_kit.style import RichColor, TextStyle, cprint
 from pfeed.config import setup_logging
-from pfeed.enums import MarketDataType, DataTool, StreamMode, DataCategory, DataStorage, DataSource
+from pfeed.enums import MarketDataType, DataTool, StreamMode, DataCategory, DataStorage, DataSource, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
@@ -59,12 +59,27 @@ class MarketFeed(TimeBasedFeed, ABC):
     def _parse_message(product: BaseProduct, msg: Any) -> ParsedMessage:
         pass
 
-    def get_supported_resolutions(self) -> list[Resolution]:
-        """Get all supported resolutions for batch processing for the data source."""
-        return [
+    def get_supported_resolutions(self, include_resampled: bool = False) -> list[Resolution]:
+        """Get all supported resolutions for batch processing for the data source.
+
+        Args:
+            include_resampled: If False (default), return only the resolutions the
+                data source literally provides. If True, also include all coarser
+                resolutions derivable by resampling from the finest native one —
+                e.g. a source providing '1t' also "supports" '1s', '1m', '1h', '1d', etc.
+        """
+        native = [
             Resolution(dtype_or_resol)
             for dtype_or_resol in self.data_source.METADATA.data_categories[DataCategory.MARKET_DATA].keys()
         ]
+        if not include_resampled or not native:
+            return native
+        non_quotes = [r for r in native if not r.is_quote()]
+        # TODO: quote data is not handled yet
+        if not non_quotes:
+            return native
+        finest = max(non_quotes)
+        return sorted(set(native) | set(finest.get_lower_resolutions(exclude_quote=True)), reverse=True)
 
     def create_data_model(
         self,
@@ -253,7 +268,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         end_date: datetime.date | str = "",
         data_origin: str = "",
         env: Environment = Environment.BACKTEST,
-        dataflow_per_date: bool | None = None,
+        dataflow_per_date: bool = False,
         clean_data: bool = False,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
@@ -276,10 +291,11 @@ class MarketFeed(TimeBasedFeed, ABC):
             data_origin: Origin label used to distinguish data from different providers
                 of the same source.
             dataflow_per_date: Whether to create a dataflow for each date.
-                If None (default), automatically determined by probing storage:
-                    True if stored data needs resampling (stored resolution != target resolution),
-                    False if no resampling needed (single scan_parquet is more efficient).
-                If True/False, uses the specified value directly.
+                If False (default), retrieve all dates in a single dataflow —
+                one polars multi-file scan + one resample. Fastest for typical queries.
+                Set True when:
+                    - The resample is too large to fit in memory (one date at a time fits).
+                    - Using Ray and want per-date tasks parallelized across workers.
             clean_data: Whether to clean raw data.
                 If data_layer is not RAW in storage_config, this parameter will be ignored.
                 If True, raw data stored in data layer=RAW will be cleaned using the default transformations for download.
@@ -310,7 +326,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         # search for higher resolutions (highest first), e.g. if resolution is '1m', search '1m' -> '1t' -> '1s'
         search_resolutions = [resolution] + sorted([
             _resolution
-            for _resolution in self.get_supported_resolutions()
+            for _resolution in self.get_supported_resolutions(include_resampled=True)
             if _resolution > resolution
         ], reverse=True)
 
@@ -341,24 +357,14 @@ class MarketFeed(TimeBasedFeed, ABC):
                 f"failed to find stored {product} data from {start_date} to {end_date} with search resolutions {search_resolutions} in {storage}"
             )
 
-        # resampling needed → per-date dataflows for parallel Ray tasks
-        # no resampling (or no data found) → single dataflow with one scan_parquet
-        if dataflow_per_date is None:  # auto-determine when dataflow_per_date is None
-            is_resampling_required = data_resolution is not None and data_resolution > resolution
-            dataflow_per_date = is_resampling_required
-            if is_resampling_required and not self._is_using_ray():
-                cprint(
-                    f"Resampling is required but Ray is not being used (num_workers={self._num_workers}), " +
-                    "retrieving data will be done sequentially.\nConsider setting 'num_workers' (Ray workers) to do resampling in parallel",
-                    style=TextStyle.BOLD + RichColor.YELLOW,
-                )
         request = MarketFeedRetrieveRequest(
             storage_config=storage_config,
             io_config=io_config,
             env=env,
             product=product,
             target_resolution=resolution,
-            data_resolution=data_resolution,  # NOTE: could be None
+            # NOTE: data_resolution could be None if data of target resolution is not found in storage
+            data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
             data_origin=data_origin,
@@ -367,8 +373,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         )
         self._requests.append(request)
         dataflows = self._create_batch_dataflows(
-            # keep data_model as arg in lambda for consistency even it's not being used
-            extract_func=lambda data_model: self._retrieve_impl(storage),
+            extract_func=lambda data_model: self._retrieve_impl(data_model, storage),
         )
         default_transformations = self._get_default_transformations_for_retrieve(request)
         for dataflow in dataflows:
@@ -377,14 +382,16 @@ class MarketFeed(TimeBasedFeed, ABC):
         # To load data to storage, pipeline mode must be enabled and .load() must be called explicitly
         return self.run() if not self.is_pipeline() else self
 
-    def _retrieve_impl(self, storage: BaseStorage) -> pl.LazyFrame | None:
-        data_model = storage._data_model
-        if data_model is None:
-            return None
-        df: pl.LazyFrame | None = storage.read_data()
-        if df is not None:
-            self.logger.debug(f"found data {data_model} in {storage}")
-        return df
+    def _retrieve_impl(self, data_model: MarketDataModel, storage: BaseStorage) -> pl.LazyFrame | None:
+        data_resolution = cast(MarketDataModel, storage.data_model).resolution
+        # data_model is of target resolution, it is important for storage to copy it
+        # since it has the correct start_date and end_date when dataflow_per_date = True
+        # storage should read data model with data_resolution
+        _ = storage.with_data_model(data_model.model_copy(update={'resolution': data_resolution}))
+        lf: pl.LazyFrame | None = storage.read_data()
+        if lf is not None:
+            self.logger.debug(f"retrived data {data_model} from {storage}")
+        return lf
 
     def _get_default_transformations_for_retrieve(self, request: MarketFeedRetrieveRequest) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
@@ -395,15 +402,19 @@ class MarketFeed(TimeBasedFeed, ABC):
         assert storage_config is not None, "storage_config is required for retrieving data"
 
         if not request.clean_data:
-            default_transformations = [
-                lambda_with_name("convert_to_polars_df",
-                    lambda df: convert_dataframe(df, DataTool.polars)),
-                lambda_with_name("resample_data_if_necessary",
-                    lambda df: etl.resample_data(df, request.target_resolution, request.product)),
-                etl.organize_columns,
+            default_transformations = []
+            if storage_config.data_layer != DataLayer.RAW:
+                default_transformations.extend([
+                    lambda_with_name("convert_to_polars_df",
+                        lambda df: convert_dataframe(df, DataTool.polars)),
+                    lambda_with_name("resample_data_if_necessary",
+                        lambda df: etl.resample_data(df, request.target_resolution, request.product)),
+                    etl.organize_columns,
+                ])
+            default_transformations.append(
                 lambda_with_name("convert_to_user_df",
                     lambda df: convert_dataframe(df)),
-            ]
+            )
         else:
             # borrow download's default transformations to go through the cleaning process
             default_transformations = self._get_default_transformations_for_download(request)

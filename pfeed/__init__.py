@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pfeed.engine import DataEngine
     from pfeed.sources.pfund import PFund
     from pfeed.sources.alphafund import AlphaFund
+    from pfeed._etl.market import resample_data
     # from pfeed.sources.financial_modeling_prep import (
     #     FinancialModelingPrep,
     #     FinancialModelingPrep as FMP,
@@ -37,6 +38,9 @@ def __getattr__(name: str):
     elif name == 'alias':
         from pfeed.utils.aliases import ALIASES
         return ALIASES
+    elif name == 'resample_data':
+        from pfeed._etl.market import resample_data
+        return resample_data
     elif name == 'plot':
         import pfund_plot as plot
         return plot
@@ -85,6 +89,8 @@ __all__ = (
     "YahooFinance", "YFinance", "YF",
     "Bybit",
     # "FinancialModelingPrep", "FMP",
+    # utils
+    "resample_data",
 )
 def __dir__():
     return sorted(__all__)

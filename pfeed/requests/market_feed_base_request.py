@@ -5,7 +5,7 @@ from pydantic import field_validator, Field, model_validator
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
 from pfund.enums.env import Environment
-from pfeed.enums import DataLayer, ExtractType
+from pfeed.enums import DataLayer
 from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
 
 

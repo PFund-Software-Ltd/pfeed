@@ -187,6 +187,8 @@ class MarketFeed(TimeBasedFeed, ABC):
             raise ValueError(f"{resolution} is not supported by {self.name}")
         # find the first resolution that is >= the target resolution
         data_resolution = min(candidates)
+        if storage_config is not None:
+            storage_config = self._normalize_storage_config(storage_config)
         request = MarketFeedDownloadRequest(
             storage_config=storage_config,
             io_config=io_config,
@@ -197,7 +199,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             data_origin=data_origin,
-            data_domain=self.data_domain,
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
@@ -312,8 +313,9 @@ class MarketFeed(TimeBasedFeed, ABC):
             for _resolution in self.get_supported_resolutions()
             if _resolution > resolution
         ], reverse=True)
-        storage_config = storage_config or StorageConfig(data_domain=self.data_domain.value)
-        io_config = io_config or IOConfig()
+
+        storage_config = self._normalize_storage_config(storage_config or StorageConfig())
+        io_config = self._normalize_io_config(io_config or IOConfig())
 
         # read metadata from storage to try to find the stored resolution thats used to auto-determine dataflow_per_date
         Storage = DataStorage[storage_config.storage].storage_class
@@ -360,7 +362,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             data_origin=data_origin,
-            data_domain=self.data_domain,
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )

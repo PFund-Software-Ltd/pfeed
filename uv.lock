@@ -1560,7 +1560,7 @@ http2 = [
 
 [[package]]
 name = "huggingface-hub"
-version = "1.14.0"
+version = "1.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -1573,9 +1573,9 @@ dependencies = [
     { name = "typer" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/39/40/43109e943fd718b0ccd0cd61eb4f1c347df22bf81f5874c6f22adf44bcff/huggingface_hub-1.14.0.tar.gz", hash = "sha256:d6d2c9cd6be1d02ae9ec6672d5587d10a427f377db688e82528f426a041622c2", size = 782365, upload-time = "2026-05-06T14:14:34.278Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/b6/e22bd20a25299c34b8c5922c1545a6320825b13906eb0f7298edfd034a0b/huggingface_hub-1.15.0.tar.gz", hash = "sha256:28abfdddda3927fd4de6a63cf26ab012498a2c24dae52baf150c5c6edf98a1d5", size = 784100, upload-time = "2026-05-15T11:42:52.149Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/a5/33b49ba7bea7c41bb37f74ec0f8beea0831e052330196633fe2c77516ea6/huggingface_hub-1.14.0-py3-none-any.whl", hash = "sha256:efe075535c62e130b30e836b138e13785f6f043d1f0539e0a39aa411a99e90b8", size = 661479, upload-time = "2026-05-06T14:14:32.029Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/11/0b64cc9024329b76d7547c19a67604a61d21d3ba678a69d1b220c29d5112/huggingface_hub-1.15.0-py3-none-any.whl", hash = "sha256:a4a59af04cbc41a3fe3fec429b171ef994ef8c971eda10136746f408dd4e3744", size = 663602, upload-time = "2026-05-15T11:42:50.487Z" },
 ]
 
 [[package]]
@@ -2211,11 +2211,11 @@ wheels = [
 
 [[package]]
 name = "narwhals"
-version = "2.21.0"
+version = "2.21.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/2d/0e/3ad61eb87088cc4932e0d851531fa82f845a6230b68b091a0e298cc7e537/narwhals-2.21.0.tar.gz", hash = "sha256:7c6e7f50528e62b7a967dd864d7e117d2955d38d4f730653ce46a9861358e2dc", size = 633083, upload-time = "2026-05-08T12:29:02.587Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/a0/6198c56d42ef2f3c6ed0c42ba30dbcefdc86a91262d7d449010770ae085b/narwhals-2.21.2.tar.gz", hash = "sha256:5c5b2d0b47aef7c73ea412cfcbcd467f2f2d5be73e3c2ab19d78f4a97718790a", size = 632176, upload-time = "2026-05-16T08:49:08.314Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/e1/68c2256b69a314eba133673377ba9118c356f6342a0c02b61de449cf2bf2/narwhals-2.21.0-py3-none-any.whl", hash = "sha256:1e6617d0fca68ae1fda29e5397c4eaacd3ffc9fffe6bcd6ded0c690475e853be", size = 451943, upload-time = "2026-05-08T12:29:01.058Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/77/928ea2e70641ca177a11140062cc5840d421795f2e82749d408d0cce900a/narwhals-2.21.2-py3-none-any.whl", hash = "sha256:7bb57c3700486039215455b9bf2d64261915cc0fd845cc30272d631df696b251", size = 451201, upload-time = "2026-05-16T08:49:05.536Z" },
 ]
 
 [[package]]
@@ -2753,16 +2753,16 @@ requires-dist = [
     { name = "dask", extras = ["complete", "dataframe"], marker = "extra == 'dask'", specifier = ">=2026.3.0" },
     { name = "deltalake", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=1.5.1" },
     { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.5.2" },
-    { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=1.14.0" },
+    { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=1.15.0" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.30.2" },
     { name = "msgspec", specifier = ">=0.21.1" },
-    { name = "narwhals", specifier = ">=2.21.0" },
+    { name = "narwhals", specifier = ">=2.21.2" },
     { name = "narwhals-daft", marker = "extra == 'daft'", specifier = ">=0.4.1" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.3.3" },
     { name = "pandera", specifier = ">=0.31.1" },
-    { name = "pfund", specifier = ">=0.0.8" },
+    { name = "pfund", specifier = ">=0.0.10" },
     { name = "polars", specifier = ">=1.40.1" },
-    { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.0" },
+    { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.1" },
     { name = "pyarrow", specifier = ">=23.0.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pyspark", extras = ["connect", "pandas-on-spark", "sql"], marker = "extra == 'spark'", specifier = ">=4.1.1" },
@@ -2775,21 +2775,21 @@ provides-extras = ["core", "prefect", "yfinance", "hf", "pandas", "dask", "spark
 
 [[package]]
 name = "pfund"
-version = "0.0.8"
+version = "0.0.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pfund-kit" },
     { name = "websockets", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/ac/5328c864763b4460a75e27f23b100e8df89083462ee7e1ba4dc036cdbff1/pfund-0.0.8.tar.gz", hash = "sha256:ba2e0a2f9613f5c938767cfac2a117646243876a3c4dee305627ca1c5d308ae5", size = 166481, upload-time = "2026-05-14T10:28:05.241Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7c/6e/3cd2a75564a714caccd69eaf505a9eb521fb8a4fc9cb1126eecdbd090e65/pfund-0.0.10.tar.gz", hash = "sha256:6801c2c1b1d92b15e1f77c67e350bedc19c880111c621dc522d8f504e3a6958c", size = 166507, upload-time = "2026-05-17T03:13:00.411Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/c3/c8d5d77cc6398bbe9a4ce1711e0541fe17b81db05fe9649c5bd64a5f821f/pfund-0.0.8-py3-none-any.whl", hash = "sha256:3e8e2ca63d1c7958c3115e737e56c2574ee522a3f906d0980ae66746d9882795", size = 243057, upload-time = "2026-05-14T10:28:06.571Z" },
+    { url = "https://files.pythonhosted.org/packages/72/56/dcac6dc00ff6ede16a6522bae3aed2ffe8910d4b3edb7fe66a7e366eb72d/pfund-0.0.10-py3-none-any.whl", hash = "sha256:25626a7820bb192dd9ebb6a293810f221da4e78696cc97eef5cb968a38aacc7d", size = 243069, upload-time = "2026-05-17T03:13:02.069Z" },
 ]
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.7"
+version = "0.1.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -2803,9 +2803,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/eb/f7aeb90744951d28601f078aad7f66408b413181d41cb75c7f24ae969b1d/pfund_kit-0.1.7.tar.gz", hash = "sha256:74122d19c9d7a83c2ca82f951db5a8b856f14a4702df129e731f1b8758ff7554", size = 41890, upload-time = "2026-05-14T00:11:21.056Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/50/da/401f99ef730736f24816e3160f3a960d13642d3a1cd12e84af7aba7aa835/pfund_kit-0.1.9.tar.gz", hash = "sha256:ce56c5a8a0371c33ba3af3b705cc8a06ae089306dfaf4f2dd05c372b3d8e4c35", size = 42061, upload-time = "2026-05-17T02:56:26.288Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/10/8fe2ec675c02355a1b585c5bda8bde3ca05cd150d8eb5394d5453cf8d33b/pfund_kit-0.1.7-py3-none-any.whl", hash = "sha256:45dc1c637611b022893f5bcb30821c046ae4f976de5fe475c4204cdbe4c8ad7d", size = 57759, upload-time = "2026-05-14T00:11:22.08Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/95/7da62b8e1ce07ec355a34433f86119b0f98fdee6f3a4c8e7f91dc9f7c8e7/pfund_kit-0.1.9-py3-none-any.whl", hash = "sha256:f963edde963d4b836f7ea3d41050e314001a5ff8e4ef2cf32e78337ff765e788", size = 57927, upload-time = "2026-05-17T02:56:24.846Z" },
 ]
 
 [[package]]
@@ -2915,7 +2915,7 @@ wheels = [
 
 [[package]]
 name = "prefect"
-version = "3.7.0"
+version = "3.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2975,9 +2975,9 @@ dependencies = [
     { name = "websockets" },
     { name = "whenever", marker = "python_full_version >= '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9b/b2/556577a5fc0bb6b89f8347593d44f410f22a7967b8689202f31b133e35fc/prefect-3.7.0.tar.gz", hash = "sha256:f7a494d464ee736efa15640c9a991c40647e6cb80f4fdf01964b517551c6b727", size = 13860516, upload-time = "2026-05-06T15:21:46.37Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/12/dde80bca1378f19ef5b45bbab75d30367796ff9358eafc21ff3c6aa43b55/prefect-3.7.1.tar.gz", hash = "sha256:7e1c59491f7d31f700539ed9084dade3b7e3bdb6c08b5a417c6a0a7502ba9c9d", size = 14056819, upload-time = "2026-05-16T02:43:21.545Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/4b/c5396bc404830f954eaf34976a09417db03510cf0872122cc60522745fa1/prefect-3.7.0-py3-none-any.whl", hash = "sha256:4f0ed2ca02c46780eb2e2c22f4af082928055d2450b31c33f30001aa40638922", size = 14707279, upload-time = "2026-05-06T15:21:43.127Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/88/bc1d779c8680e75fe77746511004a0963984b51aec65f5fb0bc64392c371/prefect-3.7.1-py3-none-any.whl", hash = "sha256:5113ecc7b6274eeea97bac29bdce9b45b3dd6bb5048202b8e5c4e2eacac5f968", size = 14933114, upload-time = "2026-05-16T02:43:17.972Z" },
 ]
 
 [[package]]

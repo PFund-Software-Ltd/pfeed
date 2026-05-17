@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     # )
 
 import os
-from importlib.metadata import version
 
 from pfeed.config import configure, get_config, configure_logging
 
@@ -32,7 +31,10 @@ os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 
 def __getattr__(name: str):
-    if name == 'alias':
+    if name == '__version__':
+        from importlib.metadata import version
+        return version("pfeed")
+    elif name == 'alias':
         from pfeed.utils.aliases import ALIASES
         return ALIASES
     elif name == 'plot':
@@ -65,9 +67,7 @@ def __getattr__(name: str):
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
-__version__ = version("pfeed")
 __all__ = (
-    "__version__",
     "alias",
     # config
     "configure",

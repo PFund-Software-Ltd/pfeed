@@ -51,7 +51,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
 
     @model_validator(mode="after")
     def _check_resampleable(self):
-        if self.data_resolution < self.target_resolution:
+        if self.data_resolution and self.data_resolution < self.target_resolution:
             raise ValueError(
                 f"data_resolution ({self.data_resolution}) must be >= " +
                 f"target_resolution ({self.target_resolution}) for resampling"
@@ -78,7 +78,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
     def model_post_init(self, __context: Any) -> None:
         from pfund_kit.style import RichColor, TextStyle, cprint
         super().model_post_init(__context)
-        if not self.clean_data and self.target_resolution < self.data_resolution:
+        if not self.clean_data and self.data_resolution and self.target_resolution < self.data_resolution:
             cprint(
                 "Skipping default transformations (e.g. resampling) because clean_data=False/data_layer=RAW, i.e.\n" +
                 f"{self.name} {self.product.name} will return {self.data_resolution} data, not requested {self.target_resolution} data.",

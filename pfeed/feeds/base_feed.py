@@ -180,18 +180,34 @@ class BaseFeed(ABC):
             raise AssertionError('No current request found, did you forget to call download()/retrieve()/stream() first?')
         return request
 
+    def _normalize_storage_config(self, storage_config: StorageConfig) -> StorageConfig:
+        if not storage_config.data_domain:
+            storage_config.data_domain = self.data_domain
+        elif storage_config.data_domain != self.data_domain and storage_config.data_layer != DataLayer.CURATED:
+            raise ValueError(f'Custom data_domain={storage_config.data_domain} is only allowed when data layer is CURATED, but got data_layer={storage_config.data_layer}')
+        return storage_config
+
+    # no real logic right now
+    def _normalize_io_config(self, io_config: IOConfig) -> IOConfig:
+        return io_config
+
     def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
         request = self._get_current_request()
         self._custom_transformations[request].extend(funcs)
         return self
 
     def load(self, storage_config: StorageConfig | None = None, io_config: IOConfig | None = None) -> BaseFeed:
-        from pfeed._io.io_config import IOConfig
         request = self._get_current_request()
+
         # allowing passing in None is useful for dynamically determining if load() is needed
         if storage_config is None:
             return self
-        io_config = io_config or IOConfig()
+        else:
+            storage_config = self._normalize_storage_config(storage_config)
+
+        from pfeed._io.io_config import IOConfig
+        io_config = self._normalize_io_config(io_config or IOConfig())
+
         Storage = storage_config.storage.storage_class
         for dataflow in self._dataflows[request]:
             storage = cast(

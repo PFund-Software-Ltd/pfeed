@@ -6,14 +6,12 @@ if TYPE_CHECKING:
     import pandas as pd
     from yfinance import Ticker
     from narwhals.typing import IntoFrame
-    from pfund.enums.env import Environment
     from pfeed.dataflow.result import RunResult
-    from pfeed.typing import ParsedMessage
+    from pfeed.feeds.streaming_feed_mixin import ParsedMessage, WebSocketName, RawMessage
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.sources.yahoo_finance.stream_api import ChannelKey
-    from pfeed.requests import MarketFeedStreamRequest
 
 import time
 import datetime
@@ -23,11 +21,11 @@ import polars as pl
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 from pfeed.feeds.market_feed import MarketFeed
-from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin, WebSocketName, Message, ChannelKey
+from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
 from pfeed._io.io_config import IOConfig
 
 
-__all__ = ["YahooFinanceMarketFeed"]
+__all__ = []
 
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
@@ -239,33 +237,19 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
 
     async def _stream_impl(
         self,
-        env: Environment | str,
-        faucet_callback: Callable[[WebSocketName, Message, ChannelKey | None], Coroutine[Any, Any, None]]
+        faucet_streaming_callback: Callable[[WebSocketName, RawMessage, ChannelKey | None], Coroutine[Any, Any, None]]
     ):
-        stream_api = self.data_source.get_stream_api(env=env)
-        async def _callback(msg: Message):
+        stream_api = self.data_source.get_stream_api()
+        async def _callback(msg: RawMessage):
             symbol: str = msg['id']
             channel_key: ChannelKey = stream_api.generate_channel_key(symbol)
             ws_name = self.name.value
-            await faucet_callback(ws_name, msg, channel_key)
+            await faucet_streaming_callback(ws_name, msg, channel_key)
         stream_api.set_callback(_callback)
         await stream_api.connect()
 
-    def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
-        from pfeed.utils import lambda_with_name
-        default_transformations = MarketFeed._get_default_transformations_for_stream(self, request)
-        # since Ray can't serialize the "self" in self._parse_message, disable it for now
-        assert self._num_workers is None, "Transformations in Yahoo Finance streaming data is not supported with Ray"
-        if request.clean_data:
-            default_transformations = [
-                lambda_with_name(
-                    'parse_message',
-                    lambda msg: self._parse_message(request.product, msg)  # pyright: ignore[reportUnknownArgumentType, reportUnknownLambdaType]
-                ),
-            ] + default_transformations
-        return default_transformations
-
-    def _parse_message(self, product: BaseProduct, msg: Message) -> ParsedMessage:
+    @staticmethod
+    def _parse_message(product: BaseProduct, msg: RawMessage) -> ParsedMessage:
         '''
         Args:
             msg: raw message from yahoo finance streaming data
@@ -277,25 +261,28 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             {'id': 'AAPL', 'price': 230.605, 'time': '1755531691000', 'exchange': 'NMS', 'quote_type': 8, 'market_hours': 1, 'change_percent': -0.4253209, 'day_volume': '14805114', 'change': -0.9850006, 'price_hint': '2'}
             # REVIEW: sometimes it doesn't have 'day_volume', not sure why, could be a bug in yfinance?
             {'id': 'AAPL', 'price': 249.8712, 'time': '1774047121000', 'exchange': 'NMS', 'quote_type': 8, 'market_hours': 2, 'change_percent': 0.758577, 'change': 1.8811951, 'price_hint': '2'}
-        currently interpret it as this is how yahoo finance handles delayed trades
-        REVIEW: current solution is, ignore 'last_size', derive volume = diff(day_volume - previous day_volume); +1 to duplicated 'time'
-        another more accurate solution to handle duplicated 'time' is, wait for the 'time' to change to get the most accurate volume,
-        but it might not be worth it due the quality of yahoo finance streaming data
         '''
-        stream_api = self.data_source.get_stream_api()
-        channel_key: ChannelKey = stream_api.generate_channel_key(product.symbol)
 
-        # derive traded volume
-        last_day_volume = stream_api.last_day_volume.get(channel_key, None)
-        # it could be missing for the after-hours messages (market_hours=2)
-        current_day_volume = msg.get('day_volume', None)
-        current_day_volume = int(current_day_volume) if current_day_volume is not None else None
-        if last_day_volume is not None and current_day_volume is not None:
-            volume = current_day_volume - last_day_volume
-        else:
-            volume = None
-        if current_day_volume is not None:
-            stream_api.update_last_day_volume(channel_key, current_day_volume)
+        # DEPRECATED: give up handling yahoo finance volume, definition of 'day_volume' is not clear
+        # currently interpret it as this is how yahoo finance handles delayed trades
+        # REVIEW: current solution is, ignore 'last_size', derive volume = diff(day_volume - previous day_volume); +1 to duplicated 'time'
+        # another more accurate solution to handle duplicated 'time' is, wait for the 'time' to change to get the most accurate volume,
+        # but it might not be worth it due the quality of yahoo finance streaming data
+
+        # stream_api = self.data_source.get_stream_api()
+        # channel_key: ChannelKey = stream_api.generate_channel_key(product.symbol)
+
+        # # derive traded volume
+        # last_day_volume = stream_api.last_day_volume.get(channel_key, None)
+        # # it could be missing for the after-hours messages (market_hours=2)
+        # current_day_volume = msg.get('day_volume', None)
+        # current_day_volume = int(current_day_volume) if current_day_volume is not None else None
+        # if last_day_volume is not None and current_day_volume is not None:
+        #     volume = current_day_volume - last_day_volume
+        # else:
+        #     volume = None
+        # if current_day_volume is not None:
+        #     stream_api.update_last_day_volume(channel_key, current_day_volume)
 
         ts = msg.get('time', None)
         if ts is not None:
@@ -312,11 +299,11 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
 
         parsed_msg: ParsedMessage = {
             'ts': cast(float, ts),
-            'channel': channel_key,
+            'channel': product.symbol,
             'data': {
                 'ts': ts,
                 'price': msg['price'],
-                'volume': volume,
+                'volume': msg.get('day_volume', None),
                 'extra_data': {
                     'exchange': msg.get('exchange', None),
                     'market_hours': msg.get('market_hours', None),

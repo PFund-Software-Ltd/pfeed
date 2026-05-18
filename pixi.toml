@@ -24,7 +24,7 @@ libpq = ">=18.4"  # for postgresql
 gh = ">=2.92.0"
 
 [pypi-dependencies]
-pfund = ">=0.0.10"
+pfund = ">=0.0.12"
 polars = ">=1.40.1"
 pyarrow = ">=23.0.1"
 pandera = ">=0.31.1"

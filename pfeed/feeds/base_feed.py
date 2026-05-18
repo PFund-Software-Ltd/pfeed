@@ -235,6 +235,9 @@ class BaseFeed(ABC):
                     raise RuntimeError(
                         'Custom transformations are not allowed when data layer is RAW'
                     )
+                # REVIEW: streaming only supports writing cleaned data for now
+                if storage and request.is_streaming() and not request.clean_data:
+                    raise RuntimeError(f"{dataflow}: streaming doesn't support writing raw data to {storage=}")
 
     def _prepare_before_run(self):
         self._last_run_dataflows = []
@@ -263,7 +266,7 @@ class BaseFeed(ABC):
         # Collect the result-bearing dataflow objects here. For non-Ray these are the
         # same objects as in `self._dataflows` (mutated in place); for Ray they're the
         # deserialized copies returned from workers (which carry the actual results).
-        post_run: list[DataFlow] = []
+        last_run_dataflows: list[DataFlow] = []
 
         try:
             if self._is_using_ray():
@@ -305,7 +308,7 @@ class BaseFeed(ABC):
                                     finished, unfinished = ray.wait(unfinished, num_returns=1)
                                     for future in finished:
                                         dataflow = ray.get(future)
-                                        post_run.append(dataflow)
+                                        last_run_dataflows.append(dataflow)
                                         pbar.advance(1)
                     except KeyboardInterrupt:
                         self.logger.warning(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
@@ -327,9 +330,9 @@ class BaseFeed(ABC):
                     except Exception as err:
                         self.logger.exception(f'Error in running {dataflow}:')
                         dataflow.mark_failed(err)
-                    post_run.append(dataflow)
+                    last_run_dataflows.append(dataflow)
 
-            if failed := [dataflow for dataflow in post_run if not dataflow.result.success]:
+            if failed := [dataflow for dataflow in last_run_dataflows if not dataflow.result.success]:
                 only_retrieval_dataflows = all(dataflow.extract_type == ExtractType.retrieve for dataflow in failed)
                 log_level = logging.DEBUG if only_retrieval_dataflows else logging.WARNING
                 self.logger.log(
@@ -337,10 +340,10 @@ class BaseFeed(ABC):
                     f'{self.name} has {len(failed)} failed dataflows, check {self.logger.name}.log for more details'
                 )
 
-            return post_run
+            return last_run_dataflows
         finally:
             # Always commit partial progress and tear down state, even if the run aborted.
             # Without this, an escaping exception (e.g. the non-prefect RuntimeError re-raise)
             # would leave `_is_running=True`, locking the feed against any future `.run()`.
-            self._last_run_dataflows = post_run
+            self._last_run_dataflows = last_run_dataflows
             self._cleanup_after_run()

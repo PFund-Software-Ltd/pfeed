@@ -2,12 +2,14 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
+from pfund.datas.data_config import DataConfig
 from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
 from pfeed.enums import ExtractType, StreamMode
 
 
 class MarketFeedStreamRequest(MarketFeedBaseRequest):
     extract_type: Literal[ExtractType.stream] = ExtractType.stream
+    data_config: DataConfig | None = None
     stream_mode: StreamMode = Field(
         default=StreamMode.FAST,
         description='''
@@ -18,11 +20,11 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
         slower write speed, but data loss risk will be minimized.
     ''')
     flush_interval: int = Field(
-        default=100, 
+        default=100,
         description='''
         Interval in seconds for flushing buffered streaming data to storage. Default is 100 seconds.
         If using deltalake:
-        Frequent flushes will reduce write performance and generate many small files 
+        Frequent flushes will reduce write performance and generate many small files
         (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
         Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
         This is expected to be fine-tuned based on the actual use case.

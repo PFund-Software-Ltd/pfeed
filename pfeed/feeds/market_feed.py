@@ -1,4 +1,4 @@
-# pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false, reportArgumentType=false, reportUnusedParameter=false
+# pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false, reportArgumentType=false, reportUnusedParameter=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast, Self
 
@@ -6,9 +6,10 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
     from narwhals.typing import IntoFrame
     from pfund.datas.data_bar import BarData
+    from pfeed.dataflow.dataflow import DataFlow
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfund.entities.products.product_base import BaseProduct
-    from pfeed.typing import ParsedMessage
+    from pfeed.feeds.streaming_feed_mixin import ParsedMessage
     from pfeed.dataflow.result import RunResult
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
     from pfeed.requests import (
@@ -17,8 +18,9 @@ if TYPE_CHECKING:
         MarketFeedStreamRequest,
     )
     from pfeed.streaming.market_data_message import MarketDataMessage
-    from pfeed.feeds.streaming_feed_mixin import WebSocketName, Message, ChannelKey
+    from pfeed.feeds.streaming_feed_mixin import WebSocketName, RawMessage, ChannelKey
 
+import time
 import datetime
 from abc import ABC, abstractmethod
 
@@ -26,7 +28,6 @@ import polars as pl
 
 from pfund.enums.env import Environment
 from pfund.datas.resolution import Resolution
-from pfund_kit.style import RichColor, TextStyle, cprint
 from pfeed.config import setup_logging
 from pfeed.enums import MarketDataType, DataTool, StreamMode, DataCategory, DataStorage, DataSource, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
@@ -53,6 +54,12 @@ class MarketFeed(TimeBasedFeed, ABC):
     @abstractmethod
     def _download_impl(self, data_model: MarketDataModel, data_resolution: Resolution) -> IntoFrame | None:
         pass
+
+    async def _stream_impl(
+        self,
+        faucet_streaming_callback: Callable[[WebSocketName, RawMessage, ChannelKey | None], Coroutine[Any, Any, None]],
+    ) -> None:
+        raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
 
     @staticmethod
     @abstractmethod
@@ -428,7 +435,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         rollback_period: Resolution | str | Literal["ytd", "max"] = "7d",
         start_date: datetime.date | str = "",
         end_date: datetime.date | str = "",
-        callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+        callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None] | None = None,
         data_origin: str = "",
         env: Environment | str = Environment.LIVE,
         stream_mode: StreamMode | str = StreamMode.FAST,
@@ -437,7 +444,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
         **product_specs: Any,
-    ) -> MarketFeed | None:
+    ) -> Self | None:
         """Stream market data, either live or by replaying historical data.
 
         When `start_date`, `end_date`, or `rollback_period` is provided, the stream replays
@@ -481,44 +488,40 @@ class MarketFeed(TimeBasedFeed, ABC):
             product_specs: Additional product specifications (e.g. strike_price, expiration for options).
                 E.g. stream(product='BTC_USDT_OPT', strike_price=10000, expiration='2024-01-01', option_type='CALL').
         """
-        from pfund.datas.data_config import DataConfig
         from pfund_kit.utils.temporal import get_utc_now
         from pfeed.requests import MarketFeedStreamRequest
 
         env = Environment[env.upper()]
-        assert env != Environment.BACKTEST, "streaming is not supported in env BACKTEST"
+        if env == Environment.BACKTEST:
+            raise ValueError("streaming is not supported in env BACKTEST")
         setup_logging(env=env)
-        self.data_source.get_stream_api(env=env)
-        product: BaseProduct = self.data_source.create_product(
-            product, symbol=symbol, **product_specs
-        )
+        product: BaseProduct = self.data_source.create_product(product, symbol=symbol, **product_specs)
         resolution = Resolution(resolution)
         if any([start_date, end_date, rollback_period]):
             start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
         else:
             today = get_utc_now().date()
             start_date = end_date = today
+
         data_resolution = resolution
         if resolution.is_bar():
+            from pfund.datas.data_config import DataConfig
             from pfund.components.mixin import ComponentMixin
-
             # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
             # e.g. '1s' is not supported by bybit, '1t' will be used instead to resample data
-            data_config = DataConfig(
-                data_source=self.data_source.name, data_origin=data_origin
-            )
+            data_config = DataConfig(data_source=self.data_source.name, data_origin=data_origin)
             data_config.data_resolutions = [data_resolution]
-            resampled_data_config = data_config.auto_resample(
-                supported_resolutions=ComponentMixin.get_supported_resolutions(product),
-            )
+            resampled_data_config = data_config.auto_resample(ComponentMixin.get_supported_resolutions(product))
             if resampled_data_config.resample != data_config.resample:
                 data_resolution = resampled_data_config.resample[resolution]
-                cprint(
+                self.logger.warning(
                     f"{product.name} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
-                    style=TextStyle.BOLD + RichColor.YELLOW,
                 )
+        else:
+            data_config = None
 
         request = MarketFeedStreamRequest(
+            data_config=data_config,
             storage_config=storage_config,
             io_config=io_config,
             env=env,
@@ -533,16 +536,11 @@ class MarketFeed(TimeBasedFeed, ABC):
             flush_interval=flush_interval,
         )
         self._requests.append(request)
-        self._create_stream_dataflow(callback=callback)  # pyright: ignore[reportAttributeAccessIssue]
+        dataflow = cast("DataFlow", self._create_stream_dataflow(env=env, user_callback=callback))
+        default_transformations = self._get_default_transformations_for_stream(request)
+        dataflow.add_transformations(*default_transformations)
+        _ = self.load(storage_config=storage_config, io_config=io_config)
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
-
-    async def _stream_impl(
-        self,
-        faucet_callback: Callable[
-            [WebSocketName, Message, ChannelKey | None], Coroutine[Any, Any, None]
-        ],
-    ) -> None:
-        raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
@@ -552,20 +550,27 @@ class MarketFeed(TimeBasedFeed, ABC):
 
         default_transformations: list[Callable[..., Any]] = []
         if request.clean_data:
+            # Bind concrete subclass's staticmethod into a local — no `self` captured.
+            parse_message = type(self)._parse_message
+            default_transformations.append(
+                lambda_with_name(
+                    'parse_message',
+                    lambda msg: parse_message(request.product, msg)
+                ),
+            )
             # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
             data_source: DataSource = self.data_source.name
             tick_counter = (
                 count() if cast(Resolution, request.data_resolution).is_tick() else None
             )
-            is_resampling = request.target_resolution != request.data_resolution
+            is_resampling = bool(request.target_resolution < request.data_resolution)  # pyright: ignore[reportOperatorIssue]
             if is_resampling:
                 # use data_bar to resample data, e.g. bybit doesn't support '1s' data (target resolution), use '1t' (data resolution) instead
                 data_bar = BarData(
-                    data_source=data_source,
-                    data_origin=request.data_origin,
                     product=request.product,
                     resolution=request.target_resolution,
-                    skip_first_bar=False,
+                    data_config=request.data_config,
+                    storage_config=request.storage_config,
                 )
             else:
                 data_bar = None
@@ -622,7 +627,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             )
         elif target_resolution.is_bar():
             data: dict[str, Any] = msg["data"]
-            if not data_bar:
+            if not data_bar:  # case when resampling is not required
                 message = convert(
                     {
                         **common,
@@ -641,7 +646,6 @@ class MarketFeed(TimeBasedFeed, ABC):
                 )
             # resampling: use higher resolution data (data resolution) to update data_bar (target resolution)
             else:
-
                 def _create_bar_message(
                     data_bar: BarData, is_incremental: bool
                 ) -> BarMessage:
@@ -661,22 +665,26 @@ class MarketFeed(TimeBasedFeed, ABC):
                         BarMessage,
                     )
 
-                def _update_bar_data_on_tick(
+                def _update_bar_data_by_tick(
                     data_bar: BarData, data: dict[str, Any], msg: dict[str, Any]
                 ) -> None:
-                    data_bar.on_tick(
-                        price=data["price"],
-                        volume=data["volume"],
+                    data_bar.on_update(
+                        o=data["price"],
+                        h=data["price"],
+                        l=data["price"],
+                        c=data["price"],
+                        v=data["volume"],
                         ts=data["ts"],
-                        # extra data is about tick data, don't pass it to bar data
+                        # NOTE: extra data is about tick data, don't pass it to bar data
                         # extra_data=data.get('extra_data', {}),
+                        is_incremental=True,
                         msg_ts=msg.get("ts", None),
                     )
 
-                def _update_bar_data_on_bar(
+                def _update_bar_data(
                     data_bar: BarData, data: dict[str, Any], msg: dict[str, Any]
                 ) -> None:
-                    data_bar.on_bar(
+                    data_bar.on_update(
                         start_ts=data.get("start_ts", None),
                         end_ts=data.get("end_ts", None),
                         ts=data.get("ts", None),
@@ -687,18 +695,19 @@ class MarketFeed(TimeBasedFeed, ABC):
                         v=data["volume"],
                         msg_ts=msg.get("ts", None),
                         is_incremental=True,
-                        # extra data is about the data with data resolution, don't pass it to bar data
+                        # extra data is about the data with data resolution, don't pass it to bar data (target resolution)
                         # extra_data=data.get('extra_data', {}),
                     )
 
                 if data_resolution.is_tick():
-                    if data_bar.is_closed(now=data["ts"]):
+                    ts = data.get("ts", None)
+                    if not data_bar.is_closed() and data_bar.is_closed(now=ts or time.time()):
                         # bar is closed, finalize the message first before creating a new bar
                         message = _create_bar_message(data_bar, is_incremental=False)
                         # this will create a new bar since ts > bar's end_ts
-                        _update_bar_data_on_tick(data_bar, data, msg)
+                        _update_bar_data_by_tick(data_bar, data, msg)
                     else:
-                        _update_bar_data_on_tick(data_bar, data, msg)
+                        _update_bar_data_by_tick(data_bar, data, msg)
                         message = _create_bar_message(data_bar, is_incremental=True)
                 # e.g. target resolution is '5s', data resolution is '1s' -> resample data from '1s' to '5s'
                 # NOTE: data['is_incremental] is saying whether the data with **data resolution** (resampler) is incremental or not
@@ -706,11 +715,11 @@ class MarketFeed(TimeBasedFeed, ABC):
                 elif data_resolution.is_bar():
                     ts = data.get("ts", None)
                     msg_ts = msg.get("ts", None)
-                    if data_bar.is_closed(now=ts or msg_ts):
+                    if not data_bar.is_closed() and data_bar.is_closed(now=ts or msg_ts or time.time()):
                         message = _create_bar_message(data_bar, is_incremental=False)
-                        _update_bar_data_on_bar(data_bar, data, msg)
+                        _update_bar_data(data_bar, data, msg)
                     else:
-                        _update_bar_data_on_bar(data_bar, data, msg)
+                        _update_bar_data(data_bar, data, msg)
                         message = _create_bar_message(data_bar, is_incremental=True)
                 else:
                     raise NotImplementedError(

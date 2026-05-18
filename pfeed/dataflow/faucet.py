@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable
     from pfeed.sources.base_source import BaseSource
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.feeds.streaming_feed_mixin import ChannelKey, WebSocketName, Message
+    from pfeed.feeds.streaming_feed_mixin import ChannelKey, WebSocketName, RawMessage
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.streaming.zeromq import ZeroMQ
 
@@ -35,14 +35,14 @@ class Faucet:
         self.extract_type = ExtractType[extract_type.lower()] if isinstance(extract_type, str) else extract_type
         self._extract_func = extract_func
         self._is_stream_opened = False
-        self._streaming_queue: asyncio.Queue[tuple[WebSocketName, Message] | None] | None = None
-        self._user_streaming_callback: Callable[[WebSocketName, Message], Awaitable[None] | None] | None = None
+        self._streaming_queue: asyncio.Queue[tuple[WebSocketName, RawMessage] | None] | None = None
+        self._user_streaming_callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None] | None = None
         self._streaming_bindings: dict[ChannelKey, DataFlow] = {}
         self._msg_queue: ZeroMQ | None = None
         self._stream_workers: list[str] = []
 
     @property
-    def streaming_queue(self) -> asyncio.Queue[tuple[WebSocketName, Message] | None]:
+    def streaming_queue(self) -> asyncio.Queue[tuple[WebSocketName, RawMessage] | None]:
         if self._streaming_queue is None:
             self._streaming_queue = asyncio.Queue(maxsize=self.STREAMING_QUEUE_MAXSIZE)
         return self._streaming_queue
@@ -74,7 +74,7 @@ class Faucet:
         # NOTE: streaming dataflows share the same faucet, so we only need to start the extraction once
         if not self._is_stream_opened:
             self._is_stream_opened = True
-            await self._extract_func(faucet_callback=self._streaming_callback)
+            await self._extract_func(faucet_streaming_callback=self._streaming_callback)
 
     async def close_stream(self):
         if self._is_stream_opened:
@@ -93,7 +93,7 @@ class Faucet:
             self._msg_queue = None
             self._stream_workers.clear()
 
-    async def _streaming_callback(self, ws_name: WebSocketName, msg: Message, channel_key: ChannelKey | None) -> None:
+    async def _streaming_callback(self, ws_name: WebSocketName, msg: RawMessage, channel_key: ChannelKey | None) -> None:
         # NOTE: only send raw data (not transformed) to user callback and streaming queue
         # if user wants to use transformed data, they should use the dataflow's transform() method
         if self._user_streaming_callback:
@@ -118,7 +118,7 @@ class Faucet:
             raise ValueError(f'channel key {channel_key} is already bound to a dataflow')
         self._streaming_bindings[channel_key] = dataflow
 
-    def set_streaming_callback(self, callback: Callable[[WebSocketName, Message], Awaitable[None] | None]):
+    def set_user_streaming_callback(self, callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None]):
         if self._user_streaming_callback is not None and self._user_streaming_callback != callback:
             from pfeed.utils import is_lambda
             msg = (

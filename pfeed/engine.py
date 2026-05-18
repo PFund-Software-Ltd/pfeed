@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
-    from pfeed.feeds.streaming_feed_mixin import Message, WebSocketName
-    from pfeed.typing import GenericData
+    from narwhals.typing import IntoFrame
+    from pfeed.feeds.streaming_feed_mixin import RawMessage, WebSocketName
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.streaming.zeromq import ZeroMQ
 
@@ -21,9 +21,9 @@ class DataEngine:
         self._logger = logging.getLogger('pfeed')
         self._feeds: list[BaseFeed] = []
         self._is_running: bool = False
-        self._is_setup_done: bool = False
+        self._has_setup_messaging: bool = False
         self._msg_queue: ZeroMQ | None = None
-        self._streaming_queue: asyncio.Queue[tuple[WebSocketName, Message] | None] | None = None
+        self._streaming_queue: asyncio.Queue[tuple[WebSocketName, RawMessage] | None] | None = None
         self._zmq_thread: Thread | None = None
 
     def is_running(self) -> bool:
@@ -42,7 +42,7 @@ class DataEngine:
     ) -> None:
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
-        if self._is_setup_done:
+        if self._has_setup_messaging:
             raise RuntimeError('Messaging is already setup, cannot setup again')
         zmq_url = zmq_url or ZeroMQ.DEFAULT_URL
         self._msg_queue = ZeroMQ(
@@ -56,7 +56,7 @@ class DataEngine:
         self._msg_queue.bind(self._msg_queue.sender, port=zmq_sender_port, url=zmq_url)
         self._msg_queue.bind(self._msg_queue.receiver, port=zmq_receiver_port, url=zmq_url)
         self._zmq_thread = Thread(target=self._run_zmq_loop, daemon=True)
-        self._is_setup_done = True
+        self._has_setup_messaging = True
 
     def _run_zmq_loop(self):
         '''receive messages from Ray workers'''
@@ -69,10 +69,6 @@ class DataEngine:
             # send to subscribers, e.g. strategies, models in pfund
             self._msg_queue.send(channel=channel, topic=topic, data=data)
         self._msg_queue.terminate()
-
-    # TODO: async background task
-    def backfill(self):
-        raise NotImplementedError('Backfill is not implemented yet')
 
     def add_feed(
         self,
@@ -92,11 +88,13 @@ class DataEngine:
             # HACK: add a add_feed() dynamically to the feed for chaining purpose:
             # e.g. engine.add_feed(...).stream(...).add_feed(...).stream(...)
             setattr(feed, 'add_feed', self.add_feed)
-        is_using_ray = any(feed._num_workers is not None for feed in self._feeds)
-        if is_using_ray and num_workers is None:
-            raise ValueError(f'{feed} has to set "num_workers" to stay consistent with other feeds')
+        if self._is_using_ray() and num_workers is None:
+            raise ValueError(f'{feed} has to set "num_workers" when using Ray')
         self._feeds.append(feed)
         return feed
+
+    def _is_using_ray(self) -> bool:
+        return any(feed._num_workers is not None for feed in self._feeds)
 
     def _is_streaming_feeds(self) -> bool:
         # either all streaming dataflows or all batch dataflows, cannot mix them
@@ -104,15 +102,14 @@ class DataEngine:
             assert all(feed.streaming_dataflows for feed in self._feeds), 'All feeds must be streaming feeds if any feed is streaming'
         return is_streaming_feeds
 
-    def run(self, **prefect_kwargs: Any) -> dict[BaseFeed, GenericData | None] | None:
+    def run(self, **prefect_kwargs: Any) -> dict[BaseFeed, IntoFrame | None] | None:
         if self.is_running():
             raise RuntimeError('Data Engine is already running, cannot run again')
         self._is_running = True
-        is_using_ray = any(feed._num_workers is not None for feed in self._feeds)
-        if is_using_ray and not self._is_setup_done:
+        if self._is_using_ray() and not self._has_setup_messaging:
             self.setup_messaging()
         if not self._is_streaming_feeds():
-            results: dict[BaseFeed, GenericData | None] = {}
+            results: dict[BaseFeed, IntoFrame | None] = {}
             for feed in self._feeds:
                 data = feed.run(**prefect_kwargs)
                 results[feed] = data
@@ -155,9 +152,9 @@ class DataEngine:
             self._logger.debug(f"ZMQ thread finished (alive={self._zmq_thread.is_alive()})")
         self._zmq_thread = None
         self._msg_queue = None
-        self._is_setup_done = False
+        self._has_setup_messaging = False
 
-    def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, Message], None]:
+    def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, RawMessage], None]:
         assert self._is_streaming_feeds(), 'Only streaming feeds support async iteration'
         from pfeed.dataflow.faucet import Faucet
 

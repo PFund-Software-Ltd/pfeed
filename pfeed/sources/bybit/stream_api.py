@@ -3,16 +3,14 @@ from typing import TYPE_CHECKING, Callable, TypeAlias
 if TYPE_CHECKING:
     from collections.abc import Awaitable
     from pfund.datas.resolution import Resolution
+    from pfund.typing import FullDataChannel
     from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
-    from pfeed.feeds.streaming_feed_mixin import WebSocketName, Message
+    from pfeed.feeds.streaming_feed_mixin import WebSocketName, RawMessage
+    from pfund.entities.products.product_bybit import BybitProduct
+    ChannelKey: TypeAlias = tuple[BybitProduct.Category, FullDataChannel]
 
 from pfund.enums.env import Environment
-from pfund.typing import FullDataChannel
 from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
-from pfund.entities.products.product_bybit import BybitProduct
-
-
-ChannelKey: TypeAlias = tuple[BybitProduct.Category, FullDataChannel]
 
 
 class StreamAPI:
@@ -22,18 +20,18 @@ class StreamAPI:
         self._ws_api = WebSocketAPI(self._env)
         # set the logger to be "bybit_stream", override the default logger 'bybit' in pfund
         self._ws_api.set_logger(f'{self._ws_api.exch.lower()}_data')
-    
+
     @property
     def env(self) -> Environment:
         return self._env
-    
+
     async def connect(self):
         assert not self._ws_api._accounts, 'Accounts should be empty in streaming'
         await self._ws_api.connect()
-    
+
     async def disconnect(self):
         await self._ws_api.disconnect()
-    
+
     def add_channel(self, data_model: BybitMarketDataModel, data_resolution: Resolution | None = None) -> ChannelKey:
         product: BybitProduct = data_model.product
         resolution: Resolution = data_resolution or data_model.resolution  # data model is using target resolution
@@ -43,10 +41,10 @@ class StreamAPI:
         self._ws_api.add_channel(channel, channel_type='public', category=category)
         channel_key: ChannelKey = self.generate_channel_key(category, channel)
         return channel_key
-        
+
     @staticmethod
     def generate_channel_key(category: BybitProduct.Category, channel: FullDataChannel) -> ChannelKey:
         return (category, channel)
-    
-    def set_callback(self, callback: Callable[[WebSocketName, Message], Awaitable[None] | None]):
+
+    def set_callback(self, callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None]):
         self._ws_api.set_callback(callback, raw_msg=True)

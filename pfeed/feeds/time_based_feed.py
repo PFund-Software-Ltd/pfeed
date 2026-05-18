@@ -75,7 +75,7 @@ class TimeBasedFeed(BaseFeed, ABC):
         return standardize_date_column(df, date_col)
 
     def _rollback_max_period(self, _: Resolution) -> tuple[datetime.date | str | None, datetime.date | str | None, str]:
-        data_source_start_date = self.data_source.METADATA.start_date
+        data_source_start_date = cast(datetime.date, self.data_source.METADATA.start_date)
         if data_source_start_date:
             start_date = data_source_start_date
             end_date = None

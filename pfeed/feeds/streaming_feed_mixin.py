@@ -1,28 +1,33 @@
-# pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false, reportUnknownArgumentType=false
+# pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false, reportUnknownArgumentType=false, reportUninitializedInstanceVariable=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias, Callable, Literal, Any, cast, Self
+from typing import TYPE_CHECKING, TypeAlias, Callable, Literal, Any, cast, TypedDict
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable
+    from pfund.enums.env import Environment
     from pfeed.engine import DataEngine
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.dataflow import DataFlow
+    from pfeed.dataflow.result import RunResult
     from pfeed.data_models.market_data_model import MarketDataModel
-    from pfeed.typing import StreamingData, GenericData
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
+    from pfeed.streaming.streaming_message import StreamingMessage
+    WebSocketName: TypeAlias = str
+    RawMessage: TypeAlias = dict[str, Any]
+    WorkerName: TypeAlias = str
+    DataFlowName: TypeAlias = str
+    ChannelKey: TypeAlias = str | tuple[str, str]
+    class ParsedMessage(TypedDict):
+        ts: float
+        channel: str
+        data: dict[str, Any]
+    StreamingData = dict[str, Any] | StreamingMessage
 
 import asyncio
 from collections import defaultdict
 
 from pfund_kit.style import cprint, TextStyle, RichColor
 from pfeed.requests.market_feed_stream_request import MarketFeedStreamRequest
-
-
-WebSocketName: TypeAlias = str
-Message: TypeAlias = dict[str, Any]
-WorkerName: TypeAlias = str
-DataFlowName: TypeAlias = str
-ChannelKey: TypeAlias = str | tuple[str, str]
 
 
 def _create_worker_name(worker_num: int) -> str:
@@ -36,13 +41,13 @@ class StreamingFeedMixin:
     def _set_engine(self, engine: DataEngine) -> None:
         self._engine = engine
 
-    def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, Message], None]:
+    def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, RawMessage], None]:
         if not self.streaming_dataflows:
             raise RuntimeError("No streaming dataflow to iterate over")
         # get the first dataflow, doesn't matter, they share the same faucet
         dataflow = self.streaming_dataflows[0]
         faucet = dataflow.faucet
-        queue: asyncio.Queue[tuple[WebSocketName, Message] | None] = faucet.streaming_queue
+        queue: asyncio.Queue[tuple[WebSocketName, RawMessage] | None] = faucet.streaming_queue
         async def _iter():
             async with asyncio.TaskGroup() as task_group:
                 producer = task_group.create_task(self.run_async())
@@ -59,187 +64,242 @@ class StreamingFeedMixin:
 
     def _create_stream_dataflow(
         self,
-        callback: Callable[[WebSocketName, Message], Awaitable[None] | None] | None=None,
+        env: Environment,
+        user_callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None] | None=None,
     ) -> DataFlow:
-        from pfeed.data_models.market_data_model import MarketDataModel  # pyright: ignore[reportUnusedImport]
-        from pfeed.dataflow.faucet import Faucet  # pyright: ignore[reportUnusedImport]
-        from pfeed.dataflow.dataflow import DataFlow  # pyright: ignore[reportUnusedImport]
-
-        request: MarketFeedStreamRequest = cast(MarketFeedStreamRequest, self._get_current_request())
+        request: MarketFeedStreamRequest = cast("MarketFeedStreamRequest", self._get_current_request())
         self.logger.debug(
             f'{request.name}:\n{request}\n',
             style=TextStyle.BOLD + RichColor.GREEN
         )
-        data_model: MarketDataModel = cast(MarketDataModel, self._create_data_model_from_request(request))
-        channel_key: ChannelKey = cast(ChannelKey, self.stream_api.add_channel(data_model, data_resolution=request.data_resolution))
+        data_model = cast("MarketDataModel", self._create_data_model_from_request(request))
 
         # NOTE: reuse existing faucet for streaming dataflows since they share the same extract_func
         if self.streaming_dataflows:
-            existing_dataflow = self.streaming_dataflows[0]
+            existing_dataflow = cast("DataFlow", self.streaming_dataflows[0])
             faucet: Faucet = existing_dataflow.faucet
         else:
-            faucet: Faucet = cast(Faucet, self._create_faucet(
+            faucet: Faucet = cast("Faucet", self._create_faucet(
                 data_source=data_model.data_source,
                 extract_func=self._stream_impl,
                 extract_type=request.extract_type,
             ))
-        dataflow: DataFlow = cast(DataFlow, self._create_dataflow(faucet=faucet, data_model=data_model))
+        dataflow = cast("DataFlow", self._create_dataflow(faucet=faucet, data_model=data_model))
 
-        if callback:
-            faucet.set_streaming_callback(callback)
+        if user_callback:
+            faucet.set_user_streaming_callback(user_callback)
+        stream_api = self.data_source.get_stream_api(env=env)  # pyright: ignore[reportUnknownVariableType]
+        channel_key = cast("ChannelKey", stream_api.add_channel(data_model, data_resolution=request.data_resolution))
         faucet.bind_channel_key_to_dataflow(channel_key, dataflow)
         self._dataflows[request] = [dataflow]
         return dataflow
 
-    async def _run_stream_dataflows(self):
+    async def _run_stream_dataflows(self) -> list[DataFlow]:
+        self._prepare_before_run()
+
+        # Snapshot dataflows up front: streaming runs them all concurrently and we need a
+        # stable list to drive both per-task wrapping and end_stream teardown. This also
+        # survives `_cleanup_after_run` so post-run inspection (completed/failed_dataflows)
+        # keeps working — same purpose as `last_run_dataflows` in `_run_batch_dataflows`.
+        last_run_dataflows: list[DataFlow] = list(self.dataflows)
+
         async def _run_dataflows():
             try:
-                await asyncio.gather(*[dataflow.run_stream(flow_type='native') for dataflow in self.dataflows])
+                async def _run_dataflow(dataflow: DataFlow) -> None:
+                    try:
+                        await dataflow.run_stream(flow_type='native')
+                    except asyncio.CancelledError:
+                        # Graceful shutdown — propagate so gather knows this branch was cancelled.
+                        # Cancellation is NOT a failure, do not mark_failed.
+                        raise
+                    except Exception as err:
+                        self.logger.exception(f'Error in running {dataflow}:')
+                        dataflow.mark_failed(err)
+                _ = await asyncio.gather(*[_run_dataflow(dataflow) for dataflow in last_run_dataflows])
             except asyncio.CancelledError:
                 self.logger.warning(f'{self.name} dataflows were cancelled, ending streams...')
             finally:
-                await asyncio.gather(*[dataflow.end_stream() for dataflow in self.dataflows])
+                # end_stream() must run for every dataflow for proper teardown
+                # (sentinel into the streaming queue + ZMQ termination). Use
+                # return_exceptions so one bad teardown doesn't skip the rest.
+                results = await asyncio.gather(
+                    *[df.end_stream() for df in last_run_dataflows],
+                    return_exceptions=True,
+                )
+                for df, result in zip(last_run_dataflows, results):
+                    if isinstance(result, BaseException):
+                        self.logger.error(f'Error ending stream for {df}: {result!r}')
+                        df.mark_failed(result)
 
-        self._prepare_before_run()
+        try:
+            if self._is_using_ray():
+                import ray
+                from ray.util.queue import Queue
+                from pfeed.utils.ray import setup_logger_in_ray_task, ray_logging_context
 
-        is_using_ray = bool(self._num_workers)
-        if is_using_ray:
-            import ray
-            from ray.util.queue import Queue
-            from pfeed.utils.ray import shutdown_ray, setup_logger_in_ray_task, ray_logging_context
+                import zmq
+                from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel, ZeroMQSignal
 
-            import zmq
-            from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel, ZeroMQSignal
+                @ray.remote
+                def ray_task(
+                    logger_name: str,
+                    log_queue: Queue,
+                    feed_name: str,
+                    worker_name: str,
+                    transformations_per_dataflow: dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]],
+                    storages_per_dataflow: dict[DataFlowName, BaseStorage | None],
+                    ports_to_connect: dict[Literal['sender', 'receiver'], set[int]],
+                    ready_queue: Queue,
+                ):
+                    logger = setup_logger_in_ray_task(logger_name, log_queue)
+                    logger.debug(f"Ray {worker_name} started")
 
-            @ray.remote
-            def ray_task(
-                logger_name: str,
-                log_queue: Queue,
-                feed_name: str,
-                worker_name: str,
-                transformations_per_dataflow: dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]],
-                storages_per_dataflow: dict[DataFlowName, BaseStorage | None],
-                ports_to_connect: dict[Literal['sender', 'receiver'], set[int]],
-                ready_queue: Queue,
-            ):
-                logger = setup_logger_in_ray_task(logger_name, log_queue)
-                logger.debug(f"Ray {worker_name} started")
+                    try:
+                        msg_queue = ZeroMQ(
+                            name=f'{feed_name}.stream.{worker_name}',
+                            logger=logger,
+                            sender_type=zmq.PUSH,  # pyright: ignore[reportArgumentType]
+                            receiver_type=zmq.DEALER,  # pyright: ignore[reportArgumentType]
+                            sender_method='connect',
+                        )
+                        msg_queue.receiver.setsockopt(zmq.IDENTITY, worker_name.encode())
+                        for sender_or_receiver, ports in ports_to_connect.items():
+                            for port in ports:
+                                msg_queue.connect(getattr(msg_queue, sender_or_receiver), port)
 
+                        ready_queue.put(worker_name)
+                        is_data_engine_running = 'sender' in ports_to_connect
+                        while True:
+                            msg = msg_queue.recv()
+                            if msg is None:
+                                continue
+                            channel, topic, _data, msg_ts = msg
+                            if channel == ZeroMQDataChannel.signal:
+                                signal: ZeroMQSignal = _data
+                                if signal == ZeroMQSignal.STOP:
+                                    # sender_name = topic
+                                    logger.debug(f'Ray {worker_name} received STOP signal, terminating...')
+                                    break
+                            else:
+                                dataflow_name, data = _data  # sent from _run_stream_etl() in dataflow.py
+                                transformations = transformations_per_dataflow[dataflow_name]
+                                for transform in transformations:
+                                    data: StreamingData = transform(data)
+                                    assert data is not None, f'transform function {transform} should return transformed data, but got None'
+
+                                if is_data_engine_running:
+                                    msg_queue.send(channel=channel, topic=topic, data=data)
+
+                                if storage := storages_per_dataflow[dataflow_name]:
+                                    storage.write_data(data, streaming=True)  # pyright: ignore[reportArgumentType]
+                        msg_queue.terminate()
+                    except Exception:
+                        logger.exception(f'Error in streaming Ray {worker_name}:')
+
+                num_workers = min(self._num_workers, len(last_run_dataflows))
+                futures: list[ray.ObjectRef[None]] = []
                 try:
-                    msg_queue = ZeroMQ(
-                        name=f'{feed_name}.stream.{worker_name}',
-                        logger=logger,
-                        sender_type=zmq.PUSH,  # pyright: ignore[reportArgumentType]
-                        receiver_type=zmq.DEALER,  # pyright: ignore[reportArgumentType]
-                        sender_method='connect',
-                    )
-                    msg_queue.receiver.setsockopt(zmq.IDENTITY, worker_name.encode())
-                    for sender_or_receiver, ports in ports_to_connect.items():
-                        for port in ports:
-                            msg_queue.connect(getattr(msg_queue, sender_or_receiver), port)
+                    with ray_logging_context(self.logger) as log_queue:
+                        try:
+                            # Distribute dataflows' transformations across workers
+                            transformations_per_worker: dict[
+                                WorkerName,
+                                dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]]
+                            ] = defaultdict(dict)
+                            storages_per_worker: dict[WorkerName, dict[DataFlowName, BaseStorage | None]] = defaultdict(dict)
+                            ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], set[int]]] = defaultdict(lambda: defaultdict(set))
+                            for i, dataflow in enumerate(last_run_dataflows):
+                                worker_num: int = i % num_workers
+                                worker_num += 1  # convert to 1-indexed, i.e. starting from 1
+                                worker_name = _create_worker_name(worker_num)
+                                dataflow.set_stream_worker(worker_name)
+                                transformations_per_worker[worker_name][dataflow.name] = cast(
+                                    "list[Callable[[StreamingData], StreamingData]]",
+                                    dataflow._transformations
+                                )
+                                storages_per_worker[worker_name][dataflow.name] = dataflow._storage
+                                # get ports in use for dataflow's ZMQ.ROUTER
+                                assert dataflow._msg_queue is not None, f'{dataflow.name} _msg_queue is not set'
+                                dataflow_zmq: ZeroMQ = dataflow._msg_queue
+                                ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)  # pyright: ignore[reportUnknownVariableType]
+                                ports_to_connect[worker_name]['receiver'].update(ports_in_use)
+                                # get ports in use for engine's ZMQ.PULL
+                                if self._engine:
+                                    engine_zmq: ZeroMQ = cast(ZeroMQ, self._engine._msg_queue)
+                                    ports_in_use: list[int] = engine_zmq.get_ports_in_use(engine_zmq.receiver)
+                                    ports_to_connect[worker_name]['sender'].update(ports_in_use)
 
-                    ready_queue.put(worker_name)
-                    is_data_engine_running = 'sender' in ports_to_connect
-                    while True:
-                        msg = msg_queue.recv()
-                        if msg is None:
-                            continue
-                        channel, topic, data, msg_ts = msg
-                        if channel == ZeroMQDataChannel.signal:
-                            signal: ZeroMQSignal = data
-                            if signal == ZeroMQSignal.STOP:
-                                # sender_name = topic
-                                logger.debug(f'Ray {worker_name} received STOP signal, terminating...')
-                                break
-                        else:
-                            dataflow_name, data = data
-                            transformations = transformations_per_dataflow[dataflow_name]
-                            for transform in transformations:
-                                data: StreamingData = transform(data)
-                                assert data is not None, f'transform function {transform} should return transformed data, but got None'
+                            worker_names = [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
+                            ready_queue = Queue()  # let ray worker notify the main thread that it's ready to receive messages
 
-                            if is_data_engine_running:
-                                msg_queue.send(channel=channel, topic=topic, data=data)
+                            # start ray workers
+                            futures = cast(list[ray.ObjectRef[None]], [
+                                ray_task.remote(
+                                    logger_name=self.logger.name,  # pyright: ignore[reportCallIssue]
+                                    log_queue=log_queue,
+                                    feed_name=self.name.value,
+                                    worker_name=worker_name,
+                                    transformations_per_dataflow=transformations_per_worker[worker_name],
+                                    storages_per_dataflow=storages_per_worker[worker_name],
+                                    ports_to_connect=ports_to_connect[worker_name],
+                                    ready_queue=ready_queue,
+                                ) for worker_name in worker_names
+                            ])
 
-                            if storage := storages_per_dataflow[dataflow_name]:
-                                storage.write_data(data, streaming=True)
-                    msg_queue.terminate()
-                except Exception:
-                    logger.exception(f'Error in streaming Ray {worker_name}:')
+                            # wait for ray workers to be ready
+                            timeout = 10
+                            while timeout:
+                                timeout -= 1
+                                worker_name = ready_queue.get(timeout=5)
+                                worker_names.remove(worker_name)
+                                is_workers_ready = not worker_names
+                                if is_workers_ready:
+                                    break
+                            else:
+                                raise RuntimeError("Timeout: Not all workers reported ready")
 
-            num_workers = min(self._num_workers, len(self.dataflows))
-            futures: list[ray.ObjectRef[None]] = []
-            with ray_logging_context(self.logger) as log_queue:
+                            # start streaming
+                            await _run_dataflows()
+                        except KeyboardInterrupt:
+                            self.logger.warning(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
+                        except Exception:
+                            self.logger.exception(f'Error in running {self.name} dataflows:')
+                finally:
+                    # Always wait for Ray workers to drain (they exit on ZMQ STOP from
+                    # faucet teardown), even if setup or streaming raised.
+                    self.logger.debug('waiting for ray tasks to finish...')
+                    if futures:
+                        _ = ray.get(futures)
+                    self.logger.debug('ray tasks finished')
+                    # NOTE: Do NOT shut down Ray here to avoid interfering with Ray's control in higher-level frameworks that might also be using Ray.
+                    # shutdown_ray()
+            else:
                 try:
-                    # Distribute dataflows' transformations across workers
-                    transformations_per_worker: dict[
-                        WorkerName,
-                        dict[DataFlowName, list[Callable[[StreamingData], StreamingData]]]
-                    ] = defaultdict(dict)
-                    storages_per_worker: dict[WorkerName, dict[DataFlowName, BaseStorage | None]] = defaultdict(dict)
-                    ports_to_connect: dict[WorkerName, dict[Literal['sender', 'receiver'], set[int]]] = defaultdict(lambda: defaultdict(set))
-                    for i, dataflow in enumerate(self.dataflows):  # pyright: ignore[reportUnknownVariableType]
-                        worker_num: int = i % num_workers
-                        worker_num += 1  # convert to 1-indexed, i.e. starting from 1
-                        worker_name = _create_worker_name(worker_num)
-                        dataflow.set_stream_worker(worker_name)
-                        transformations_per_worker[worker_name][dataflow.name] = dataflow._transformations
-                        storages_per_worker[worker_name][dataflow.name] = dataflow._storage
-                        # get ports in use for dataflow's ZMQ.ROUTER
-                        dataflow_zmq: ZeroMQ = dataflow._msg_queue  # pyright: ignore[reportUnknownVariableType]
-                        ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(dataflow_zmq.sender)  # pyright: ignore[reportUnknownVariableType]
-                        ports_to_connect[worker_name]['receiver'].update(ports_in_use)
-                        # get ports in use for engine's ZMQ.PULL
-                        if self._engine:
-                            engine_zmq: ZeroMQ = cast(ZeroMQ, self._engine._msg_queue)
-                            ports_in_use: list[int] = engine_zmq.get_ports_in_use(engine_zmq.receiver)
-                            ports_to_connect[worker_name]['sender'].update(ports_in_use)
-
-                    worker_names = [_create_worker_name(worker_num) for worker_num in range(1, num_workers+1)]
-                    ready_queue = Queue()  # let ray worker notify the main thread that it's ready to receive messages
-
-                    # start ray workers
-                    futures = cast(list[ray.ObjectRef[None]], [
-                        ray_task.remote(
-                            logger_name=self.logger.name,  # pyright: ignore[reportCallIssue]
-                            log_queue=log_queue,
-                            feed_name=self.name.value,
-                            worker_name=worker_name,
-                            transformations_per_dataflow=transformations_per_worker[worker_name],
-                            storages_per_dataflow=storages_per_worker[worker_name],
-                            ports_to_connect=ports_to_connect[worker_name],
-                            ready_queue=ready_queue,
-                        ) for worker_name in worker_names
-                    ])
-
-                    # wait for ray workers to be ready
-                    timeout = 10
-                    while timeout:
-                        timeout -= 1
-                        worker_name = ready_queue.get(timeout=5)
-                        worker_names.remove(worker_name)
-                        is_workers_ready = not worker_names
-                        if is_workers_ready:
-                            break
-                    else:
-                        raise RuntimeError("Timeout: Not all workers reported ready")
-
-                    # start streaming
                     await _run_dataflows()
                 except KeyboardInterrupt:
-                    print(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
+                    self.logger.warning(f"KeyboardInterrupt received, stopping {self.name} dataflows...")
                 except Exception:
                     self.logger.exception(f'Error in running {self.name} dataflows:')
-            self.logger.debug('waiting for ray tasks to finish...')
-            _ = ray.get(futures)
-            self.logger.debug('ray tasks finished')
-            # NOTE: Do NOT shut down Ray here to avoid interfering with Ray's control in higher-level frameworks that might also be using Ray.
-            # shutdown_ray()
-        else:
-            await _run_dataflows()
-        self._cleanup_after_run()
 
-    def run(self, **prefect_kwargs: Any) -> GenericData | None:
+            # Summary log — mirror `_run_batch_dataflows`. Use `result.error is not None`
+            # rather than `not result.success`: streaming dataflows never set a positive
+            # result on clean shutdown, so checking `success` would false-flag every
+            # cleanly-cancelled stream as failed.
+            if failed := [dataflow for dataflow in last_run_dataflows if dataflow.result.error is not None]:
+                self.logger.warning(
+                    f'{self.name} has {len(failed)} failed streaming dataflows, ' +
+                    f'check {self.logger.name}.log for more details'
+                )
+
+            return last_run_dataflows
+        finally:
+            # Always commit captured dataflows + tear down state, even if the run aborted.
+            # Mirrors the batch runner's finally so an escaping exception can't leave
+            # `_is_running=True` and lock the feed against future `.run()` calls.
+            self._last_run_dataflows = last_run_dataflows
+            self._cleanup_after_run()
+
+    def run(self, **prefect_kwargs: Any) -> RunResult | None:
         if self.streaming_dataflows:
             try:
                 _ = asyncio.get_running_loop()

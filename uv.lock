@@ -2760,7 +2760,7 @@ requires-dist = [
     { name = "narwhals-daft", marker = "extra == 'daft'", specifier = ">=0.4.1" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.3.3" },
     { name = "pandera", specifier = ">=0.31.1" },
-    { name = "pfund", specifier = ">=0.0.10" },
+    { name = "pfund", specifier = ">=0.0.12" },
     { name = "polars", specifier = ">=1.40.1" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.1" },
     { name = "pyarrow", specifier = ">=23.0.1" },
@@ -2775,16 +2775,16 @@ provides-extras = ["core", "prefect", "yfinance", "hf", "pandas", "dask", "spark
 
 [[package]]
 name = "pfund"
-version = "0.0.10"
+version = "0.0.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pfund-kit" },
     { name = "websockets", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7c/6e/3cd2a75564a714caccd69eaf505a9eb521fb8a4fc9cb1126eecdbd090e65/pfund-0.0.10.tar.gz", hash = "sha256:6801c2c1b1d92b15e1f77c67e350bedc19c880111c621dc522d8f504e3a6958c", size = 166507, upload-time = "2026-05-17T03:13:00.411Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/b4/36b211f279e026685a607a38f6e8802de4096f8a593fba73c56e43b5e9a0/pfund-0.0.12.tar.gz", hash = "sha256:4aca14c7d4f623e3ef5eee7bfe44b15def699d715307f06c9afdb2c02e084c11", size = 166822, upload-time = "2026-05-18T09:30:16.581Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/56/dcac6dc00ff6ede16a6522bae3aed2ffe8910d4b3edb7fe66a7e366eb72d/pfund-0.0.10-py3-none-any.whl", hash = "sha256:25626a7820bb192dd9ebb6a293810f221da4e78696cc97eef5cb968a38aacc7d", size = 243069, upload-time = "2026-05-17T03:13:02.069Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/5b/7224c77d045238924243d445b255a309df9d0b0f7d161f8fd68d89bf1f29/pfund-0.0.12-py3-none-any.whl", hash = "sha256:7113fcc22830eff7697c2aa08086be3b7c3515c19a4fc4bbcc6b7917cd0a4153", size = 243307, upload-time = "2026-05-18T09:30:15.448Z" },
 ]
 
 [[package]]

@@ -4,13 +4,13 @@ from typing import Callable, TYPE_CHECKING, Literal, Any, cast
 if TYPE_CHECKING:
     from prefect import Flow as PrefectDataFlow
     from narwhals.typing import IntoFrame
-    from pfeed.feeds.streaming_feed_mixin import Message
+    from pfeed.feeds.streaming_feed_mixin import RawMessage
     from pfeed.dataflow.faucet import Faucet
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.streaming.zeromq import ZeroMQ
-    from pfeed.typing import StreamingData
+    from pfeed.feeds.streaming_feed_mixin import StreamingData
 
 import logging
 
@@ -148,7 +148,7 @@ class DataFlow:
         """
         self._result = DataFlowResult.failed(error=error)
 
-    def _run_stream_etl(self, msg: Message) -> None:
+    def _run_stream_etl(self, msg: RawMessage) -> None:
         # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
         if self._msg_queue:
             self._msg_queue.send(
@@ -160,7 +160,7 @@ class DataFlow:
         else:
             try:
                 data = cast("StreamingData", self._transform(msg))
-            # ValueError from StreamingMessage.__post_init__ validation, ValidationError from msgspec.convert
+            # e.g. ValueError from StreamingMessage.__post_init__ validation, ValidationError from msgspec.convert
             except Exception:
                 self._logger.exception(f'{self.name} failed to transform streaming message:')
                 # REVIEW: we will NOT load the bad data to storage, unless it can handle raw msg, for now, just return

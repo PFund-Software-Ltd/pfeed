@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfeed.typing import StreamingData
+    from pfeed.feeds.streaming_feed_mixin import StreamingData
 
 from abc import ABC, abstractmethod
 

@@ -288,6 +288,10 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         if ts is not None:
             ts = int(ts) / 1000  # convert to seconds
 
+        day_volume = msg.get('day_volume', None)
+        if day_volume is not None:
+            day_volume = float(day_volume)
+
         # DEPRECATED: tick message now has an "index" for uniqueness, no need to manually make the ts unique
         # detect duplicated 'time', if duplicated, add 1 to it to make it unique
         # last_time_in_mts = self.stream_api.last_time_in_mts.get(channel_key, None)
@@ -303,7 +307,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             'data': {
                 'ts': ts,
                 'price': msg['price'],
-                'volume': msg.get('day_volume', None),
+                'volume': day_volume,
                 'extra_data': {
                     'exchange': msg.get('exchange', None),
                     'market_hours': msg.get('market_hours', None),

@@ -90,8 +90,6 @@ class DataFlow:
         return self._result
 
     def add_transformations(self, *funcs: Callable[..., Any]):
-        if self._transformations:
-            raise ValueError('transformations are already added')
         self._transformations.extend(funcs)
 
     def set_storage(self, storage: BaseStorage):

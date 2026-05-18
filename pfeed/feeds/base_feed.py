@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
 import os
 import logging
-from collections import defaultdict
 from abc import ABC, abstractmethod
 
 from pfeed.enums import ExtractType, DataLayer, FlowType, DataCategory
@@ -49,7 +48,6 @@ class BaseFeed(ABC):
         # whether Ray was used (Ray returns new objects from workers).
         self._last_run_dataflows: list[DataFlow] = []
         self._requests: list[BaseRequest] = []
-        self._custom_transformations: dict[BaseRequest, list[Callable[..., Any]]] = defaultdict(list)
         self._num_workers: int | None = num_workers
         self._is_running = False
         if self._num_workers:
@@ -193,7 +191,9 @@ class BaseFeed(ABC):
 
     def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
         request = self._get_current_request()
-        self._custom_transformations[request].extend(funcs)
+        dataflows = self._dataflows[request]
+        for dataflow in dataflows:
+            dataflow.add_transformations(*funcs)
         return self
 
     def load(self, storage_config: StorageConfig | None = None, io_config: IOConfig | None = None) -> BaseFeed:
@@ -228,13 +228,8 @@ class BaseFeed(ABC):
 
     def _validate_before_run(self) -> None:
         for request, dataflows in self._dataflows.items():
-            custom_transformations = self._custom_transformations[request]
             for dataflow in dataflows:
                 storage = dataflow.storage
-                if storage and storage.data_layer == DataLayer.RAW and custom_transformations:
-                    raise RuntimeError(
-                        'Custom transformations are not allowed when data layer is RAW'
-                    )
                 # REVIEW: streaming only supports writing cleaned data for now
                 if storage and request.is_streaming() and not request.clean_data:
                     raise RuntimeError(f"{dataflow}: streaming doesn't support writing raw data to {storage=}")
@@ -247,7 +242,6 @@ class BaseFeed(ABC):
     def _cleanup_after_run(self):
         self._requests.clear()
         self._dataflows = {}
-        self._custom_transformations = defaultdict(list)
         self._set_running(False)
 
     def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> list[DataFlow]:

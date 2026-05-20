@@ -142,7 +142,7 @@ class TimeBasedFeed(BaseFeed, ABC):
         super()._validate_before_run()
         if self._is_using_ray():
             for request, dataflows in self._dataflows.items():
-                if not request.dataflow_per_date:
+                if request.is_streaming() or not request.dataflow_per_date:
                     continue   # single dataflow, no concurrent writes anyway
                 for dataflow in dataflows:
                     storage = dataflow.storage

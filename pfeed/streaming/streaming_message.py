@@ -15,7 +15,7 @@ class StreamingMessage(
     forbid_unknown_fields=True,
     array_like=False,  # NOTE: setting array_like=True will boost performance by 1.5-2x
     gc=True,  # OPTIMIZE: consider setting gc=False for performance boost (but then you can't use lists, dicts etc.)
-    # tag=True,
+    tag=True,
 ):
     data_source: DataSource
     data_category: DataCategory

@@ -42,6 +42,7 @@ class DataEngine:
     ) -> None:
         import zmq
         from pfeed.streaming.zeromq import ZeroMQ
+        from pfeed.streaming import TickMessage, BarMessage
         if self._has_setup_messaging:
             raise RuntimeError('Messaging is already setup, cannot setup again')
         zmq_url = zmq_url or ZeroMQ.DEFAULT_URL
@@ -52,6 +53,7 @@ class DataEngine:
             sender_type=zmq.XPUB,
             receiver_type=zmq.PULL,  # pull from Ray workers in _run_stream_dataflows()
             receiver_method='bind',
+            recv_type=TickMessage | BarMessage,
         )
         self._msg_queue.bind(self._msg_queue.sender, port=zmq_sender_port, url=zmq_url)
         self._msg_queue.bind(self._msg_queue.receiver, port=zmq_receiver_port, url=zmq_url)

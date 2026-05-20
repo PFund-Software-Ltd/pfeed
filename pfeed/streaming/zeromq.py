@@ -13,7 +13,7 @@ from enum import StrEnum
 from collections import defaultdict
 
 import zmq
-from msgspec import msgpack, Raw, ValidationError
+from msgspec import msgpack
 
 
 class SocketMethod(StrEnum):
@@ -24,6 +24,7 @@ class SocketMethod(StrEnum):
 # REVIEW
 class ZeroMQDataChannel(StrEnum):
     signal = 'signal'
+    logging = 'logging'
 
     @staticmethod
     def create_private_channel(account: BaseAccount, channel: PrivateDataChannel):
@@ -59,6 +60,7 @@ class ZeroMQ:
         receiver_type: SocketType | None=None,
         send_latest_only: bool=False,
         recv_latest_only: bool=False,
+        recv_type: Any=None,
     ):
         '''
         Args:
@@ -72,9 +74,12 @@ class ZeroMQ:
                 If True, sets `ZMQ_CONFLATE=1` on the receiver socket.
                 Only the newest unprocessed message is kept; arriving messages overwrite older ones if not yet received.
                 Use when you only care about the most recent data and not the message history.
-        '''
-        from pfeed.streaming import BarMessage
 
+            recv_type : optional
+                Expected payload type for non-signal channels (e.g. `TickMessage | BarMessage`).
+                When provided, payloads on non-signal channels are decoded into this type via a typed
+                msgspec Decoder. When None, all payloads are decoded with the untyped decoder.
+        '''
         assert any([sender_type, receiver_type]), 'Either sender_type or receiver_type must be provided'
         self._name = name
         self._logger = logger
@@ -87,8 +92,7 @@ class ZeroMQ:
         self._poller: zmq.Poller | None = None
         self._encoder = msgpack.Encoder()
         self._decoder = msgpack.Decoder()
-        self._msg_decoder = msgpack.Decoder(type=Union[BarMessage])
-        self._peek_decoder = msgpack.Decoder(type=dict[str, Raw])
+        self._msg_decoder = msgpack.Decoder(type=recv_type) if recv_type is not None else None
 
         if sender_type:
             self._sender = self._ctx.socket(sender_type)
@@ -238,28 +242,20 @@ class ZeroMQ:
 
     def recv(self) -> tuple[str, str, Any, float] | None:
         try:
-            def _is_streaming_msg(buf: bytes) -> bool:
-                '''Peeks at the fields to check if the message is of type StreamingMessage, etc.'''
-                try:
-                    outer = self._peek_decoder.decode(buf)
-                except ValidationError:
-                    return False  # Not a dict at the top level
-                # if 'specs' and '_created_at' is also present, it is a streaming message
-                if outer.get("_created_at") and outer.get('specs'):
-                    return True
-                else:
-                    return False
-
             # REVIEW: blocks for 1ms to avoid busy-waiting and 100% CPU usage
             events = self._poller.poll(1)
             if events:
                 msg = self._receiver.recv_multipart(zmq.NOBLOCK)
                 channel, topic, data, msg_ts = msg
-                if _is_streaming_msg(data):
-                    decoded_data = self._msg_decoder.decode(data)
+                channel = channel.decode()
+                # Channels declared as explicit `ZeroMQDataChannel` members (e.g. `signal`) carry
+                # untyped payloads. Everything else is a dynamically-built channel (market data,
+                # private data, etc.) and is decoded into `recv_type` when one was provided.
+                if self._msg_decoder is None or channel in ZeroMQDataChannel.__members__:
+                    decoded_data = self._decoder.decode(data)
                 else:
-                    decoded_data = msgpack.decode(data)
-                return channel.decode(), topic.decode(), decoded_data, self._decoder.decode(msg_ts)
+                    decoded_data = self._msg_decoder.decode(data)
+                return channel, topic.decode(), decoded_data, self._decoder.decode(msg_ts)
             else:
                 return None
         except zmq.error.Again:  # no message available, will be raised when using zmq.NOBLOCK

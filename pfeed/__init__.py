@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from pfeed.utils.aliases import ALIASES as alias
     from pfeed.storages.storage_config import StorageConfig
     from pfeed._io.io_config import IOConfig
+    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
         YahooFinance as YF,
@@ -46,6 +47,9 @@ def __getattr__(name: str):
     elif name == 'IOConfig':
         from pfeed._io.io_config import IOConfig
         return IOConfig
+    elif name == 'SinkConfig':
+        from pfeed._sinks.sink_config import SinkConfig
+        return SinkConfig
     elif name == 'DataEngine':
         from pfeed.engine import DataEngine
         return DataEngine
@@ -75,6 +79,7 @@ __all__ = (
     'configure_logging',
     "StorageConfig",
     "IOConfig",
+    "SinkConfig",
     # plot
     "plot",
     # engine

@@ -7,6 +7,8 @@ from pfund.entities.products.product_base import BaseProduct
 from pfund.enums.env import Environment
 from pfeed.enums import DataLayer
 from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
+from pfeed.storages.storage_config import StorageConfig
+from pfeed._io.io_config import IOConfig
 
 
 MIN_TARGET_RESOLUTION = Resolution("1d")
@@ -77,10 +79,10 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
             data["storage_config"] = self.storage_config.model_dump()
         return pformat(data, sort_dicts=False)
 
-    def model_post_init(self, __context: Any) -> None:
-        super().model_post_init(__context)
-        if self.storage_config:
-            is_raw_data = self.storage_config.data_layer == DataLayer.RAW
+    def finalize_load_config(self, storage_config: StorageConfig | None, io_config: IOConfig | None) -> None:
+        super().finalize_load_config(storage_config, io_config)
+        if storage_config:
+            is_raw_data = storage_config.data_layer == DataLayer.RAW
             # raw data but clean_data is False = no auto-resampling when target_resolution < data_resolution
             # e.g. download 1minute (target_resolution) raw data from 1tick (data_resolution) source -> FAIL
             # e.g. retrieve 1minute (target_resolution) raw data from 1tick (data_resolution) storage -> FAIL

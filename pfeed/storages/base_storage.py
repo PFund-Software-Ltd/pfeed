@@ -7,10 +7,12 @@ if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.database_storage import DatabaseURI
+    from pfeed.feeds.streaming_feed_mixin import StreamingData
     from pfeed._io.base_io import BaseIO
-    from pfeed.streaming.streaming_message import StreamingMessage
+    from pfeed._sinks.base_sink import BaseSink
     from pfeed.storages.storage_config import StorageConfig
     from pfeed._io.io_config import IOConfig
+    from pfeed._sinks.sink_config import SinkConfig
 
 import datetime
 from pprint import pformat
@@ -19,7 +21,7 @@ import polars as pl
 
 from pydantic import Field, BaseModel, ConfigDict
 
-from pfeed.enums import DataLayer, IOFormat
+from pfeed.enums import DataLayer, IOFormat, DataSink
 from pfeed.utils.file_path import FilePath
 from pfeed.data_handlers.base_data_handler import SourcePath, BaseDataMetadata
 
@@ -64,6 +66,7 @@ class StorageMetadata(BaseModel):
 
 class BaseStorage:
     SUPPORTED_IO_FORMATS: ClassVar[list[IOFormat]] = []
+    SUPPORTED_SINKS: ClassVar[list[DataSink]] = []
 
     def __init__(
         self,
@@ -93,10 +96,17 @@ class BaseStorage:
         self._data_model: BaseDataModel | None = None
         self._data_handler: BaseDataHandler | None = None
         self._io: BaseIO | None = None
+        self._sink: BaseSink | None = None
         self._is_data_handler_stale: bool = False
 
     def _get_io_kwargs(self) -> dict[str, Any]:
         return {}
+
+    def _has_only_one_io_format(self) -> bool:
+        return len(self.SUPPORTED_IO_FORMATS) == 1
+
+    def _has_only_one_sink(self) -> bool:
+        return len(self.SUPPORTED_SINKS) == 1
 
     @property
     def name(self) -> str:
@@ -150,10 +160,12 @@ class BaseStorage:
         return self._data_handler
 
     @property
-    def io(self) -> BaseIO:
-        if not self._io:
-            raise AttributeError(f"No IO has been set for storage: {self.name}")
+    def io(self) -> BaseIO | None:
         return self._io
+
+    @property
+    def sink(self) -> BaseSink | None:
+        return self._sink
 
     @classmethod
     def from_storage_config(cls, storage_config: StorageConfig) -> Self:
@@ -166,12 +178,30 @@ class BaseStorage:
         return self
 
     def with_io(self, io_config: IOConfig) -> BaseStorage:
+        # automatically pick the only supported IO format regardless of the config
+        if self._has_only_one_io_format():
+            io_config = io_config.model_copy(update={'io_format': self.SUPPORTED_IO_FORMATS[0]})
+        assert io_config.io_format in self.SUPPORTED_IO_FORMATS, (
+            f"{self.name} only supports IO formats: {self.SUPPORTED_IO_FORMATS}"
+        )
         IO = cast("type[BaseIO]", io_config.io_format.io_class)
         self._io = IO(
             storage_options=self.storage_options,
             **io_config.model_dump(),
             **self._get_io_kwargs(),  # io kwargs specific to the storage, e.g filesystem from a file-based storage
         )
+        self._is_data_handler_stale = True
+        return self
+
+    def with_sink(self, sink_config: SinkConfig) -> BaseStorage:
+        # automatically pick the only supported sink regardless of the config
+        if self._has_only_one_sink():
+            sink_config = sink_config.model_copy(update={'sink': self.SUPPORTED_SINKS[0]})
+        assert sink_config.sink in self.SUPPORTED_SINKS, (
+            f"{self.name} only supports sinks: {self.SUPPORTED_SINKS}"
+        )
+        Sink = cast("type[BaseSink]", sink_config.sink.sink_class)
+        self._sink = Sink(**sink_config.model_dump())
         self._is_data_handler_stale = True
         return self
 
@@ -183,12 +213,16 @@ class BaseStorage:
             data_domain=self.data_domain,
             data_model=self.data_model,
             io=self.io,
+            sink=self.sink,
         )
 
-    def write_data(self, data: IntoFrame | StreamingMessage, streaming: bool = False):
-        self.data_handler.write(data=data, streaming=streaming)
+    def write(self, data: IntoFrame | StreamingData, streaming: bool = False):
+        if streaming:
+            self.data_handler.write_stream(data=data)
+        else:
+            self.data_handler.write_batch(data=data)
 
-    def read_data(self) -> pl.LazyFrame | None:
+    def read(self) -> pl.LazyFrame | None:
         """Read data from storage."""
         return self.data_handler.read()
 

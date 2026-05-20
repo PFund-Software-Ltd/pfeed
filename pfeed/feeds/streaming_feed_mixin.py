@@ -191,7 +191,7 @@ class StreamingFeedMixin:
                                     msg_queue.send(channel=channel, topic=topic, data=data)
 
                                 if storage := storages_per_dataflow[dataflow_name]:
-                                    storage.write_data(data, streaming=True)  # pyright: ignore[reportArgumentType]
+                                    storage.write(data, streaming=True)
                         msg_queue.terminate()
                     except Exception:
                         logger.exception(f'Error in streaming Ray {worker_name}:')

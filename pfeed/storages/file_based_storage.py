@@ -12,13 +12,14 @@ from abc import abstractmethod
 from pathlib import Path
 
 from pfeed.utils.file_path import FilePath
-from pfeed.enums import IOFormat, DataLayer
+from pfeed.enums import IOFormat, DataLayer, DataSink
 from pfeed.storages.base_storage import BaseStorage
 
 
 class FileBasedStorage(BaseStorage):
     # EXTEND: add more file-based formats, iceberg, etc.
     SUPPORTED_IO_FORMATS = [IOFormat.PARQUET, IOFormat.DELTALAKE]
+    SUPPORTED_SINKS = [DataSink.DELTALAKE]
 
     def __init__(
         self,
@@ -44,13 +45,9 @@ class FileBasedStorage(BaseStorage):
             'filesystem': self.get_filesystem(),
         }
 
-    def with_io(self, io_config: IOConfig) -> FileIO | DeltaLakeIO:
-        io_format = io_config.io_format
-        assert io_format in self.SUPPORTED_IO_FORMATS, (
-            f"File-based storage only supports IO formats: {self.SUPPORTED_IO_FORMATS}"
-        )
+    def with_io(self, io_config: IOConfig) -> BaseStorage:
         # Dynamically add DeltaLake mixin if using DeltaLake format
-        if io_format == IOFormat.DELTALAKE:
+        if io_config.io_format == IOFormat.DELTALAKE:
             from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
             if not isinstance(self, DeltaLakeStorageMixin):
                 new_cls = type(
@@ -59,4 +56,4 @@ class FileBasedStorage(BaseStorage):
                     {'__module__': self.__class__.__module__}
                 )
                 self.__class__ = new_cls
-        return super().with_io(io_config=io_config)  # pyright: ignore[reportReturnType]
+        return super().with_io(io_config=io_config)

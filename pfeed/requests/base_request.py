@@ -1,5 +1,3 @@
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from pfeed.enums import ExtractType, DataLayer
@@ -17,10 +15,11 @@ class BaseRequest(BaseModel):
     clean_data: bool = Field(
         default=True,
         description="""
-            Whether to clean raw data after download when storage_config is None.
-            When storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
-            If True, downloaded raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
-            If False, downloaded raw data will be returned as is.
+            Whether to clean raw data using the default transformations (normalize, standardize columns, resample, etc.).
+            For download/stream: when storage_config is provided, this parameter is ignored — cleaning is determined by storage_config.data_layer instead (resolved at load() time via finalize_load_config).
+            For retrieve: when storage_config_for_retrieval.data_layer is not RAW, this parameter is forced to False — already-cleaned source data is never re-cleaned (resolved at request construction via model_post_init).
+            If True, raw data will be cleaned.
+            If False, raw data will be returned as is.
         """
     )
 
@@ -37,14 +36,16 @@ class BaseRequest(BaseModel):
     def is_streaming(self) -> bool:
         return False
 
-    def model_post_init(self, __context: Any) -> None:
-        super().model_post_init(__context)
-        storage_config = self.storage_config
+    def finalize_load_config(self, storage_config: StorageConfig | None, io_config: IOConfig | None) -> None:
+        """Finalize the storage/io config actually used by this request.
+
+        because in pipeline mode storage_config and io_config are unknown
+        at request construction time and only become final when .load() is invoked.
+        """
+        self.storage_config = storage_config
+        self.io_config = io_config
         if storage_config:
             is_raw_data = storage_config.data_layer == DataLayer.RAW
+            # clean_data is already determined during request creation, no need to finalize for ExtractType.retrieve
             if self.extract_type != ExtractType.retrieve:
                 self.clean_data = not is_raw_data
-            else:
-                # if it's not retrieving raw data, there's nothing to clean, clean_data is always False
-                if not is_raw_data:
-                    self.clean_data = False

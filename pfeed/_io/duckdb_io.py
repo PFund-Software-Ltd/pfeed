@@ -21,8 +21,6 @@ from pfeed._io.database_io import DatabaseIO, DBPath
 
 
 class DuckDBIO(DatabaseIO, FileIO):
-    # TODO: support streaming
-    # SUPPORTS_STREAMING: bool = True
     # TODO: integrate with DuckDB's QUACK protocol to allow parallel writes
     SUPPORTS_PARALLEL_WRITES: bool = False
     FILE_EXTENSION = ".duckdb"

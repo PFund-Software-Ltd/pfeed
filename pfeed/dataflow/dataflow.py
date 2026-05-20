@@ -33,6 +33,7 @@ class DataFlow:
         self._zmq_channel: str = ''
         self._zmq_topic: PublicDataChannel | None = None
         self._assigned_stream_worker: str | None = None
+        self._is_sealed = False
 
     def _setup_messaging(self):
         from pfeed.data_models.market_data_model import MarketDataModel
@@ -89,12 +90,24 @@ class DataFlow:
     def result(self) -> DataFlowResult:
         return self._result
 
-    def add_transformations(self, *funcs: Callable[..., Any]):
+    def add_default_transformations(self, funcs: list[Callable[..., Any]]):
+        if self.is_sealed():
+            raise ValueError(f'cannot add default transformations to sealed dataflow {self.name}')
+        self._transformations = funcs + self._transformations
+
+    def add_user_transformations(self, funcs: list[Callable[..., Any]]):
+        if self.is_sealed():
+            raise ValueError(f'cannot add transformations to sealed dataflow {self.name}')
         self._transformations.extend(funcs)
+
+    def has_storage(self) -> bool:
+        return self._storage is not None
 
     def set_storage(self, storage: BaseStorage):
         if self._storage is not None:
             raise ValueError(f'storage is already set for dataflow {self.name}')
+        if self.is_sealed():
+            raise ValueError(f'cannot set storage for sealed dataflow {self.name}')
         self._storage = storage
 
     def __str__(self):
@@ -105,6 +118,12 @@ class DataFlow:
 
     def is_streaming(self) -> bool:
         return self.extract_type == ExtractType.stream
+
+    def is_sealed(self) -> bool:
+        return self._is_sealed
+
+    def seal(self):
+        self._is_sealed = True
 
     def _run_batch_etl(self) -> pl.LazyFrame | None:
         from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
@@ -120,6 +139,8 @@ class DataFlow:
         return data
 
     def run_batch(self, flow_type: FlowType=FlowType.native, prefect_kwargs: dict | None=None) -> DataFlowResult:
+        if not self.is_sealed():
+            raise ValueError(f'cannot run batch on unsealed dataflow {self.name}')
         self._logger.debug(f'{self} to storage={self.storage.data_path if self.storage else None}')
 
         self._flow_type = FlowType[flow_type.lower()]
@@ -133,7 +154,7 @@ class DataFlow:
             self._result = DataFlowResult.failed(error=ValueError(f'{self.name} produced no data'))
         elif self.storage is not None:
             # Lazy-load from storage on access so Ray workers don't copy large frames back to main.
-            self._result = DataFlowResult.lazy(loader=self.storage.read_data)
+            self._result = DataFlowResult.lazy(loader=self.storage.read)
         else:
             self._result = DataFlowResult.materialized(data=data)
         return self._result
@@ -167,6 +188,8 @@ class DataFlow:
             self._load(data)
 
     async def run_stream(self, flow_type: Literal['native']='native'):
+        if not self.is_sealed():
+            raise ValueError(f'cannot run stream on unsealed dataflow {self.name}')
         self._logger.info(f'{self} to storage={self.storage.data_path if self.storage else None}')
         self._flow_type = FlowType[flow_type.lower()]
         await self.faucet.open_stream()  # this will trigger _run_stream_etl()
@@ -192,18 +215,18 @@ class DataFlow:
         return data
 
     def _load(self, data: IntoFrame | StreamingData):
-        if self._storage is None:
+        if not self.has_storage():
             return
         try:
             log_level = logging.DEBUG if self.is_streaming() else logging.INFO
             if self.is_streaming():
-                self._storage.write_data(data, streaming=True)
+                self._storage.write(data)
             else:
                 if self._flow_type == FlowType.prefect:
                     from prefect import task
-                    write = task(self._storage.write_data)
+                    write = task(self._storage.write)
                 else:
-                    write = self._storage.write_data
+                    write = self._storage.write
                 write(data)
             self._logger.log(log_level, f'loaded {self.data_model} data to {self._storage}')
         except Exception:

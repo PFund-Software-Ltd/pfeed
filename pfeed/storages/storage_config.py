@@ -27,21 +27,21 @@ class StorageConfig(BaseModel):
 
     @field_validator('storage', mode='before')
     @classmethod
-    def create_storage(cls, v: DataStorage | str) -> DataStorage:
+    def validate_storage(cls, v: DataStorage | str) -> DataStorage:
         if not isinstance(v, DataStorage):
             return DataStorage[v.upper()]
         return v
 
     @field_validator('file_backend', mode='before')
     @classmethod
-    def create_file_backend(cls, v: FileBasedDataStorage | str) -> FileBasedDataStorage:
+    def validate_file_backend(cls, v: FileBasedDataStorage | str) -> FileBasedDataStorage:
         if not isinstance(v, FileBasedDataStorage):
             return FileBasedDataStorage[v.upper()]
         return v
 
     @field_validator('data_path', mode='before')
     @classmethod
-    def create_data_path(cls, v: FilePath | Path | str | None) -> FilePath:
+    def validate_data_path(cls, v: FilePath | Path | str | None) -> FilePath:
         if v is None:
             from pfeed import get_config
             config = get_config()
@@ -53,7 +53,7 @@ class StorageConfig(BaseModel):
 
     @field_validator('data_layer', mode='before')
     @classmethod
-    def create_data_layer(cls, v: DataLayer | str) -> DataLayer:
+    def validate_data_layer(cls, v: DataLayer | str) -> DataLayer:
         if isinstance(v, str):
             return DataLayer[v.upper()]
         return v

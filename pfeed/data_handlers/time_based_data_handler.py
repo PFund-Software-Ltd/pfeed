@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, ClassVar, cast, TypeAlias, assert_never
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
     from pfeed._io.database_io import DatabaseIO
-    from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed._io.base_io import BaseIO
+    from pfeed._sinks.base_sink import BaseSink
     from pfeed.data_handlers.base_data_handler import SourcePath
     IOClassName: TypeAlias = str
 
@@ -42,19 +42,22 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
         data_layer: DataLayer,
         data_domain: str,
         data_model: TimeBasedDataModel,
-        io: BaseIO,
+        io: BaseIO | None = None,
+        sink: BaseSink | None = None,
     ):
-        '''
-        Args:
-            data_path: data path provided by file based storage
-                e.g. for local storage, data_path = config.data_path
-                it is None for database based storage
-        '''
-        super().__init__(data_path=data_path, data_layer=data_layer, data_domain=data_domain, data_model=data_model, io=io)
-        self._file_paths_per_date = {
-            date: self._create_file_path(date=date) for date in data_model.dates
-        } if self._is_file_io() else {}
-        self._file_paths: list[FilePath] = list(self._file_paths_per_date.values())
+        super().__init__(
+            data_path=data_path,
+            data_layer=data_layer,
+            data_domain=data_domain,
+            data_model=data_model,
+            io=io,
+            sink=sink,
+        )
+        if self._io:
+            self._file_paths_per_date = {
+                date: self._create_file_path(date=date) for date in data_model.dates
+            } if self._io.is_file_io() else {}
+            self._file_paths: list[FilePath] = list(self._file_paths_per_date.values())
 
     def _create_file_path(self, date: datetime.date) -> FilePath:
         raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
@@ -68,18 +71,15 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
     def _create_metadata(self, dates: list[datetime.date]) -> TimeBasedDataMetadata:
         raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
 
-    def write(self, data: IntoFrame | StreamingMessage, streaming: bool = False):
-        if streaming:
-            self._write_stream(data)  # pyright: ignore[reportAttributeAccessIssue]
-        else:
-            from pfeed._etl.base import convert_dataframe
-            df = cast(pl.LazyFrame, convert_dataframe(data, DataTool.polars))
-            with self._io:
-                self._write_batch(df)
+    def write_batch(self, data: IntoFrame):
+        from pfeed._etl.base import convert_dataframe
+        df = cast(pl.LazyFrame, convert_dataframe(data, DataTool.polars))
+        with self.io:
+            self._write_batch(df)
 
     def _requires_partitioning(self) -> bool:
         # REVIEW: only deltalake requires partitioning
-        return self._supports_partitioning() and self._io.name in self.IO_USING_PARTITION_COLUMNS
+        return self.io.SUPPORTS_PARTITIONING and self.io.name in self.IO_USING_PARTITION_COLUMNS
 
     def find_missing_dates_in_storage(self):
         existing_metadata_dict = cast("dict[SourcePath, TimeBasedDataMetadata]", self.read_metadata())
@@ -93,7 +93,7 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
                 ]
             case (IOType.TABLE | IOType.DATABASE) as io_type:
                 source_path = self._table_path if io_type == IOType.TABLE else self._db_path
-                assert source_path is not None, f'source_path is not set for {self._io.name}'
+                assert source_path is not None, f'source_path is not set for {self.io.name}'
                 existing_metadata = existing_metadata_dict.get(source_path, None)
                 if existing_metadata is not None:
                     existing_dates = existing_metadata.dates
@@ -136,8 +136,8 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
                     table = df_chunk.to_arrow()
                     metadata = self._create_metadata(dates=[date])
                     # NOTE: this only writes metadata to the table schema, not to the file.
-                    table_with_metadata = self._io.write_metadata(table, metadata)
-                    self._io.write(data=table_with_metadata, file_path=file_path)
+                    table_with_metadata = self.io.write_metadata(table, metadata)
+                    self.io.write(data=table_with_metadata, file_path=file_path)
             case (IOType.TABLE | IOType.DATABASE) as io_type:
                 if io_type == IOType.TABLE:
                     source_path = self._table_path
@@ -162,28 +162,28 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
                     # IO owns the precision policy (e.g. DuckDB stores at microsecond).
                     # conform() casts datetime columns to the IO's TIMESTAMP_PRECISION so
                     # the start/end ts we derive below match what will actually be stored.
-                    io = cast("DatabaseIO", self._io)
+                    io = cast("DatabaseIO", self.io)
                     df = cast(pl.DataFrame, io.conform(df))
                 else:
-                    raise ValueError(f'Unsupported IO format: {self._io.name}')
+                    raise ValueError(f'Unsupported IO format: {self.io.name}')
 
                 # Replace any overlapping data within the date range
                 if not df.is_empty():
                     start_date = df[date_col].min()
                     end_date = df[date_col].max()
-                    if not self._io.DATE_FILTER_PREDICATE:
-                        raise ValueError(f"IO {self._io.name} has no DATE_FILTER_PREDICATE")
-                    delete_where = self._io.DATE_FILTER_PREDICATE.format(date_col=date_col, start_date=start_date, end_date=end_date)
+                    if not self.io.DATE_FILTER_PREDICATE:
+                        raise ValueError(f"IO {self.io.name} has no DATE_FILTER_PREDICATE")
+                    delete_where = self.io.DATE_FILTER_PREDICATE.format(date_col=date_col, start_date=start_date, end_date=end_date)
                 else:
                     delete_where = None
 
-                self._io.write(
+                self.io.write(
                     df.to_arrow(),
                     source_path,
                     delete_where=delete_where,
                     **write_kwargs,
                 )
-                self._io.write_metadata(source_path, metadata=self._create_metadata(dates=data_model.dates))
+                self.io.write_metadata(source_path, metadata=self._create_metadata(dates=data_model.dates))
             case _:
                 assert_never(self._io_type)
 
@@ -192,10 +192,10 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
         lf: pl.LazyFrame | None = None
         match self._io_type:
             case IOType.FILE:
-                lf = self._io.read(file_paths=self._file_paths)
+                lf = self.io.read(file_paths=self._file_paths)
             case (IOType.TABLE | IOType.DATABASE) as io_type:
                 source_path = self._table_path if io_type == IOType.TABLE else self._db_path
-                lf: pl.LazyFrame | None = self._io.read(source_path)
+                lf: pl.LazyFrame | None = self.io.read(source_path)
                 start_date, end_date = self._data_model.start_date, self._data_model.end_date
                 if lf is not None:
                     lf = lf.filter(

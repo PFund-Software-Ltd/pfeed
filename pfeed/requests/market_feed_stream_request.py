@@ -1,34 +1,19 @@
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 
 from pfund.datas.data_config import DataConfig
 from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
 from pfeed.enums import ExtractType, StreamMode
+from pfeed.storages.storage_config import StorageConfig
+from pfeed._io.io_config import IOConfig
+from pfeed._sinks.sink_config import SinkConfig
 
 
 class MarketFeedStreamRequest(MarketFeedBaseRequest):
     extract_type: Literal[ExtractType.stream] = ExtractType.stream
     data_config: DataConfig | None = None
-    stream_mode: StreamMode = Field(
-        default=StreamMode.FAST,
-        description='''
-        Stream mode for streaming data.
-        If "FAST" is chosen, streaming data will be cached to memory to a certain amount before writing to disk,
-        faster write speed, but data loss risk will increase.
-        If "SAFE" is chosen, streaming data will be written to disk immediately,
-        slower write speed, but data loss risk will be minimized.
-    ''')
-    flush_interval: int = Field(
-        default=100,
-        description='''
-        Interval in seconds for flushing buffered streaming data to storage. Default is 100 seconds.
-        If using deltalake:
-        Frequent flushes will reduce write performance and generate many small files
-        (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
-        Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
-        This is expected to be fine-tuned based on the actual use case.
-    ''')
+    sink_config: SinkConfig | None = None
 
     @field_validator("stream_mode", mode="before")
     @classmethod
@@ -39,3 +24,8 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
 
     def is_streaming(self) -> bool:
         return True
+
+    def finalize_load_config(self, storage_config: StorageConfig | None, io_config: IOConfig | None) -> None:
+        super().finalize_load_config(storage_config, io_config)
+        if storage_config and not self.clean_data:
+            raise RuntimeError("Writing raw data in streaming is not supported")

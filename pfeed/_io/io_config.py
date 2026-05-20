@@ -26,14 +26,14 @@ class IOConfig(BaseModel):
 
     @field_validator('io_format', mode='before')
     @classmethod
-    def create_io_format(cls, v: IOFormat | str) -> IOFormat:
-        if not isinstance(v, IOFormat):
-            return IOFormat[v.upper()]
-        return v
+    def validate_io_format(cls, value: IOFormat | str) -> IOFormat:
+        if not isinstance(value, IOFormat):
+            return IOFormat[value.upper()]
+        return value
 
     @field_validator('compression', mode='before')
     @classmethod
-    def create_compression(cls, v: Compression | str) -> Compression:
-        if not isinstance(v, Compression):
-            return Compression[v.upper()]
-        return v
+    def validate_compression(cls, value: Compression | str) -> Compression:
+        if not isinstance(value, Compression):
+            return Compression[value.upper()]
+        return value

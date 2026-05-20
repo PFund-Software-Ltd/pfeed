@@ -13,6 +13,7 @@ from pfeed.enums.io_format import IOFormat
 from pfeed.enums.compression import Compression
 from pfeed.enums.timestamp_precision import TimestampPrecision
 from pfeed.enums.io_type import IOType
+from pfeed.enums.data_sink import DataSink
 
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     'Compression',
     'TimestampPrecision',
     'IOType',
+    'DataSink',
 ]

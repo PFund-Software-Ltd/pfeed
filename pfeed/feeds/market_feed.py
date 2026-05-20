@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
     from narwhals.typing import IntoFrame
     from pfund.datas.data_bar import BarData
-    from pfeed.dataflow.dataflow import DataFlow
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.feeds.streaming_feed_mixin import ParsedMessage
@@ -34,6 +33,7 @@ from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
 from pfeed._io.io_config import IOConfig
+from pfeed._sinks.sink_config import SinkConfig
 from pfeed.storages.base_storage import BaseStorage
 
 
@@ -225,16 +225,12 @@ class MarketFeed(TimeBasedFeed, ABC):
             clean_data=clean_data,
         )
         self._requests.append(request)
-        dataflows = self._create_batch_dataflows(
+        _ = self._create_batch_dataflows(
             extract_func=lambda data_model: self._download_impl(
                 data_model=data_model,
                 data_resolution=data_resolution,
             )
         )
-        default_transformations = self._get_default_transformations_for_download(request)
-        for dataflow in dataflows:
-            dataflow.add_transformations(*default_transformations)
-        _ = self.load(storage_config=storage_config, io_config=io_config)
         return self.run() if not self.is_pipeline() else self
 
     def _get_default_transformations_for_download(
@@ -307,10 +303,9 @@ class MarketFeed(TimeBasedFeed, ABC):
                 If data_layer is not RAW in storage_config, this parameter will be ignored.
                 If True, raw data stored in data layer=RAW will be cleaned using the default transformations for download.
                 If False, raw data stored in data layer=RAW will be loaded as is.
-            storage_config: Where to persist downloaded data. If None, data is not
-                persisted to storage.
-            io_config: IO format/compression and read/write/connect options. Defaults
-                to parquet + snappy.
+            storage_config: Where to retrieve the data from. If None, try to retrieve from the local storage.
+            io_config: IO format/compression and read/write/connect options used to retrieve data.
+                Defaults to parquet + snappy.
             product_specs: Extra product attributes for products that need them, e.g.
                 `download(product='BTC_USDT_OPT', strike_price=10000,
                 expiration='2024-01-01', option_type='CALL')`. Leave empty first and
@@ -340,7 +335,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         storage_config = self._normalize_storage_config(storage_config or StorageConfig())
         io_config = self._normalize_io_config(io_config or IOConfig())
 
-        # read metadata from storage to try to find the stored resolution thats used to auto-determine dataflow_per_date
+        # read metadata from storage to try to find data resolution
         Storage = DataStorage[storage_config.storage].storage_class
         storage = Storage.from_storage_config(storage_config).with_io(io_config)
         data_model = data_resolution = None
@@ -365,8 +360,8 @@ class MarketFeed(TimeBasedFeed, ABC):
             )
 
         request = MarketFeedRetrieveRequest(
-            storage_config=storage_config,
-            io_config=io_config,
+            storage_config_for_retrieval=storage_config,
+            io_config_for_retrieval=io_config,
             env=env,
             product=product,
             target_resolution=resolution,
@@ -379,14 +374,9 @@ class MarketFeed(TimeBasedFeed, ABC):
             clean_data=clean_data,
         )
         self._requests.append(request)
-        dataflows = self._create_batch_dataflows(
+        _ = self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(data_model, storage),
         )
-        default_transformations = self._get_default_transformations_for_retrieve(request)
-        for dataflow in dataflows:
-            dataflow.add_transformations(*default_transformations)
-        # NOTE: self.load() is NOT called here, storage_config is used to read data from, but not write data to storage.
-        # To load data to storage, pipeline mode must be enabled and .load() must be called explicitly
         return self.run() if not self.is_pipeline() else self
 
     def _retrieve_impl(self, data_model: MarketDataModel, storage: BaseStorage) -> pl.LazyFrame | None:
@@ -395,7 +385,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         # since it has the correct start_date and end_date when dataflow_per_date = True
         # storage should read data model with data_resolution
         _ = storage.with_data_model(data_model.model_copy(update={'resolution': data_resolution}))
-        lf: pl.LazyFrame | None = storage.read_data()
+        lf: pl.LazyFrame | None = storage.read()
         if lf is not None:
             self.logger.debug(f"retrived data {data_model} from {storage}")
         return lf
@@ -405,8 +395,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         from pfeed._etl.base import convert_dataframe
         from pfeed.utils import lambda_with_name
 
-        storage_config = request.storage_config
-        assert storage_config is not None, "storage_config is required for retrieving data"
+        storage_config = request.storage_config_for_retrieval
 
         if not request.clean_data:
             default_transformations = []
@@ -438,11 +427,10 @@ class MarketFeed(TimeBasedFeed, ABC):
         callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None] | None = None,
         data_origin: str = "",
         env: Environment | str = Environment.LIVE,
-        stream_mode: StreamMode | str = StreamMode.FAST,
-        flush_interval: int = 100,  # in seconds
         clean_data: bool = True,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
+        sink_config: SinkConfig | None = None,
         **product_specs: Any,
     ) -> Self | None:
         """Stream market data, either live or by replaying historical data.
@@ -467,17 +455,6 @@ class MarketFeed(TimeBasedFeed, ABC):
                 Receives the raw message dict. If None, messages are handled by the default pipeline.
             data_origin: Origin label for the data, used to distinguish data from different sources.
             env: Trading environment. Cannot be BACKTEST. Default is LIVE.
-            stream_mode: SAFE or FAST.
-                If FAST, streaming data is cached in memory before writing to disk —
-                faster write speed but higher data loss risk on crash.
-                If SAFE, streaming data is written to disk immediately —
-                slower write speed but minimal data loss risk.
-            flush_interval: Interval in seconds for flushing buffered streaming data to storage. Default is 100 seconds.
-                If using deltalake:
-                Frequent flushes reduce write performance and generate many small files
-                (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
-                Infrequent flushes create larger files but increase data loss risk during crashes when using FAST stream_mode.
-                Fine-tune based on your actual use case.
             clean_data: Whether to clean raw streaming data.
                 If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
                 If True, raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
@@ -524,6 +501,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             data_config=data_config,
             storage_config=storage_config,
             io_config=io_config,
+            sink_config=sink_config,
             env=env,
             product=product,
             target_resolution=resolution,
@@ -532,14 +510,9 @@ class MarketFeed(TimeBasedFeed, ABC):
             end_date=end_date,
             data_origin=data_origin,
             clean_data=clean_data,
-            stream_mode=stream_mode,
-            flush_interval=flush_interval,
         )
         self._requests.append(request)
-        dataflow = cast("DataFlow", self._create_stream_dataflow(env=env, user_callback=callback))
-        default_transformations = self._get_default_transformations_for_stream(request)
-        dataflow.add_transformations(*default_transformations)
-        _ = self.load(storage_config=storage_config, io_config=io_config)
+        self._create_stream_dataflow(env=env, user_callback=callback)
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray

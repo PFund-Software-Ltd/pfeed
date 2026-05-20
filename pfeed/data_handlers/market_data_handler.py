@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast, assert_never
 if TYPE_CHECKING:
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.data_models.market_data_model import MarketDataModel
@@ -15,7 +15,7 @@ from pfeed.utils.file_path import FilePath
 from pfeed._io.table_io import TablePath
 from pfeed._io.database_io import DBPath
 from pfeed.data_handlers.base_data_handler import SourcePath
-from pfeed.enums import StreamMode, DataSource
+from pfeed.enums import DataSource, IOType
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler, TimeBasedDataMetadata
 from pfeed.data_handlers.streaming_data_handler_mixin import StreamingDataHandlerMixin
 
@@ -102,19 +102,25 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
             str(product.asset_type),
             str(data_model.resolution),
         ]).lower()
-        # NOTE: special case "lancedb" where its table io and database io at the same time
-        if self._is_table_io(strict=False):
-            table_path = self._create_table_path()
-            table_path = table_path.parents[1]  # remove levels "asset_type" and "resolution"
-            db_uri = str(table_path)
-        # NOTE: special case "duckdb" where its file io and database io at the same time
-        elif self._is_file_io(strict=False):
-            file_extension = self._io.FILE_EXTENSION
-            assert file_extension is not None
-            db_uri = cast(FilePath, self._data_path) / (db_name + file_extension)
-            db_uri = str(db_uri)
-        else:
-            db_uri = cast(DatabaseURI, self._data_path) + '/' + db_name
+
+        if self._io_type is None:
+            raise ValueError("io is not set")
+        match self._io_type:
+            # NOTE: special case "lancedb" where its table io and database io at the same time
+            case IOType.TABLE:
+                table_path = self._create_table_path()
+                table_path = table_path.parents[1]  # remove levels "asset_type" and "resolution"
+                db_uri = str(table_path)
+            # NOTE: special case "duckdb" where its file io and database io at the same time
+            case IOType.FILE:
+                file_extension = self.io.FILE_EXTENSION
+                assert file_extension is not None
+                db_uri = cast(FilePath, self._data_path) / (db_name + file_extension)
+                db_uri = str(db_uri)
+            case IOType.DATABASE:
+                db_uri = cast(DatabaseURI, self._data_path) + '/' + db_name
+            case _:
+                assert_never(self._io_type)
         return DBPath(db_uri=db_uri, db_name=db_name, schema_name=schema_name, table_name=table_name)
 
     def _create_metadata(self, dates: list[datetime.date]) -> MarketDataMetadata:
@@ -126,9 +132,9 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
                 specs=self._data_model.product.specs,
             )
         }
-        if self._is_table_io() or self._is_database_io():
-            source_path = self._table_path if self._is_table_io() else self._db_path
-            assert source_path is not None, f'source_path is not set for {self._io.name}'
+        if self._io_type == IOType.TABLE or self._io_type == IOType.DATABASE:
+            source_path = self._table_path if self._io_type == IOType.TABLE else self._db_path
+            assert source_path is not None, f'source_path is not set for {self.io.name}'
             existing_metadata_dict = cast(dict[SourcePath, MarketDataMetadata], self.read_metadata())
             existing_metadata = existing_metadata_dict.get(source_path, None)
             if existing_metadata is not None:
@@ -144,27 +150,8 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
             asset_type=str(self._data_model.product.asset_type),
         )
 
-    def _create_stream_writer(self, stream_mode: StreamMode, flush_interval: int):
-        from pfeed.streaming.stream_buffer import StreamBuffer
-        if self._is_streaming_io():
-            # EXTEND: only support deltalake_io for now
-            if self._is_table_io():
-                buffer_path = self._table_path
-                assert buffer_path is not None, 'buffer_path is required for table io'
-                self._stream_writer = StreamBuffer(
-                    io=self._io,
-                    buffer_path=buffer_path,
-                    stream_mode=stream_mode,
-                    flush_interval=flush_interval
-                )
-            # TODO: writing streaming data to database is not supported yet
-            else:
-                raise ValueError(f"Streaming is not supported for {self._io.name}")
-        else:
-            raise ValueError(f"Streaming is not supported for {self._io.name}")
-
     # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same columns in write_batch (env=BACKTEST)
-    def _standardize_streaming_msg(self, msg: StreamingMessage) -> dict:
+    def _standardize_streaming_data(self, msg: StreamingMessage) -> dict:
         """
         Convert StreamingMessage to dict and standardize it, e.g. convert timestamp to datetime (UTC)
         """
@@ -188,19 +175,18 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
         data["date"] = date
 
         # add year, month, day columns for delta table partitioning
-        if self._supports_partitioning():
+        if self.io.SUPPORTS_PARTITIONING:
             data["year"] = date.year
             data["month"] = date.month
             data["day"] = date.day
 
         return data
 
-    # EXTEND: currently only supports writing for parquet+deltalake (using .arrow for buffering)
-    def _write_stream(self, data: dict[str, Any] | StreamingMessage):
+    def write_stream(self, data: StreamingMessage):
         # TODO: check to ensure data is not raw
         print(f'***WRITE STREAM GOT*** {data}')
-        # data =I self._standardize_streaming_msg(data)
-        # self._stream_writer.write(
+        # data = self._standardize_streaming_data(data)
+        # self._sink.write(
         #     data,
         #     metadata=self._data_model.to_metadata(),
         #     partition_by=self.PARTITION_COLUMNS,

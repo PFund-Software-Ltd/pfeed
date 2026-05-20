@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.faucet import Faucet
     from pfeed.storages.storage_config import StorageConfig
     from pfeed._io.io_config import IOConfig
+    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.dataflow.result import DataFlowResult
 
 import os
@@ -120,7 +121,7 @@ class BaseFeed(ABC):
         skip `_prepare_before_run` / `_cleanup_after_run` so we don't leave the
         feed in an `is_running=True` state with no way to clear it.
         '''
-        self._validate_before_run()
+        self._finalize_before_run()
         return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
 
     def supports_streaming(self) -> bool:
@@ -185,18 +186,27 @@ class BaseFeed(ABC):
             raise ValueError(f'Custom data_domain={storage_config.data_domain} is only allowed when data layer is CURATED, but got data_layer={storage_config.data_layer}')
         return storage_config
 
-    # no real logic right now
     def _normalize_io_config(self, io_config: IOConfig) -> IOConfig:
+        io_format = io_config.io_format
+        IO = io_format.io_class
+        if self._is_using_ray():
+            # NOTE: the condition is_file_io(strict=True) allows ParquetIO for parallel writes using Ray
+            if not IO.SUPPORTS_PARALLEL_WRITES and not IO.is_file_io(strict=True):
+                raise RuntimeError(f'{io_format} does not support parallel writes, cannot be used with Ray')
         return io_config
 
     def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
         request = self._get_current_request()
-        dataflows = self._dataflows[request]
-        for dataflow in dataflows:
-            dataflow.add_transformations(*funcs)
+        for dataflow in self._dataflows[request]:
+            dataflow.add_user_transformations(list(funcs))
         return self
 
-    def load(self, storage_config: StorageConfig | None = None, io_config: IOConfig | None = None) -> BaseFeed:
+    def load(
+        self,
+        storage_config: StorageConfig | None = None,
+        io_config: IOConfig | None = None,
+        sink_config: SinkConfig | None = None,
+    ) -> BaseFeed:
         request = self._get_current_request()
 
         # allowing passing in None is useful for dynamically determining if load() is needed
@@ -207,6 +217,8 @@ class BaseFeed(ABC):
 
         from pfeed._io.io_config import IOConfig
         io_config = self._normalize_io_config(io_config or IOConfig())
+
+        request.finalize_load_config(storage_config, io_config)
 
         Storage = storage_config.storage.storage_class
         for dataflow in self._dataflows[request]:
@@ -219,24 +231,35 @@ class BaseFeed(ABC):
                 )
             )
             if request.is_streaming():
-                storage.data_handler.create_stream_buffer(
-                    mode=request.mode,
-                    flush_interval=request.flush_interval,
-                )
+                _ = storage.with_sink(sink_config=sink_config)
             dataflow.set_storage(storage)
         return self
 
-    def _validate_before_run(self) -> None:
-        for request, dataflows in self._dataflows.items():
-            for dataflow in dataflows:
-                storage = dataflow.storage
-                # REVIEW: streaming only supports writing cleaned data for now
-                if storage and request.is_streaming() and not request.clean_data:
-                    raise RuntimeError(f"{dataflow}: streaming doesn't support writing raw data to {storage=}")
+    def _get_default_transformations(self, request: BaseRequest) -> list[Callable[..., Any]]:
+        if request.extract_type == ExtractType.download:
+            default_transformations = self._get_default_transformations_for_download(request)
+        elif request.extract_type == ExtractType.stream:
+            default_transformations = self._get_default_transformations_for_stream(request)
+        elif request.extract_type == ExtractType.retrieve:
+            default_transformations = self._get_default_transformations_for_retrieve(request)
+        else:
+            raise ValueError(f"Unknown extract type: {request.extract_type}")
+        return default_transformations
+
+    def _finalize_before_run(self) -> None:
+        request = self._get_current_request()
+        has_no_destination = any(not dataflow.has_storage() for dataflow in self._dataflows[request])
+        # NOTE: load() will finalize the storage/io configs in request
+        if has_no_destination:
+            _ = self.load(storage_config=request.storage_config, io_config=request.io_config)
+        default_transformations = self._get_default_transformations(request)
+        for dataflow in self._dataflows[request]:
+            dataflow.add_default_transformations(default_transformations)
+            dataflow.seal()
 
     def _prepare_before_run(self):
         self._last_run_dataflows = []
-        self._validate_before_run()
+        self._finalize_before_run()
         self._set_running(True)
 
     def _cleanup_after_run(self):

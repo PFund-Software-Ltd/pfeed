@@ -21,13 +21,13 @@ class NewsDataHandler(TimeBasedDataHandler):
         df = df.reset_index(drop=True)
         schema = NewsDataSchema
         return schema.validate(df)
-    
+
     def _create_filename(self, date: datetime.date) -> str:
         product = self._data_model.product
         name = self.DEFAULT_FILENAME if product is None else product.symbol
         filename = '_'.join([name, str(date)])
         file_extension = self._get_file_extension()
-        return filename + file_extension    
+        return filename + file_extension
 
     def _create_storage_path(self, date: datetime.date | None=None) -> Path:
         data_model: NewsDataModel = self._data_model
@@ -37,19 +37,19 @@ class NewsDataHandler(TimeBasedDataHandler):
         path = (
             Path()
             / f'asset_type={asset_type}'
-            / f'symbol={symbol}'   
+            / f'symbol={symbol}'
         )
-        if self._is_table_io():
+        if self._io.is_table_io():
             return path
-        elif self._is_database_io():
+        elif self._io.is_database_io():
             return Path()
         else:
             assert date is not None, 'date is required for non-table format'
             year, month, day = str(date).split('-')
             return (
-                path 
-                / f'year={year}' 
-                / f'month={month}' 
+                path
+                / f'year={year}'
+                / f'month={month}'
                 / f'day={day}'
             )
 

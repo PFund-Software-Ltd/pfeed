@@ -19,7 +19,7 @@ class DatabaseDataStorage(StrEnum):
     LANCEDB = 'LANCEDB'
     # POSTGRESQL = 'POSTGRESQL'
 
-    
+
 class DataStorage(StrEnum):
     CACHE = FileBasedDataStorage.CACHE
     LOCAL = FileBasedDataStorage.LOCAL

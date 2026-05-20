@@ -138,21 +138,6 @@ class TimeBasedFeed(BaseFeed, ABC):
         self._dataflows[request] = dataflows
         return dataflows
 
-    def _validate_before_run(self) -> None:
-        super()._validate_before_run()
-        if self._is_using_ray():
-            for request, dataflows in self._dataflows.items():
-                if request.is_streaming() or not request.dataflow_per_date:
-                    continue   # single dataflow, no concurrent writes anyway
-                for dataflow in dataflows:
-                    storage = dataflow.storage
-                    if storage:
-                        data_handler = storage.data_handler
-                        # NOTE: this condition _is_file_io(strict=True) allows ParquetIO for parallel writes using Ray
-                        # because TimeBasedFeed writes data per date (writing to separate files for each date), instead of writing to a single file.
-                        if not data_handler._supports_parallel_writes() and not data_handler._is_file_io(strict=True):
-                            raise RuntimeError(f'{data_handler._io} does not support parallel writes, cannot be used with Ray')
-
     def run(self, **prefect_kwargs: Any) -> RunResult:
         '''Runs dataflows and returns a RunResult exposing the combined frame,
         per-flow successes/failures, and any dates that produced no data.'''
@@ -177,7 +162,7 @@ class TimeBasedFeed(BaseFeed, ABC):
             columns = schema.names()
             if 'date' in columns and schema['date'].is_temporal():
                 df: Frame = df.sort(by='date', descending=False)
-            # Storage-backed flows return raw pl.LazyFrame from storage.read_data,
+            # Storage-backed flows return raw pl.LazyFrame from storage.read,
             # bypassing the per-flow `convert_to_user_df` transformation. Convert
             # once here so the aggregated frame matches the user's data_tool.
             combined: IntoFrame | None = convert_dataframe(nw.to_native(df))

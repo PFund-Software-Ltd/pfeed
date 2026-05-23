@@ -1,59 +1,59 @@
+# pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownParameterType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     import pyarrow as pa
+    from pfeed._io.base_io import BaseIO
+    from pfeed.data_handlers.base_data_handler import SourcePath
 
+import time
 from abc import ABC, abstractmethod
-
-from pfeed.enums import StreamMode
 
 
 class BaseSink(ABC):
-    """
-    Stateful streaming writer. A sink is a streaming-mode interface to a Storage
-    destination -- it borrows the storage's location, IO, and data handler setup,
-    and adds the lifecycle (open -> write* -> flush -> close) plus any bookkeeping
-    state needed for buffering, batching, and crash recovery.
-
-    The abstract contract is intentionally minimal -- only what the simplest sink
-    (e.g. a periodic-flush Delta writer) can honor. Capabilities like exactly-once,
-    checkpointing, watermarks, or transactional commits require *correctness*
-    state that a simple sink does not have; those belong on extension interfaces
-    shipped by a real streaming engine (e.g. CheckpointableSink), not on this base.
-
-    Composition over inheritance: sink has-a storage rather than is-a storage.
-    Inheriting from BaseStorage would force the sink to honor read/batch-write
-    semantics it can't, while duplicating storage's fluent setup would just be the
-    same fields under a different name.
-    """
-
-    def __init__(
-        self,
-        stream_mode: StreamMode | str = StreamMode.FAST,
-        flush_interval: int = 100,  # in seconds
-    ):
-        self._stream_mode = stream_mode
+    def __init__(self, io: BaseIO, flush_interval: int = 100) -> None:
+        self._io = io
         self._flush_interval = flush_interval
+        self._buffer: list[dict[str, Any]] = []
+        self._last_flush_ts: float = time.time()
+        self._schema: pa.Schema | None = None
+        self._partition_func: Callable[[pa.Table], pa.Table] | None = None
 
     @property
     def name(self) -> str:
         return self.__class__.__name__
 
-    @abstractmethod
-    def open(self) -> None:
-        """Acquire resources (buffers, file handles, connections) and recover
-        from any prior crash. Called once before the first write."""
+    def with_schema(self, schema: pa.Schema) -> None:
+        self._schema = schema
 
     @abstractmethod
-    def write(self, batch: pa.RecordBatch) -> None:
-        """Accept one Arrow RecordBatch. Implementations may buffer internally
-        and flush according to their own policy."""
+    def write(self, data: dict[str, Any], path: SourcePath) -> None:
+        """Accept one standardized streaming record. Implementations buffer
+        internally and flush according to their own policy."""
 
     @abstractmethod
-    def flush(self) -> None:
+    def flush(self, path: SourcePath) -> None:
         """Force buffered records to the destination. Safe to call manually;
-        also invoked by write() when the implementation's flush policy triggers."""
+        also invoked indirectly by write() via _maybe_flush() when the
+        interval has elapsed."""
 
-    @abstractmethod
-    def close(self) -> None:
-        """Final flush + release resources. Called once at shutdown."""
+    def set_partitioning(
+        self,
+        partition_func: Callable[[pa.Table], pa.Table],
+        partition_columns: list[pa.Field],
+    ) -> None:
+        if self._schema is None:
+            raise RuntimeError(f"{self.name}: call with_schema() before set_partitioning()")
+        self._partition_func = partition_func
+        self._schema = pa.schema(list(self._schema) + list(partition_columns))
+
+    def _maybe_flush(self, path: SourcePath) -> None:
+        """Flush if the interval has elapsed since the last successful flush.
+        Subclasses call this from write() after appending to the buffer."""
+        if time.time() - self._last_flush_ts < self._flush_interval or not self._buffer:
+            return
+        if self._schema is None:
+            raise RuntimeError(f"schema is missing in {self.name}")
+        self.flush(path)
+        self._last_flush_ts = time.time()
+        self._buffer.clear()

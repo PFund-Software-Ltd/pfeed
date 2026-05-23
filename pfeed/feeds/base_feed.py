@@ -121,7 +121,7 @@ class BaseFeed(ABC):
         skip `_prepare_before_run` / `_cleanup_after_run` so we don't leave the
         feed in an `is_running=True` state with no way to clear it.
         '''
-        self._finalize_before_run()
+        self._finalize_run()
         return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
 
     def supports_streaming(self) -> bool:
@@ -246,7 +246,7 @@ class BaseFeed(ABC):
             raise ValueError(f"Unknown extract type: {request.extract_type}")
         return default_transformations
 
-    def _finalize_before_run(self) -> None:
+    def _finalize_run(self) -> None:
         request = self._get_current_request()
         has_no_destination = any(not dataflow.has_storage() for dataflow in self._dataflows[request])
         # NOTE: load() will finalize the storage/io configs in request
@@ -259,7 +259,7 @@ class BaseFeed(ABC):
 
     def _prepare_before_run(self):
         self._last_run_dataflows = []
-        self._finalize_before_run()
+        self._finalize_run()
         self._set_running(True)
 
     def _cleanup_after_run(self):

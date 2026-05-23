@@ -21,11 +21,11 @@ class StreamingMessage(
     data_category: DataCategory
     data_origin: str = ''
     specs: dict[str, Any]  # product specifications, e.g. for options, specs are strike_price, expiration, etc.
-    # if timestamp's unit is second, it should have only 10 digits in the next 200 years
+    # timestamps below are int64 ns since epoch; gt-bound catches passing seconds by mistake
     # NOTE: msg_ts vs ts, e.g. for candlesticks, "msg_ts" is the timestamp of the message sent by the exchange, "ts" is the timestamp of the candlestick
-    ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)]  # timestamp of the data
-    msg_ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)] | None = None  # timestamp of the message sent
-    _created_at: float = field(default_factory=time.time)  # timestamp of this object creation
+    ts: Annotated[int, Meta(gt=10_000_000_000)]
+    msg_ts: Annotated[int, Meta(gt=10_000_000_000)] | None = None
+    _created_at: int = field(default_factory=time.time_ns)
     extra_data: dict[str, Any] = field(default_factory=dict)
     
     @property

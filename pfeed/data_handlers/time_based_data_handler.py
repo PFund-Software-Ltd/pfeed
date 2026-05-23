@@ -1,6 +1,6 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportArgumentType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, cast, TypeAlias, assert_never
+from typing import TYPE_CHECKING, ClassVar, cast, assert_never
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
@@ -9,13 +9,13 @@ if TYPE_CHECKING:
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed._io.base_io import BaseIO
     from pfeed._sinks.base_sink import BaseSink
-    from pfeed.data_handlers.base_data_handler import SourcePath
-    IOClassName: TypeAlias = str
+    from pfeed.data_handlers.base_data_handler import SourcePath, IOClassName
 
 import datetime
 from abc import ABC
 
 import polars as pl
+import pyarrow as pa
 
 from pfeed.utils.file_path import FilePath
 from pfeed._io.table_io import TablePath
@@ -42,7 +42,7 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
         data_layer: DataLayer,
         data_domain: str,
         data_model: TimeBasedDataModel,
-        io: BaseIO | None = None,
+        io: BaseIO,
         sink: BaseSink | None = None,
     ):
         super().__init__(
@@ -58,6 +58,11 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
                 date: self._create_file_path(date=date) for date in data_model.dates
             } if self._io.is_file_io() else {}
             self._file_paths: list[FilePath] = list(self._file_paths_per_date.values())
+        if self._sink and self._requires_partitioning():
+            self._sink.set_partitioning(
+                partition_func=self._partition_stream_data,
+                partition_columns=[pa.field(col, pa.int32()) for col in self.PARTITION_COLUMNS],
+            )
 
     def _create_file_path(self, date: datetime.date) -> FilePath:
         raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
@@ -71,15 +76,39 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
     def _create_metadata(self, dates: list[datetime.date]) -> TimeBasedDataMetadata:
         raise NotImplementedError(f'{self.__class__.__name__} is not implemented')
 
-    def write_batch(self, data: IntoFrame):
-        from pfeed._etl.base import convert_dataframe
-        df = cast(pl.LazyFrame, convert_dataframe(data, DataTool.polars))
-        with self.io:
-            self._write_batch(df)
+    @staticmethod
+    def _partition_batch_data(date_col: str, df: pl.LazyFrame) -> pl.LazyFrame:
+        # Preprocess table to add year, month, day columns for partitioning
+        return df.with_columns(
+            pl.col(date_col).dt.year().alias("year"),
+            pl.col(date_col).dt.month().alias("month"),
+            pl.col(date_col).dt.day().alias("day"),
+        )
 
-    def _requires_partitioning(self) -> bool:
-        # REVIEW: only deltalake requires partitioning
-        return self.io.SUPPORTS_PARTITIONING and self.io.name in self.IO_USING_PARTITION_COLUMNS
+    @staticmethod
+    def _partition_stream_data(table: pa.Table) -> pa.Table:
+        """Partition the streaming data by year, month, and day.
+
+        Args:
+            table: pyarrow table (converted by streaming buffer in sink) to partition.
+
+        Returns:
+            The partitioned table.
+        """
+        import pyarrow.compute as pc
+        ts = pc.cast(table["ts"], pa.timestamp("ns", tz="UTC"))
+        return (
+            table
+            .append_column("year",  pc.year(ts))
+            .append_column("month", pc.month(ts))
+            .append_column("day",   pc.day(ts))
+        )
+
+    def write_batch(self, data: IntoFrame):
+        with self.io:
+            from pfeed._etl.base import convert_dataframe
+            df = cast(pl.LazyFrame, convert_dataframe(data, DataTool.polars))
+            self._write_batch(df)
 
     def find_missing_dates_in_storage(self):
         existing_metadata_dict = cast("dict[SourcePath, TimeBasedDataMetadata]", self.read_metadata())
@@ -142,12 +171,7 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
                 if io_type == IOType.TABLE:
                     source_path = self._table_path
                     if self._requires_partitioning():
-                        # Preprocess table to add year, month, day columns for partitioning
-                        df = df.with_columns(
-                            pl.col(date_col).dt.year().alias("year"),
-                            pl.col(date_col).dt.month().alias("month"),
-                            pl.col(date_col).dt.day().alias("day"),
-                        )
+                        df = self._partition_batch_data(date_col, df)
                         write_kwargs["partition_by"] = self.PARTITION_COLUMNS
                 elif io_type == IOType.DATABASE:
                     source_path = self._db_path

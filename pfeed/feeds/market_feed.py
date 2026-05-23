@@ -28,7 +28,7 @@ import polars as pl
 from pfund.enums.env import Environment
 from pfund.datas.resolution import Resolution
 from pfeed.config import setup_logging
-from pfeed.enums import MarketDataType, DataTool, StreamMode, DataCategory, DataStorage, DataSource, DataLayer
+from pfeed.enums import MarketDataType, DataTool, DataCategory, DataStorage, DataSource, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
@@ -134,7 +134,6 @@ class MarketFeed(TimeBasedFeed, ABC):
                 "extract_type",
                 "product",
                 "data_resolution",
-                "stream_mode",
                 "flush_interval",
             }
         return self.create_data_model(

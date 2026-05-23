@@ -1,10 +1,8 @@
 from typing import Literal
 
-from pydantic import field_validator
-
 from pfund.datas.data_config import DataConfig
 from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
-from pfeed.enums import ExtractType, StreamMode
+from pfeed.enums import ExtractType
 from pfeed.storages.storage_config import StorageConfig
 from pfeed._io.io_config import IOConfig
 from pfeed._sinks.sink_config import SinkConfig
@@ -14,13 +12,6 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
     extract_type: Literal[ExtractType.stream] = ExtractType.stream
     data_config: DataConfig | None = None
     sink_config: SinkConfig | None = None
-
-    @field_validator("stream_mode", mode="before")
-    @classmethod
-    def create_stream_mode(cls, v: StreamMode | str) -> StreamMode:
-        if isinstance(v, str):
-            return StreamMode[v.upper()]
-        return v
 
     def is_streaming(self) -> bool:
         return True

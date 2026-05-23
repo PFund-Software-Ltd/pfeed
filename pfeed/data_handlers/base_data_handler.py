@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportUnknownArgumentType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, Any, ClassVar, assert_never
 
@@ -6,6 +7,7 @@ if TYPE_CHECKING:
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO, MetadataDict
     from pfeed._sinks.base_sink import BaseSink
+    IOClassName: TypeAlias = str
 
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, ConfigDict
@@ -26,6 +28,7 @@ class BaseDataMetadata(BaseModel):
 
 class BaseDataHandler(ABC):
     metadata_class: ClassVar[type[BaseDataMetadata]]
+    IO_USING_PARTITION_COLUMNS: ClassVar[set[IOClassName]] = set()
 
     def __init__(
         self,
@@ -33,20 +36,22 @@ class BaseDataHandler(ABC):
         data_layer: DataLayer,
         data_domain: str,
         data_model: BaseDataModel,
-        io: BaseIO | None = None,
+        io: BaseIO,
         sink: BaseSink | None = None,
     ):
         self._data_path = data_path
         self._data_layer = data_layer
         self._data_domain = data_domain
         self._data_model = data_model
-        self._io: BaseIO | None = io
+        self._io: BaseIO = io
         self._sink: BaseSink | None = sink
-        assert self._io is not None or self._sink is not None, "Either io or sink must be provided"
-        self._io_type: IOType | None = self._initialize_io_type()
+        self._io_type: IOType = self._get_io_type()
         self._file_paths: list[FilePath] = []
         self._table_path: TablePath | None = self._create_table_path() if self._io_type == IOType.TABLE else None
         self._db_path: DBPath | None = self._create_db_path() if self._io_type == IOType.DATABASE else None
+        self._sink_path: SourcePath | None = self._create_sink_path() if self._sink else None
+        if self._sink:
+            self.sink.with_schema(schema=self._build_streaming_schema())
 
     @abstractmethod
     def write(self, data: Any, *args: Any, **kwargs: Any):
@@ -78,8 +83,6 @@ class BaseDataHandler(ABC):
 
     @property
     def io(self) -> BaseIO:
-        if self._io is None:
-            raise ValueError("io is not initialized")
         return self._io
 
     @property
@@ -93,9 +96,7 @@ class BaseDataHandler(ABC):
             raise ValueError(f'{self._io.__class__.__name__} does not have a file extension')
         return self.io.FILE_EXTENSION
 
-    def _initialize_io_type(self) -> IOType | None:
-        if self._io is None:
-            return None
+    def _get_io_type(self) -> IOType:
         if self._io.is_file_io():
             return IOType.FILE
         elif self._io.is_table_io():
@@ -106,8 +107,6 @@ class BaseDataHandler(ABC):
             raise ValueError(f"Unsupported IO type: {self._io}")
 
     def read_metadata(self) -> dict[SourcePath, BaseDataMetadata]:
-        if self._io_type is None:
-            raise ValueError("io must be set before accessing source_paths")
         match self._io_type:
             case IOType.FILE:
                 source_paths = self._file_paths
@@ -126,8 +125,6 @@ class BaseDataHandler(ABC):
         return metadata
 
     def find_missing_source_paths(self):
-        if self._io_type is None:
-            raise ValueError("io must be set before accessing source_paths")
         match self._io_type:
             case IOType.FILE:
                 missing_source_paths=[fp for fp in self._file_paths if not self.io.exists(fp)]
@@ -138,3 +135,7 @@ class BaseDataHandler(ABC):
             case _:
                 assert_never(self._io_type)
         return missing_source_paths
+
+    def _requires_partitioning(self) -> bool:
+        # REVIEW: only deltalake requires partitioning
+        return self.io.SUPPORTS_PARTITIONING and self.io.name in self.IO_USING_PARTITION_COLUMNS

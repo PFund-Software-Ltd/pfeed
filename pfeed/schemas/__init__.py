@@ -3,6 +3,8 @@ from pfeed.schemas.market_data_schema import MarketDataSchema
 from pfeed.schemas.tick_data_schema import TickDataSchema
 from pfeed.schemas.bar_data_schema import BarDataSchema
 from pfeed.schemas.news_data_schema import NewsDataSchema
+from pfeed.schemas.tick_message_schema import TickMessageSchema
+from pfeed.schemas.bar_message_schema import BarMessageSchema
 
 
 __all__ = [
@@ -11,4 +13,6 @@ __all__ = [
     'TickDataSchema',
     'BarDataSchema',
     'NewsDataSchema',
+    'TickMessageSchema',
+    'BarMessageSchema',
 ]

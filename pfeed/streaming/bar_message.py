@@ -6,8 +6,8 @@ from pfeed.streaming.market_data_message import MarketDataMessage
 
 
 class BarMessage(MarketDataMessage, frozen=True):
-    start_ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)]  # timestamp of the start of the bar
-    end_ts: Annotated[float, Meta(gt=0, lt=10_000_000_000)]  # timestamp of the end of the bar
+    start_ts: Annotated[int, Meta(gt=10_000_000_000)]  # ns since epoch, start of bar
+    end_ts: Annotated[int, Meta(gt=10_000_000_000)]  # ns since epoch, end of bar
     open: Annotated[float, Meta(gt=0)]
     high: Annotated[float, Meta(gt=0)]
     low: Annotated[float, Meta(gt=0)]

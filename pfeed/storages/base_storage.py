@@ -26,6 +26,9 @@ from pfeed.utils.file_path import FilePath
 from pfeed.data_handlers.base_data_handler import SourcePath, BaseDataMetadata
 
 
+__all__ = []
+
+
 class StorageMetadata(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
@@ -160,11 +163,15 @@ class BaseStorage:
         return self._data_handler
 
     @property
-    def io(self) -> BaseIO | None:
+    def io(self) -> BaseIO:
+        if not self._io:
+            raise AttributeError(f"No IO has been set for storage: {self.name}")
         return self._io
 
     @property
-    def sink(self) -> BaseSink | None:
+    def sink(self) -> BaseSink:
+        if not self._sink:
+            raise AttributeError(f"No sink has been set for storage: {self.name}")
         return self._sink
 
     @classmethod
@@ -187,7 +194,7 @@ class BaseStorage:
         IO = cast("type[BaseIO]", io_config.io_format.io_class)
         self._io = IO(
             storage_options=self.storage_options,
-            **io_config.model_dump(),
+            **io_config.model_dump(exclude={'io_format'}),
             **self._get_io_kwargs(),  # io kwargs specific to the storage, e.g filesystem from a file-based storage
         )
         self._is_data_handler_stale = True
@@ -201,7 +208,9 @@ class BaseStorage:
             f"{self.name} only supports sinks: {self.SUPPORTED_SINKS}"
         )
         Sink = cast("type[BaseSink]", sink_config.sink.sink_class)
-        self._sink = Sink(**sink_config.model_dump())
+        if not isinstance(self.io, sink_config.sink.io_class):
+            raise ValueError(f"{self.io} cannot be used with {Sink}")
+        self._sink = Sink(io=self.io, **sink_config.model_dump(exclude={'sink'}))
         self._is_data_handler_stale = True
         return self
 
@@ -218,9 +227,9 @@ class BaseStorage:
 
     def write(self, data: IntoFrame | StreamingData, streaming: bool = False):
         if streaming:
-            self.data_handler.write_stream(data=data)
+            self.data_handler.write_stream(data)
         else:
-            self.data_handler.write_batch(data=data)
+            self.data_handler.write_batch(data)
 
     def read(self) -> pl.LazyFrame | None:
         """Read data from storage."""

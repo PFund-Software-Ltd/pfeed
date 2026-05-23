@@ -1,6 +1,8 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownParameterType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast, assert_never
 if TYPE_CHECKING:
+    import pyarrow as pa
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.storages.database_storage import DatabaseURI
@@ -88,7 +90,7 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
             / f'resolution={str(data_model.resolution)}'
         )
 
-    def _create_db_path(self):
+    def _create_db_path(self) -> DBPath:
         data_model = self._data_model
         product = data_model.product
         db_name = data_model.env.lower()
@@ -103,8 +105,6 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
             str(data_model.resolution),
         ]).lower()
 
-        if self._io_type is None:
-            raise ValueError("io is not set")
         match self._io_type:
             # NOTE: special case "lancedb" where its table io and database io at the same time
             case IOType.TABLE:
@@ -122,6 +122,18 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
             case _:
                 assert_never(self._io_type)
         return DBPath(db_uri=db_uri, db_name=db_name, schema_name=schema_name, table_name=table_name)
+
+    def _create_sink_path(self) -> SourcePath:
+        match self._io_type:
+            case IOType.FILE:
+                raise NotImplementedError(f"Unhandled {self.io} as a sink")
+            case IOType.TABLE:
+                sink_path = self._table_path
+            case IOType.DATABASE:
+                sink_path = self._db_path
+            case _:
+                assert_never(self._io_type)
+        return sink_path  # pyright: ignore[reportReturnType]
 
     def _create_metadata(self, dates: list[datetime.date]) -> MarketDataMetadata:
         symbol: ProductSymbol = self._data_model.product.symbol
@@ -150,44 +162,43 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
             asset_type=str(self._data_model.product.asset_type),
         )
 
-    # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same columns in write_batch (env=BACKTEST)
-    def _standardize_streaming_data(self, msg: StreamingMessage) -> dict:
+    def _build_streaming_schema(self) -> pa.Schema:
+        from pfeed.schemas.tick_message_schema import TickMessageSchema
+        from pfeed.schemas.bar_message_schema import BarMessageSchema
+        from pfeed.schemas.specs_schemas import get_specs_schema
+
+        data_model: MarketDataModel = self._data_model
+        resolution: Resolution = data_model.resolution
+        if resolution.is_quote():
+            raise NotImplementedError('streaming quote data is not supported yet')
+        elif resolution.is_tick():
+            message_schema = TickMessageSchema
+        elif resolution.is_bar():
+            message_schema = BarMessageSchema
+        else:
+            raise ValueError(f'unsupported resolution for streaming: {resolution}')
+        specs_schema = get_specs_schema(data_model.product)
+        return message_schema.build(specs_schema=specs_schema)
+
+    # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same column schema in write_batch (env=BACKTEST)
+    def _standardize_streaming_msg(self, msg: StreamingMessage) -> dict[str, Any]:
         """
-        Convert StreamingMessage to dict and standardize it, e.g. convert timestamp to datetime (UTC)
+        Convert StreamingMessage to dict and standardize it: drop extra_data and flatten specs into top-level columns.
         """
         data = msg.to_dict()
 
-        # drop empty dicts
+        # REVIEW: drop extra_data, only support writing data defined in streaming schema
         dict_fields = ["extra_data"]
         for field in dict_fields:
-            if not data[field]:
-                data.pop(field)
+            data.pop(field)
 
         # flatten specs, make each spec a column, e.g. strike_price is now a column
         for k, v in data["specs"].items():
             data[k] = v
         data.pop("specs")
 
-        # convert timestamp to datetime (UTC)
-        date = datetime.datetime.fromtimestamp(
-            data["ts"], tz=datetime.timezone.utc
-        ).replace(tzinfo=None)
-        data["date"] = date
-
-        # add year, month, day columns for delta table partitioning
-        if self.io.SUPPORTS_PARTITIONING:
-            data["year"] = date.year
-            data["month"] = date.month
-            data["day"] = date.day
-
         return data
 
-    def write_stream(self, data: StreamingMessage):
-        # TODO: check to ensure data is not raw
-        print(f'***WRITE STREAM GOT*** {data}')
-        # data = self._standardize_streaming_data(data)
-        # self._sink.write(
-        #     data,
-        #     metadata=self._data_model.to_metadata(),
-        #     partition_by=self.PARTITION_COLUMNS,
-        # )
+    def write_stream(self, msg: StreamingMessage):
+        data = self._standardize_streaming_msg(msg)
+        self.sink.write(data, path=self._sink_path)  # pyright: ignore[reportArgumentType]

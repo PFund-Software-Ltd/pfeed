@@ -28,6 +28,7 @@ class BaseDataMetadata(BaseModel):
 
 class BaseDataHandler(ABC):
     metadata_class: ClassVar[type[BaseDataMetadata]]
+    PARTITION_COLUMNS: ClassVar[list[str]] = []
     IO_USING_PARTITION_COLUMNS: ClassVar[set[IOClassName]] = set()
 
     def __init__(

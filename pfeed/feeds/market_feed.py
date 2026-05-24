@@ -123,24 +123,13 @@ class MarketFeed(TimeBasedFeed, ABC):
         )
 
     def _create_data_model_from_request(self, request: MarketFeedBaseRequest) -> MarketDataModel:
-        if not request.is_streaming():
-            exclude = {
-                "extract_type",
-                "product",
-                "data_resolution",
-                "dataflow_per_date",
-            }
-        else:
-            exclude = {
-                "extract_type",
-                "product",
-                "data_resolution",
-                "flush_interval",
-            }
         return self.create_data_model(
-            **request.model_dump(exclude=exclude),
             product=request.product,
             resolution=request.target_resolution,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            env=request.env,
+            data_origin=request.data_origin,
         )
 
     def download(
@@ -212,6 +201,8 @@ class MarketFeed(TimeBasedFeed, ABC):
         if storage_config is not None:
             storage_config = self._normalize_storage_config(storage_config)
         request = MarketFeedDownloadRequest(
+            data_source=self.name,
+            data_origin=data_origin,
             storage_config=storage_config,
             io_config=io_config,
             env=env,
@@ -220,7 +211,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
-            data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
@@ -360,6 +350,8 @@ class MarketFeed(TimeBasedFeed, ABC):
             )
 
         request = MarketFeedRetrieveRequest(
+            data_source=self.name,
+            data_origin=data_origin,
             storage_config_for_retrieval=storage_config,
             io_config_for_retrieval=io_config,
             env=env,
@@ -369,7 +361,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
-            data_origin=data_origin,
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
@@ -523,6 +514,8 @@ class MarketFeed(TimeBasedFeed, ABC):
             io_config = self._normalize_io_config(io_config or IOConfig())
 
         request = MarketFeedStreamRequest(
+            data_source=self.name,
+            data_origin=data_origin,
             data_config=data_config,
             storage_config=storage_config,
             io_config=io_config,
@@ -533,7 +526,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
-            data_origin=data_origin,
             replay_pace=replay_pace,
             clean_data=clean_data,
         )
@@ -634,6 +626,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                     "standardize_message",
                     lambda msg: MarketFeed._standardize_message(
                         data_source=data_source,
+                        data_origin=request.data_origin,
                         product=request.product,
                         target_resolution=request.target_resolution,
                         data_resolution=request.data_resolution,
@@ -648,6 +641,7 @@ class MarketFeed(TimeBasedFeed, ABC):
     @staticmethod
     def _standardize_message(
         data_source: DataSource,
+        data_origin: str,
         product: BaseProduct,
         target_resolution: Resolution,
         data_resolution: Resolution,
@@ -661,6 +655,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         common = {
             "msg_ts": msg.get("ts", None),
             "data_source": data_source.value,
+            "data_origin": data_origin,
             "product": product.name,
             "basis": str(product.basis),
             "symbol": product.symbol,

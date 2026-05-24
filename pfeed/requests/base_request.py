@@ -1,6 +1,9 @@
-from pydantic import BaseModel, ConfigDict, Field
+from __future__ import annotations
+from typing import Any
 
-from pfeed.enums import ExtractType, DataLayer
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from pfeed.enums import ExtractType, DataLayer, DataSource
 from pfeed.storages.storage_config import StorageConfig
 from pfeed._io.io_config import IOConfig
 from pfeed._sinks.sink_config import SinkConfig
@@ -9,6 +12,7 @@ from pfeed._sinks.sink_config import SinkConfig
 class BaseRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
+    data_source: DataSource | str
     data_origin: str = ''
     extract_type: ExtractType
     storage_config: StorageConfig | None = None
@@ -37,6 +41,17 @@ class BaseRequest(BaseModel):
 
     def is_streaming(self) -> bool:
         return False
+
+    @field_validator('data_source', mode='before')
+    @classmethod
+    def validate_data_source(cls, value: DataSource | str) -> DataSource:
+        if isinstance(value, str):
+            return DataSource[value]
+        return value
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.data_origin:
+            self.data_origin = str(self.data_source)
 
     def finalize_load_config(self, storage_config: StorageConfig | None, io_config: IOConfig | None, sink_config: SinkConfig | None) -> None:
         """Finalize the storage/io config actually used by this request.

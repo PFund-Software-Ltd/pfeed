@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast, assert_never
 if TYPE_CHECKING:
     import pyarrow as pa
-    from pfeed.streaming.streaming_message import StreamingMessage
+    from pfeed.streaming.market_data_message import MarketDataMessage
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.storages.database_storage import DatabaseURI
 
@@ -181,9 +181,9 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
         return message_schema.build(specs_schema=specs_schema)
 
     # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same column schema in write_batch (env=BACKTEST)
-    def _standardize_streaming_msg(self, msg: StreamingMessage) -> dict[str, Any]:
+    def _standardize_streaming_msg(self, msg: MarketDataMessage) -> dict[str, Any]:
         """
-        Convert StreamingMessage to dict and standardize it: drop extra_data and flatten specs into top-level columns.
+        Convert MarketDataMessage to dict and standardize it: drop extra_data and flatten specs into top-level columns.
         """
         data = msg.to_dict()
 
@@ -199,6 +199,10 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
 
         return data
 
-    def write_stream(self, msg: StreamingMessage):
+    def write_stream(self, msg: MarketDataMessage):
+        if msg.is_bar():
+            sink_config = self.sink.config
+            if msg.is_incremental and not sink_config.store_incremental_bars:  # pyright: ignore[reportAttributeAccessIssue]
+                return
         data = self._standardize_streaming_msg(msg)
         self.sink.write(data, path=self._sink_path)  # pyright: ignore[reportArgumentType]

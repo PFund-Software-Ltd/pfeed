@@ -16,6 +16,7 @@ from pfund_kit.style import cprint, TextStyle, RichColor
 from pfeed.enums import DataSource, DataCategory
 
 
+# TODO: backfilling, running deltalake optimize/compact etc.
 class DataEngine:
     def __init__(self):
         self._logger = logging.getLogger('pfeed')

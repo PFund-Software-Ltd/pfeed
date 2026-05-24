@@ -210,7 +210,7 @@ class BaseStorage:
         Sink = cast("type[BaseSink]", sink_config.sink.sink_class)
         if not isinstance(self.io, sink_config.sink.io_format.io_class):
             raise ValueError(f"{self.io} cannot be used with {Sink}")
-        self._sink = Sink(io=self.io, **sink_config.model_dump(exclude={'sink'}))
+        self._sink = Sink(io=self.io, sink_config=sink_config)
         self._is_data_handler_stale = True
         return self
 

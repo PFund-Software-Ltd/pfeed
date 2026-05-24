@@ -18,6 +18,13 @@ class SinkConfig(BaseModel):
         Frequent flushes will reduce write performance and generate many small files
         (e.g. part-00001-0a1fd07c-9479-4a72-8a1e-6aa033456ce3-c000.snappy.parquet).
     ''')
+    store_incremental_bars: bool = Field(
+        default=False,
+        description='''
+        If True, every bar update (including partial/in-progress bars) is written to storage.
+        Useful for research on intra-bar dynamics, but produces many redundant rows that must
+        be deduped on read. If False (default), only closed bars are written.
+    ''')
 
     @field_validator('sink', mode='before')
     def validate_sink(cls, value: DataSink | str) -> DataSink:

@@ -60,6 +60,13 @@ class MarketFeed(TimeBasedFeed, ABC):
     def _parse_message(product: BaseProduct, msg: Any) -> ParsedMessage:
         pass
 
+    @staticmethod
+    @abstractmethod
+    def _normalize_timestamps(msg: ParsedMessage) -> ParsedMessage:
+        """Convert source's native time unit to int ns since epoch.
+        Touches top-level `ts` and any timestamp fields inside `data`."""
+        pass
+
     def get_supported_resolutions(self, include_resampled: bool = False) -> list[Resolution]:
         """Get all supported resolutions for batch processing for the data source.
 
@@ -596,12 +603,16 @@ class MarketFeed(TimeBasedFeed, ABC):
         if request.clean_data:
             # Bind concrete subclass's staticmethod into a local — no `self` captured.
             parse_message = type(self)._parse_message
-            default_transformations.append(
+            default_transformations.extend([
                 lambda_with_name(
                     'parse_message',
                     lambda msg: parse_message(request.product, msg)
                 ),
-            )
+                lambda_with_name(
+                    'normalize_timestamps',
+                    lambda msg: self._normalize_timestamps(msg)
+                ),
+            ])
             # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
             data_source: DataSource = self.data_source.name
             tick_counter = (

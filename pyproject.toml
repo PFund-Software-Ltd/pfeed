@@ -24,8 +24,8 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfund>=0.0.13",
-    "polars>=1.40.1",
+    "pfund>=0.0.14",
+    "polars>=1.41.0",
     "pyarrow>=23.0.1",
     "pandera>=0.31.1",
     "msgspec>=0.21.1",
@@ -42,14 +42,14 @@ core = [
     "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
     "deltalake>=1.6.0 ; sys_platform != 'emscripten'",
 ]
-prefect = ["prefect>=3.7.1"]
-yfinance = ["yfinance>=1.3.0"]
-hf = ["huggingface-hub>=1.15.0"]
+prefect = ["prefect>=3.7.2"]
+yfinance = ["yfinance>=1.4.0"]
+hf = ["huggingface-hub>=1.16.1"]
 pandas = ["pandas>=2.3.3"]
 dask = ["dask[complete,dataframe]>=2026.3.0"]
-spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.1"]
+spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.2"]
 daft = ["daft>=0.7.14", "narwhals-daft>=0.4.1"]
-duckdb = ["duckdb>=1.5.2"]
+duckdb = ["duckdb>=1.5.3"]
 lancedb = ["lancedb>=0.30.2"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # fmp = ["fmp-api-client>=0.0.1"]
@@ -71,7 +71,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed-docs.pfund.ai"
 
 [build-system]
-requires = ["uv_build>=0.11.15,<0.12.0"]
+requires = ["uv_build>=0.11.16,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

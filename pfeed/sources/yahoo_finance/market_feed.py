@@ -272,8 +272,6 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         #     stream_api.update_last_day_volume(channel_key, current_day_volume)
 
         ts = msg.get('time', None)
-        if ts is not None:
-            ts = int(ts) / 1000  # convert to seconds
 
         day_volume = msg.get('day_volume', None)
         if day_volume is not None:
@@ -289,7 +287,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         # self.stream_api.update_last_time_in_mts(channel_key, current_time_in_mts)
 
         parsed_msg: ParsedMessage = {
-            'ts': cast(float, ts),
+            'ts': ts,  # pyright: ignore[reportAssignmentType]
             'channel': product.symbol,
             'data': {
                 'ts': ts,
@@ -304,6 +302,14 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         }
         return parsed_msg
 
+    @staticmethod
+    def _normalize_timestamps(msg: ParsedMessage) -> ParsedMessage:
+        '''Yahoo Finance timestamps are in milliseconds, convert to nanoseconds'''
+        msg['ts'] = int(msg['ts'] * 10**6)
+        data = msg['data']
+        if 'ts' in data:
+            data['ts'] = int(data['ts'] * 10**6)
+        return msg
 
     ##############################################################################################
     # EXTEND: Functions using yfinance for convenience

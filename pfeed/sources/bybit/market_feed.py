@@ -1,15 +1,14 @@
 """High-level API for getting historical/streaming data from Bybit."""
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any, Self
+from typing import TYPE_CHECKING, Literal, ClassVar, Any, Self
 if TYPE_CHECKING:
-    from collections.abc import Coroutine
     import datetime
     from pfund.datas.resolution import Resolution
-    from pfeed.storages.base_storage import BaseStorage
-    from pfeed.feeds.streaming_feed_mixin import ParsedMessage, WebSocketName, RawMessage
+    from pfeed.feeds.streaming_feed_mixin import ParsedMessage, RawMessage
     from pfeed.dataflow.result import RunResult
     from pfeed.storages.storage_config import StorageConfig
-    from pfeed.sources.bybit.stream_api import ChannelKey
+
+from decimal import Decimal
 
 import polars as pl
 
@@ -133,3 +132,16 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
         assert product.category is not None, 'product.category is not initialized'
         BybitWebSocketAPIClass: type[BybitWebSocketAPI] = WebSocketAPI._get_api_class(product.category)
         return BybitWebSocketAPIClass._parse_message(msg)
+
+    @staticmethod
+    def _normalize_timestamps(msg: ParsedMessage) -> ParsedMessage:
+        '''Bybit timestamps are in milliseconds, convert to nanoseconds'''
+        msg['ts'] = int(msg['ts'] * 10**6)
+        data = msg['data']
+        if 'ts' in data:
+            data['ts'] = int(data['ts'] * 10**6)
+        if 'start_ts' in data:
+            data['start_ts'] = int(data['start_ts'] * 10**6)
+        if 'end_ts' in data:
+            data['end_ts'] = int(data['end_ts'] * 10**6)
+        return msg

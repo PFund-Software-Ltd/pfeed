@@ -7,15 +7,16 @@ if TYPE_CHECKING:
     from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
     from pfeed.feeds.streaming_feed_mixin import WebSocketName, RawMessage
     from pfund.entities.products.product_bybit import BybitProduct
-    ChannelKey: TypeAlias = tuple[BybitProduct.Category, FullDataChannel]
+    BybitProductCategory: TypeAlias = BybitProduct.Category
+    ChannelKey: TypeAlias = tuple[BybitProductCategory, FullDataChannel]
 
 from pfund.enums.env import Environment
-from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
 
 
 class StreamAPI:
     '''Simple wrapper of exchange's websocket API to connect to public channels'''
     def __init__(self, env: Environment | str):
+        from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
         self._env = Environment[env.upper()]
         self._ws_api = WebSocketAPI(self._env)
         # set the logger to be "bybit_stream", override the default logger 'bybit' in pfund
@@ -43,10 +44,11 @@ class StreamAPI:
         return channel_key
 
     @staticmethod
-    def generate_channel_key(category: BybitProduct.Category, channel: FullDataChannel) -> ChannelKey:
+    def generate_channel_key(category: BybitProductCategory, channel: FullDataChannel) -> ChannelKey:
         return (category, channel)
 
     def set_callback(self, faucet_callback: Callable[[WebSocketName, RawMessage, ChannelKey | None], Coroutine[Any, Any, None]]):
+        from pfund.entities.products.product_bybit import BybitProduct
         async def _callback(ws_name: WebSocketName, msg: RawMessage):
             if 'topic' in msg:
                 channel: str = msg['topic']

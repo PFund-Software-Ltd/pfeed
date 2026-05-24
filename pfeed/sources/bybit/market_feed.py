@@ -8,8 +8,6 @@ if TYPE_CHECKING:
     from pfeed.dataflow.result import RunResult
     from pfeed.storages.storage_config import StorageConfig
 
-from decimal import Decimal
-
 import polars as pl
 
 from pfund.entities.products.product_bybit import BybitProduct

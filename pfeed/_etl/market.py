@@ -27,15 +27,16 @@ def filter_columns(df: pl.LazyFrame, product: BaseProduct) -> pl.LazyFrame:
     cols = df.collect_schema().names()
     is_tick_data = 'price' in cols
     if is_tick_data:
-        standard_cols = ['date', 'product', 'resolution', 'side', 'volume', 'price']
+        standard_cols = ['date', 'product', 'resolution', 'volume', 'price']
+        optional_cols = ['side']
     else:
         standard_cols = ['date', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume']
-    extra_cols: list[str] = []
+        optional_cols = []
     if product.is_stock() or product.is_etf():
-        extra_cols.extend(['dividends', 'splits'])
-    for extra_col in extra_cols:
-        if extra_col in cols:
-            standard_cols.append(extra_col)
+        optional_cols.extend(['dividends', 'splits'])
+    for col in optional_cols:
+        if col in cols:
+            standard_cols.append(col)
     return df.select(standard_cols)
 
 
@@ -112,6 +113,7 @@ def resample_data(
         aggs.append(pl.col('dividends').sum().alias('dividends'))
     if 'splits' in cols:
         aggs.append(pl.col('splits').product().alias('splits'))
+    aggs.append(pl.len().alias('n_data_points'))
 
     resampled = (
         df

@@ -4,7 +4,6 @@ from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast, Self
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine, Iterator
-    from narwhals.typing import IntoFrame
     from pfund.datas.data_bar import BarData
     from pfeed.sources.data_provider_source import DataProviderSource
     from pfund.entities.products.product_base import BaseProduct
@@ -28,7 +27,7 @@ import polars as pl
 from pfund.enums.env import Environment
 from pfund.datas.resolution import Resolution
 from pfeed.config import setup_logging
-from pfeed.enums import MarketDataType, DataTool, DataCategory, DataStorage, DataSource, DataLayer
+from pfeed.enums import MarketDataType, DataCategory, DataStorage, DataSource, DataLayer
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.storages.storage_config import StorageConfig
@@ -52,7 +51,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         pass
 
     @abstractmethod
-    def _download_impl(self, data_model: MarketDataModel, data_resolution: Resolution) -> IntoFrame | None:
+    def _download_impl(self, data_model: MarketDataModel, data_resolution: Resolution) -> pl.LazyFrame | None:
         pass
 
     @staticmethod
@@ -229,10 +228,10 @@ class MarketFeed(TimeBasedFeed, ABC):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
         from pfeed.utils import lambda_with_name
+        from pfeed import get_config
 
+        config = get_config()
         default_transformations = [
-            lambda_with_name("convert_to_polars_df",
-                lambda data: convert_dataframe(data, DataTool.polars)),
             lambda_with_name("standardize_date_column",
                 lambda df: self._standardize_date_column(df, is_raw_data=not request.clean_data)),
         ]
@@ -247,7 +246,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             ])
         default_transformations.append(
             lambda_with_name("convert_to_user_df",
-                lambda df: convert_dataframe(df))
+                lambda df: convert_dataframe(df, data_tool=config.data_tool))
         )
         return default_transformations
 
@@ -385,22 +384,30 @@ class MarketFeed(TimeBasedFeed, ABC):
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
         from pfeed.utils import lambda_with_name
+        from pfeed import get_config
 
+        config = get_config()
         storage_config = request.storage_config_for_retrieval
+        is_retrieving_streaming_data = request.env in (Environment.PAPER, Environment.LIVE)
 
         if not request.clean_data:
             default_transformations = []
+            if is_retrieving_streaming_data:
+                default_transformations.append(
+                    lambda_with_name("streaming_to_batch_schema",
+                        lambda df: df.with_columns(
+                            pl.from_epoch(pl.col('ts'), time_unit='ns').alias('date')
+                        )),
+                )
             if storage_config.data_layer != DataLayer.RAW:
                 default_transformations.extend([
-                    lambda_with_name("convert_to_polars_df",
-                        lambda df: convert_dataframe(df, DataTool.polars)),
                     lambda_with_name("resample_data_if_necessary",
                         lambda df: etl.resample_data(df, request.target_resolution, request.product)),
                     etl.organize_columns,
                 ])
             default_transformations.append(
                 lambda_with_name("convert_to_user_df",
-                    lambda df: convert_dataframe(df)),
+                    lambda df: convert_dataframe(df, data_tool=config.data_tool)),
             )
         else:
             # borrow download's default transformations to go through the cleaning process

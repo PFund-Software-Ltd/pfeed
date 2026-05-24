@@ -131,8 +131,16 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
         return [date for date in self._data_model.dates if date not in existing_dates]
 
     def _get_date_col(self) -> str:
+        from pfund.enums.env import Environment
         from pfeed.feeds.time_based_feed import TimeBasedFeed
-        return TimeBasedFeed.DATE_COL_IN_CLEANED_DATA if self._data_layer != DataLayer.RAW else TimeBasedFeed.DATE_COL_IN_RAW_DATA
+        if self._data_layer == DataLayer.RAW:
+            return TimeBasedFeed.DATE_COL_IN_RAW_DATA
+        else:
+            is_streaming_data = hasattr(self._data_model, 'env') and self._data_model.env in (Environment.LIVE, Environment.PAPER)  # pyright: ignore[reportAttributeAccessIssue]
+            if is_streaming_data:
+                return 'ts'   # streaming records carry ts (sub-day timestamp)
+            else:
+                return TimeBasedFeed.DATE_COL_IN_CLEANED_DATA
 
     def _write_batch(self, lf: pl.LazyFrame):
         is_raw_data = self._data_layer == DataLayer.RAW
@@ -222,10 +230,10 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
                 lf: pl.LazyFrame | None = self.io.read(source_path)
                 start_date, end_date = self._data_model.start_date, self._data_model.end_date
                 if lf is not None:
-                    lf = lf.filter(
-                        (pl.col(date_col).dt.date() >= start_date) &
-                        (pl.col(date_col).dt.date() <= end_date)
-                    )
+                    # streaming 'ts' is int64 ns epoch; batch 'date' is a temporal type
+                    col = pl.col(date_col)
+                    col_as_date = pl.from_epoch(col, time_unit='ns').dt.date() if date_col == 'ts' else col.dt.date()
+                    lf = lf.filter((col_as_date >= start_date) & (col_as_date <= end_date))
             case _:
                 assert_never(self._io_type)
         return lf

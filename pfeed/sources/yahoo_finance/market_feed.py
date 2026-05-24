@@ -1,17 +1,15 @@
 # pyright: reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false
 from __future__ import annotations
-from typing import TYPE_CHECKING, Literal, Callable, ClassVar, Any, cast, Self
+from typing import TYPE_CHECKING, Literal, ClassVar, Any, cast, Self
 if TYPE_CHECKING:
-    from collections.abc import Coroutine
     import pandas as pd
     from yfinance import Ticker
     from narwhals.typing import IntoFrame
     from pfeed.dataflow.result import RunResult
-    from pfeed.feeds.streaming_feed_mixin import ParsedMessage, WebSocketName, RawMessage
+    from pfeed.feeds.streaming_feed_mixin import ParsedMessage, RawMessage
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.storages.storage_config import StorageConfig
-    from pfeed.sources.yahoo_finance.stream_api import ChannelKey
 
 import time
 import datetime

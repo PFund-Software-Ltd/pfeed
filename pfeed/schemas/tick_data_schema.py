@@ -6,7 +6,8 @@ from pfeed.schemas import MarketDataSchema
 
 class TickDataSchema(MarketDataSchema):
     price: float = pa.Field(gt=0)
-    side: int = pa.Field(isin=[1, -1])
+    # not all tick sources expose trade direction (e.g. Bybit streaming ticks have none)
+    side: int | None = pa.Field(isin=[1, -1], nullable=True)
     volume: float = pa.Field(gt=0)
 
     @pa.check('side')

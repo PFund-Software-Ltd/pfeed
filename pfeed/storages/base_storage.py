@@ -222,7 +222,7 @@ class BaseStorage:
             data_domain=self.data_domain,
             data_model=self.data_model,
             io=self.io,
-            sink=self.sink,
+            sink=self._sink,
         )
 
     def write(self, data: IntoFrame | StreamingData, streaming: bool = False):

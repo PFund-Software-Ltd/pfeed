@@ -26,8 +26,9 @@ class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
     def model_post_init(self, __context: Any) -> None:
         super().model_post_init(__context)
         storage_config = self.storage_config_for_retrieval
-        if storage_config:
-            is_raw_data = storage_config.data_layer == DataLayer.RAW
-            # if it's not retrieving raw data, there's nothing to clean, clean_data is always False
-            if not is_raw_data:
-                self.clean_data = False
+        if not storage_config:
+            raise ValueError("storage config is missing, cannot retrieve data")
+        is_raw_data = storage_config.data_layer == DataLayer.RAW
+        # if it's not retrieving raw data, there's nothing to clean, clean_data is always False
+        if not is_raw_data:
+            self.clean_data = False

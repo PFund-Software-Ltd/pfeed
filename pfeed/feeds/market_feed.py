@@ -1,4 +1,4 @@
-# pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false, reportArgumentType=false, reportUnusedParameter=false, reportAttributeAccessIssue=false
+# pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false, reportArgumentType=false, reportUnusedParameter=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false
 from __future__ import annotations
 from typing import Literal, TYPE_CHECKING, Callable, ClassVar, Any, cast, Self
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
         MarketFeedStreamRequest,
     )
     from pfeed.streaming.market_data_message import MarketDataMessage
-    from pfeed.feeds.streaming_feed_mixin import WebSocketName, RawMessage, ChannelKey
+    from pfeed.feeds.streaming_feed_mixin import WebSocketName, RawMessage, ChannelKey, ReplayData
 
 import time
 import datetime
@@ -54,12 +54,6 @@ class MarketFeed(TimeBasedFeed, ABC):
     @abstractmethod
     def _download_impl(self, data_model: MarketDataModel, data_resolution: Resolution) -> IntoFrame | None:
         pass
-
-    async def _stream_impl(
-        self,
-        faucet_streaming_callback: Callable[[WebSocketName, RawMessage, ChannelKey | None], Coroutine[Any, Any, None]],
-    ) -> None:
-        raise NotImplementedError(f"{self.name} _stream_impl() is not implemented")
 
     @staticmethod
     @abstractmethod
@@ -426,50 +420,70 @@ class MarketFeed(TimeBasedFeed, ABC):
         callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None] | None = None,
         data_origin: str = "",
         env: Environment | str = Environment.LIVE,
+        replay_pace: float | None=None,
         clean_data: bool = True,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
         sink_config: SinkConfig | None = None,
         **product_specs: Any,
     ) -> Self | None:
-        """Stream market data, either live or by replaying historical data.
-
-        When `start_date`, `end_date`, or `rollback_period` is provided, the stream replays
-        historical data for the specified date range before continuing with live data.
-        When none are provided, only live data is streamed starting from today.
+        """Stream market data, either live from the data source or by replaying historical data from storage at CLEANED data layer.
 
         Args:
-            product: Financial product, e.g. BTC_USDT_PERP, AAPL_USD_STK.
-                Details of specifications should be specified in `product_specs`.
-            resolution: Data resolution, e.g. '1m', '1h', 'tick'.
-            symbol: Symbol used by the data source. If not specified, derived from `product`.
-                Note that the derived symbol might NOT be correct, in that case, specify it manually.
-            rollback_period: Period to rollback from today for historical replay.
-                Only used when `start_date` is not specified. Default is '1d'.
-                Accepts a resolution string (e.g. '7d'), 'ytd' (year to date), or 'max'.
-            start_date: Start date for historical replay.
-                If not specified, `rollback_period` is used to determine the start date.
-            end_date: End date for historical replay. If not specified, uses today's date.
+            product: Product basis (e.g. 'BTC_USDT_PERP', 'AAPL_USD_STK'). For products
+                with extra attributes (options, futures), pass them via `product_specs`.
+            resolution: Target data resolution (e.g. '1m', '1h', '1d'). If the source
+                doesn't provide this resolution natively, finer-grained source data is
+                downloaded and resampled down.
+            symbol: Source-specific symbol. If empty, derived from `product` — but the
+                derivation may be wrong, in which case pass it explicitly.
+            rollback_period: Lookback from today, only used when `start_date` is empty.
+                Accepts a resolution string (e.g. '7d'), 'ytd', or 'max'. With 'max',
+                the source's own `start_date` attribute is used.
+                Only meaningful when env=BACKTEST (defines the replay range).
+            start_date: Start date. If empty, derived from `rollback_period`.
+                Only meaningful when env=BACKTEST.
+            end_date: End date. If empty, defaults to today.
+                Only meaningful when env=BACKTEST.
             callback: Async or sync callable invoked for each incoming message.
-                Receives the raw message dict. If None, messages are handled by the default pipeline.
-            data_origin: Origin label for the data, used to distinguish data from different sources.
-            env: Trading environment. Cannot be BACKTEST. Default is LIVE.
+                Receives the raw message dict.
+            data_origin: Origin label used to distinguish data from different providers
+                of the same source.
+            env: Trading environment. LIVE (default) connects to the live data source
+                via websocket. BACKTEST replays historical data from storage.
+                only supports BACKTEST, PAPER (paper trading) and LIVE
+            replay_pace: Pacing between row emissions when replaying (env=BACKTEST). Ignored otherwise.
+                - None (default, realistic): for bars, sleep one resolution period between
+                  rows (so weekend/halt gaps don't make replay wait hours); for ticks,
+                  sleep the timestamp difference between consecutive rows.
+                - 0: ASAP — no sleep between rows.
+                - >0: fixed cadence in seconds (e.g. 1.0 → one row per wall-second
+                  regardless of resolution). Useful for fast iteration during backtesting.
             clean_data: Whether to clean raw streaming data.
                 If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
                 If True, raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
                 If False, raw data will be passed through as is.
-            storage_config: Storage configuration.
-                If None, streamed data will NOT be persisted to storage.
-                If provided, streamed data will be stored according to the storage config.
-            product_specs: Additional product specifications (e.g. strike_price, expiration for options).
-                E.g. stream(product='BTC_USDT_OPT', strike_price=10000, expiration='2024-01-01', option_type='CALL').
+            storage_config: Storage configuration. Direction depends on env:
+                - LIVE: WHERE to persist streamed data (write destination).
+                  If None, streamed data will NOT be persisted.
+                - BACKTEST: WHERE to read historical data FROM (read source).
+                  If None, defaults to local storage.
+            io_config: IO format/compression and read/write/connect options.
+                Applies to writes when env=LIVE, reads when env=BACKTEST.
+                Defaults to parquet + snappy.
+            sink_config: Sink configuration for buffering streamed writes.
+            product_specs: Extra product attributes for products that need them, e.g.
+                `stream(product='BTC_USDT_OPT', strike_price=10000,
+                expiration='2024-01-01', option_type='CALL')`. Leave empty first and
+                read the exception message to discover required keys.
         """
         from pfund_kit.utils.temporal import get_utc_now
         from pfeed.requests import MarketFeedStreamRequest
 
+        SUPPORTED_ENVS = [Environment.BACKTEST, Environment.PAPER, Environment.LIVE]
         env = Environment[env.upper()]
-        if env == Environment.BACKTEST:
-            raise ValueError("streaming is not supported in env BACKTEST")
+        if env not in SUPPORTED_ENVS:
+            raise ValueError(f"streaming is only supported in envs {SUPPORTED_ENVS}")
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, symbol=symbol, **product_specs)
         resolution = Resolution(resolution)
@@ -479,22 +493,27 @@ class MarketFeed(TimeBasedFeed, ABC):
             today = get_utc_now().date()
             start_date = end_date = today
 
+        is_replaying = (env == Environment.BACKTEST)
+        data_config = None
         data_resolution = resolution
-        if resolution.is_bar():
-            from pfund.datas.data_config import DataConfig
-            from pfund.components.mixin import ComponentMixin
-            # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
-            # e.g. '1s' is not supported by bybit, '1t' will be used instead to resample data
-            data_config = DataConfig(data_source=self.data_source.name, data_origin=data_origin)
-            data_config.data_resolutions = [data_resolution]
-            resampled_data_config = data_config.auto_resample(ComponentMixin.get_supported_resolutions(product))
-            if resampled_data_config.resample != data_config.resample:
-                data_resolution = resampled_data_config.resample[resolution]
-                self.logger.warning(
-                    f"{product.name} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
-                )
+        if not is_replaying:
+            if resolution.is_bar():
+                from pfund.datas.data_config import DataConfig
+                from pfund.components.mixin import ComponentMixin
+                # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
+                # e.g. '1s' is not supported by bybit, '1t' will be used instead to resample data
+                data_config = DataConfig(data_source=self.data_source.name, data_origin=data_origin)
+                data_config.data_resolutions = [data_resolution]
+                resampled_data_config = data_config.auto_resample(ComponentMixin.get_supported_resolutions(product))
+                if resampled_data_config.resample != data_config.resample:
+                    data_resolution = resampled_data_config.resample[resolution]
+                    self.logger.warning(
+                        f"{product.name} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
+                    )
         else:
-            data_config = None
+            # NOTE: in replay mode, storage_config means loading data FROM storage, not TO storage, so it must exist
+            storage_config = self._normalize_storage_config(storage_config or StorageConfig())
+            io_config = self._normalize_io_config(io_config or IOConfig())
 
         request = MarketFeedStreamRequest(
             data_config=data_config,
@@ -508,11 +527,58 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             data_origin=data_origin,
+            replay_pace=replay_pace,
             clean_data=clean_data,
         )
         self._requests.append(request)
-        self._create_stream_dataflow(env=env, user_callback=callback)
+        self._create_stream_dataflow(user_callback=callback)
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
+
+    async def _stream_impl(
+        self,
+        data_model: MarketDataModel,
+        faucet_callback: Callable[[WebSocketName | DataSource, RawMessage | ReplayData, ChannelKey | None], Coroutine[Any, Any, None]],
+        storage: BaseStorage | None = None,
+        replay_pace: float | None = None,
+    ) -> None:
+        from pfund.enums.env import Environment
+        stream_api = self.data_source.get_stream_api(env=data_model.env)
+        is_replaying = (data_model.env == Environment.BACKTEST)
+        if not is_replaying:
+            stream_api.set_callback(faucet_callback)
+            await stream_api.connect()
+        # replaying BACKTEST data:
+        else:
+            import asyncio
+            assert storage is not None, "storage must be provided for replaying"
+            data_source = data_model.data_source.name
+            channel_key: ChannelKey = cast("ChannelKey", stream_api.add_channel(data_model))
+            start_date, end_date = data_model.start_date, data_model.end_date
+            resolution = data_model.resolution
+            prev_ts: float | None = None
+            for date in pl.date_range(start=start_date, end=end_date, interval="1d", eager=True):
+                data_model_per_date = data_model.model_copy(update={'start_date': date, 'end_date': date})
+                _ = storage.with_data_model(data_model_per_date)
+                lf = storage.read()
+                if lf is None:
+                    self.logger.debug(f"No data to replay on {date}")
+                    continue
+                for row in lf.collect().iter_rows(named=True):
+                    current_ts: float = row['date'].timestamp()
+                    if replay_pace == 0:  # ASAP
+                        delay = 0.0
+                    elif replay_pace is not None:  # custom fixed cadence
+                        delay = replay_pace if prev_ts is not None else 0.0
+                    # realistic mode
+                    else:
+                        if resolution.is_tick():  # ticks: use timestamp diff between consecutive rows
+                            delay = current_ts - prev_ts if prev_ts is not None else 0.0
+                        else:  # bars: use resolution period (insulates from data gaps like weekends)
+                            delay = resolution.to_seconds() if prev_ts is not None else 0.0
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                    prev_ts = current_ts
+                    await faucet_callback(data_source, row, channel_key)
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _get_default_transformations_for_stream(self, request: MarketFeedStreamRequest) -> list[Callable[..., Any]]:
@@ -521,6 +587,12 @@ class MarketFeed(TimeBasedFeed, ABC):
         from pfeed.utils import lambda_with_name
 
         default_transformations: list[Callable[..., Any]] = []
+
+        is_replaying = (request.env == Environment.BACKTEST)
+        # NOTE: replaying backtest data must be cleaned beforehand, no default transformations when env is BACKTEST
+        if is_replaying:
+            return default_transformations
+
         if request.clean_data:
             # Bind concrete subclass's staticmethod into a local — no `self` captured.
             parse_message = type(self)._parse_message

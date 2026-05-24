@@ -235,19 +235,6 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         self._yfinance_kwargs.clear()
         return pl.from_pandas(df).lazy() if df is not None else None
 
-    async def _stream_impl(
-        self,
-        faucet_streaming_callback: Callable[[WebSocketName, RawMessage, ChannelKey | None], Coroutine[Any, Any, None]]
-    ):
-        stream_api = self.data_source.get_stream_api()
-        async def _callback(msg: RawMessage):
-            symbol: str = msg['id']
-            channel_key: ChannelKey = stream_api.generate_channel_key(symbol)
-            ws_name = self.name.value
-            await faucet_streaming_callback(ws_name, msg, channel_key)
-        stream_api.set_callback(_callback)
-        await stream_api.connect()
-
     @staticmethod
     def _parse_message(product: BaseProduct, msg: RawMessage) -> ParsedMessage:
         '''

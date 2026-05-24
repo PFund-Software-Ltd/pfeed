@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from collections.abc import Coroutine
     import datetime
     from pfund.datas.resolution import Resolution
+    from pfeed.storages.base_storage import BaseStorage
     from pfeed.feeds.streaming_feed_mixin import ParsedMessage, WebSocketName, RawMessage
     from pfeed.dataflow.result import RunResult
     from pfeed.storages.storage_config import StorageConfig
@@ -125,34 +126,10 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
         )
         return data
 
-    async def _stream_impl(
-        self,
-        faucet_streaming_callback: Callable[[WebSocketName, RawMessage, ChannelKey | None], Coroutine[Any, Any, None]]
-    ):
-        stream_api = self.data_source.get_stream_api()
-        async def _callback(ws_name: WebSocketName, msg: RawMessage):
-            if 'topic' in msg:
-                channel: str = msg['topic']
-                category = ws_name.split('_')[1]
-                category = BybitProduct.Category[category.upper()]
-                channel_key: ChannelKey = stream_api.generate_channel_key(category, channel)
-                # NOTE: Bybit's tick (publicTrade) messages and bar (kline) messages when it's closed contain multiple trades in a single message,
-                # split them into individual messages so each tick/bar flows through the pipeline separately
-                if isinstance(msg.get('data'), list):
-                    for item in msg['data']:
-                        individual_msg = {**msg, 'data': item}
-                        await faucet_streaming_callback(ws_name, individual_msg, channel_key)
-                    return
-            else:
-                channel_key: tuple[str, str] | None = None
-            await faucet_streaming_callback(ws_name, msg, channel_key)
-        stream_api.set_callback(_callback)
-        await stream_api.connect()
-
     @staticmethod
     def _parse_message(product: BybitProduct, msg: RawMessage) -> ParsedMessage:
         from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
         from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
         assert product.category is not None, 'product.category is not initialized'
         BybitWebSocketAPIClass: type[BybitWebSocketAPI] = WebSocketAPI._get_api_class(product.category)
-        return BybitWebSocketAPIClass._parse_message(msg)  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
+        return BybitWebSocketAPIClass._parse_message(msg)

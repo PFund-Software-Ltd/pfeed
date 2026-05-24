@@ -1,9 +1,9 @@
-# pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false, reportUnknownArgumentType=false, reportUninitializedInstanceVariable=false
+# pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false, reportUnknownArgumentType=false, reportUninitializedInstanceVariable=false, reportUnknownLambdaType=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, Callable, Literal, Any, cast, TypedDict
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable
-    from pfund.enums.env import Environment
+    from pfeed.enums import DataSource
     from pfeed.engine import DataEngine
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.dataflow import DataFlow
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
     from pfeed.streaming.streaming_message import StreamingMessage
+    ReplayData: TypeAlias = dict[str, Any]
     WebSocketName: TypeAlias = str
     RawMessage: TypeAlias = dict[str, Any]
     WorkerName: TypeAlias = str
@@ -41,13 +42,13 @@ class StreamingFeedMixin:
     def _set_engine(self, engine: DataEngine) -> None:
         self._engine = engine
 
-    def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, RawMessage], None]:
+    def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName | DataSource, RawMessage | ReplayData], None]:
         if not self.streaming_dataflows:
             raise RuntimeError("No streaming dataflow to iterate over")
         # get the first dataflow, doesn't matter, they share the same faucet
         dataflow = self.streaming_dataflows[0]
         faucet = dataflow.faucet
-        queue: asyncio.Queue[tuple[WebSocketName, RawMessage] | None] = faucet.streaming_queue
+        queue: asyncio.Queue[tuple[WebSocketName | DataSource, RawMessage | ReplayData] | None] = faucet.streaming_queue
         async def _iter():
             async with asyncio.TaskGroup() as task_group:
                 producer = task_group.create_task(self.run_async())
@@ -64,8 +65,7 @@ class StreamingFeedMixin:
 
     def _create_stream_dataflow(
         self,
-        env: Environment,
-        user_callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None] | None=None,
+        user_callback: Callable[[WebSocketName | DataSource, RawMessage | ReplayData], Awaitable[None] | None] | None=None,
     ) -> DataFlow:
         request: MarketFeedStreamRequest = cast("MarketFeedStreamRequest", self._get_current_request())
         self.logger.debug(
@@ -81,14 +81,17 @@ class StreamingFeedMixin:
         else:
             faucet: Faucet = cast("Faucet", self._create_faucet(
                 data_source=data_model.data_source,
-                extract_func=self._stream_impl,
+                extract_func=(
+                    lambda data_model, faucet_callback, storage:
+                        self._stream_impl(data_model, faucet_callback, storage=storage, replay_pace=request.replay_pace)
+                ),
                 extract_type=request.extract_type,
             ))
         dataflow = cast("DataFlow", self._create_dataflow(faucet=faucet, data_model=data_model))
 
         if user_callback:
-            faucet.set_user_streaming_callback(user_callback)
-        stream_api = self.data_source.get_stream_api(env=env)  # pyright: ignore[reportUnknownVariableType]
+            faucet.set_user_callback(user_callback)
+        stream_api = self.data_source.get_stream_api(env=request.env)  # pyright: ignore[reportUnknownVariableType]
         channel_key = cast("ChannelKey", stream_api.add_channel(data_model, data_resolution=request.data_resolution))
         faucet.bind_channel_key_to_dataflow(channel_key, dataflow)
         self._dataflows[request] = [dataflow]

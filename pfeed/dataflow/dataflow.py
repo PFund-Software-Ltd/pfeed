@@ -192,7 +192,10 @@ class DataFlow:
             raise ValueError(f'cannot run stream on unsealed dataflow {self.name}')
         self._logger.info(f'{self} to storage={self.storage.data_path if self.storage else None}')
         self._flow_type = FlowType[flow_type.lower()]
-        await self.faucet.open_stream()  # this will trigger _run_stream_etl()
+        await self.faucet.open_stream(
+            data_model=self.data_model,
+            storage=self.storage
+        )  # this will trigger _run_stream_etl()
 
     async def end_stream(self):
         await self.faucet.close_stream()

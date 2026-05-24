@@ -1,11 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeAlias, Callable
+from typing import TYPE_CHECKING, TypeAlias, Callable, Any
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Coroutine
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
-    from pfeed.feeds.streaming_feed_mixin import RawMessage
+    from pfeed.feeds.streaming_feed_mixin import WebSocketName, RawMessage
     ChannelKey: TypeAlias = str
 
 
@@ -66,5 +66,11 @@ class StreamAPI:
     def generate_channel_key(symbol: str) -> ChannelKey:
         return f'{symbol}'
 
-    def set_callback(self, callback: Callable[[RawMessage], Awaitable[None] | None]):
-        self._callback = callback
+    def set_callback(self, faucet_callback: Callable[[WebSocketName, RawMessage, ChannelKey | None], Coroutine[Any, Any, None]]):
+        async def _callback(msg: RawMessage):
+            from pfeed.enums import DataSource
+            symbol: str = msg['id']
+            channel_key: ChannelKey = self.generate_channel_key(symbol)
+            ws_name = DataSource.YAHOO_FINANCE
+            await faucet_callback(ws_name, msg, channel_key)
+        self._callback = _callback

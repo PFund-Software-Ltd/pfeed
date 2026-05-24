@@ -1,7 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, TypeAlias
+from typing import TYPE_CHECKING, Callable, TypeAlias, Any
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Coroutine
     from pfund.datas.resolution import Resolution
     from pfund.typing import FullDataChannel
     from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
@@ -46,5 +46,21 @@ class StreamAPI:
     def generate_channel_key(category: BybitProduct.Category, channel: FullDataChannel) -> ChannelKey:
         return (category, channel)
 
-    def set_callback(self, callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None]):
-        self._ws_api.set_callback(callback, raw_msg=True)
+    def set_callback(self, faucet_callback: Callable[[WebSocketName, RawMessage, ChannelKey | None], Coroutine[Any, Any, None]]):
+        async def _callback(ws_name: WebSocketName, msg: RawMessage):
+            if 'topic' in msg:
+                channel: str = msg['topic']
+                category = ws_name.split('_')[1]
+                category = BybitProduct.Category[category.upper()]
+                channel_key: ChannelKey = self.generate_channel_key(category, channel)
+                # NOTE: Bybit's tick (publicTrade) messages and bar (kline) messages when it's closed contain multiple trades in a single message,
+                # split them into individual messages so each tick/bar flows through the pipeline separately
+                if isinstance(msg.get('data'), list):
+                    for item in msg['data']:
+                        individual_msg = {**msg, 'data': item}
+                        await faucet_callback(ws_name, individual_msg, channel_key)
+                    return
+            else:
+                channel_key: tuple[str, str] | None = None
+            await faucet_callback(ws_name, msg, channel_key)
+        self._ws_api.set_callback(_callback, raw_msg=True)

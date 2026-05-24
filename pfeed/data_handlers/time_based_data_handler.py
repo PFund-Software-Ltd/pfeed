@@ -61,7 +61,7 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
         if self._sink and self._requires_partitioning():
             self._sink.set_partitioning(
                 partition_func=self._partition_stream_data,
-                partition_columns=[pa.field(col, pa.int32()) for col in self.PARTITION_COLUMNS],
+                partition_columns=self.PARTITION_COLUMNS,
             )
 
     def _create_file_path(self, date: datetime.date) -> FilePath:

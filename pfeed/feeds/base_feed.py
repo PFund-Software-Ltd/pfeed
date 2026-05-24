@@ -195,6 +195,10 @@ class BaseFeed(ABC):
                 raise RuntimeError(f'{io_format} does not support parallel writes, cannot be used with Ray')
         return io_config
 
+    # not doing anything yet
+    def _normalize_sink_config(self, sink_config: SinkConfig) -> SinkConfig:
+        return sink_config
+
     def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
         request = self._get_current_request()
         for dataflow in self._dataflows[request]:
@@ -216,9 +220,16 @@ class BaseFeed(ABC):
             storage_config = self._normalize_storage_config(storage_config)
 
         from pfeed._io.io_config import IOConfig
-        io_config = self._normalize_io_config(io_config or IOConfig())
+        if request.is_streaming():
+            from pfeed._sinks.sink_config import SinkConfig
+            sink_config = self._normalize_sink_config(sink_config or SinkConfig())
+            io_format_associated_with_sink = sink_config.sink.io_format
+            default_io_config = IOConfig(io_format=io_format_associated_with_sink)
+        else:
+            default_io_config = IOConfig()
+        io_config = self._normalize_io_config(io_config or default_io_config)
 
-        request.finalize_load_config(storage_config, io_config)
+        request.finalize_load_config(storage_config, io_config, sink_config)
 
         Storage = storage_config.storage.storage_class
         for dataflow in self._dataflows[request]:

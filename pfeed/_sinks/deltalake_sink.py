@@ -21,5 +21,13 @@ class DeltaLakeSink(BaseSink):
         table = pa.Table.from_pylist(self._buffer)
         if self._partition_func is not None:
             table = self._partition_func(table)
-        table = table.cast(self._schema)
-        self._io.write(data=table, table_path=path)
+            partition_fields = [table.schema.field(n) for n in self._partition_columns]
+            schema = pa.schema(list(self._schema) + partition_fields)
+        else:
+            schema = self._schema
+        table = table.select(schema.names).cast(schema)
+        self._io.write(
+            data=table,
+            table_path=path,
+            partition_by=self._partition_columns,
+        )

@@ -3,6 +3,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pfeed.enums import ExtractType, DataLayer
 from pfeed.storages.storage_config import StorageConfig
 from pfeed._io.io_config import IOConfig
+from pfeed._sinks.sink_config import SinkConfig
 
 
 class BaseRequest(BaseModel):
@@ -12,6 +13,7 @@ class BaseRequest(BaseModel):
     extract_type: ExtractType
     storage_config: StorageConfig | None = None
     io_config: IOConfig | None = None
+    sink_config: SinkConfig | None = None
     clean_data: bool = Field(
         default=True,
         description="""
@@ -36,7 +38,7 @@ class BaseRequest(BaseModel):
     def is_streaming(self) -> bool:
         return False
 
-    def finalize_load_config(self, storage_config: StorageConfig | None, io_config: IOConfig | None) -> None:
+    def finalize_load_config(self, storage_config: StorageConfig | None, io_config: IOConfig | None, sink_config: SinkConfig | None) -> None:
         """Finalize the storage/io config actually used by this request.
 
         because in pipeline mode storage_config and io_config are unknown
@@ -44,8 +46,11 @@ class BaseRequest(BaseModel):
         """
         self.storage_config = storage_config
         self.io_config = io_config
+        self.sink_config = sink_config
         if storage_config:
             is_raw_data = storage_config.data_layer == DataLayer.RAW
             # clean_data is already determined during request creation, no need to finalize for ExtractType.retrieve
             if self.extract_type != ExtractType.retrieve:
                 self.clean_data = not is_raw_data
+            if self.is_streaming() and is_raw_data:
+                raise RuntimeError("Writing raw data in streaming is not supported")

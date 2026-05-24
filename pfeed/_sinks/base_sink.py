@@ -2,12 +2,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
-    import pyarrow as pa
     from pfeed._io.base_io import BaseIO
     from pfeed.data_handlers.base_data_handler import SourcePath
 
 import time
 from abc import ABC, abstractmethod
+
+import pyarrow as pa
 
 
 class BaseSink(ABC):
@@ -18,6 +19,7 @@ class BaseSink(ABC):
         self._last_flush_ts: float = time.time()
         self._schema: pa.Schema | None = None
         self._partition_func: Callable[[pa.Table], pa.Table] | None = None
+        self._partition_columns: list[str] | None = None
 
     @property
     def name(self) -> str:
@@ -40,12 +42,10 @@ class BaseSink(ABC):
     def set_partitioning(
         self,
         partition_func: Callable[[pa.Table], pa.Table],
-        partition_columns: list[pa.Field],
+        partition_columns: list[str],
     ) -> None:
-        if self._schema is None:
-            raise RuntimeError(f"{self.name}: call with_schema() before set_partitioning()")
         self._partition_func = partition_func
-        self._schema = pa.schema(list(self._schema) + list(partition_columns))
+        self._partition_columns = partition_columns
 
     def _maybe_flush(self, path: SourcePath) -> None:
         """Flush if the interval has elapsed since the last successful flush.

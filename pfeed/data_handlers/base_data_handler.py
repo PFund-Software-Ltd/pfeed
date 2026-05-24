@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, Any, ClassVar, assert_never
 
 if TYPE_CHECKING:
+    from narwhals.typing import IntoFrame
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed._io.base_io import BaseIO, MetadataDict
@@ -55,7 +56,7 @@ class BaseDataHandler(ABC):
             self.sink.with_schema(schema=self._build_streaming_schema())
 
     @abstractmethod
-    def write(self, data: Any, *args: Any, **kwargs: Any):
+    def write_batch(self, data: IntoFrame, *args: Any, **kwargs: Any):
         pass
 
     @abstractmethod

@@ -223,7 +223,7 @@ class DataFlow:
         try:
             log_level = logging.DEBUG if self.is_streaming() else logging.INFO
             if self.is_streaming():
-                self._storage.write(data)
+                self._storage.write(data, streaming=True)
             else:
                 if self._flow_type == FlowType.prefect:
                     from prefect import task

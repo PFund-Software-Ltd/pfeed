@@ -36,7 +36,7 @@ dependencies = [
     "narwhals>=2.21.2 ; sys_platform != 'emscripten'",
     "zstandard>=0.22.0", # REVIEW: this is included in python 3.14
     "beautifulsoup4>=4.12.3",
-    "cloudpathlib[s3,gs,azure]>=0.24.0",
+    "cloudpathlib[s3,gs,azure]>=0.24.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]

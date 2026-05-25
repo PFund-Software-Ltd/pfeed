@@ -4,10 +4,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pfeed._sinks.base_sink import BaseSink
+    from pfeed.enums import IOFormat
 
 from enum import StrEnum
-
-from pfeed.enums import IOFormat
 
 
 class DataSink(StrEnum):
@@ -24,6 +23,8 @@ class DataSink(StrEnum):
 
     @property
     def io_format(self) -> IOFormat:
+        from pfeed.enums import IOFormat
+
         if self == DataSink.DELTALAKE:
             return IOFormat.DELTALAKE
         else:

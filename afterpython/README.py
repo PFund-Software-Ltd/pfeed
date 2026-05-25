@@ -2,7 +2,7 @@
 # /// script
 # dependencies = [
 #     "marimo",
-#     "pfeed==0.0.7",
+#     "pfeed==0.0.8",
 # ]
 # requires-python = ">=3.11"
 # ///

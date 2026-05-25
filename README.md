@@ -33,7 +33,7 @@
 > **This library is NOT ready for use, please wait for 0.1.0 release.**
 
 ## TL;DR: use pfeed to manage your trading data; other traders will help you clean it
-![PFeed Architecture](./docs/images/pfeed.png)
+![PFeed Architecture](./afterpython/static/pfeed.png)
 > For illustration purposes only, not everything shown is currently supported.
 
 ## Problem

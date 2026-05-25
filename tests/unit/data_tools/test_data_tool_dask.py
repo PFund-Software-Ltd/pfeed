@@ -1,9 +1,10 @@
-import pytest
-import pandas as pd
-import dask.dataframe as dd
 import io
 
+import dask.dataframe as dd
+import pandas as pd
+import pytest
 from dask.dataframe.utils import assert_eq
+
 # from pfeed.data_tools.data_tool_dask import read_parquet, concat, sort_by_ts, is_empty
 
 
@@ -51,7 +52,7 @@ def test_read_parquet_from_bytes(sample_df, parquet_bytes):
 def test_read_parquet_from_single_path(tmp_path, sample_df):
     file_path = tmp_path / "test.parquet"
     sample_df.compute().to_parquet(file_path)
-    
+
     result = read_parquet(str(file_path), storage='local')
     assert_eq(result, sample_df, check_divisions=False)
 
@@ -61,7 +62,7 @@ def test_read_parquet_from_multiple_paths(tmp_path, sample_df):
         file_path = tmp_path / f"test_{i}.parquet"
         sample_df.compute().to_parquet(file_path)
         file_paths.append(str(file_path))
-    
+
     result = read_parquet(file_paths, storage='local')
     expected = dd.concat([sample_df, sample_df], ignore_index=True)
     assert_eq(result, expected, check_divisions=False)

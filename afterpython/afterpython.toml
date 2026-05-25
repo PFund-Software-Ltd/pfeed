@@ -1,0 +1,13 @@
+[company]
+name = "PFund.ai"
+url = "https://pfund.ai"
+
+[website]
+url = "https://pfeed.pfund.ai"
+favicon = "favicon.ico"
+logo = "logo.svg"
+logo_dark = "logo.svg"
+thumbnail = "thumbnail.png"
+announcement = ""
+readme_py = "wasm"
+api_reference = false

@@ -1,4 +1,5 @@
 import pytest
+
 from pfeed.sources.bybit.market_feed import BybitFeed
 
 

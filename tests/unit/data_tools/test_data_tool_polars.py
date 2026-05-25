@@ -1,8 +1,9 @@
-import pytest
-import polars as pl
 import io
 
-from pfeed.data_tools.data_tool_polars import read_parquet, concat, sort_by_ts, is_empty
+import polars as pl
+import pytest
+from pfeed.data_tools.data_tool_polars import concat, is_empty, read_parquet, sort_by_ts
+
 
 @pytest.fixture
 def sample_df():
@@ -44,7 +45,7 @@ def test_read_parquet_from_single_path(tmp_path, sample_df):
     # Create a temporary parquet file
     file_path = tmp_path / "test.parquet"
     sample_df.write_parquet(file_path)
-    
+
     result = read_parquet(str(file_path), storage='local')
     assert result.collect().equals(sample_df)  # collect() needed as scan_parquet returns LazyFrame
 
@@ -55,7 +56,7 @@ def test_read_parquet_from_multiple_paths(tmp_path, sample_df):
         file_path = tmp_path / f"test_{i}.parquet"
         sample_df.write_parquet(file_path)
         file_paths.append(str(file_path))
-    
+
     result = read_parquet(file_paths, storage='local')
     expected = pl.concat([sample_df, sample_df])
     assert result.collect().equals(expected)  # collect() needed as scan_parquet returns LazyFrame

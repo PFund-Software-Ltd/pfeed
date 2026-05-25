@@ -1,5 +1,6 @@
-import pytest
 import pandas as pd
+import pytest
+
 from pfeed.feeds import BybitFeed
 
 
@@ -14,7 +15,7 @@ class TestDownload:
         dicts = BybitFeed.__dict__
         assert 'download' in dicts
         assert '_download_impl' in dicts
-    
+
     def test_dataflows_cleared_before_download(self, feed, mocker):
         spy = mocker.spy(feed, '_clear_subflows')
         mocker.patch.object(feed, 'run')
@@ -29,7 +30,7 @@ class TestDownload:
         data_model = mocker.Mock(product='BTC_USDT_PERP', date='2024-01-01')
         result = feed._download_impl(data_model)
         assert result is None
-        
+
     def test_download_impl_return_df_if_download_succeeds(self, feed, mocker):
         mocker.patch.object(feed.api, 'get_data', return_value=b"column1,column2\n1,2\n3,4\n5,6")
         data_model = mocker.Mock(product='BTC_USDT_PERP', date='2024-01-01')

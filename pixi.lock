@@ -7844,7 +7844,7 @@ packages:
 - pypi: ./
   name: pfeed
   version: 0.0.5
-  sha256: a171f0f6a0877bf977acf395aed6ef5bb0e147a06d52563555d52873aed963e1
+  sha256: 07d09e6167be23a6d5d655889ee88acbd6276f6fde0ab00a6fda35f0a4829adb
   requires_dist:
   - pfund>=0.0.14
   - polars>=1.41.0

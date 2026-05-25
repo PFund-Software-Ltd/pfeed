@@ -1,8 +1,7 @@
 import pytest
 
 import pfeed as pe
-
-from tests.fixtures.common import PARAMS, IDS, build_mixed_params
+from tests.fixtures.common import IDS, PARAMS, build_mixed_params
 
 
 @pytest.fixture(params=PARAMS, ids=IDS)

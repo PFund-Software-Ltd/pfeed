@@ -198,3 +198,8 @@ tests/data/
 
 .python-version
 .claude/
+
+# AfterPython website rules
+**/_build/
+!afterpython/_website/src/lib/
+afterpython/_website.backup/

@@ -1,0 +1,51 @@
+# See docs at: https://mystmd.org/guide/frontmatter
+version: 1
+project:
+  id: 650053b3-b17f-4054-b440-5f9a0a8d95eb
+  # title:
+  # description:
+  # keywords: []
+  # authors: []
+  github: https://github.com/PFund-Software-Ltd/pfeed
+  # To autogenerate a Table of Contents, run "myst init --write-toc"
+  license: CC-BY-4.0
+  subject: Documentation
+  authors:
+  - stephen_yau
+  venue:
+    title: ''
+    url: ''
+  copyright: © pfeed 2026. All rights reserved.
+  title: ''
+  description: Data pipeline for algo-trading, getting and storing both real-time and historical data made easy.
+  keywords:
+  - trading
+  - algo-trading
+  - data pipeline
+  - ETL
+  - data lake
+  - data warehouse
+  - data integration
+  - historical data
+  - live data
+  - data streaming
+  - data engineering
+  thumbnail: ../static/thumbnail.png
+site:
+  template: book-theme
+  # options:
+  #   favicon: favicon.ico
+  #   logo: site_logo.png
+# See options at: https://mystmd.org/guide/website-templates#site-options
+  options:
+    analytics_google: '{{ GOOGLE_ANALYTICS_ID }}'
+    favicon: ../static/favicon.ico
+    logo: ../static/logo.svg
+    logo_dark: ../static/logo.svg
+    logo_text: pfeed
+    logo_url: ''
+  title: pfeed's Doc
+  actions:
+  - title: ⭐ Star
+    url: https://github.com/PFund-Software-Ltd/pfeed
+extends: ../authors.yml

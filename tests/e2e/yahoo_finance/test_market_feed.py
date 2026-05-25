@@ -1,8 +1,8 @@
+import datetime
 import time
 
 import pytest
 import pytz
-import datetime
 
 import pfeed as pe
 from pfeed._etl.base import convert_dataframe
@@ -12,16 +12,16 @@ from pfeed.enums import DataTool
 def is_trading_hours():
     # Example for US markets (9:30 AM - 4:00 PM ET, Mon-Fri)
     now = datetime.datetime.now(tz=pytz.timezone('US/Eastern'))
-    
+
     # Skip weekends
     if now.weekday() >= 5:
         return False
-    
+
     # Check if within trading hours
     trading_start = datetime.time(9, 30)
     trading_end = datetime.time(16, 0)
     current_time = now.time()
-    
+
     return trading_start <= current_time <= trading_end
 
 
@@ -75,7 +75,7 @@ def test_download_and_retrieve_mixed(tmp_path, yahoo_finance_mixed, product, res
     is_futures = product.endswith('_FUTURE')
     if is_futures:
         # NOTE: this doesn't need to be accurate, "expiration" is supposed to be a field provided by user for their own reference.
-        # e.g. for ES_USD_FUTURE, even its symbol is ES=F (Sept 25), we can just set the expiration to be 2025-08-01, 
+        # e.g. for ES_USD_FUTURE, even its symbol is ES=F (Sept 25), we can just set the expiration to be 2025-08-01,
         # and a wrong symbol will be derived internally, in this case, ESQ25 where Q = August
         product_specs['expiration'] = '2025-08-01'
     feed = yahoo_finance_mixed.market_feed
@@ -98,8 +98,8 @@ def test_download_and_retrieve_mixed(tmp_path, yahoo_finance_mixed, product, res
         **product_specs
     )
     _assert_df(df)
-    
-    
+
+
 # TODO
 @pytest.mark.skipif(not is_trading_hours(), reason="Streaming only available during trading hours")
 def test_stream_and_retrieve(tmp_path, yahoo_finance):

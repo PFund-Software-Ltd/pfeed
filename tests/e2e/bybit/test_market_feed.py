@@ -1,7 +1,7 @@
 import pytest
+from pfund.datas.resolution import Resolution
 
 import pfeed as pe
-from pfund.datas.resolution import Resolution
 from pfeed._etl.base import convert_dataframe
 from pfeed.enums import DataTool
 
@@ -72,16 +72,16 @@ def test_download_and_retrieve(tmp_path, bybit, product, resolution):
         **product_specs
     )
     _assert_df(df, start_date, end_date)
-    
+
 
 @pytest.mark.parametrize(('product', 'resolution'), [('ETH_USDT_PERP', '1t')])
 def test_download_and_retrieve_mixed(tmp_path, bybit_mixed, product, resolution):
-    
+
     def _assert_df(df, start_date, end_date):
         assert df is not None
         df = convert_dataframe(df, DataTool.pandas)
         print(df.head())
-        
+
     pe.configure(data_path=tmp_path / 'data')
     start_date, end_date = '2025-09-01', '2025-09-02'
     auto_transform = False  # raw df from bybit, not normalized

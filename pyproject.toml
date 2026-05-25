@@ -66,9 +66,9 @@ pfeed = "pfeed.__main__:run_cli"
 pfeed = "pfeed.cli:pfeed_group"
 
 [project.urls]
-homepage = "https://pfund.ai"
+homepage = "https://pfeed.pfund.ai"
 repository = "https://github.com/PFund-Software-Ltd/pfeed"
-documentation = "https://pfeed-docs.pfund.ai"
+documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12.0"]
@@ -91,7 +91,7 @@ reportImplicitOverride = false
 
 [tool.uv.build-backend]
 module-name = "pfeed"
-module-root = ""
+module-root = "src"
 
 [tool.pytest.ini_options]
 markers = [

@@ -2,9 +2,9 @@ import datetime
 
 import pytest
 
+from pfeed.enums import DataLayer
 from pfeed.feeds import BybitFeed
 from pfeed.storages.base_storage import BaseStorage
-from pfeed.enums import DataLayer
 
 
 @pytest.fixture
@@ -33,17 +33,18 @@ class TestDownload:
                 # },
             },
         }
-    
+
     def extract_downloaded_data(self, feed, pdt: str, data_type, date, to_storage, raw_level, filename_prefix: str='', filename_suffix: str='') -> BaseStorage | None:
-        from pfeed._etl.base import extract_data
         from pfund.datas.resolution import Resolution
+
+        from pfeed._etl.base import extract_data
         product = feed.create_product(pdt)
         data_model = feed.create_data_model(
-            product=product, 
-            resolution=Resolution(data_type), 
-            date=datetime.datetime.strptime(date, '%Y-%m-%d').date(), 
+            product=product,
+            resolution=Resolution(data_type),
+            date=datetime.datetime.strptime(date, '%Y-%m-%d').date(),
             raw_level=raw_level,
-            filename_prefix=filename_prefix, 
+            filename_prefix=filename_prefix,
             filename_suffix=filename_suffix
         )
         return extract_data(data_model, storage=to_storage)
@@ -83,7 +84,7 @@ class TestDownload:
         elif raw_level == 'original':
             original_cols = ['timestamp', 'symbol', 'side', 'price', 'size', 'tickDirection', 'trdMatchID', 'grossValue', 'homeNotional', 'foreignNotional']
             assert set(df.columns) == set(original_cols)
-            
+
     @pytest.mark.parametrize('feed', [
         {'data_tool': 'pandas', 'use_ray': False, 'use_prefect': False, 'pipeline_mode': True},
     ], indirect=True)
@@ -110,7 +111,7 @@ class TestDownload:
         # Verify transformations were applied
         assert 'ma5' in df.columns
         assert 'price_pct_change' in df.columns
-    
+
     # TODO: e.g. resample to 1-minute
     def test_download_with_resample(self, feed):
         pass

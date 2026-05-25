@@ -7849,8 +7849,8 @@ packages:
   - ptyprocess>=0.5
 - pypi: ./
   name: pfeed
-  version: 0.0.5
-  sha256: 8e2d7fb03c00657ec47d7d7fa1b0c42324a3012b229a398d3422d4a8b01358ee
+  version: 0.0.6
+  sha256: fb8b2739b9ed786cc187970c96be52688f7d3b4a7f0ab83beb2d7218f02713b5
   requires_dist:
   - pfund>=0.0.14
   - polars>=1.41.0

@@ -1,4 +1,11 @@
 # ruff: noqa
+# /// script
+# dependencies = [
+#     "marimo",
+#     "pfeed==0.0.6",
+# ]
+# requires-python = ">=3.11"
+# ///
 
 import marimo
 
@@ -11,12 +18,17 @@ def _():
     import marimo as mo
     import pfeed as pe
 
+    return (pe,)
+
+
+@app.cell
+def _(pe):
+    print(pe.__version__)
     return
 
 
 @app.cell
 def _():
-    print("testing")
     return
 
 

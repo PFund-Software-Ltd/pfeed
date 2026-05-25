@@ -83,7 +83,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/xorg-libxt-1.3.1-hb9d3cd8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/xorg-libxtst-1.2.5-hb9d3cd8_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
-      - pypi: https://files.pythonhosted.org/packages/e7/34/e1a98a79105807970682f22b2eabe916b81b5bbd1b92bdefd34c4e3e4798/afterpython-0.3.9-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/dd/de/7979612df176b11bf4d5977022737ab9521cacccbaa5988106f53d1613e4/afterpython-0.3.10-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0f/15/5bf3b99495fb160b63f95972b81750f18f7f4e02ad051373b669d17d44f2/aiohappyeyeballs-2.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/a5/0521aa32c1ddf3aa1e71dcc466be0b7db2771907a13f18cddaa45967d97b/aiohttp-3.13.5-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/98/3b/40a68de458904bcc143622015fff2352b6461cd92fd66d3527bf1c6f5716/aiohttp_cors-0.8.1-py3-none-any.whl
@@ -264,8 +264,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ef/d4/2cf83b5fb7fae8939ed596009465c6de0b8fafa70abd486ed9d192e457f7/peewee-4.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/36/94/9947cf710620afcc68751683f2f8de88d902505e7c13c0349d7e9d362f97/pendulum-3.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/9e/c3/059298687310d527a58bb01f3b1965787ee3b40dce76752eda8b44e9a2c5/pexpect-4.9.0-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e9/bd/e51a61b1054f09437acfbc2ff9106c30d1eb76bc1453d428399946781253/pillow-12.2.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/68/13/2aa1f0e1364feb2c9ef45302f387ac0bd81484e9c9a4c5688a322fbdfd08/platformdirs-4.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -412,7 +412,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-h010d191_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025c-hc9c84f9_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/uv-0.11.16-h2c65d96_0.conda
-      - pypi: https://files.pythonhosted.org/packages/e7/34/e1a98a79105807970682f22b2eabe916b81b5bbd1b92bdefd34c4e3e4798/afterpython-0.3.9-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/dd/de/7979612df176b11bf4d5977022737ab9521cacccbaa5988106f53d1613e4/afterpython-0.3.10-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0f/15/5bf3b99495fb160b63f95972b81750f18f7f4e02ad051373b669d17d44f2/aiohappyeyeballs-2.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/87/ec/e38ce072e724fd7add6243613f8d1810da084f54175353d25ccf9f9c7e5a/aiohttp-3.13.5-cp311-cp311-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/98/3b/40a68de458904bcc143622015fff2352b6461cd92fd66d3527bf1c6f5716/aiohttp_cors-0.8.1-py3-none-any.whl
@@ -595,8 +595,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ef/d4/2cf83b5fb7fae8939ed596009465c6de0b8fafa70abd486ed9d192e457f7/peewee-4.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/59/e1/2a214e18355ec2a6ce3f683a97eecdb6050866ff3a6cf165d411450aeb1b/pendulum-3.2.0-cp311-cp311-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/9e/c3/059298687310d527a58bb01f3b1965787ee3b40dce76752eda8b44e9a2c5/pexpect-4.9.0-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/a1/d5ff69e747374c33a3b53b9f98cca7889fce1fd03d79cdc4e1bccc6c5a87/pillow-12.2.0-cp311-cp311-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/68/13/2aa1f0e1364feb2c9ef45302f387ac0bd81484e9c9a4c5688a322fbdfd08/platformdirs-4.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -930,8 +930,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ef/d4/2cf83b5fb7fae8939ed596009465c6de0b8fafa70abd486ed9d192e457f7/peewee-4.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/36/94/9947cf710620afcc68751683f2f8de88d902505e7c13c0349d7e9d362f97/pendulum-3.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e9/bd/e51a61b1054f09437acfbc2ff9106c30d1eb76bc1453d428399946781253/pillow-12.2.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -1182,8 +1182,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ef/d4/2cf83b5fb7fae8939ed596009465c6de0b8fafa70abd486ed9d192e457f7/peewee-4.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/59/e1/2a214e18355ec2a6ce3f683a97eecdb6050866ff3a6cf165d411450aeb1b/pendulum-3.2.0-cp311-cp311-macosx_11_0_arm64.whl
-      - pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/a1/d5ff69e747374c33a3b53b9f98cca7889fce1fd03d79cdc4e1bccc6c5a87/pillow-12.2.0-cp311-cp311-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -1491,8 +1491,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ef/d4/2cf83b5fb7fae8939ed596009465c6de0b8fafa70abd486ed9d192e457f7/peewee-4.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3a/f7/e6a2fdf2a23d59b4b48b8fa89e8d4bf2dd371aea2c6ba8fcecec20a4acb9/pendulum-3.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/fdc657359e919462369869f1c9f0e973f353f9a9ee295a39b1fea8ee1a77/pillow-12.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -1742,8 +1742,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ef/d4/2cf83b5fb7fae8939ed596009465c6de0b8fafa70abd486ed9d192e457f7/peewee-4.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/cf/98/83d62899bf7226fc12396de4bc1fb2b5da27e451c7c60790043aaf8b4731/pendulum-3.2.0-cp312-cp312-macosx_11_0_arm64.whl
-      - pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d8/95/0a351b9289c2b5cbde0bacd4a83ebc44023e835490a727b2a3bd60ddc0f4/pillow-12.2.0-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -2051,8 +2051,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/71/e7/40fb618334dcdf7c5a316c0e7343c5cd82d3d866edc100d98e29bc945ecd/partd-1.4.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ef/d4/2cf83b5fb7fae8939ed596009465c6de0b8fafa70abd486ed9d192e457f7/peewee-4.0.5-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/67/ee/21d4e8536afd1a328f01b359b4d3997b291ffd35a237c877b331c1c3b71c/pillow-12.2.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -2304,8 +2304,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/71/e7/40fb618334dcdf7c5a316c0e7343c5cd82d3d866edc100d98e29bc945ecd/partd-1.4.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ef/d4/2cf83b5fb7fae8939ed596009465c6de0b8fafa70abd486ed9d192e457f7/peewee-4.0.5-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/71/43/905a14a8b17fdb1ccb58d282454490662d2cb89a6bfec26af6d3520da5ec/pillow-12.2.0-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/75/a6/a0a304dc33b49145b21f4808d763822111e67d1c3a32b524a1baf947b6e1/platformdirs-4.9.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -2418,10 +2418,10 @@ packages:
   purls: []
   size: 28948
   timestamp: 1770939786096
-- pypi: https://files.pythonhosted.org/packages/e7/34/e1a98a79105807970682f22b2eabe916b81b5bbd1b92bdefd34c4e3e4798/afterpython-0.3.9-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/dd/de/7979612df176b11bf4d5977022737ab9521cacccbaa5988106f53d1613e4/afterpython-0.3.10-py3-none-any.whl
   name: afterpython
-  version: 0.3.9
-  sha256: 68efeccff3067eb58281f89af00b41e669882179189384205ec0d5e005dbb9c0
+  version: 0.3.10
+  sha256: 44c71763217a4e282bab1d9becde3ef3304969651030927f537d26b70212e55b
   requires_dist:
   - click>=8.2.1
   - trogon>=0.6.0
@@ -7850,17 +7850,17 @@ packages:
 - pypi: ./
   name: pfeed
   version: 0.0.6
-  sha256: c5819a4bf2651413aabadba7b1ec05e88d08f91594f9a97c22d9c4cd186e9f56
+  sha256: f8c18eb7d1b8d35f1fe10853e9c872bb36a0164dd34e3fc81949e8c84bd090c5
   requires_dist:
-  - pfund>=0.0.15
-  - polars>=1.41.0
-  - pyarrow>=23.0.1
+  - pfund>=0.0.16
+  - polars>=1.41.0 ; sys_platform != 'emscripten'
+  - pyarrow>=23.0.1 ; sys_platform != 'emscripten'
   - pandera>=0.31.1
-  - msgspec>=0.21.1
-  - pydantic>=2.13.4
-  - narwhals>=2.21.2
-  - zstandard>=0.25.0
-  - beautifulsoup4>=4.14.3
+  - msgspec>=0.21.1 ; sys_platform != 'emscripten'
+  - pydantic>=2.13.4 ; sys_platform != 'emscripten'
+  - narwhals>=2.21.2 ; sys_platform != 'emscripten'
+  - zstandard>=0.22.0
+  - beautifulsoup4>=4.12.3
   - cloudpathlib[s3,gs,azure]>=0.24.0
   - ray[default]>=2.55.1 ; sys_platform != 'emscripten' and extra == 'core'
   - pyzmq>=27.1.0 ; sys_platform != 'emscripten' and extra == 'core'
@@ -7868,7 +7868,7 @@ packages:
   - prefect>=3.7.2 ; extra == 'prefect'
   - yfinance>=1.4.0 ; extra == 'yfinance'
   - huggingface-hub>=1.16.1 ; extra == 'hf'
-  - pandas>=2.3.3 ; extra == 'pandas'
+  - pandas>=2.2.3 ; extra == 'pandas'
   - dask[complete,dataframe]>=2026.3.0 ; extra == 'dask'
   - pyspark[connect,pandas-on-spark,sql]>=4.1.2 ; extra == 'spark'
   - daft>=0.7.14 ; extra == 'daft'
@@ -7876,12 +7876,12 @@ packages:
   - duckdb>=1.5.3 ; extra == 'duckdb'
   - lancedb>=0.30.2 ; extra == 'lancedb'
   requires_python: '>=3.11'
-- pypi: https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl
   name: pfund
-  version: 0.0.15
-  sha256: 24f663f33ac8bb29df1bc87ec38e4ac7c3eb462303a590a8f92734e34f437f3d
+  version: 0.0.16
+  sha256: 1f9931b9741c85915609ca882b3ed7bcdb70ee95b9db34225785cfe774af102b
   requires_dist:
-  - pfund-kit>=0.1.10
+  - pfund-kit>=0.1.11
   - pfeed>=0.0.6
   - httpx>=0.28.1
   - websockets>=16.0 ; sys_platform != 'emscripten'
@@ -7890,26 +7890,26 @@ packages:
   - pfund-ibapi>=10.42.1 ; sys_platform != 'emscripten' and extra == 'ibkr'
   - jax>=0.10.0 ; sys_platform != 'emscripten' and extra == 'jax'
   - orbax-checkpoint>=0.11.39 ; sys_platform != 'emscripten' and extra == 'jax'
-  - joblib>=1.5.3 ; extra == 'sklean'
-  - scikit-learn>=1.8.0 ; extra == 'sklean'
+  - joblib>=1.4.0 ; extra == 'sklean'
+  - scikit-learn>=1.6.1 ; extra == 'sklean'
   - ta-lib>=0.6.4 ; sys_platform != 'emscripten' and extra == 'ta-lib'
   - torch>=2.11.0 ; sys_platform != 'emscripten' and extra == 'torch'
   - safetensors>=0.7.0 ; sys_platform != 'emscripten' and extra == 'torch'
   requires_python: '>=3.11'
-- pypi: https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl
   name: pfund-kit
-  version: 0.1.10
-  sha256: 2638beda56ee8fa236f6010631df618dcf07dd87f7065c53a1ef7585768f33cf
+  version: 0.1.11
+  sha256: cff9680a81fd34c647e5e163e40a5094bd114f44c624809f19f16022ee8a9ea8
   requires_dist:
-  - rich>=14.2.0
-  - tqdm>=4.67.1
-  - click>=8.2.1
+  - rich>=13.7.1
+  - tqdm>=4.66.2
+  - click>=8.1.7
   - trogon>=0.6.0 ; sys_platform != 'emscripten'
-  - pyyaml>=6.0.3
-  - tomlkit>=0.13.3
-  - packaging>=25.0
-  - python-dotenv>=1.2.1
-  - prompt-toolkit>=3.0.51
+  - pyyaml>=6.0.2
+  - tomlkit>=0.15.0
+  - packaging>=24.2
+  - python-dotenv>=1.2.2
+  - prompt-toolkit>=3.0.43
   requires_python: '>=3.11'
 - pypi: https://files.pythonhosted.org/packages/43/e3/fdc657359e919462369869f1c9f0e973f353f9a9ee295a39b1fea8ee1a77/pillow-12.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
   name: pillow

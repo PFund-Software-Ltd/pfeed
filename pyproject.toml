@@ -24,15 +24,18 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfund>=0.0.15",
-    "polars>=1.41.0",
-    "pyarrow>=23.0.1",
+    "pfund>=0.0.16",
+    # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
+    # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
+    # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
+    "polars>=1.41.0 ; sys_platform != 'emscripten'",
+    "pyarrow>=23.0.1 ; sys_platform != 'emscripten'",
     "pandera>=0.31.1",
-    "msgspec>=0.21.1",
-    "pydantic>=2.13.4",
-    "narwhals>=2.21.2",
-    "zstandard>=0.25.0", # REVIEW: this is included in python 3.14
-    "beautifulsoup4>=4.14.3",
+    "msgspec>=0.21.1 ; sys_platform != 'emscripten'",
+    "pydantic>=2.13.4 ; sys_platform != 'emscripten'",
+    "narwhals>=2.21.2 ; sys_platform != 'emscripten'",
+    "zstandard>=0.22.0", # REVIEW: this is included in python 3.14
+    "beautifulsoup4>=4.12.3",
     "cloudpathlib[s3,gs,azure]>=0.24.0",
 ]
 
@@ -45,7 +48,7 @@ core = [
 prefect = ["prefect>=3.7.2"]
 yfinance = ["yfinance>=1.4.0"]
 hf = ["huggingface-hub>=1.16.1"]
-pandas = ["pandas>=2.3.3"]
+pandas = ["pandas>=2.2.3"]
 dask = ["dask[complete,dataframe]>=2026.3.0"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.2"]
 daft = ["daft>=0.7.14", "narwhals-daft>=0.4.1"]

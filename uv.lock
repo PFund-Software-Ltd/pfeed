@@ -2695,13 +2695,13 @@ source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "cloudpathlib", extra = ["azure", "gs", "s3"] },
-    { name = "msgspec" },
-    { name = "narwhals" },
+    { name = "msgspec", marker = "sys_platform != 'emscripten'" },
+    { name = "narwhals", marker = "sys_platform != 'emscripten'" },
     { name = "pandera" },
     { name = "pfund" },
-    { name = "polars" },
-    { name = "pyarrow" },
-    { name = "pydantic" },
+    { name = "polars", marker = "sys_platform != 'emscripten'" },
+    { name = "pyarrow", marker = "sys_platform != 'emscripten'" },
+    { name = "pydantic", marker = "sys_platform != 'emscripten'" },
     { name = "zstandard" },
 ]
 
@@ -2742,7 +2742,7 @@ yfinance = [
 
 [package.metadata]
 requires-dist = [
-    { name = "beautifulsoup4", specifier = ">=4.14.3" },
+    { name = "beautifulsoup4", specifier = ">=4.12.3" },
     { name = "cloudpathlib", extras = ["s3", "gs", "azure"], specifier = ">=0.24.0" },
     { name = "daft", marker = "extra == 'daft'", specifier = ">=0.7.14" },
     { name = "dask", extras = ["complete", "dataframe"], marker = "extra == 'dask'", specifier = ">=2026.3.0" },
@@ -2750,27 +2750,27 @@ requires-dist = [
     { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.5.3" },
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=1.16.1" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.30.2" },
-    { name = "msgspec", specifier = ">=0.21.1" },
-    { name = "narwhals", specifier = ">=2.21.2" },
+    { name = "msgspec", marker = "sys_platform != 'emscripten'", specifier = ">=0.21.1" },
+    { name = "narwhals", marker = "sys_platform != 'emscripten'", specifier = ">=2.21.2" },
     { name = "narwhals-daft", marker = "extra == 'daft'", specifier = ">=0.4.1" },
-    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.3.3" },
+    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.2.3" },
     { name = "pandera", specifier = ">=0.31.1" },
-    { name = "pfund", specifier = ">=0.0.15" },
-    { name = "polars", specifier = ">=1.41.0" },
+    { name = "pfund", specifier = ">=0.0.16" },
+    { name = "polars", marker = "sys_platform != 'emscripten'", specifier = ">=1.41.0" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.2" },
-    { name = "pyarrow", specifier = ">=23.0.1" },
-    { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "pyarrow", marker = "sys_platform != 'emscripten'", specifier = ">=23.0.1" },
+    { name = "pydantic", marker = "sys_platform != 'emscripten'", specifier = ">=2.13.4" },
     { name = "pyspark", extras = ["connect", "pandas-on-spark", "sql"], marker = "extra == 'spark'", specifier = ">=4.1.2" },
     { name = "pyzmq", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=27.1.0" },
     { name = "ray", extras = ["default"], marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=2.55.1" },
     { name = "yfinance", marker = "extra == 'yfinance'", specifier = ">=1.4.0" },
-    { name = "zstandard", specifier = ">=0.25.0" },
+    { name = "zstandard", specifier = ">=0.22.0" },
 ]
 provides-extras = ["core", "prefect", "yfinance", "hf", "pandas", "dask", "spark", "daft", "duckdb", "lancedb"]
 
 [[package]]
 name = "pfund"
-version = "0.0.15"
+version = "0.0.16"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -2778,14 +2778,14 @@ dependencies = [
     { name = "pfund-kit" },
     { name = "websockets", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f2/86/8ddeddfa0af678cd7d150aa63292f145924e723e23e2d39f421c8aa6b46d/pfund-0.0.15.tar.gz", hash = "sha256:de712d8e83a07693befaad47fe540611ee74f991fed85557f272220cbf15a2b3", size = 166838, upload-time = "2026-05-25T05:53:29.232Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/10/48/f249592e5b87f2137e433c13b61c4513a92ba13e3afa6b811b93fc08e6b0/pfund-0.0.16.tar.gz", hash = "sha256:636cffbf877086ca298d4fe3ce014aa6c1f39ed157a8fbafbbadcff6832b65f8", size = 166831, upload-time = "2026-05-25T13:17:42.495Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl", hash = "sha256:24f663f33ac8bb29df1bc87ec38e4ac7c3eb462303a590a8f92734e34f437f3d", size = 243229, upload-time = "2026-05-25T05:53:27.405Z" },
+    { url = "https://files.pythonhosted.org/packages/59/11/8bc97225ad7e06274d21b1d47e103f8cc39c3ee8b6661762b79c7216e848/pfund-0.0.16-py3-none-any.whl", hash = "sha256:1f9931b9741c85915609ca882b3ed7bcdb70ee95b9db34225785cfe774af102b", size = 243226, upload-time = "2026-05-25T13:17:43.852Z" },
 ]
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.10"
+version = "0.1.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -2798,9 +2798,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/f3/ad5e377d315520d7fdab97e4642612950a90a7e3634bb4d8ad0cb6ddff22/pfund_kit-0.1.10.tar.gz", hash = "sha256:fe6869948bea1013746c62825ccc498f3e2341203e7ab915450688c2e1570d5e", size = 42252, upload-time = "2026-05-20T07:14:32.717Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/2e/403ac85e30382252740d75033ef2a2b704ec364c7b279cfc268dc145b528/pfund_kit-0.1.11.tar.gz", hash = "sha256:c266895e314070d1907aec99ba2fd52d9832b6e4089198fee383a803f2591990", size = 42252, upload-time = "2026-05-25T13:02:25.258Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/73/52a38c3ef6928ae77cd294a2523d0b337b577be6b427646c83d3f0cd8797/pfund_kit-0.1.10-py3-none-any.whl", hash = "sha256:2638beda56ee8fa236f6010631df618dcf07dd87f7065c53a1ef7585768f33cf", size = 58131, upload-time = "2026-05-20T07:14:33.844Z" },
+    { url = "https://files.pythonhosted.org/packages/80/43/921d5411495856602462be621f7573ab86de31b4ce594b30a36e1cfcd7c0/pfund_kit-0.1.11-py3-none-any.whl", hash = "sha256:cff9680a81fd34c647e5e163e40a5094bd114f44c624809f19f16022ee8a9ea8", size = 58131, upload-time = "2026-05-25T13:02:24.157Z" },
 ]
 
 [[package]]
@@ -3512,11 +3512,11 @@ wheels = [
 
 [[package]]
 name = "python-dotenv"
-version = "1.2.1"
+version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f0/26/19cadc79a718c5edbec86fd4919a6b6d3f681039a2f6d66d14be94e75fb9/python_dotenv-1.2.1.tar.gz", hash = "sha256:42667e897e16ab0d66954af0e60a9caa94f0fd4ecf3aaf6d2d260eec1aa36ad6", size = 44221, upload-time = "2025-10-26T15:12:10.434Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef3d94b6ec08bbcabd04a72018415dcb29e588514bba8/python_dotenv-1.2.2.tar.gz", hash = "sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3", size = 50135, upload-time = "2026-03-01T16:00:26.196Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/1b/a298b06749107c305e1fe0f814c6c74aea7b2f1e10989cb30f544a1b3253/python_dotenv-1.2.1-py3-none-any.whl", hash = "sha256:b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61", size = 21230, upload-time = "2025-10-26T15:12:09.109Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl", hash = "sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a", size = 22101, upload-time = "2026-03-01T16:00:25.09Z" },
 ]
 
 [[package]]

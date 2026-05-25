@@ -24,7 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfund>=0.0.14",
+    "pfund>=0.0.15",
     "polars>=1.41.0",
     "pyarrow>=23.0.1",
     "pandera>=0.31.1",

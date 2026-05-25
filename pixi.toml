@@ -24,7 +24,7 @@ libpq = ">=18.4"  # for postgresql
 gh = ">=2.92.0"
 
 [pypi-dependencies]
-pfund = ">=0.0.14"
+pfund = ">=0.0.15"
 polars = ">=1.41.0"
 pyarrow = ">=23.0.1"
 pandera = ">=0.31.1"
@@ -64,7 +64,7 @@ lancedb = ">=0.30.2"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-afterpython = ">=0.3.6"
+afterpython = ">=0.3.9"
 marimo = { version = ">=0.23.8", extras = ["recommended", "lsp"] }
 basedpyright = ">=1.39.6"
 pandas-stubs = ">=2.3.3.260113"

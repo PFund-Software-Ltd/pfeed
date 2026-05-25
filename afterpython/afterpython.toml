@@ -4,9 +4,9 @@ url = "https://pfund.ai"
 
 [website]
 url = "https://pfeed.pfund.ai"
-favicon = "favicon.ico"
+favicon = "favicon.svg"
 logo = "logo.svg"
-logo_dark = "logo.svg"
+logo_dark = "logo-dark.svg"
 thumbnail = "thumbnail.png"
 announcement = ""
 readme_py = "wasm"

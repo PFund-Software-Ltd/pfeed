@@ -2755,7 +2755,7 @@ requires-dist = [
     { name = "narwhals-daft", marker = "extra == 'daft'", specifier = ">=0.4.1" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.3.3" },
     { name = "pandera", specifier = ">=0.31.1" },
-    { name = "pfund", specifier = ">=0.0.14" },
+    { name = "pfund", specifier = ">=0.0.15" },
     { name = "polars", specifier = ">=1.41.0" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.2" },
     { name = "pyarrow", specifier = ">=23.0.1" },
@@ -2770,16 +2770,17 @@ provides-extras = ["core", "prefect", "yfinance", "hf", "pandas", "dask", "spark
 
 [[package]]
 name = "pfund"
-version = "0.0.14"
+version = "0.0.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
+    { name = "pfeed" },
     { name = "pfund-kit" },
     { name = "websockets", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f3/34/508144c47ae7aee59d1091abc7a7b7a9faa6ec83fccb879f80fab6cbc36e/pfund-0.0.14.tar.gz", hash = "sha256:c85a493eb7f06a55068189d09a3c3ea8839d0be6ad7180ec490fdc6c0da0e036", size = 166797, upload-time = "2026-05-24T08:15:37.535Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f2/86/8ddeddfa0af678cd7d150aa63292f145924e723e23e2d39f421c8aa6b46d/pfund-0.0.15.tar.gz", hash = "sha256:de712d8e83a07693befaad47fe540611ee74f991fed85557f272220cbf15a2b3", size = 166838, upload-time = "2026-05-25T05:53:29.232Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/9d/354b8e2e40f74bb18424aab5aadb0ba642289d97f72824a017ab83e6ec21/pfund-0.0.14-py3-none-any.whl", hash = "sha256:2b57e6eeb6abe0e4cca22b6766d0372762cfe46cb7c2b77f3e08d84b5de94035", size = 243193, upload-time = "2026-05-24T08:15:38.923Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/b1/c7ea1d1e01d3d0d1da5279efedfddff6673058b12699254bb83e5bbd87e7/pfund-0.0.15-py3-none-any.whl", hash = "sha256:24f663f33ac8bb29df1bc87ec38e4ac7c3eb462303a590a8f92734e34f437f3d", size = 243229, upload-time = "2026-05-25T05:53:27.405Z" },
 ]
 
 [[package]]

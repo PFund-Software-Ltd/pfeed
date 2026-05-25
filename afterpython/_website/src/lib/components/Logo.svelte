@@ -1,19 +1,50 @@
 <script lang="ts">
-	import { asset, resolve } from "$app/paths";
+	import { asset, resolve } from '$app/paths';
 
 	type LogoProps = {
 		class?: string;
-		size?: 'sm' | 'md' | 'lg' | 'xl';
+		size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 		text?: string;
 		showText?: boolean;
+		logo?: string | null;
+		logoDark?: string | null;
+	};
+
+	let {
+		class: className = '',
+		size = 'md',
+		text = '',
+		showText = true,
+		logo,
+		logoDark
+	}: LogoProps = $props();
+
+	// Probed in order when no explicit `logo` is configured via metadata.
+	const DEFAULT_FORMATS = ['/logo.svg', '/logo.png', '/logo.jpg', '/logo.jpeg'];
+
+	function normalizePath(value: string | null | undefined): string | null {
+		const trimmed = value?.trim();
+		if (!trimmed) return null;
+		return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 	}
 
-	let { class: className = '', size = 'md', text = '', showText = true }: LogoProps = $props();
+	const explicitLight = $derived(normalizePath(logo));
+	const darkPath = $derived(normalizePath(logoDark));
 
-	let hasLogo = $state(true);
+	let lightFallbackIndex = $state(0);
+	let hasLight = $state(true);
+	let hasDark = $state(true);
 
-	// Size classes for logo image
+	const lightSrc = $derived.by(() => {
+		if (!hasLight) return null;
+		if (explicitLight) return asset(explicitLight);
+		if (lightFallbackIndex >= DEFAULT_FORMATS.length) return null;
+		return asset(DEFAULT_FORMATS[lightFallbackIndex]);
+	});
+	const darkSrc = $derived(darkPath && hasDark ? asset(darkPath) : null);
+
 	const sizeClasses = {
+		xs: 'h-6',
 		sm: 'h-10',
 		md: 'h-14',
 		lg: 'h-18',
@@ -22,41 +53,46 @@
 
 	// Font size classes for logo text - matching MyST's responsive sizing
 	const textSizeClasses = {
+		xs: 'text-sm sm:text-md tracking-tight',
 		sm: 'text-md sm:text-lg tracking-tight',
 		md: 'text-md sm:text-xl tracking-tight',
 		lg: 'text-lg sm:text-2xl tracking-tight',
 		xl: 'text-xl sm:text-3xl tracking-tight'
 	};
 
-	// Handle fallback to different image formats
-	function handleImageError(event: Event) {
-		const img = event.target as HTMLImageElement;
-		const currentSrc = img.src;
-
-		// Try formats in priority order: svg -> png -> jpg -> jpeg
-		if (currentSrc.endsWith('/logo.svg')) {
-			img.src = asset('/logo.png');
-		} else if (currentSrc.endsWith('/logo.png')) {
-			img.src = asset('/logo.jpg');
-		} else if (currentSrc.endsWith('/logo.jpg')) {
-			img.src = asset('/logo.jpeg');
+	function handleLightError() {
+		if (!explicitLight && lightFallbackIndex < DEFAULT_FORMATS.length - 1) {
+			lightFallbackIndex += 1;
 		} else {
-			// All formats failed, hide the logo
-			hasLogo = false;
+			hasLight = false;
 		}
+	}
+
+	function handleDarkError() {
+		hasDark = false;
 	}
 </script>
 
-{#if hasLogo}
+{#if lightSrc || darkSrc || (showText && text)}
 	<a href={resolve('/')} class="flex items-center gap-3 {className}">
-		<img
-			src={asset('/logo.svg')}
-			alt="Logo"
-			class="{sizeClasses[size]} w-auto"
-			onerror={handleImageError}
-		/>
+		{#if lightSrc}
+			<img
+				src={lightSrc}
+				alt="Logo"
+				class="{sizeClasses[size]} w-auto {darkSrc ? 'dark:hidden' : ''}"
+				onerror={handleLightError}
+			/>
+		{/if}
+		{#if darkSrc}
+			<img
+				src={darkSrc}
+				alt="Logo"
+				class="{sizeClasses[size]} w-auto {lightSrc ? 'hidden dark:block' : ''}"
+				onerror={handleDarkError}
+			/>
+		{/if}
 		{#if showText && text}
-			<span class="{textSizeClasses[size]}">
+			<span class={textSizeClasses[size]}>
 				{text}
 			</span>
 		{/if}

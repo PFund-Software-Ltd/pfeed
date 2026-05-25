@@ -13,9 +13,9 @@ project:
   authors:
   - stephen_yau
   venue:
-    title: ''
-    url: ''
-  copyright: © pfeed 2026. All rights reserved.
+    title: 'PFund.ai'
+    url: 'https://pfund.ai'
+  copyright: © PFund.ai 2026. All rights reserved.
   title: ''
   description: Data pipeline for algo-trading, getting and storing both real-time and historical data made easy.
   keywords:
@@ -31,6 +31,7 @@ project:
   - data streaming
   - data engineering
   thumbnail: ../static/thumbnail.png
+  toc: []
 site:
   template: book-theme
   # options:
@@ -41,9 +42,9 @@ site:
     analytics_google: '{{ GOOGLE_ANALYTICS_ID }}'
     favicon: ../static/favicon.ico
     logo: ../static/logo.svg
-    logo_dark: ../static/logo.svg
+    logo_dark: ../static/logo-dark.svg
     logo_text: pfeed
-    logo_url: ''
+    logo_url: 'https://pfeed.pfund.ai'
   title: pfeed's Blog
   actions:
   - title: ⭐ Star

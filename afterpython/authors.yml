@@ -1,5 +1,8 @@
 version: 1
 project:
+# See more at: https://mystmd.org/guide/frontmatter#frontmatter-authors
+# See more at: https://mystmd.org/guide/frontmatter#frontmatter-authors
+# See more at: https://mystmd.org/guide/frontmatter#frontmatter-authors
   contributors:
   - id: stephen_yau
     name: Stephen Yau

@@ -4,8 +4,8 @@
 [![Downloads](https://static.pepy.tech/badge/pfeed/month)](https://pepy.tech/project/pfeed)
 [![PyPI](https://img.shields.io/pypi/v/pfeed.svg?cacheSeconds=300)](https://pypi.org/project/pfeed)
 ![PyPI - Support Python Versions](https://img.shields.io/pypi/pyversions/pfeed?cacheSeconds=300)
-[![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfeed/discussions)
 [![afterpython](https://afterpython.org/shield.svg)](https://afterpython.org)
+[![Discussions](https://img.shields.io/badge/Discussions-Let's%20Chat-green)](https://github.com/PFund-Software-Ltd/pfeed/discussions)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PFund-Software-Ltd/pfeed)
 [![View Code Wiki](https://assets.codewiki.google/readme-badge/static.svg)](https://codewiki.google/github.com/pfund-software-ltd/pfeed?utm_source=badge&utm_medium=github&utm_campaign=github.com/pfund-software-ltd/pfeed)
 <!-- [![PyPI version](https://badge.fury.io/py/pfeed.svg)](https://badge.fury.io/py/pfeed) -->
@@ -33,7 +33,9 @@
 > **This library is NOT ready for use, please wait for 0.1.0 release.**
 
 ## TL;DR: use pfeed to manage your trading data; other traders will help you clean it
-![PFeed Architecture](./afterpython/static/pfeed.png)
+
+<img alt="PFeed Architecture" src="afterpython/static/pfeed.png">
+
 > For illustration purposes only, not everything shown is currently supported.
 
 ## Problem

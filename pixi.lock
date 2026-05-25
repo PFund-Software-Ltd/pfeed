@@ -7849,8 +7849,8 @@ packages:
   - ptyprocess>=0.5
 - pypi: ./
   name: pfeed
-  version: 0.0.7
-  sha256: de034192edda60b0aa1ab0d9e2dd1e854274b6d360dea2d6c599a2911277634c
+  version: 0.0.8
+  sha256: fd924313e242eb04db33e0155f0176cc48786466ba7481603ef91a92f6af4495
   requires_dist:
   - pfund>=0.0.16
   - polars>=1.41.0 ; sys_platform != 'emscripten'
@@ -7861,7 +7861,7 @@ packages:
   - narwhals>=2.21.2 ; sys_platform != 'emscripten'
   - zstandard>=0.22.0
   - beautifulsoup4>=4.12.3
-  - cloudpathlib[s3,gs,azure]>=0.24.0
+  - cloudpathlib[s3,gs,azure]>=0.24.0 ; sys_platform != 'emscripten'
   - ray[default]>=2.55.1 ; sys_platform != 'emscripten' and extra == 'core'
   - pyzmq>=27.1.0 ; sys_platform != 'emscripten' and extra == 'core'
   - deltalake>=1.6.0 ; sys_platform != 'emscripten' and extra == 'core'

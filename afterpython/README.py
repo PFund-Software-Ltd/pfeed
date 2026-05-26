@@ -84,7 +84,7 @@ def _(mo):
             "**Demo mode.** This is `pfeed` running in WASM — core features "
             "are not fully supported. "
             "For full functionality, install locally:\n\n"
-            "```\npip install pfeed[core]\n```\n"
+            "```\npip install pfeed[core,yfinance]\n```\n"
             "Click **▶ Run all** (bottom right) to start. First run takes ~15s while Pyodide and dependencies load."
         ),
         kind="info",

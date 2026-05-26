@@ -68,8 +68,9 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-    - [Download Data](#1-download-data)
-    - [Retrieve Data](#2-retrieve-data)
+    - [Download Historical Data](#1-download-historical-data)
+    - [Retrieve Downloaded Data](#2-retrieve-downloaded-data)
+    - [Stream Live Data](#3-stream-live-data)
 - [Supported Data Storages](#supported-data-storages)
 - [Supported IO Formats](#supported-io-formats)
 - [Supported Data Sources](#supported-data-sources)
@@ -98,7 +99,7 @@ bybit = pe.Bybit()  # initialize data client
 feed = bybit.market_feed  # this could be {data_source}.news_feed if the data source supports it
 ```
 
-### 1. Download Data
+### 1. Download Historical Data
 Download data from Bybit and get a standardized dataframe
 ```python
 result = feed.download(
@@ -112,7 +113,7 @@ df = result.data.collect()  # polars dataframe by default
 ```
 
 
-### 2. Retrieve Data
+### 2. Retrieve Downloaded Data
 Retrieve downloaded data from storage
 ```python
 result = feed.retrieve(
@@ -124,6 +125,18 @@ result = feed.retrieve(
 )
 df = result.data.collect()
 ```
+
+
+### 3. Stream Live Data
+Get streaming data from Bybit
+```python
+feed.stream(
+    product='BTC_USDT_PERP',
+    resolution='1tick',  # or just 'tick' for tick data
+    callback=lambda ws_name, msg: print(ws_name, msg),
+)
+```
+
 
 ## Supported Data Storages
 | Storage                | Status |

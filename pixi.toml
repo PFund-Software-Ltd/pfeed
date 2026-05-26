@@ -64,7 +64,7 @@ lancedb = ">=0.30.2"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-afterpython = ">=0.3.10"
+afterpython = ">=0.3.11"
 marimo = { version = ">=0.23.8", extras = ["recommended", "lsp"] }
 basedpyright = ">=1.39.6"
 pandas-stubs = ">=2.3.3.260113"

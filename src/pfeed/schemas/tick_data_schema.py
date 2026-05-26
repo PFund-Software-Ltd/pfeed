@@ -1,7 +1,7 @@
 import pandera.polars as pa
 import polars as pl
 
-from pfeed.schemas import MarketDataSchema
+from pfeed.schemas.market_data_schema import MarketDataSchema
 
 
 class TickDataSchema(MarketDataSchema):

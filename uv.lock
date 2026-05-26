@@ -2694,7 +2694,7 @@ version = "0.0.8"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
-    { name = "cloudpathlib", extra = ["azure", "gs", "s3"] },
+    { name = "cloudpathlib", extra = ["azure", "gs", "s3"], marker = "sys_platform != 'emscripten'" },
     { name = "msgspec", marker = "sys_platform != 'emscripten'" },
     { name = "narwhals", marker = "sys_platform != 'emscripten'" },
     { name = "pandera" },
@@ -2743,7 +2743,7 @@ yfinance = [
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.3" },
-    { name = "cloudpathlib", extras = ["s3", "gs", "azure"], specifier = ">=0.24.0" },
+    { name = "cloudpathlib", extras = ["s3", "gs", "azure"], marker = "sys_platform != 'emscripten'", specifier = ">=0.24.0" },
     { name = "daft", marker = "extra == 'daft'", specifier = ">=0.7.14" },
     { name = "dask", extras = ["complete", "dataframe"], marker = "extra == 'dask'", specifier = ">=2026.3.0" },
     { name = "deltalake", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=1.6.0" },

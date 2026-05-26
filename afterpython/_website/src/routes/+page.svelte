@@ -9,47 +9,6 @@
 
 	const { data }: PageProps = $props();
 
-	let readmeIframeEl = $state<HTMLIFrameElement | null>(null);
-	let readmeIframeHeight = $state(800);
-
-	function handleReadmeIframeLoad() {
-		const doc = readmeIframeEl?.contentDocument;
-		if (!doc) return;
-
-		// Marimo's wasm app shell sets html/body to 100vh with internal scrolling,
-		// which prevents the iframe from sizing to real content. Override so the
-		// document flows naturally and scrollHeight reflects actual content height.
-		const style = doc.createElement('style');
-		style.textContent = `
-			html, body {
-				height: auto !important;
-				min-height: 0 !important;
-				max-height: none !important;
-				overflow: visible !important;
-			}
-			#App, #root, marimo-mount, [class*="marimo"] {
-				height: auto !important;
-				min-height: 0 !important;
-				max-height: none !important;
-				overflow: visible !important;
-			}
-		`;
-		(doc.head ?? doc.documentElement).appendChild(style);
-
-		const update = () => {
-			const h = Math.max(
-				doc.documentElement?.scrollHeight ?? 0,
-				doc.body?.scrollHeight ?? 0
-			);
-			if (h > 0) readmeIframeHeight = h;
-		};
-
-		update();
-		const ro = new ResizeObserver(update);
-		if (doc.documentElement) ro.observe(doc.documentElement);
-		if (doc.body) ro.observe(doc.body);
-	}
-
 	// Extract repository URL safely
 	const repositoryUrl = $derived(
 		data.project_url?.find((url: string) => url.startsWith('repository,'))?.split(', ')[1]
@@ -142,13 +101,10 @@
 
 		{#if data.readme_py}
 			<iframe
-				bind:this={readmeIframeEl}
 				src={resolve('/readme_py/readme_py.html')}
 				title="README"
 				loading="lazy"
-				onload={handleReadmeIframeLoad}
-				class="w-full max-w-4xl rounded-2xl border border-bg300 bg-bg100 text-left shadow-lg"
-				style="height: {readmeIframeHeight}px;"
+				class="h-[96vh] w-full max-w-4xl rounded-2xl border mb-28 border-bg300 bg-bg100 text-left shadow-lg"
 			></iframe>
 		{:else if data.description}
 			<div

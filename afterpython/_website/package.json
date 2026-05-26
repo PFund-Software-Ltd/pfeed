@@ -1,6 +1,6 @@
 {
 	"name": "@afterpython/project-website-template",
-	"version": "0.3.8",
+	"version": "0.3.9",
 	"license": "Apache-2.0",
 	"type": "module",
 	"packageManager": "pnpm@11.1.1",

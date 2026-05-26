@@ -45,9 +45,9 @@ core = [
     "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
     "deltalake>=1.6.0 ; sys_platform != 'emscripten'",
 ]
-prefect = ["prefect>=3.7.2"]
 yfinance = ["yfinance>=1.4.0"]
 hf = ["huggingface-hub>=1.16.1"]
+prefect = ["prefect>=3.7.2"]
 pandas = ["pandas>=2.2.3"]
 dask = ["dask[complete,dataframe]>=2026.3.0"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.2"]
@@ -57,7 +57,7 @@ lancedb = ["lancedb>=0.30.2"]
 # s3 = ["minio>=7.2.20", "cloudpathlib[s3]>=0.24.0"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # fmp = ["fmp-api-client>=0.0.1"]
-# "databento>=0.63.0",
+# databento = ["databento>=0.63.0"]
 # vortex = ["vortex-data>=0.55.0"]
 # kafka = ["confluent-kafka>=2.8.2"]
 # massive = ["massive>=2.2.0"]  # previously "polygon"

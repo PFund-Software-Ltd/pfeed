@@ -15,7 +15,7 @@
 <!-- [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/) -->
 
 [MinIO]: https://min.io/
-[Deltalake]: https://github.com/delta-io/delta-rs
+[DeltaLake]: https://github.com/delta-io/delta-rs
 [PFund]: https://github.com/PFund-Software-Ltd/pfund
 [Polars]: https://github.com/pola-rs/polars
 [Dask]: https://www.dask.org/
@@ -29,8 +29,14 @@
 [Polygon]: https://polygon.io/
 [FirstRate Data]: https://firstratedata.com
 [Prefect]: https://www.prefect.io/
-
-> **This library is NOT ready for use, please wait for 0.1.0 release.**
+[Daft]: https://www.daft.ai/
+[Hyperliquid]: https://app.hyperliquid.xyz/trade
+[FinancialModelingPrep]: https://financialmodelingprep.com/
+[DuckDB]: https://duckdb.org/
+[LanceDB]: https://lancedb.com/
+[Vortex]: https://vortex.dev/
+[DuckLake]: https://github.com/duckdb/ducklake
+[Iceberg]: https://iceberg.apache.org/
 
 ## TL;DR: use pfeed to manage your trading data; other traders will help you clean it
 
@@ -42,7 +48,7 @@
 Starting algo-trading requires reliable and clean data, but traders often **work in silos**, each writing **duplicated code** to clean the same datasets—wasting time and effort. Accessing clean, ready-to-use data is a challenge, forcing traders to handle tedious data tasks before they can even start trading.
 
 ## Solution
-`pfeed` leverages modern data engineering tools to centralize data cleaning efforts, automate ETL/ELT, store data in a **data lake with Delta Lake** support, and output **backtesting-ready data**, allowing traders to focus on strategy development.
+`pfeed` leverages modern data engineering tools to centralize data cleaning efforts, automate ETL/ELT, store data in a **data lake with DeltaLake** support, and output **backtesting-ready data**, allowing traders to focus on strategy development.
 
 ---
 `pfeed` (/piː fiːd/) is the data engine for trading, serving as a pipeline between raw data sources and traders. It enables you to **download historical data**, **stream real-time data**, and **store cleaned data** in a **local data lake for quantitative analysis**, supporting both **batch processing** and **streaming** workflows through streamlined data collection, cleaning, transformation, and storage.
@@ -50,9 +56,10 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 ## Core Features
 - [x] Download or stream reliable, validated and **clean data** for research, backtesting, or live trading
 - [x] Get historical data (**dataframe**) or live data in standardized formats by just calling a **single** function
-- [x] **Own your data** by storing them locally using [MinIO] + [Deltalake], or in the cloud
+- [x] **Own your data** — store locally now, write directly to the cloud later
+- [x] Build a local data lakehouse (Parquet + [DeltaLake]) on your own machine
 - [x] Interact with different kinds of data (including TradFi, CeFi and DeFi) using a **unified interface**
-- [x] Scale using modern data tools (e.g. [Polars], [Dask]) and workflow orchestration frameworks (e.g. [Prefect] for batch processing)
+- [x] Scale using modern data tools (e.g. [Polars], [Daft]) and workflow orchestration frameworks ([Prefect] for batch processing)
 
 ---
 
@@ -61,8 +68,10 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-    - [Get Historical Data in Dataframe](#1-get-historical-data-in-dataframe)
-    - [Download Historical Data](#2-download-historical-data)
+    - [Download Data](#1-download-data)
+    - [Retrieve Data](#2-retrieve-data)
+- [Supported Data Storages](#supported-data-storages)
+- [Supported IO Formats](#supported-io-formats)
 - [Supported Data Sources](#supported-data-sources)
 - [Related Projects](#related-projects)
 - [Disclaimer](#disclaimer)
@@ -72,77 +81,84 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 
 
 ## Installation
-> For more installation options, please refer to the [documentation](https://pfeed-docs.pfund.ai/installation).
+> For more installation options, please refer to the [documentation](https://pfeed.pfund.ai/doc/installation).
 ```bash
-# [RECOMMENDED]: Core Features, including MinIO, DeltaLake, Ray, Prefect, etc.
-pip install -U "pfeed[core]"
-
-# add your desired data sources, e.g. databento, polygon, etc.
-pip install -U "pfeed[core,databento,polygon]"
-
-# Minimal Features
-pip install -U "pfeed"
+# [RECOMMENDED]: Core Features, including Ray, ZeroMQ, DeltaLake, etc.
+pip install "pfeed[core,yfinance]"
 ```
-
 
 
 ## Quick Start
-Create data feed object
+> Want to try first? Run `pfeed` in your browser — no install needed — at
+ **[pfeed.pfund.ai](https://pfeed.pfund.ai/)**.
 ```python
 import pfeed as pe
 
-bybit = pe.Bybit(data_tool='polars')
-feed = bybit.market_feed  # this could be xxx.news_feed if the data source supports it
+bybit = pe.Bybit()  # initialize data client
+feed = bybit.market_feed  # this could be {data_source}.news_feed if the data source supports it
 ```
 
-### 1. Get Historical Data in Dataframe
-Get [Bybit]'s data in dataframe, e.g. 1-minute data (data is downloaded on the fly if not found in storage)
-
+### 1. Download Data
+Download data from Bybit and get a standardized dataframe
 ```python
-df = feed.get_historical_data(
+result = feed.download(
     product='BTC_USDT_PERP',  # or BTC_USDT_PERPETUAL in full
     resolution='1minute',  # '1tick'/'1t' or '2second'/'2s' etc.
-    start_date='2025-01-01',
-    end_date='2025-01-01',
+    start_date='2026-01-01',
+    end_date='2026-01-01',
+    storage_config=pe.StorageConfig(storage='LOCAL'),  # store data locally
 )
+df = result.data.collect()  # polars dataframe by default
 ```
 
-<details>
-<summary>See the first few rows of df:</summary>
 
-| date                | resolution   | product       | symbol   |    open |    high |     low |   close |   volume |
-|:--------------------|:-------------|:--------------|:---------|--------:|--------:|--------:|--------:|---------:|
-| 2025-01-01 00:00:00 | 1m           | BTC_USDT_PERP | BTCUSDT  | 93530   | 93590.8 | 93501.3 | 93590.5 |   30.284 |
-| 2025-01-01 00:01:00 | 1m           | BTC_USDT_PERP | BTCUSDT  | 93590.5 | 93627.7 | 93571.8 | 93625   |   30.334 |
-</details>
-
-> By using pfeed, you are just **one function call** away from getting a standardized dataframe
-
-
-### 2. Download Historical Data
-Download historical data to the storage (e.g. local, MinIO, DuckDB etc.)
+### 2. Retrieve Data
+Retrieve downloaded data from storage
 ```python
-feed.download(
-    product='ETH_USDT_SPOT',
-    resolution='1s',  # 1-second data
-    rollback_period='1w',  # rollback 1 week
-    to_storage='local',
+result = feed.retrieve(
+    product='BTC_USDT_PERP',
+    resolution='1m',  # 1-minute data
+    start_date='2026-01-01',
+    end_date='2026-01-01',
+    storage_config=pe.StorageConfig(storage='LOCAL'),
 )
+df = result.data.collect()
 ```
 
+## Supported Data Storages
+| Storage                | Status |
+| ---------------------- | ------ |
+| LOCAL/CACHE            | 🟢     |
+| [DuckDB]               | 🟢     |
+| [LanceDB]              | 🟢     |
+| HuggingFace            | 🔴     |
+| S3                     | 🔴     |
+| PostgreSQL/TimescaleDB | 🔴     |
+
+
+## Supported IO Formats
+| IO Format   | Status |
+| ----------- | ------ |
+| Parquet     | 🟢     |
+| [DeltaLake] | 🟢     |
+| [DuckLake]  | 🔴     |
+| [Iceberg]   | 🔴     |
+| [Vortex]    | 🔴     |
 
 
 ## Supported Data Sources
-| Data Source          | Get Historical Data | Download Historical Data | Get Live Data | Stream Live Data |
-| -------------------- | ------------------- | ------------------------ | --------------| ---------------- |
-| [Yahoo Finance]      | 🟢                  | ⚪                        | ⚪            | ⚪               |
-| [Bybit]              | 🟢                  | 🟢                        | 🟡            | 🔴               |
-| *Interactive Brokers | 🔴                  | ⚪                        | 🔴            | 🔴               |
-| *[FirstRate Data]    | 🔴                  | 🔴                        | ⚪            | ⚪               |
-| *[Databento]         | 🔴                  | 🔴                        | 🔴            | 🔴               |
-| *[Polygon]           | 🔴                  | 🔴                        | 🔴            | 🔴               |
-| [Binance]            | 🔴                  | 🔴                        | 🔴            | 🔴               |
-| [OKX]                | 🔴                  | 🔴                        | 🔴            | 🔴               |
+| Data Source          | Data Categories | Download Historical Data | Stream Live Data |
+| -------------------- | --------------- | ------------------------ | ---------------- |
+| [Yahoo Finance]      | Market Data, News Data, Fundamental Data     | 🟢                       | 🟢               |
+| [Bybit]              | Market Data     | 🟢                       | 🟢               |
+| *Interactive Brokers | Market Data     | ⚪                        | 🔴               |
+| [OKX]                | Market Data     | 🔴                       | 🔴               |
+| [Binance]            | Market Data     | 🔴                       | 🔴               |
+| [Hyperliquid]        | Market Data     | 🔴                       | 🔴               |
+| *[Databento]         | Market Data     | 🔴                       | 🔴               |
+| *[FinancialModelingPrep] | Market Data, News Data, Fundamental Data     | 🔴                       | 🔴               |
+| *[FirstRate Data]    | Market Data     | 🔴                       | ⚪                |
+| *[Polygon]           | Market Data     | 🔴                       | 🔴               |
 
 🟢 = finished \
 🟡 = in progress \

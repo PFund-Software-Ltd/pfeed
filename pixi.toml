@@ -50,9 +50,9 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 ray = { version = ">=2.55.1", extras = ["default"] }
 pyzmq = ">=27.1.0"
 deltalake = ">=1.6.0"
-prefect = ">=3.7.2"
 yfinance = ">=1.4.0"
 huggingface-hub = ">=1.16.1"
+prefect = ">=3.7.2"
 pandas = ">=2.2.3,<3"  # TODO: pandas 3 breaks everything, e.g. pyspark. lift it when fixed
 dask = { version = ">=2026.3.0", extras = ["complete", "dataframe"] }
 pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }

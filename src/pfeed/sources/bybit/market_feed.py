@@ -43,9 +43,11 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
             - 'side' mapped from Buy/Sell (case-insensitive) to 1/-1
             - volume cast to float64
         """
+        # Bybit spot CSVs ship 'volume' directly (and an 'rpi' column);
+        # non-spot still ships 'size'. strict=False tolerates either schema.
         RENAMING_COLS: dict[str, str] = {"size": "volume"}
         MAPPING_COLS: dict[str, int] = {"buy": 1, "sell": -1}
-        return df.rename(RENAMING_COLS).with_columns(
+        return df.rename(RENAMING_COLS, strict=False).with_columns(
             # some products use "Buy"/"Sell" while some use "buy"/"sell";
             # replace_strict errors on unexpected values rather than silently producing nulls
             pl.col("side")

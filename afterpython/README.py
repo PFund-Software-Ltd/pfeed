@@ -2,7 +2,7 @@
 # /// script
 # dependencies = [
 #     "marimo",
-#     "pfeed==0.0.9",
+#     "pfeed==0.0.10",
 # ]
 # requires-python = ">=3.11"
 # ///
@@ -94,37 +94,64 @@ def _(mo):
 
 @app.cell
 def _(pe):
-    # Bybit only supports market_feed, for some data sources, news_feed and other fundamental data will also be supported in the future
     bybit = pe.Bybit()
     feed = bybit.market_feed
-    product = "BTC_USDT_PERP"  # or 'BTC_USDT_PERPETUAL', "ETH_USDT_SPOT"'
+    product = "BTC_USDT_PERP"  # or 'BTC_USDT_PERPETUAL', "ETH_USDT_SPOT"' etc.
     resolution = "1minute"  # or "1s"/"1second", "1t"/"1tick" etc.
     date = "2026-01-01"
     storage_config = pe.StorageConfig(storage="cache")  # store to cache
-
-    result = feed.download(
-        product=product,
-        resolution=resolution,
-        start_date=date,
-        end_date=date,
-        storage_config=storage_config,
-    )
-    df = result.data.collect()  # collect polars's LazyFrame
-    df
     return date, feed, product, resolution, storage_config
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Download Data from Bybit
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    > Bybit only supports market_feed, for some data sources, news_feed and other fundamental data will also be supported in the future
+    """)
+    return
 
 
 @app.cell
 def _(date, feed, product, resolution, storage_config):
-    result2 = feed.retrieve(
+    download_result = feed.download(
         product=product,
         resolution=resolution,
         start_date=date,
         end_date=date,
         storage_config=storage_config,
     )
-    df2 = result2.data.collect()
-    df2
+    df = download_result.data.collect()  # collect polars's LazyFrame
+    df
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Retrieve Data from Storage
+    """)
+    return
+
+
+@app.cell
+def _(date, feed, product, resolution, storage_config):
+    retrieve_result = feed.retrieve(
+        product=product,
+        resolution=resolution,
+        start_date=date,
+        end_date=date,
+        storage_config=storage_config,
+    )
+    retrieved_df = retrieve_result.data.collect()
+    retrieved_df
     return
 
 

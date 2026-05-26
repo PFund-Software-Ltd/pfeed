@@ -2,7 +2,7 @@
 # /// script
 # dependencies = [
 #     "marimo",
-#     "pfeed==0.0.8",
+#     "pfeed==0.0.9",
 # ]
 # requires-python = ">=3.11"
 # ///
@@ -25,16 +25,19 @@ def _():
 async def _():
     import sys
 
+    # monkey patching for WASM to work in this demo
     if sys.platform == "emscripten":
         import micropip
 
         await micropip.install(["polars", "pyarrow", "pyodide-http"])
 
+        ####################################################
         # avoid creating a thread in tqdm
         import tqdm
 
         tqdm.tqdm.monitor_interval = 0
 
+        ####################################################
         import pyodide_http
 
         pyodide_http.patch_all()
@@ -50,6 +53,27 @@ async def _():
             return _orig_get(PROXY + url, *args, **kwargs)
 
         httpx.get = _proxied_get
+
+        ####################################################
+        # Pyodide polars has no native parquet scanner; marimo's fallback
+        # only handles a single source. Iterate and concat instead.
+        import polars as pl
+        import pfeed._io.parquet_io as _pio
+
+        def _patched_read(self, file_paths, **io_kwargs):
+            io_kwargs = io_kwargs or self._read_options
+            non_empty = [
+                str(p) for p in file_paths if self.exists(p) and not self.is_empty(p)
+            ]
+            if not non_empty:
+                return None
+            lfs = [
+                pl.scan_parquet(p, storage_options=self._storage_options, **io_kwargs)
+                for p in non_empty
+            ]
+            return lfs[0] if len(lfs) == 1 else pl.concat(lfs)
+
+        _pio.ParquetIO.read = _patched_read
     return
 
 
@@ -70,24 +94,37 @@ def _(mo):
 
 @app.cell
 def _(pe):
+    # Bybit only supports market_feed, for some data sources, news_feed and other fundamental data will also be supported in the future
     bybit = pe.Bybit()
-    # Bybit only supports market feed, for some data sources, news_feed and other fundamental data will also be supported in the future
     feed = bybit.market_feed
+    product = "BTC_USDT_PERP"  # or 'BTC_USDT_PERPETUAL', "ETH_USDT_SPOT"'
+    resolution = "1minute"  # or "1s"/"1second", "1t"/"1tick" etc.
+    date = "2026-01-01"
+    storage_config = pe.StorageConfig(storage="cache")  # store to cache
+
     result = feed.download(
-        product="BTC_USDT_PERP",  # or 'BTC_USDT_PERPETUAL', "ETH_USDT_SPOT"
-        # You can try out other resolutions: "1s"/"1second", "1t"/"1tick" etc.
-        resolution="1minute",
-        start_date="2026-01-01",
-        end_date="2026-01-01",
-        storage_config=pe.StorageConfig(storage="local"),
+        product=product,
+        resolution=resolution,
+        start_date=date,
+        end_date=date,
+        storage_config=storage_config,
     )
     df = result.data.collect()  # collect polars's LazyFrame
     df
-    return
+    return date, feed, product, resolution, storage_config
 
 
 @app.cell
-def _():
+def _(date, feed, product, resolution, storage_config):
+    result2 = feed.retrieve(
+        product=product,
+        resolution=resolution,
+        start_date=date,
+        end_date=date,
+        storage_config=storage_config,
+    )
+    df2 = result2.data.collect()
+    df2
     return
 
 

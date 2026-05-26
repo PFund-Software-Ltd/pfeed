@@ -35,8 +35,8 @@ dependencies = [
     "pydantic>=2.13.4 ; sys_platform != 'emscripten'",
     "narwhals>=2.21.2 ; sys_platform != 'emscripten'",
     "zstandard>=0.22.0", # REVIEW: this is included in python 3.14
+    "cloudpathlib>=0.24.0",
     "beautifulsoup4>=4.12.3",
-    "cloudpathlib[s3,gs,azure]>=0.24.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]
@@ -54,11 +54,11 @@ spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.2"]
 daft = ["daft>=0.7.14", "narwhals-daft>=0.4.1"]
 duckdb = ["duckdb>=1.5.3"]
 lancedb = ["lancedb>=0.30.2"]
+# s3 = ["minio>=7.2.20", "cloudpathlib[s3]>=0.24.0"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # fmp = ["fmp-api-client>=0.0.1"]
 # "databento>=0.63.0",
 # vortex = ["vortex-data>=0.55.0"]
-# "minio>=7.2.20",
 # kafka = ["confluent-kafka>=2.8.2"]
 # massive = ["massive>=2.2.0"]  # previously "polygon"
 

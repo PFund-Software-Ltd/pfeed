@@ -33,7 +33,7 @@ pydantic = ">=2.13.4"
 narwhals = ">=2.21.2"
 zstandard = ">=0.22.0"
 beautifulsoup4 = ">=4.12.3"
-cloudpathlib = { version = ">=0.24.0", extras = ["s3", "gs", "azure"] }
+cloudpathlib = ">=0.24.0"
 
 [environments]
 default = ["py311", "dev", "optional"]

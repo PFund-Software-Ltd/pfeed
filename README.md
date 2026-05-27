@@ -16,11 +16,11 @@
 
 [MinIO]: https://min.io/
 [DeltaLake]: https://github.com/delta-io/delta-rs
-[PFund]: https://github.com/PFund-Software-Ltd/pfund
+[pfund]: https://github.com/PFund-Software-Ltd/pfund
 [Polars]: https://github.com/pola-rs/polars
 [Dask]: https://www.dask.org/
 [Spark]: https://spark.apache.org/docs/latest/api/python/index.html
-[PyTrade.org]: https://pytrade.org
+[pytrade]: https://pytrade.org
 [Yahoo Finance]: https://github.com/ranaroussi/yfinance
 [Bybit]: https://public.bybit.com
 [Binance]: https://data.binance.vision
@@ -182,8 +182,8 @@ feed.stream(
 
 
 ## Related Projects
-- [PFund] — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
-- [PyTrade.org] - A curated list of Python libraries and resources for algorithmic trading.
+- [pfund] — A Complete Algo-Trading Framework for Machine Learning, TradFi, CeFi and DeFi ready. Supports Vectorized and Event-Driven Backtesting, Paper and Live Trading
+- [pytrade] - A curated list of Python libraries and resources for algorithmic trading.
 
 
 

@@ -28,7 +28,7 @@ dependencies = [
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
-    "polars>=1.41.0 ; sys_platform != 'emscripten'",
+    "polars>=1.40.1 ; sys_platform != 'emscripten'",
     "pyarrow>=23.0.1 ; sys_platform != 'emscripten'",
     "pandera>=0.31.1",
     "msgspec>=0.21.1 ; sys_platform != 'emscripten'",
@@ -46,7 +46,7 @@ core = [
     "deltalake>=1.6.0 ; sys_platform != 'emscripten'",
 ]
 yfinance = ["yfinance>=1.4.0"]
-hf = ["huggingface-hub>=1.16.1"]
+hf = ["huggingface-hub>=1.16.4"]
 prefect = ["prefect>=3.7.2"]
 pandas = ["pandas>=2.2.3"]
 dask = ["dask[complete,dataframe]>=2026.3.0"]

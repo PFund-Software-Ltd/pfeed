@@ -24,16 +24,16 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfund>=0.0.16",
+    "pfund>=0.0.17",
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
-    "polars>=1.40.1 ; sys_platform != 'emscripten'",
+    "polars>=1.41.2 ; sys_platform != 'emscripten'",
     "pyarrow>=23.0.1 ; sys_platform != 'emscripten'",
     "pandera>=0.31.1",
     "msgspec>=0.21.1 ; sys_platform != 'emscripten'",
     "pydantic>=2.13.4 ; sys_platform != 'emscripten'",
-    "narwhals>=2.21.2 ; sys_platform != 'emscripten'",
+    "narwhals>=2.22.0 ; sys_platform != 'emscripten'",
     "zstandard>=0.22.0", # REVIEW: this is included in python 3.14
     "cloudpathlib>=0.24.0",
     "beautifulsoup4>=4.12.3",
@@ -45,15 +45,15 @@ core = [
     "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
     "deltalake>=1.6.0 ; sys_platform != 'emscripten'",
 ]
-yfinance = ["yfinance>=1.4.0"]
-hf = ["huggingface-hub>=1.16.4"]
-prefect = ["prefect>=3.7.2"]
+yfinance = ["yfinance>=1.4.1"]
+hf = ["huggingface-hub>=1.17.0"]
+prefect = ["prefect>=3.7.3"]
 pandas = ["pandas>=2.2.3"]
 dask = ["dask[complete,dataframe]>=2026.3.0"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.2"]
 daft = ["daft>=0.7.14", "narwhals-daft>=0.4.1"]
 duckdb = ["duckdb>=1.5.3"]
-lancedb = ["lancedb>=0.30.2"]
+lancedb = ["lancedb>=0.33.0"]
 # s3 = ["minio>=7.2.20", "cloudpathlib[s3]>=0.24.0"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # fmp = ["fmp-api-client>=0.0.1"]
@@ -74,7 +74,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.16,<0.12.0"]
+requires = ["uv_build>=0.11.18,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

@@ -2,7 +2,6 @@ from pfund_kit.cli import create_cli_group
 from pfund_kit.cli.commands import config, docker_compose, remove
 
 from pfeed.cli.commands.data import data
-from pfeed.cli.commands.deltalake import deltalake
 
 # TODO
 # from pfund_kit.cli.commands import doc
@@ -23,9 +22,19 @@ pfeed_group.add_command(docker_compose)
 pfeed_group.add_command(docker_compose, name="compose")
 pfeed_group.add_command(remove)
 pfeed_group.add_command(remove, name="rm")
-pfeed_group.add_command(deltalake)
-pfeed_group.add_command(deltalake, name="delta")  # alias for deltalake
 pfeed_group.add_command(data)
+
+# `deltalake` depends on the optional `deltalake` package (installed via pfeed[core]).
+# Its command module imports the package lazily, so this import normally always
+# succeeds; the try/except is a safety net so that a missing or broken optional
+# dependency in any optional command can never take down the entire pfeed CLI.
+try:
+    from pfeed.cli.commands.deltalake import deltalake
+
+    pfeed_group.add_command(deltalake)
+    pfeed_group.add_command(deltalake, name="delta")  # alias for deltalake
+except ImportError:
+    pass
 # pfeed_group.add_command(doc)
 # pfeed_group.add_command(download)
 # pfeed_group.add_command(stream)

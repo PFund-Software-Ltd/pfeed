@@ -18,19 +18,19 @@ depends-on = [
 
 [dependencies]
 python = ">=3.11.14"
-uv = ">=0.11.16"
+uv = ">=0.11.18"
 openjdk = "21.*"  # for spark
 libpq = ">=18.4"  # for postgresql
 gh = ">=2.92.0"
 
 [pypi-dependencies]
-pfund = ">=0.0.16"
-polars = ">=1.40.1"
+pfund = ">=0.0.17"
+polars = ">=1.41.2"
 pyarrow = ">=23.0.1"
 pandera = ">=0.31.1"
 msgspec = ">=0.21.1"
 pydantic = ">=2.13.4"
-narwhals = ">=2.21.2"
+narwhals = ">=2.22.0"
 zstandard = ">=0.22.0"
 beautifulsoup4 = ">=4.12.3"
 cloudpathlib = ">=0.24.0"
@@ -50,23 +50,25 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 ray = { version = ">=2.55.1", extras = ["default"] }
 pyzmq = ">=27.1.0"
 deltalake = ">=1.6.0"
-yfinance = ">=1.4.0"
-huggingface-hub = ">=1.16.4"
-prefect = ">=3.7.2"
+yfinance = ">=1.4.1"
+huggingface-hub = ">=1.17.0"
+prefect = ">=3.7.3"
 pandas = ">=2.2.3,<3"  # TODO: pandas 3 breaks everything, e.g. pyspark. lift it when fixed
 dask = { version = ">=2026.3.0", extras = ["complete", "dataframe"] }
 pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }
 daft = ">=0.7.14"
 narwhals-daft = ">=0.4.1"
 duckdb = ">=1.5.3"
-lancedb = ">=0.30.2"
+lancedb = ">=0.33.0"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-afterpython = ">=0.3.11"
-marimo = { version = ">=0.23.8", extras = ["recommended", "lsp"] }
+afterpython = ">=0.3.15"
 basedpyright = ">=1.39.6"
+marimo = { version = ">=0.23.8", extras = ["recommended", "lsp"] }
+jupytext = ">=1.19.3"
+jupyterlab = ">=4.5.7"
 pandas-stubs = ">=2.2.3.250527"
 financetoolkit = ">=2.0.7"
 defeatbeta-api = ">=0.0.43"

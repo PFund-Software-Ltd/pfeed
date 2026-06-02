@@ -2,7 +2,6 @@ import re
 from pathlib import Path
 
 import click
-from deltalake import DeltaTable
 from pfund_kit.style import RichColor, TextStyle, cprint
 
 from pfeed._io.io_config import IOConfig
@@ -12,6 +11,19 @@ from pfeed.storages.file_based_storage import FileBasedStorage
 # Supported partition filter operators (order matters: check multi-char operators first)
 PARTITION_FILTER_OPERATORS = [">=", "<=", "!=", ">", "<", "="]
 PARTITION_FILTER_PATTERN = re.compile(r"^(\w+)(>=|<=|!=|>|<|=)(.+)$")
+
+
+def _import_delta_table():
+    """Lazily import DeltaTable so the rest of the pfeed CLI works without the
+    optional `deltalake` dependency installed. Only this subcommand needs it."""
+    try:
+        from deltalake import DeltaTable
+    except ImportError:
+        raise click.ClickException(
+            "The 'deltalake' package is required for this command but is not installed.\n"
+            + "Install it with: pip install 'pfeed[core]', or on its own with: pip install deltalake"
+        ) from None
+    return DeltaTable
 
 
 def parse_partition_filter(filt: str) -> tuple[str, str, str] | None:
@@ -110,6 +122,10 @@ def vacuum(
     - By default, Delta Lake enforces a minimum retention period for safety.
     - Use `--no-enforce-retention-duration` to disable this safety check (use with caution).
     """
+    # Fail fast with a friendly message if the optional `deltalake` package is missing,
+    # before any code path (e.g. storage.with_io) transitively imports it.
+    DeltaTable = _import_delta_table()
+
     if not no_dry_run:
         cprint(
             "This is a dry run. NO files will actually be deleted. To turn it off, use the --no-dry-run/-n flag.",
@@ -226,6 +242,10 @@ def optimize(
     - Control parallelism with `--max-concurrent-tasks`
     - Set `--min-commit-interval` (seconds) for long-running operations
     """
+    # Fail fast with a friendly message if the optional `deltalake` package is missing,
+    # before any code path (e.g. storage.with_io) transitively imports it.
+    DeltaTable = _import_delta_table()
+
     # Get storage class and its data_path
     Storage = storage.storage_class
     assert issubclass(Storage, FileBasedStorage), (

@@ -8247,8 +8247,8 @@ packages:
   - ptyprocess>=0.5
 - pypi: ./
   name: pfeed
-  version: 0.0.12
-  sha256: 795d2fc4bf85a1aa573fa11a83cdf1aa46c7a783ad8421e0d8982259c9074d2f
+  version: 0.0.13
+  sha256: 97a523805ef51d83ad931bc5b7c45fdd38967b0a335f52979c3f4a1d5a07d220
   requires_dist:
   - pfund>=0.0.17
   - polars>=1.41.2 ; sys_platform != 'emscripten'

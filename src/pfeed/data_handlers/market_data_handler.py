@@ -116,24 +116,23 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
             ]
         ).lower()
 
-        match self._io_type:
-            # NOTE: special case "lancedb" where its table io and database io at the same time
-            case IOType.TABLE:
-                table_path = self._create_table_path()
-                table_path = table_path.parents[
-                    1
-                ]  # remove levels "asset_type" and "resolution"
-                db_uri = str(table_path)
-            # NOTE: special case "duckdb" where its file io and database io at the same time
-            case IOType.FILE:
-                file_extension = self.io.FILE_EXTENSION
-                assert file_extension is not None
-                db_uri = cast(FilePath, self._data_path) / (db_name + file_extension)
-                db_uri = str(db_uri)
-            case IOType.DATABASE:
-                db_uri = cast("DatabaseURI", self._data_path) + "/" + db_name
-            case _:
-                assert_never(self._io_type)
+        # NOTE: this only runs for database io, but some databases are also
+        # table/file io (e.g. lancedb, duckdb), so branch on that secondary
+        # capability rather than self._io_type (which is always DATABASE here).
+        if self.io.is_table_io(strict=False):
+            # special case "lancedb" where its table io and database io at the same time
+            table_path = self._create_table_path()
+            table_path = table_path.parents[
+                1
+            ]  # remove levels "asset_type" and "resolution"
+            db_uri = str(table_path)
+        elif self.io.is_file_io(strict=False):
+            # special case "duckdb" where its file io and database io at the same time
+            file_extension = self.io.FILE_EXTENSION
+            assert file_extension is not None
+            db_uri = str(cast(FilePath, self._data_path) / (db_name + file_extension))
+        else:
+            db_uri = cast("DatabaseURI", self._data_path) + "/" + db_name
         return DBPath(
             db_uri=db_uri,
             db_name=db_name,

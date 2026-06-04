@@ -78,9 +78,6 @@ class YahooFinanceSource(DataProviderSource):
         """Creates or reuses existing stream API for the given environment"""
         if self._stream_api is None:
             assert env is not None, "env must be provided when creating stream API"
-            assert env == Environment.LIVE, (
-                "stream API is only available in live environment"
-            )
             self._stream_api = StreamAPI()
         return self._stream_api
 

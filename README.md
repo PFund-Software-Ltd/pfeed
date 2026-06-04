@@ -145,7 +145,7 @@ feed.stream(
 | LOCAL/CACHE            | 🟢     |
 | [DuckDB]               | 🟢     |
 | [LanceDB]              | 🟢     |
-| HuggingFace            | 🔴     |
+| HuggingFace            | 🟢     |
 | S3                     | 🔴     |
 | PostgreSQL/TimescaleDB | 🔴     |
 

@@ -41,8 +41,12 @@ class HuggingFaceStorage(FileBasedStorage):
             storage_options: Storage options. Can include:
                 - 'token': HuggingFace API token (defaults to HF_TOKEN env var)
         """
-        if not data_path.startswith("hf://"):
-            data_path = f"hf://{data_path}"
+        # data_path may arrive as a str, Path, or an already-wrapped FilePath/HfPath
+        # (e.g. via from_storage_config, which model_dumps data_path into a FilePath).
+        # Normalize to a string to safely check/add the hf:// scheme.
+        data_path_str = str(data_path)
+        if not data_path_str.startswith("hf://"):
+            data_path = f"hf://{data_path_str}"
 
         super().__init__(
             data_path=data_path,

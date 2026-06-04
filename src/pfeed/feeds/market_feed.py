@@ -502,7 +502,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         | None = None,
         data_origin: str = "",
         env: Environment | str = Environment.LIVE,
-        replay_pace: float | None = None,
+        replay_pace: float | None = 0,
         clean_data: bool = True,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
@@ -535,12 +535,14 @@ class MarketFeed(TimeBasedFeed, ABC):
                 via websocket. BACKTEST replays historical data from storage.
                 only supports BACKTEST, PAPER (paper trading) and LIVE
             replay_pace: Pacing between row emissions when replaying (env=BACKTEST). Ignored otherwise.
-                - None (default, realistic): for bars, sleep one resolution period between
-                  rows (so weekend/halt gaps don't make replay wait hours); for ticks,
-                  sleep the timestamp difference between consecutive rows.
-                - 0: ASAP — no sleep between rows.
-                - >0: fixed cadence in seconds (e.g. 1.0 → one row per wall-second
-                  regardless of resolution). Useful for fast iteration during backtesting.
+                - 0 (default): ASAP — no sleep between rows. Backtests process the whole
+                  range as fast as possible regardless of resolution or row count.
+                - >0: fixed cadence in seconds (e.g. 1.0 → one row per wall-second).
+                  Useful for watching a replay at a steady, human-readable rate.
+                - None: realistic — for bars, sleep one resolution period between rows;
+                  for ticks, sleep the timestamp difference between consecutive rows.
+                  Opt-in only: for fine resolutions or tick data a per-row sleep
+                  multiplied by row count can take hours, so it is not the default.
             clean_data: Whether to clean raw streaming data.
                 If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
                 If True, raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).

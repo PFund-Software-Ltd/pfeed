@@ -43,6 +43,9 @@ class BaseRequest(BaseModel):
     def is_streaming(self) -> bool:
         return False
 
+    def is_replaying(self) -> bool:
+        return False
+
     @field_validator("data_source", mode="before")
     @classmethod
     def validate_data_source(cls, value: DataSource | str) -> DataSource:

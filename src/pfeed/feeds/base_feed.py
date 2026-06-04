@@ -272,7 +272,13 @@ class BaseFeed(ABC):
 
         from pfeed._io.io_config import IOConfig
 
-        if request.is_streaming():
+        # Only a LIVE stream writes through a sink. A replaying stream reads FROM
+        # storage, so it takes the read path (default io, no write sink) just like a
+        # batch request — attaching a sink would pair the read io (e.g. parquet) with
+        # the default DeltaLakeSink and raise in with_sink().
+        streaming_write = request.is_streaming() and not request.is_replaying()
+
+        if streaming_write:
             from pfeed._sinks.sink_config import SinkConfig
 
             sink_config = self._normalize_sink_config(sink_config or SinkConfig())
@@ -294,7 +300,7 @@ class BaseFeed(ABC):
                     .with_data_model(dataflow.data_model)
                 ),
             )
-            if request.is_streaming():
+            if streaming_write:
                 _ = storage.with_sink(sink_config=sink_config)
             dataflow.set_storage(storage)
         return self

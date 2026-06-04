@@ -2587,7 +2587,7 @@ requires-dist = [
     { name = "narwhals-daft", marker = "extra == 'daft'", specifier = ">=0.4.1" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.2.3" },
     { name = "pandera", specifier = ">=0.31.1" },
-    { name = "pfund", specifier = ">=0.0.17" },
+    { name = "pfund", specifier = ">=0.0.18" },
     { name = "polars", marker = "sys_platform != 'emscripten'", specifier = ">=1.41.2" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.3" },
     { name = "pyarrow", marker = "sys_platform != 'emscripten'", specifier = ">=23.0.1" },
@@ -2602,7 +2602,7 @@ provides-extras = ["core", "yfinance", "hf", "prefect", "pandas", "dask", "spark
 
 [[package]]
 name = "pfund"
-version = "0.0.17"
+version = "0.0.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -2610,9 +2610,9 @@ dependencies = [
     { name = "pfund-kit" },
     { name = "websockets", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/7f/043979d69019f11deee45f48007533de3f09929abf72b9b749abcb097db6/pfund-0.0.17.tar.gz", hash = "sha256:9e2f8432c53c50d0fa2c5bf5cf551fc4b5f6e3c96e5951da04466ebaa6c5e729", size = 166235, upload-time = "2026-05-27T09:35:06.39Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/27/4ce35490ab4892e7de15c8be78fac2962524b2adea84638bb7c7d29044d1/pfund-0.0.18.tar.gz", hash = "sha256:ce8dc1192c3b7d3edb1894a254b34a2c1f7aee021e99046adc46a881d5f919b0", size = 166765, upload-time = "2026-06-04T23:01:12.625Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a4/21/8201ca560b2a67322801ce945adc37419d4c1fffebb072f3df00d65fb60b/pfund-0.0.17-py3-none-any.whl", hash = "sha256:9bfc86878226ebb9e50339f9d2af5dd692b11a07e1504ce942d4c06097dfdfcb", size = 241579, upload-time = "2026-05-27T09:35:04.798Z" },
+    { url = "https://files.pythonhosted.org/packages/72/3f/488e9e78cf60ac71174f055d84e30d55ec67f0805458e4c05cdb5e6e778d/pfund-0.0.18-py3-none-any.whl", hash = "sha256:0718a799300f681dcc481910a5267351f3dc988e5128c175b247152e7cb4d251", size = 242545, upload-time = "2026-06-04T23:01:11.406Z" },
 ]
 
 [[package]]

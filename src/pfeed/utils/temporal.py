@@ -12,9 +12,33 @@ from pfund_kit.utils.temporal import convert_to_date, get_utc_now, get_yesterday
 __all__ = [
     "determine_timestamp_integer_unit_and_scaling_factor",
     "infer_ts_unit",
+    "ns_to_seconds",
     "parse_date_range",
     "rollback_date_range",
+    "seconds_to_ns",
 ]
+
+NS_PER_SECOND = 1_000_000_000
+
+
+def ns_to_seconds(ts_ns: int | None) -> float | None:
+    """Convert pfeed's int-ns timestamps to float seconds.
+
+    pfeed standardizes every timestamp to int ns since epoch, but pfund's `Bar`
+    is a float-seconds API (resolution flooring, `end_ts = start_ts + secs - 0.001`,
+    `datetime.fromtimestamp`). Use this when feeding ns timestamps into `Bar`.
+    """
+    return ts_ns / NS_PER_SECOND if ts_ns is not None else None
+
+
+def seconds_to_ns(ts_s: float) -> int:
+    """Convert pfund `Bar`'s float-second timestamps back to pfeed's int-ns contract.
+
+    Inverse of `ns_to_seconds`. Bar boundaries are second-aligned, so the round-trip
+    is exact for start_ts/end_ts; sub-ns drift on the update `ts` is inherent to
+    routing through a seconds-based float API and is harmless.
+    """
+    return round(ts_s * NS_PER_SECOND)
 
 
 def infer_ts_unit(ts: float | int) -> Literal["s", "ms", "us", "ns"]:

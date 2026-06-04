@@ -43,6 +43,7 @@ from pfeed.enums import DataCategory, DataLayer, DataSource, DataStorage, Market
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.storages.base_storage import BaseStorage
 from pfeed.storages.storage_config import StorageConfig
+from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 __all__ = []
 
@@ -822,9 +823,11 @@ class MarketFeed(TimeBasedFeed, ABC):
                     return convert(
                         {
                             **common,
-                            "ts": data_bar.ts,
-                            "start_ts": data_bar.start_ts,
-                            "end_ts": data_bar.end_ts,
+                            # data_bar (pfund Bar) works in float seconds; convert back
+                            # to pfeed's int-ns contract before building the message.
+                            "ts": seconds_to_ns(data_bar.ts),
+                            "start_ts": seconds_to_ns(data_bar.start_ts),
+                            "end_ts": seconds_to_ns(data_bar.end_ts),
                             "open": data_bar.open,
                             "high": data_bar.high,
                             "low": data_bar.low,
@@ -844,33 +847,36 @@ class MarketFeed(TimeBasedFeed, ABC):
                         l=data["price"],
                         c=data["price"],
                         v=data["volume"],
-                        ts=data["ts"],
+                        # pfund Bar is seconds-based; pfeed timestamps are int ns.
+                        ts=ns_to_seconds(data["ts"]),
                         # NOTE: extra data is about tick data, don't pass it to bar data
                         # extra_data=data.get('extra_data', {}),
                         is_incremental=True,
-                        msg_ts=msg.get("ts"),
+                        msg_ts=ns_to_seconds(msg.get("ts")),
                     )
 
                 def _update_bar_data(
                     data_bar: BarData, data: dict[str, Any], msg: dict[str, Any]
                 ) -> None:
                     data_bar.on_update(
-                        start_ts=data.get("start_ts"),
-                        end_ts=data.get("end_ts"),
-                        ts=data.get("ts"),
+                        # pfund Bar is seconds-based; pfeed timestamps are int ns.
+                        start_ts=ns_to_seconds(data.get("start_ts")),
+                        end_ts=ns_to_seconds(data.get("end_ts")),
+                        ts=ns_to_seconds(data.get("ts")),
                         o=data["open"],
                         h=data["high"],
                         l=data["low"],
                         c=data["close"],
                         v=data["volume"],
-                        msg_ts=msg.get("ts"),
+                        msg_ts=ns_to_seconds(msg.get("ts")),
                         is_incremental=True,
                         # extra data is about the data with data resolution, don't pass it to bar data (target resolution)
                         # extra_data=data.get('extra_data', {}),
                     )
 
                 if data_resolution.is_tick():
-                    ts = data.get("ts")
+                    # seconds to compare against data_bar's seconds-based end_ts / time.time()
+                    ts = ns_to_seconds(data.get("ts"))
                     if not data_bar.is_closed() and data_bar.is_closed(
                         now=ts or time.time()
                     ):
@@ -885,8 +891,9 @@ class MarketFeed(TimeBasedFeed, ABC):
                 # NOTE: data['is_incremental] is saying whether the data with **data resolution** (resampler) is incremental or not
                 # it is IRRELEVANT to the target resolution, i.e. for target resolution (resamplee) it is always incremental until the bar is closed
                 elif data_resolution.is_bar():
-                    ts = data.get("ts")
-                    msg_ts = msg.get("ts", None)
+                    # seconds to compare against data_bar's seconds-based end_ts / time.time()
+                    ts = ns_to_seconds(data.get("ts"))
+                    msg_ts = ns_to_seconds(msg.get("ts"))
                     if not data_bar.is_closed() and data_bar.is_closed(
                         now=ts or msg_ts or time.time()
                     ):

@@ -3,10 +3,12 @@ from pfund_kit.cli.commands import config, docker_compose, remove
 
 from pfeed.cli.commands.data import data
 
-# TODO
-# from pfund_kit.cli.commands import doc
+# TODO: verify and finish download/stream, not worth the time for now
 # from pfeed.cli.commands.download import download
 # from pfeed.cli.commands.stream import stream
+
+# TODO
+# from pfund_kit.cli.commands import doc
 
 
 def init_context(ctx):
@@ -23,6 +25,8 @@ pfeed_group.add_command(docker_compose, name="compose")
 pfeed_group.add_command(remove)
 pfeed_group.add_command(remove, name="rm")
 pfeed_group.add_command(data)
+# pfeed_group.add_command(download)
+# pfeed_group.add_command(stream)
 
 # `deltalake` depends on the optional `deltalake` package (installed via pfeed[core]).
 # Its command module imports the package lazily, so this import normally always
@@ -35,6 +39,3 @@ try:
     pfeed_group.add_command(deltalake, name="delta")  # alias for deltalake
 except ImportError:
     pass
-# pfeed_group.add_command(doc)
-# pfeed_group.add_command(download)
-# pfeed_group.add_command(stream)

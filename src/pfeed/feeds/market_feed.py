@@ -238,7 +238,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
-        self._requests.append(request)
+        self._append_request(request)
         _ = self._create_batch_dataflows(
             extract_func=lambda data_model: self._download_impl(
                 data_model=data_model,
@@ -418,7 +418,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             dataflow_per_date=dataflow_per_date,
             clean_data=clean_data,
         )
-        self._requests.append(request)
+        self._append_request(request)
         _ = self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(data_model, storage),
         )
@@ -625,7 +625,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             replay_pace=replay_pace,
             clean_data=clean_data,
         )
-        self._requests.append(request)
+        self._append_request(request)
         self._create_stream_dataflow(user_callback=callback)
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
 

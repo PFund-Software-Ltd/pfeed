@@ -191,6 +191,22 @@ class BaseFeed(ABC):
             )
         return request
 
+    def _append_request(self, request: BaseRequest) -> None:
+        # In pipeline mode requests accumulate before run(), but run() dispatches a
+        # single path based on whether streaming dataflows exist — batch and streaming
+        # requests cannot be mixed in one feed run. Reject the mix at the source rather
+        # than letting a batch faucet hit run_stream() (or vice versa) downstream.
+        if (
+            self._requests
+            and request.is_streaming() != self._requests[-1].is_streaming()
+        ):
+            raise ValueError(
+                f"cannot mix streaming and batch requests in one pipeline: "
+                f"{request.extract_type} request is incompatible with the queued "
+                f"{self._requests[-1].extract_type} request"
+            )
+        self._requests.append(request)
+
     def _normalize_storage_config(self, storage_config: StorageConfig) -> StorageConfig:
         if not storage_config.data_domain:
             storage_config.data_domain = self.data_domain
@@ -233,8 +249,21 @@ class BaseFeed(ABC):
         io_config: IOConfig | None = None,
         sink_config: SinkConfig | None = None,
     ) -> BaseFeed:
-        request = self._get_current_request()
+        # fluent-chain entry point: always targets the request just created
+        return self._load_for_request(
+            request=self._get_current_request(),
+            storage_config=storage_config,
+            io_config=io_config,
+            sink_config=sink_config,
+        )
 
+    def _load_for_request(
+        self,
+        request: BaseRequest,
+        storage_config: StorageConfig | None = None,
+        io_config: IOConfig | None = None,
+        sink_config: SinkConfig | None = None,
+    ) -> BaseFeed:
         # allowing passing in None is useful for dynamically determining if load() is needed
         if storage_config is None:
             return self
@@ -290,19 +319,27 @@ class BaseFeed(ABC):
         return default_transformations
 
     def _finalize_run(self) -> None:
-        request = self._get_current_request()
-        has_no_destination = any(
-            not dataflow.has_storage() for dataflow in self._dataflows[request]
-        )
-        # NOTE: load() will finalize the storage/io configs in request
-        if has_no_destination:
-            _ = self.load(
-                storage_config=request.storage_config, io_config=request.io_config
+        # run-time method: finalize EVERY queued request, not just the latest.
+        # In pipeline mode multiple download()/retrieve()/stream() calls accumulate
+        # requests before run(), and `dataflows` runs all of them — so each must be
+        # sealed. (Unlike transform()/load(), which target the current request only.)
+        for request in self._requests:
+            dataflows = self._dataflows[request]
+            has_no_destination = any(
+                not dataflow.has_storage() for dataflow in dataflows
             )
-        default_transformations = self._get_default_transformations(request)
-        for dataflow in self._dataflows[request]:
-            dataflow.add_default_transformations(default_transformations)
-            dataflow.seal()
+            # NOTE: _load_for_request() will finalize the storage/io configs in request
+            if has_no_destination:
+                _ = self._load_for_request(
+                    request=request,
+                    storage_config=request.storage_config,
+                    io_config=request.io_config,
+                    sink_config=request.sink_config,
+                )
+            default_transformations = self._get_default_transformations(request)
+            for dataflow in dataflows:
+                dataflow.add_default_transformations(default_transformations)
+                dataflow.seal()
 
     def _prepare_before_run(self):
         self._last_run_dataflows = []

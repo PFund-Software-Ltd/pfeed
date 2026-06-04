@@ -126,6 +126,16 @@ class DataFlow:
     def is_streaming(self) -> bool:
         return self.extract_type == ExtractType.stream
 
+    def is_replaying(self) -> bool:
+        # In BACKTEST the streaming dataflow's storage is the source it READS replay
+        # data from, not a write destination — so it must never write back.
+        from pfund.enums.env import Environment
+
+        return (
+            self.is_streaming()
+            and getattr(self._data_model, "env", None) == Environment.BACKTEST
+        )
+
     def is_sealed(self) -> bool:
         return self._is_sealed
 
@@ -183,6 +193,11 @@ class DataFlow:
         self._result = DataFlowResult.failed(error=error)
 
     def _run_stream_etl(self, msg: RawMessage) -> None:
+        # Replay is read-only: the raw row already reached the user callback and the
+        # streaming queue in the faucet. Its storage is the READ source, so there is
+        # nothing to transform or load here — skip the whole ETL-to-storage step.
+        if self.is_replaying():
+            return
         # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
         if self._msg_queue:
             self._msg_queue.send(

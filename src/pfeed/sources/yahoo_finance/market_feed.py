@@ -333,10 +333,11 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
     @staticmethod
     def _normalize_timestamps(msg: ParsedMessage) -> ParsedMessage:
         """Yahoo Finance timestamps are in milliseconds, convert to nanoseconds"""
-        msg["ts"] = int(msg["ts"] * 10**6)
+        # Yahoo Finance sends 'time' as a string, cast before scaling ms -> ns
+        msg["ts"] = int(msg["ts"]) * 10**6
         data = msg["data"]
         if "ts" in data:
-            data["ts"] = int(data["ts"] * 10**6)
+            data["ts"] = int(data["ts"]) * 10**6
         return msg
 
     ##############################################################################################

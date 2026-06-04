@@ -17,22 +17,22 @@ def standardize_date_column(df: pl.LazyFrame, date_col: str) -> pl.LazyFrame:
 
     date_dtype = df.collect_schema()[date_col]
 
-    if date_dtype.is_temporal():
-        return df.sort(date_col)
-
     if date_dtype == pl.String:
-        return df.with_columns(
+        df = df.with_columns(
             pl.col(date_col).str.to_datetime().dt.replace_time_zone(None)
-        ).sort(date_col)
-
-    if date_dtype.is_numeric():
+        )
+    elif date_dtype.is_numeric():
         first_date = df.select(pl.col(date_col).first()).collect().item()
         ts_unit = infer_ts_unit(first_date)
-        return df.with_columns(
+        df = df.with_columns(
             pl.from_epoch(pl.col(date_col), time_unit=ts_unit).alias(date_col)
-        ).sort(date_col)
+        )
+    elif not date_dtype.is_temporal():
+        raise ValueError(f"{date_dtype=}")
 
-    raise ValueError(f"{date_dtype=}")
+    # Cleaned-data contract: nanosecond precision (lossless upcast from us/ms, and the
+    # native precision of pandas-sourced data via pl.from_pandas).
+    return df.with_columns(pl.col(date_col).dt.cast_time_unit("ns")).sort(date_col)
 
 
 def convert_dataframe(df: Any, data_tool: DataTool | str | None = None) -> IntoFrame:

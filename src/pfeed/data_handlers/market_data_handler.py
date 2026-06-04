@@ -131,7 +131,7 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
                 db_uri = cast(FilePath, self._data_path) / (db_name + file_extension)
                 db_uri = str(db_uri)
             case IOType.DATABASE:
-                db_uri = cast(DatabaseURI, self._data_path) + "/" + db_name
+                db_uri = cast("DatabaseURI", self._data_path) + "/" + db_name
             case _:
                 assert_never(self._io_type)
         return DBPath(

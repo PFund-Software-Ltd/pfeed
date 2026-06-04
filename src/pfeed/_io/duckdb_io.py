@@ -27,7 +27,7 @@ class DuckDBIO(DatabaseIO, FileIO):
     # TODO: integrate with DuckDB's QUACK protocol to allow parallel writes
     SUPPORTS_PARALLEL_WRITES: bool = False
     FILE_EXTENSION = ".duckdb"
-    TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
+    TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.NANOSECOND
     DATE_FILTER_PREDICATE = (
         "{date_col} >= '{start_date}' AND {date_col} <= '{end_date}'"
     )

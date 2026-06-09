@@ -21,7 +21,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.fs as pa_fs
 
-from pfeed._io.file_io import FileIO
+from pfeed._io.parquet_io import ParquetIO
 from pfeed.utils.file_path import FilePath
 
 
@@ -29,7 +29,9 @@ class TablePath(FilePath):
     pass
 
 
-class TableIO(FileIO, ABC):
+class TableIO(ParquetIO, ABC):
+    FILE_EXTENSION: str | None = None
+
     def exists(self, table_path: TablePath, *args: Any, **kwargs: Any) -> bool:
         file_info = self._filesystem.get_file_info(table_path.schemeless)
         return file_info.type == pa_fs.FileType.Directory

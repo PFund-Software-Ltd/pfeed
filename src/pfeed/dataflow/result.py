@@ -64,7 +64,7 @@ class RunResult:
     can introspect failures programmatically instead of relying on log output.
     """
 
-    data: IntoFrame | None
+    data: IntoFrame | bytes | None
     dataflows: list[DataFlow]
 
     @property

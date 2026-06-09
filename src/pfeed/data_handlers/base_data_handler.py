@@ -67,7 +67,7 @@ class BaseDataHandler(ABC):
             self.sink.with_schema(schema=self._build_streaming_schema())
 
     @abstractmethod
-    def write_batch(self, data: IntoFrame, *args: Any, **kwargs: Any):
+    def write_batch(self, data: IntoFrame | bytes, *args: Any, **kwargs: Any):
         pass
 
     @abstractmethod

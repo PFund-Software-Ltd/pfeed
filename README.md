@@ -1,4 +1,4 @@
-# PFeed: The Single Source of Truth for Algo-Trading Data. Uniting Traders to Clean Once & Share with All.
+# `pfeed`: The Single Source of Truth for Algo-Trading Data. Uniting Traders to Clean Once & Share with All.
 
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/vqpS94tpdp)
 [![X](https://img.shields.io/twitter/follow/pfund_ai?style=social)](https://x.com/pfund_ai)

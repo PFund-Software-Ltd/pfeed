@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
@@ -237,7 +237,7 @@ class BaseFeed(ABC):
     def _normalize_sink_config(self, sink_config: SinkConfig) -> SinkConfig:
         return sink_config
 
-    def transform(self, *funcs: Callable[..., Any]) -> BaseFeed:
+    def transform(self, *funcs: Callable[..., Any]) -> Self:
         request = self._get_current_request()
         for dataflow in self._dataflows[request]:
             dataflow.add_user_transformations(list(funcs))
@@ -248,7 +248,7 @@ class BaseFeed(ABC):
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
         sink_config: SinkConfig | None = None,
-    ) -> BaseFeed:
+    ) -> Self:
         # fluent-chain entry point: always targets the request just created
         return self._load_for_request(
             request=self._get_current_request(),
@@ -263,7 +263,7 @@ class BaseFeed(ABC):
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
         sink_config: SinkConfig | None = None,
-    ) -> BaseFeed:
+    ) -> Self:
         # allowing passing in None is useful for dynamically determining if load() is needed
         if storage_config is None:
             return self

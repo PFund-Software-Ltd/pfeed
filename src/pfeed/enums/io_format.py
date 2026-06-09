@@ -42,6 +42,11 @@ class IOFormat(StrEnum):
     DELTALAKE = "deltalake"
     DUCKDB = "duckdb"
     LANCEDB = "lancedb"
+    # BLOB is the opaque-bytes "format": no serialization of its own — it writes/reads
+    # whatever bytes it is handed. Used for artifacts pfeed persists but doesn't own the
+    # format of (e.g. pfund model weights, source .py); serialization lives with the
+    # producer (pfund). Backed directly by the generic, format-blind FileIO.
+    BLOB = "blob"
 
     @property
     def io_class(self) -> type[BaseIO]:
@@ -49,6 +54,10 @@ class IOFormat(StrEnum):
             from pfeed._io.parquet_io import ParquetIO
 
             return ParquetIO
+        elif self == IOFormat.BLOB:
+            from pfeed._io.file_io import FileIO
+
+            return FileIO
         elif self == IOFormat.DELTALAKE:
             from pfeed._io.deltalake_io import DeltaLakeIO
 

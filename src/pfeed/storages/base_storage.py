@@ -230,13 +230,13 @@ class BaseStorage:
             sink=self._sink,
         )
 
-    def write(self, data: IntoFrame | StreamingData, streaming: bool = False):
+    def write(self, data: IntoFrame | bytes | StreamingData, streaming: bool = False):
         if streaming:
-            self.data_handler.write_stream(data)
+            self.data_handler.write_stream(cast("StreamingData", data))
         else:
-            self.data_handler.write_batch(data)
+            self.data_handler.write_batch(cast("IntoFrame | bytes", data))
 
-    def read(self) -> pl.LazyFrame | None:
+    def read(self) -> pl.LazyFrame | bytes | None:
         """Read data from storage."""
         return self.data_handler.read()
 

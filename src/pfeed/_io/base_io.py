@@ -87,7 +87,9 @@ class BaseIO(ABC):
         from pfeed._io.file_io import FileIO
 
         if strict:
-            return cls.__bases__[0] is FileIO
+            # FileIO is concrete (used directly for the BLOB format), so it counts
+            # as a FileIO itself, not only its subclasses.
+            return cls is FileIO or cls.__bases__[0] is FileIO
         else:
             return issubclass(cls, FileIO)
 

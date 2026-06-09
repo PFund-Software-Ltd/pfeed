@@ -14,9 +14,9 @@ from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 class MarketDataModel(TimeBasedDataModel):
     data_handler_class: ClassVar[type[MarketDataHandler]] = MarketDataHandler
 
-    env: Environment
+    env: Environment | str
     product: BaseProduct
-    resolution: Resolution
+    resolution: Resolution | str
 
     def __str__(self) -> str:
         return ":".join(
@@ -31,14 +31,14 @@ class MarketDataModel(TimeBasedDataModel):
 
     @field_validator("env", mode="before")
     @classmethod
-    def _create_env(cls, v: str | Environment) -> Environment:
+    def _validate_env(cls, v: str | Environment) -> Environment:
         if isinstance(v, str):
             return Environment[v.upper()]
         return v
 
     @field_validator("resolution", mode="before")
     @classmethod
-    def _create_resolution(cls, v: str | Resolution) -> Resolution:
+    def _validate_resolution(cls, v: str | Resolution) -> Resolution:
         if isinstance(v, str):
             return Resolution(v)
         return v

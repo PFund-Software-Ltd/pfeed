@@ -27,7 +27,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
 
     @field_validator("env", mode="before")
     @classmethod
-    def _create_env(cls, v: Environment | str) -> Environment:
+    def _validate_env(cls, v: Environment | str) -> Environment:
         if isinstance(v, str):
             return Environment[v.upper()]
         return v
@@ -43,14 +43,14 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
 
     @field_validator("target_resolution", mode="before")
     @classmethod
-    def _create_target_resolution(cls, v: Resolution | str) -> Resolution:
+    def _validate_target_resolution(cls, v: Resolution | str) -> Resolution:
         if isinstance(v, str):
             return Resolution(v)
         return v
 
     @field_validator("data_resolution", mode="before")
     @classmethod
-    def _create_data_resolution(cls, v: Resolution | str) -> Resolution:
+    def _validate_data_resolution(cls, v: Resolution | str) -> Resolution:
         if isinstance(v, str):
             return Resolution(v)
         return v

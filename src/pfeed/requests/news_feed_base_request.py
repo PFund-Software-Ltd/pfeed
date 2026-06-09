@@ -11,7 +11,7 @@ class NewsFeedBaseRequest(TimeBasedFeedBaseRequest):
 
     @field_validator("env", mode="before")
     @classmethod
-    def create_env(cls, v):
+    def _validate_env(cls, v):
         if isinstance(v, str):
             return Environment[v.upper()]
         return v

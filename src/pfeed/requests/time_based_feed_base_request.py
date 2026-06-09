@@ -11,14 +11,14 @@ class TimeBasedFeedBaseRequest(BaseRequest):
 
     @field_validator("start_date", mode="before")
     @classmethod
-    def create_start_date(cls, v: datetime.date | str) -> datetime.date:
+    def _validate_start_date(cls, v: datetime.date | str) -> datetime.date:
         if isinstance(v, str):
             return datetime.date.fromisoformat(v)
         return v
 
     @field_validator("end_date", mode="before")
     @classmethod
-    def create_end_date(cls, v: datetime.date | str) -> datetime.date:
+    def _validate_end_date(cls, v: datetime.date | str) -> datetime.date:
         if isinstance(v, str):
             return datetime.date.fromisoformat(v)
         return v

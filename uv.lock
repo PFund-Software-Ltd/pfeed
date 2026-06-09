@@ -747,21 +747,22 @@ wheels = [
 
 [[package]]
 name = "daft"
-version = "0.7.14"
+version = "0.7.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fsspec" },
     { name = "packaging" },
     { name = "pyarrow" },
     { name = "tqdm" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/43/897f27f2cdcd8a93276fbc64fbde15d0c2131c8e656bb93be657efe85b66/daft-0.7.14.tar.gz", hash = "sha256:23b8ae24537817d40f300f71d60550fdca50a9000ddf37deffc0e303b3e6923e", size = 3224465, upload-time = "2026-05-20T03:41:05.088Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ea/54/5553c78dfaa0b387bbc2795d36832ad57901e45eed55594b553a4efa48fc/daft-0.7.15.tar.gz", hash = "sha256:f7c7bfd5714eb5729cf9ce3362834cae2a8759a97bd7423b69ba2bfbba203bf5", size = 3317832, upload-time = "2026-06-07T03:05:56.942Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/ca/02f43d207e29383a3743ad2738aa3726419e376a3c4574e31c9399b2b011/daft-0.7.14-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:dd2328961835797cc3b1f721bea910518b8e1a090560e19088db82ec2ef8ff44", size = 61509612, upload-time = "2026-05-20T03:40:16.485Z" },
-    { url = "https://files.pythonhosted.org/packages/5f/40/f7437c120cd9c78e8bd258d9047403ffb8371ac9b21587e8ca5c28b9e52e/daft-0.7.14-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:d372ac76beb2cd1cd8d7cb617b5c5936ddd2ade8f6d61f8b32a9b2bb14747685", size = 57069703, upload-time = "2026-05-20T03:40:22.526Z" },
-    { url = "https://files.pythonhosted.org/packages/2a/16/b442a439004934de1140e04025e0d1ba07dd17c5fc6e6dda89bc6746723f/daft-0.7.14-cp310-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:de296328d19f3ecd5ad409583979f89b01f1d8a913d0360b4b4d3f20f5e56a09", size = 59651829, upload-time = "2026-05-20T03:40:27.904Z" },
-    { url = "https://files.pythonhosted.org/packages/c6/19/df6465dee01e2557801d8e323a7d1ad5bae1ec11883440afebe21f6be67a/daft-0.7.14-cp310-abi3-manylinux_2_24_x86_64.whl", hash = "sha256:5808823c3ef21dfe278d21af2540e11bc675642f617d2b51434bf2fdd827d0fa", size = 61946262, upload-time = "2026-05-20T03:40:33.309Z" },
-    { url = "https://files.pythonhosted.org/packages/3a/13/e0efefb2cfac2b2b33d01143aaa16f832009a7516969eb42efaac723d36c/daft-0.7.14-cp310-abi3-win_amd64.whl", hash = "sha256:f7a7ae3088b234d75fa10242b181d90326eea3f7b6a9c331ec02ce07f404c706", size = 62767597, upload-time = "2026-05-20T03:40:40.416Z" },
+    { url = "https://files.pythonhosted.org/packages/10/eb/201ecf2f3ed4ea709e0692716f29ddd7aedc1c38fb0e2a5a8429c352a6de/daft-0.7.15-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:b893e732db49020daeab500f636842d271eaa8d0a210e9b1a68e4b178da1e419", size = 61756120, upload-time = "2026-06-07T03:05:26.8Z" },
+    { url = "https://files.pythonhosted.org/packages/06/8e/7b7298def7412f85fa00cca00b7cea619252257efe236423f7524b41659b/daft-0.7.15-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:6f192c9e090a27f121855f2a4a4f5781569d7fe7f158a0ad3d8f161b50f92c08", size = 57299676, upload-time = "2026-06-07T03:05:30.624Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/53/f94fa83a0c3808e045556ad057e78eb85659299a32ce7f78358632673cbb/daft-0.7.15-cp310-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:e4231a0d2512fa6a7a74eca1b8f5c1be3fba75901f3ab32f34914f020403f930", size = 59881693, upload-time = "2026-06-07T03:05:34.806Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/b1/e98c641b9197285cfc6d29b5794ec683478747a4845e63e46368740ff8fe/daft-0.7.15-cp310-abi3-manylinux_2_24_x86_64.whl", hash = "sha256:70fac4183d2d68be8eed7e57534189fc35da269f231cba66ed1212d5907abf60", size = 62193072, upload-time = "2026-06-07T03:05:38.617Z" },
+    { url = "https://files.pythonhosted.org/packages/24/64/5672db6574314ea21d8ce62a458668981c9d3d01205cda3b5fc8bf2a65f9/daft-0.7.15-cp310-abi3-win_amd64.whl", hash = "sha256:789a05490748befea2cb585b0b0527eb130a0b5888b73fbc8dcc93ce2112da0f", size = 62969464, upload-time = "2026-06-07T03:05:42.253Z" },
 ]
 
 [[package]]
@@ -1398,7 +1399,7 @@ http2 = [
 
 [[package]]
 name = "huggingface-hub"
-version = "1.17.0"
+version = "1.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -1412,9 +1413,9 @@ dependencies = [
     { name = "typer" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/65/9826515abb600b5722bcf53f8b4a2fb58340b1f8bfcaee19f83561c13a44/huggingface_hub-1.17.0.tar.gz", hash = "sha256:fad842b6763ef70ebc3919665b1b9273645203185400a7d6c5eddc2323cc3435", size = 797082, upload-time = "2026-05-28T15:12:13.347Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/d8/748ea0a47f0fa15227fe682f7a80826b4b7c096e4818044b8f56d6cb66d6/huggingface_hub-1.18.0.tar.gz", hash = "sha256:f0c5ecd1ef8c6a60f86f61ee278f2c1570ba9e279c9f54de9094210723b3613b", size = 812699, upload-time = "2026-06-05T09:26:33.401Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/28/d7cef5e477b855c25d415b8f57e5bc7347c7a90cad3acf1725d0c92ca294/huggingface_hub-1.17.0-py3-none-any.whl", hash = "sha256:3b8156d23118e87f6a587648bfbc04f04a12a757ccb4ed298b35c4ae638bf24c", size = 671546, upload-time = "2026-05-28T15:12:11.441Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/03/40a05316cb6616e5b7efd7773656441ab04b4b022c2199e79bb4622a92a3/huggingface_hub-1.18.0-py3-none-any.whl", hash = "sha256:729be4a976fb706dcc02d176bcda8a3f32bdf21a294e8f4b3dda6fbcbc9c1ab1", size = 684411, upload-time = "2026-06-05T09:26:31.48Z" },
 ]
 
 [[package]]
@@ -2032,11 +2033,11 @@ wheels = [
 
 [[package]]
 name = "narwhals"
-version = "2.22.0"
+version = "2.22.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9c/1c/c80cb7719721a44846c6301ef118434bae30a423924bfad3a47f16bdc064/narwhals-2.22.0.tar.gz", hash = "sha256:6486282bb7e4b4ab55963efbd8be1451b764cc4874b74d1fd625eba9dc60b86f", size = 417565, upload-time = "2026-06-01T13:34:36.249Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/62/3c/c4ef2164a71c1a63d7f1ae411c4082c5fa872405106db60a4b7114989ad7/narwhals-2.22.1.tar.gz", hash = "sha256:d62920805a0a43b7ff8b54b0c0d3142d796f8a9301836ada37e573d6a33cbcd9", size = 647493, upload-time = "2026-06-05T12:34:34.051Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/b6/e7cdde7b8e90d5dff25b622f95833ef26567ad184c977278b93a1cbd5717/narwhals-2.22.0-py3-none-any.whl", hash = "sha256:1421797ede01789cc1537619dbc3f36f840737240f748fdb24a60a0225fc80be", size = 453815, upload-time = "2026-06-01T13:34:34.127Z" },
+    { url = "https://files.pythonhosted.org/packages/48/ca/36339329c4604adbcc99c899b7eb1ce1a555c499b6a6860757dc9bfed36d/narwhals-2.22.1-py3-none-any.whl", hash = "sha256:60567d774edf77db53906f89d9fbd164e66e56d66d388e1e6990f17ac33cfb53", size = 454815, upload-time = "2026-06-05T12:34:32.289Z" },
 ]
 
 [[package]]
@@ -2576,20 +2577,20 @@ yfinance = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.3" },
     { name = "cloudpathlib", specifier = ">=0.24.0" },
-    { name = "daft", marker = "extra == 'daft'", specifier = ">=0.7.14" },
+    { name = "daft", marker = "extra == 'daft'", specifier = ">=0.7.15" },
     { name = "dask", extras = ["complete", "dataframe"], marker = "extra == 'dask'", specifier = ">=2026.3.0" },
     { name = "deltalake", marker = "sys_platform != 'emscripten' and extra == 'core'", specifier = ">=1.6.0" },
     { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.5.3" },
-    { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=1.17.0" },
+    { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=1.18.0" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.33.0" },
     { name = "msgspec", marker = "sys_platform != 'emscripten'", specifier = ">=0.21.1" },
-    { name = "narwhals", marker = "sys_platform != 'emscripten'", specifier = ">=2.22.0" },
+    { name = "narwhals", marker = "sys_platform != 'emscripten'", specifier = ">=2.22.1" },
     { name = "narwhals-daft", marker = "extra == 'daft'", specifier = ">=0.4.1" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.2.3" },
     { name = "pandera", specifier = ">=0.31.1" },
     { name = "pfund", specifier = ">=0.0.18" },
     { name = "polars", marker = "sys_platform != 'emscripten'", specifier = ">=1.41.2" },
-    { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.3" },
+    { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.4" },
     { name = "pyarrow", marker = "sys_platform != 'emscripten'", specifier = ">=23.0.1" },
     { name = "pydantic", marker = "sys_platform != 'emscripten'", specifier = ">=2.13.4" },
     { name = "pyspark", extras = ["connect", "pandas-on-spark", "sql"], marker = "extra == 'spark'", specifier = ">=4.1.2" },
@@ -2742,7 +2743,7 @@ wheels = [
 
 [[package]]
 name = "prefect"
-version = "3.7.3"
+version = "3.7.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2803,9 +2804,9 @@ dependencies = [
     { name = "websockets" },
     { name = "whenever", marker = "python_full_version >= '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e7/51/4b17109cac94607e3eecc3a0ff0d21aa40e812772a3269b78d28acf2236c/prefect-3.7.3.tar.gz", hash = "sha256:fd4f03474773af9af7f135f30cd9916bb371f88e499caec799ebd1921795d028", size = 14083737, upload-time = "2026-06-01T16:29:55.017Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/f6/0992db98fc12ee627a8d492b2a370762b6ed8f3edcb36f78077431e8196a/prefect-3.7.4.tar.gz", hash = "sha256:65a143310a42850caa1d7f21c2d9be5dfd18ee4b7baa1ce6dd8c6b421bc3e4ea", size = 14098696, upload-time = "2026-06-05T17:52:18.752Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/74/3a76454e24537429b010634896b8a51d3409ad7158b84114415085184de2/prefect-3.7.3-py3-none-any.whl", hash = "sha256:4266e950eb909b3c377d54e7b477e7ca614a69cd1190fbba6b24456dc06ec9d9", size = 14963599, upload-time = "2026-06-01T16:29:51.549Z" },
+    { url = "https://files.pythonhosted.org/packages/77/69/b674cc47e0f35094a44b1671ad092e243acaa75157ae84725819aeeae9c5/prefect-3.7.4-py3-none-any.whl", hash = "sha256:1ab7c5e9d418eb6e7dbb870b08704a2cce9ff054369c3bd1a9e9b0f8ec0d1257", size = 14987192, upload-time = "2026-06-05T17:52:14.651Z" },
 ]
 
 [[package]]

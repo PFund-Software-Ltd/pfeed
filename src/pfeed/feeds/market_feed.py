@@ -223,8 +223,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             raise ValueError(f"{resolution} is not supported by {self.name}")
         # find the first resolution that is >= the target resolution
         data_resolution = min(candidates)
-        if storage_config is not None:
-            storage_config = self._normalize_storage_config(storage_config)
         request = MarketFeedDownloadRequest(
             data_source=self.name,
             data_origin=data_origin,
@@ -251,12 +249,10 @@ class MarketFeed(TimeBasedFeed, ABC):
     def _get_default_transformations_for_download(
         self, request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest
     ) -> list[Callable[..., Any]]:
-        from pfeed import get_config
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
         from pfeed.utils import lambda_with_name
 
-        config = get_config()
         default_transformations = [
             lambda_with_name(
                 "standardize_date_column",
@@ -285,10 +281,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                 ]
             )
         default_transformations.append(
-            lambda_with_name(
-                "convert_to_user_df",
-                lambda df: convert_dataframe(df, data_tool=config.data_tool),
-            )
+            lambda_with_name("convert_to_user_df", lambda df: convert_dataframe(df))
         )
         return default_transformations
 
@@ -435,20 +428,20 @@ class MarketFeed(TimeBasedFeed, ABC):
         _ = storage.with_data_model(
             data_model.model_copy(update={"resolution": data_resolution})
         )
-        lf: pl.LazyFrame | None = storage.read()
+        lf: pl.LazyFrame | None = cast(pl.LazyFrame | None, storage.read())
         if lf is not None:
             self.logger.debug(f"retrived data {data_model} from {storage}")
+        else:
+            self.logger.debug(f"no data found for {data_model} in {storage}")
         return lf
 
     def _get_default_transformations_for_retrieve(
         self, request: MarketFeedRetrieveRequest
     ) -> list[Callable[..., Any]]:
-        from pfeed import get_config
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
         from pfeed.utils import lambda_with_name
 
-        config = get_config()
         storage_config = request.storage_config_for_retrieval
         is_retrieving_streaming_data = request.env in (
             Environment.PAPER,
@@ -480,8 +473,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                 )
             default_transformations.append(
                 lambda_with_name(
-                    "convert_to_user_df",
-                    lambda df: convert_dataframe(df, data_tool=config.data_tool),
+                    "convert_to_user_df", lambda df: convert_dataframe(df)
                 ),
             )
         else:

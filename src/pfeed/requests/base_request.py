@@ -48,7 +48,7 @@ class BaseRequest(BaseModel):
 
     @field_validator("data_source", mode="before")
     @classmethod
-    def validate_data_source(cls, value: DataSource | str) -> DataSource:
+    def _validate_data_source(cls, value: DataSource | str) -> DataSource:
         if isinstance(value, str):
             return DataSource[value]
         return value

@@ -2,14 +2,13 @@ from pydantic import field_validator
 
 from pfeed.enums import DataSource
 from pfeed.requests.base_request import BaseRequest
-from pfund.enums import Environment, RunStage
+from pfund.enums import Environment
 
 
 class PFundBaseRequest(BaseRequest):
     data_source: DataSource | str = DataSource.PFUND
 
     env: Environment | str
-    run_stage: RunStage | str
     project_name: str
     run_id: str
 
@@ -19,13 +18,6 @@ class PFundBaseRequest(BaseRequest):
         if isinstance(v, str):
             return Environment[v.upper()]
         return v
-
-    @field_validator("run_stage", mode="before")
-    @classmethod
-    def _validate_run_stage(cls, value: RunStage | str) -> RunStage:
-        if isinstance(value, str):
-            return RunStage[value]
-        return value
 
     @field_validator("project_name", mode="before")
     @classmethod

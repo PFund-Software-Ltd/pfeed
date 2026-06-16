@@ -8,7 +8,7 @@ from pydantic import Field, field_validator
 from pfeed.data_models.base_data_model import BaseDataModel
 from pfeed.sources.pfund.component_data_handler import ComponentDataHandler
 from pfund.datas.resolution import Resolution
-from pfund.enums import ArtifactType, ComponentType, Environment, RunMode, RunStage
+from pfund.enums import ArtifactType, ComponentType, Environment, RunMode
 from pfund.typing import ComponentName
 
 
@@ -19,9 +19,9 @@ class PFundComponentDataModel(BaseDataModel):
     extension: Literal[".joblib", ".safetensors", ".py", ".delta"]
 
     env: Environment | str
-    run_stage: RunStage | str
     project_name: str
-    run_id: str
+    # NOTE: run_name is mtflow's run_id (e.g. "run_001") if mtflow is used, otherwise it's "default_run" by default in pfund
+    run_name: str
     # fields from pfund component.to_dict()
     class_name: str
     component_name: str
@@ -62,13 +62,6 @@ class PFundComponentDataModel(BaseDataModel):
     def _validate_run_mode(cls, v: str | RunMode) -> RunMode:
         if isinstance(v, str):
             return RunMode[v.upper()]
-        return v
-
-    @field_validator("run_stage", mode="before")
-    @classmethod
-    def _validate_run_stage(cls, v: str | RunStage) -> RunStage:
-        if isinstance(v, str):
-            return RunStage[v.lower()]
         return v
 
     @field_validator("resolution", mode="before")

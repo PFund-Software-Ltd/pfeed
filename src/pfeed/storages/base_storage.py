@@ -177,8 +177,7 @@ class BaseStorage:
 
     @classmethod
     def from_storage_config(cls, storage_config: StorageConfig) -> Self:
-        # file_backend is only meaningful for FileBackedDatabaseStorage, which overrides this method.
-        return cls(**storage_config.model_dump(exclude={"storage", "file_backend"}))
+        return cls(**storage_config.model_dump(exclude={"storage"}))
 
     def with_data_model(self, data_model: BaseDataModel) -> BaseStorage:
         self._data_model = data_model

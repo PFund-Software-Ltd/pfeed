@@ -1,7 +1,7 @@
 # pyright: reportUnusedParameter=false, reportUnknownMemberType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, assert_never, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, assert_never, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -34,8 +34,8 @@ from pfeed.enums import DataCategory, DataStorage, DataTool, IOFormat
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.pfund.mixin import PFundMixin
 from pfeed.storages.storage_config import StorageConfig
-from pfund.engines.base_engine import BaseEngine
-from pfund.enums import ArtifactType, Environment, RunStage
+from pfund.engines.engine_context import EngineContext
+from pfund.enums import ArtifactType, Environment
 
 
 class PFundComponentFeed(PFundMixin, BaseFeed):
@@ -172,10 +172,8 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         self,
         artifact_type: ArtifactType | str = ArtifactType.data,
         env: Environment | str = Environment.BACKTEST,
-        run_stage: RunStage
-        | Literal["experiment", "refinement", "deployment"] = RunStage.EXPERIMENT,
-        project_name: str = BaseEngine.DEFAULT_PROJECT_NAME,
-        run_id: str = BaseEngine.DEFAULT_RUN_ID,
+        project_name: str = EngineContext.DEFAULT_PROJECT_NAME,
+        run_id: str = EngineContext.DEFAULT_RUN_NAME,
         storage_config: StorageConfig | None = None,
     ) -> Self | RunResult:
         """Extract the component's artifact (e.g. .py source code, model weights, or output dataframe)c"""
@@ -186,7 +184,6 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         request = PFundComponentFeedDownloadRequest(
             artifact_type=artifact_type,
             env=env,
-            run_stage=run_stage,
             project_name=project_name,
             run_id=run_id,
             storage_config=storage_config,
@@ -223,15 +220,12 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         self,
         artifact_type: ArtifactType | str = ArtifactType.data,
         env: Environment | str = Environment.BACKTEST,
-        run_stage: RunStage
-        | Literal["experiment", "refinement", "deployment"] = RunStage.EXPERIMENT,
-        project_name: str = BaseEngine.DEFAULT_PROJECT_NAME,
-        run_id: str = BaseEngine.DEFAULT_RUN_ID,
+        project_name: str = EngineContext.DEFAULT_PROJECT_NAME,
+        run_id: str = EngineContext.DEFAULT_RUN_NAME,
     ) -> PFundComponentDataModel:
         artifact_type = ArtifactType[artifact_type.lower()]
         artifact_kwargs: dict[str, Any] = {
             "env": env,
-            "run_stage": run_stage,
             "project_name": project_name,
             "run_id": run_id,
             **self.component.to_dict(),
@@ -266,10 +260,8 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
     def retrieve(
         self,
         artifact_type: ArtifactType | str = ArtifactType.data,
-        run_stage: RunStage
-        | Literal["experiment", "refinement", "deployment"] = RunStage.EXPERIMENT,
-        project_name: str = BaseEngine.DEFAULT_PROJECT_NAME,
-        run_id: str = BaseEngine.DEFAULT_RUN_ID,
+        project_name: str = EngineContext.DEFAULT_PROJECT_NAME,
+        run_id: str = EngineContext.DEFAULT_RUN_NAME,
         env: Environment | str = Environment.BACKTEST,
         storage_config: StorageConfig | None = None,
     ) -> Self | RunResult:
@@ -288,7 +280,6 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         io_config = self._normalize_io_config(IOConfig(io_format=io_format))
         request = PFundComponentFeedRetrieveRequest(
             env=env,
-            run_stage=run_stage,
             project_name=project_name,
             run_id=run_id,
             data_source=self.name,
@@ -319,7 +310,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
             self.logger.debug(f"no artifact found for {data_model} in {storage}")
         return artifact
 
-    # TODO:
+    # TODO: connect to mtflow's ws server
     def stream(self, *args: Any, **kwargs: Any) -> Self:
         # streaming a component's live signals — separate (StreamingFeedMixin) path
         raise NotImplementedError(f"{self.name} stream() is not implemented yet")

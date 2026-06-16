@@ -37,59 +37,34 @@ class ComponentDataMetadata(BaseDataMetadata):
 
 # TODO (mtflow): add tags to components, parent/child relationships/lineage (component in refinement is from which experiment?)
 """
-[component stage = SEEDED] (mtflow only)
-env=BACKTEST/
-    experiments/
-        {experiment_name}/
-            # TODO: add more details like pfund version, pfeed version, etc.
-            # mtflow.duckdb looks sth like this:
-            # templates (list[dict]): e.g. {'name': 'pfund_official/backtest_template', 'version': '0.0.1'}
-            # run_id  python_version	strategy_version	mtflow_version	artifact_path	sharpe	max_dd	templates	created_at
-            # run_001	3.11.14	        0.1.0	3	artifacts/run_001/	1.2	-0.08	{"window": 20}	...
-            # run_002	3.11.14	        0.1.0	3	artifacts/run_002/	1.5	-0.06	{"window": 50}	...
-            # - component signature (includes __version__)
-            mtflow.duckdb  (optional)
-            optuna.db  (optional)
-            run_001/
-                pfund.duckdb  (backtest results per chunk? TBD)
-                artifacts/
-                    {component_type}/
-                        {unique_component_name}/
-                            metadata.json
-                            artifacts, e.g. strategy.py, model.pkl, delta table etc.
-[component stage = SELECTED] (mtflow only)
-env=BACKTEST/
-    refinements/
-        {refinement_name}/
-            mtflow.duckdb  (optional)
-            optuna.db  (optional)
-            run_001/
-                pfund.duckdb  (backtest results per chunk? TBD)
-                artifacts/
-                    {component_type}/
-                        {unique_component_name}/
-                            metadata.json
-                            artifacts, e.g. strategy.py, model.pkl, delta table etc.
-[component stage = STAGED for SANDBOX/PAPER environment, SHIPPED for LIVE environment] (mtflow only)
-env=SANDBOX or PAPER or LIVE/
-    deployments/
-        {deployment_name}/
-            mtflow.duckdb  (optional)  (chosen components from registry, deployment metadata, live trading tracking)
-            run_001/
-                pfund.duckdb  (engine states, e.g. orders, positions, trades, etc.)
-                artifacts/
-                    {component_type}/
-                        {unique_component_name}/
-                            metadata.json
-                            artifacts, e.g. strategy_{version}.py, model.pkl, delta table etc.
-[component stage = SUPERSEDED for new version, SEALED for retirement] (mtflow only)
-mtflow/  (focuses on components lifecycle)
+pfund_data_path/
+    # TODO: add more details like pfund version, pfeed version, etc.
+    # mtflow.duckdb looks sth like this:
+    # templates (list[dict]): e.g. {'name': 'pfund_official/backtest_template', 'version': '0.0.1'}
+    # run_id  group run_name python_version	strategy_version	mtflow_version	artifact_path	sharpe	max_dd	templates	created_at
+    # run_001	...  ...    3.11.14	        0.1.0	3	artifacts/run_001/	1.2	-0.08	{"window": 20}	...
+    # run_002	...  ...    3.11.14	        0.1.0	3	artifacts/run_002/	1.5	-0.06	{"window": 50}	...
+    # - component signature (includes __version__)
+    # (chosen components from registry, deployment metadata, live trading tracking)
     mtflow.duckdb  (components lifecycle tracking, e.g. component status (retired?), metrics in different envs)
-    {component_type}/
-        {component_class_name}/
-            {version}/  (if registered)
-                metadata.json
-                artifacts, e.g. strategy.py, model.pkl, delta table etc.
+    registry/  (focuses on components lifecycle)
+        {component_type}/
+            {component_class_name}/
+                {version}/  (if registered)
+                    metadata.json
+                    artifacts, e.g. strategy.py, model.pkl, delta table etc.
+    runs/
+        env=BACKTEST or SANDBOX or PAPER or LIVE/
+            {project_name}/
+                trackio.db  (optional)
+                optuna.db  (optional for BACKTEST env)
+                run_001/
+                    pfund.duckdb  (backtest results per chunk? TBD) (engine states, e.g. orders, positions, trades, etc.)
+                    artifacts/
+                        {component_type}/
+                            {unique_component_name}/
+                                metadata.json
+                                artifacts, e.g. strategy.py, strategy_{version}.py (when registered) model.pkl, delta table etc.
 """
 
 
@@ -109,8 +84,8 @@ class ComponentDataHandler(BaseDataHandler):
     def __init__(
         self,
         data_path: FilePath,
-        data_layer: DataLayer,
-        data_domain: str,
+        data_layer: DataLayer,  # not in use
+        data_domain: str,  # not in use
         data_model: PFundComponentDataModel,
         io: FileIO,
     ):
@@ -132,9 +107,8 @@ class ComponentDataHandler(BaseDataHandler):
         artifact_dir = (
             cast(FilePath, self._data_path)
             / f"env={artifact.env}"
-            / artifact.run_stage.to_plural()
-            / artifact.project_name
-            / artifact.run_id.lower()
+            / artifact.project_name.lower()
+            / artifact.run_name.lower()
             / "artifacts"
             / artifact.component_type.to_plural()
             / artifact.component_name  # NOTE: unique

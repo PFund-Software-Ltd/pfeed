@@ -29,7 +29,7 @@ dependencies = [
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
     "polars>=1.41.2 ; sys_platform != 'emscripten'",
-    "pyarrow>=23.0.1 ; sys_platform != 'emscripten'",
+    "pyarrow>=24.0.0 ; sys_platform != 'emscripten'",
     "pandera>=0.31.1",
     "msgspec>=0.21.1 ; sys_platform != 'emscripten'",
     "pydantic>=2.13.4 ; sys_platform != 'emscripten'",
@@ -46,10 +46,10 @@ core = [
     "deltalake>=1.6.0 ; sys_platform != 'emscripten'",
 ]
 yfinance = ["yfinance>=1.4.1"]
-hf = ["huggingface-hub>=1.18.0"]
+hf = ["huggingface-hub>=1.19.0"]
 prefect = ["prefect>=3.7.4"]
 pandas = ["pandas>=2.2.3"]
-dask = ["dask[complete,dataframe]>=2026.3.0"]
+dask = ["dask[complete,dataframe]>=2026.6.0"]
 spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.2"]
 daft = ["daft>=0.7.15", "narwhals-daft>=0.4.1"]
 duckdb = ["duckdb>=1.5.3"]
@@ -74,7 +74,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.19,<0.12.0"]
+requires = ["uv_build>=0.11.21,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

@@ -4,26 +4,20 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pfeed.enums import DataLayer, DataStorage
-from pfeed.enums.data_storage import FileBasedDataStorage
 from pfeed.utils.file_path import FilePath
 
 
 class StorageConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
-        arbitrary_types_allowed=True, extra="forbid"
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        extra="forbid",
     )
 
     storage: DataStorage | str = DataStorage.LOCAL
     data_path: FilePath | Path | str | None = Field(default=None, validate_default=True)
     data_layer: DataLayer | str = DataLayer.CLEANED
     data_domain: str = ""
-    file_backend: FileBasedDataStorage | str = Field(
-        default=FileBasedDataStorage.LOCAL,
-        description="""
-        File-based storage backend, only applicable for file-based storages,
-        e.g. storage=duckdb, file_backend=local or huggingface etc.
-        """,
-    )
     storage_options: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("storage", mode="before")
@@ -31,15 +25,6 @@ class StorageConfig(BaseModel):
     def validate_storage(cls, v: DataStorage | str) -> DataStorage:
         if not isinstance(v, DataStorage):
             return DataStorage[v.upper()]
-        return v
-
-    @field_validator("file_backend", mode="before")
-    @classmethod
-    def validate_file_backend(
-        cls, v: FileBasedDataStorage | str
-    ) -> FileBasedDataStorage:
-        if not isinstance(v, FileBasedDataStorage):
-            return FileBasedDataStorage[v.upper()]
         return v
 
     @field_validator("data_path", mode="before")

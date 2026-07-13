@@ -46,6 +46,7 @@ core = [
     "deltalake>=1.6.0 ; sys_platform != 'emscripten'",
 ]
 yfinance = ["yfinance>=1.4.1"]
+cryptohftdata = ["cryptohftdata>=0.4.0"]
 hf = ["huggingface-hub>=1.19.0"]
 prefect = ["prefect>=3.7.4"]
 pandas = ["pandas>=2.2.3"]

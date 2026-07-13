@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from pfeed.engine import DataEngine
     from pfeed.sources.alphafund import AlphaFund
     from pfeed.sources.bybit import Bybit
+    from pfeed.sources.crypto_hft_data import CryptoHftData
+    from pfeed.sources.crypto_hft_data import CryptoHftData as CHD  # noqa: N817
+    from pfeed.sources.crypto_hft_data import CryptoHftData as CryptoHFTData
     from pfeed.sources.pfund import PFund
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
@@ -74,6 +77,10 @@ def __getattr__(name: str):
         from pfeed.sources.bybit import Bybit
 
         return Bybit
+    elif name.lower() in ("cryptohftdata", "chd"):
+        from pfeed.sources.crypto_hft_data import CryptoHftData
+
+        return CryptoHftData
     elif name.lower() == "pfund":
         from pfeed.sources.pfund import PFund
 
@@ -89,9 +96,12 @@ def __getattr__(name: str):
 
 
 __all__ = (
+    "CHD",
     "YF",
     "AlphaFund",
     "Bybit",
+    "CryptoHFTData",
+    "CryptoHftData",
     "DataEngine",
     "IOConfig",
     "PFund",

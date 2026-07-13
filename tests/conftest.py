@@ -31,7 +31,7 @@ def configure_test_env():
     # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
     os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
     # Silence logs below WARNING and disable file handlers entirely for tests
-    pe.configure(
+    pe.configure_logging(
         logging_config={
             "handlers": {"stream_handler": {"level": "WARNING"}},
             # File handlers removed to avoid race conditions in parallel tests (pytest-xdist)

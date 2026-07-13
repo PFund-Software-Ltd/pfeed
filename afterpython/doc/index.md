@@ -16,3 +16,7 @@ Replace this placeholder content with your own. Here's what you can do:
 - [MyST Markdown Guide](https://mystmd.org)
 
 Start building your amazing project! 🚀
+
+## Integrations
+
+- [CryptoHFTData historical crypto data](cryptohftdata.md)

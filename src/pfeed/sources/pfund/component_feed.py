@@ -32,7 +32,7 @@ from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
 from pfeed.sources.pfund.mixin import PFundMixin
 from pfeed.storages.storage_config import StorageConfig
-from pfund.enums import ArtifactType
+from pfund.enums import ArtifactType, Environment
 
 
 class PFundComponentFeed(PFundMixin, BaseFeed):
@@ -134,10 +134,16 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
             raise ValueError(
                 f"{self.component.name} must be a model for model/checkpoint artifacts"
             )
-        if artifact_type == ArtifactType.checkpoint and checkpoint_step is None:
-            raise ValueError("checkpoint_step is required for a checkpoint")
-        elif artifact_type != ArtifactType.checkpoint and checkpoint_step is not None:
-            raise ValueError("checkpoint_step is only valid for checkpoints")
+        if artifact_type == ArtifactType.checkpoint:
+            if self.component.env != Environment.BACKTEST:
+                raise ValueError(
+                    "checkpoint artifacts are only available in backtesting"
+                )
+            if checkpoint_step is None:
+                raise ValueError("checkpoint_step is required for a checkpoint")
+        else:
+            if checkpoint_step is not None:
+                raise ValueError("checkpoint_step is only valid for checkpoints")
         return artifact_type
 
     def download(

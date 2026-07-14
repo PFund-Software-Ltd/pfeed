@@ -46,9 +46,9 @@ class MarketDataMetadata(TimeBasedDataMetadata):
     asset_type: str
 
 
-class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyright: ignore[reportImplicitAbstractClass]
+class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):
     _data_model: MarketDataModel
-    metadata_class: ClassVar[type[MarketDataMetadata]] = MarketDataMetadata
+    Metadata: ClassVar[type[MarketDataMetadata]] = MarketDataMetadata
 
     def _validate_schema(self, df: pl.LazyFrame) -> pl.LazyFrame:
         from pandera.config import ValidationDepth, config_context
@@ -204,12 +204,12 @@ class MarketDataHandler(StreamingDataHandlerMixin, TimeBasedDataHandler):  # pyr
     # NOTE: streaming data (env=LIVE/PAPER) does NOT follow the same column schema in write_batch (env=BACKTEST)
     def _standardize_streaming_msg(self, msg: MarketDataMessage) -> dict[str, Any]:
         """
-        Convert MarketDataMessage to dict and standardize it: drop extra_data and flatten specs into top-level columns.
+        Convert MarketDataMessage to dict and standardize it: drop extra and flatten specs into top-level columns.
         """
         data = msg.to_dict()
 
-        # REVIEW: drop extra_data, only support writing data defined in streaming schema
-        dict_fields = ["extra_data"]
+        # REVIEW: drop extra, only support writing data defined in streaming schema
+        dict_fields = ["extra"]
         for field in dict_fields:
             data.pop(field)
 

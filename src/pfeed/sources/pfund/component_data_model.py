@@ -6,22 +6,33 @@ from typing import Any, ClassVar, Literal
 from pydantic import Field, field_validator
 
 from pfeed.data_models.base_data_model import BaseDataModel
-from pfeed.sources.pfund.component_data_handler import ComponentDataHandler
+from pfeed.sources.pfund.component_data_handler import PFundComponentDataHandler
 from pfund.datas.resolution import Resolution
 from pfund.enums import ArtifactType, ComponentType, Environment, RunMode
 from pfund.typing import ComponentName
 
 
+# REVIEW: too many fields?
 class PFundComponentDataModel(BaseDataModel):
-    data_handler_class: ClassVar[type[ComponentDataHandler]] = ComponentDataHandler
+    DataHandler: ClassVar[type[PFundComponentDataHandler]] = PFundComponentDataHandler
 
-    artifact_type: ArtifactType | str
-    extension: Literal[".joblib", ".safetensors", ".py", ".delta"]
+    artifact_type: ArtifactType
+    extension: Literal[
+        ".joblib",  # sklearn model
+        ".safetensors",  # torch/jax model
+        ".py",  # python source code
+        ".delta",  # trading_df delta table
+        ".pth",  # pytorch checkpoint
+        ".pkl",  # jax checkpoint
+    ]
 
     env: Environment | str
     project_name: str
-    # NOTE: run_name is mtflow's run_id (e.g. "run_001") if mtflow is used, otherwise it's "default_run" by default in pfund
-    run_name: str
+    run_name: str = Field(
+        description="""
+        mtflow\'s run_id (e.g. "run_001") if mtflow is used, otherwise it is "default_run" by default in pfund
+        """
+    )
     # fields from pfund component.to_dict()
     class_name: str
     component_name: str
@@ -31,6 +42,7 @@ class PFundComponentDataModel(BaseDataModel):
     df_form: Literal["wide", "long"]
     component_type: ComponentType | str
     signal_cols: list[str]
+    model: str | None = None  # underlying model class, for model components
     # fields for metadata
     run_mode: RunMode | str
     signature: tuple[tuple[Any, ...], dict[str, Any]]  # (args, kwargs)
@@ -41,7 +53,6 @@ class PFundComponentDataModel(BaseDataModel):
     strategies: list[ComponentName] = Field(default_factory=list)
     models: list[ComponentName] = Field(default_factory=list)
     features: list[ComponentName] = Field(default_factory=list)
-    indicators: list[ComponentName] = Field(default_factory=list)
 
     @field_validator("artifact_type", mode="before")
     @classmethod
@@ -90,8 +101,14 @@ class ModelArtifact(PFundComponentDataModel):
     extension: Literal[".joblib", ".safetensors"]
 
 
+class CheckpointArtifact(PFundComponentDataModel):
+    artifact_type: Literal[ArtifactType.checkpoint] = ArtifactType.checkpoint
+    extension: Literal[".pth", ".pkl"]
+    step: int = Field(ge=0)
+
+
 class DataArtifact(PFundComponentDataModel):
-    """The output frame of a component (strategy / model / feature / indicator)."""
+    """The output frame of a component (strategy / model / feature)."""
 
     artifact_type: Literal[ArtifactType.data] = ArtifactType.data
     # .delta is just the convention for the deltalake folder

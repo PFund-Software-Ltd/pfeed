@@ -9,11 +9,8 @@ from pathlib import Path
 
 import pyarrow.fs as pa_fs
 
-from pfeed.config import get_config
 from pfeed.enums import DataLayer
 from pfeed.storages.file_based_storage import FileBasedStorage
-
-config = get_config()
 
 
 class LocalStorage(FileBasedStorage):
@@ -24,6 +21,9 @@ class LocalStorage(FileBasedStorage):
         data_domain: str = "MARKET_DATA",
         storage_options: dict[str, Any] | None = None,
     ):
+        from pfeed.config import get_config
+
+        config = get_config()
         super().__init__(
             data_path=data_path or config.data_path,
             data_layer=data_layer,

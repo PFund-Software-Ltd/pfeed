@@ -80,7 +80,9 @@ class ParquetIO(FileIO):
         """This only writes metadata to the table schema, not to the file.
         You must call _write_pyarrow_table to actually write the metadata to the file.
         """
-        metadata_json = json.dumps(metadata.model_dump(mode="json") if metadata else {})
+        metadata_json = json.dumps(
+            metadata.model_dump(mode="json", fallback=str) if metadata else {}
+        )
         schema = data.schema.with_metadata({b"metadata_json": metadata_json})
         return data.replace_schema_metadata(schema.metadata)
 

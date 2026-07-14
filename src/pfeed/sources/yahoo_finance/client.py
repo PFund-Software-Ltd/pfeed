@@ -9,8 +9,6 @@ if TYPE_CHECKING:
 from pfeed.data_client import DataClient
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 
-__all__ = ["YahooFinance"]
-
 
 class YahooFinance(YahooFinanceMixin, DataClient):
     market_feed: YahooFinanceMarketFeed

@@ -3,11 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pfeed.config import get_config
 from pfeed.enums import DataLayer
 from pfeed.storages.local_storage import LocalStorage
-
-config = get_config()
 
 
 class CacheStorage(LocalStorage):
@@ -21,6 +18,9 @@ class CacheStorage(LocalStorage):
         storage_options: dict[str, Any] | None = None,
         num_retained_days: int = DEFAULT_NUM_RETAINED_DAYS,
     ):
+        from pfeed.config import get_config
+
+        config = get_config()
         super().__init__(
             data_path=data_path or config.cache_path,
             data_layer=data_layer,
@@ -38,6 +38,10 @@ class CacheStorage(LocalStorage):
         from pfund_kit.style import RichColor, TextStyle, cprint
         from pfund_kit.utils import get_last_modified_time
         from pfund_kit.utils.temporal import get_today
+
+        from pfeed.config import get_config
+
+        config = get_config()
 
         cache_path = config.cache_path
         today = get_today()

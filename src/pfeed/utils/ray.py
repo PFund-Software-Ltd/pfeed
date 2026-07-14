@@ -41,6 +41,12 @@ def setup_ray():
 
 
 def shutdown_ray():
+    import sys
+
+    # if ray was never imported this process, it was never used — nothing to shut
+    # down, and importing it here would needlessly pull in ray's (heavy) import chain.
+    if "ray" not in sys.modules:
+        return
     import ray
 
     if ray.is_initialized():

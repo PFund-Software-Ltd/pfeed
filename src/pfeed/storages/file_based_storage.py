@@ -18,6 +18,7 @@ from pfeed.utils.file_path import FilePath
 class FileBasedStorage(BaseStorage):
     # EXTEND: add more file-based formats, iceberg, etc.
     SUPPORTED_IO_FORMATS: ClassVar[list[IOFormat]] = [
+        IOFormat.BLOB,
         IOFormat.PARQUET,
         IOFormat.DELTALAKE,
     ]

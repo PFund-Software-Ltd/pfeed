@@ -4,8 +4,6 @@ from pfeed.sources.pfund.component_feed import PFundComponentFeed
 from pfeed.sources.pfund.engine_feed import PFundEngineFeed
 from pfeed.sources.pfund.mixin import PFundMixin
 
-__all__ = ["PFund"]
-
 
 class PFund(PFundMixin, DataClient):
     engine_feed: PFundEngineFeed

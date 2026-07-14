@@ -12,15 +12,11 @@ from pfeed.enums import DataCategory
 
 
 class BaseSource(ABC):
-    NAME: ClassVar[DataSource]
+    name: ClassVar[DataSource]
 
     def __init__(self):
         self._batch_api: Any | None = None
         self._stream_api: Any | None = None
-
-    @property
-    def name(self) -> DataSource:
-        return self.NAME
 
     @abstractmethod
     def get_data_categories(self) -> list[DataCategory]:

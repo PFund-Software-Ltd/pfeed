@@ -36,7 +36,7 @@ how to handle this? handled by metadata?
 
 
 class NewsFeed(TimeBasedFeed, ABC):
-    data_model_class: ClassVar[type[NewsDataModel]] = NewsDataModel
+    DataModel: ClassVar[type[NewsDataModel]] = NewsDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.NEWS_DATA
 
     def create_data_model(

@@ -19,16 +19,19 @@ depends-on = [
 [dependencies]
 
 [pypi-dependencies]
-pfund = ">=0.0.19"
-polars = ">=1.41.2"
+# pfund = ">=0.0.19"
+polars = ">=1.42.1"
 pyarrow = ">=24.0.0"
-pandera = ">=0.31.1"
+pandera = ">=0.32.1"
 msgspec = ">=0.21.1"
 pydantic = ">=2.13.4"
-narwhals = ">=2.22.1"
+narwhals = ">=2.24.0"
 zstandard = ">=0.22.0"  # REVIEW: this is included in python 3.14
 cloudpathlib = ">=0.24.0"
 beautifulsoup4 = ">=4.12.3"
+ray = { version = ">=2.56.0", extras = ["default"] }
+pyzmq = ">=27.1.0"
+deltalake = ">=1.6.2"
 
 [environments]
 default = ["py311", "dev", "optional"]
@@ -42,39 +45,39 @@ JDK_HOME  = "$JAVA_HOME"
 PATH      = "$JAVA_HOME/bin:$PATH"
 
 [feature.optional.dependencies]
-openjdk = "21.*"  # for spark
+# openjdk = "21.*"  # for spark
 libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
-ray = { version = ">=2.55.1", extras = ["default"] }
-pyzmq = ">=27.1.0"
-deltalake = ">=1.6.0"
-yfinance = ">=1.4.1"
-huggingface-hub = ">=1.19.0"
-prefect = ">=3.7.4"
-pandas = ">=2.2.3,<3"  # TODO: pandas 3 breaks everything, e.g. pyspark. lift it when fixed
-dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
-pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }
-daft = ">=0.7.15"
-narwhals-daft = ">=0.4.1"
-duckdb = ">=1.5.3"
-lancedb = ">=0.33.0"
+yfinance = ">=1.5.1"
+huggingface-hub = ">=1.23.0"
+prefect = ">=3.7.8"
+pandas = ">=3.0.3"
+duckdb = ">=1.5.4"
+lancedb = ">=0.34.0"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
+# dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
+# pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }
+# daft = ">=0.7.15"
+# narwhals-daft = ">=0.4.1"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
+# TEMP
+pfund = { path = "../pfund", editable = true }
+pfund-kit = { path = "../pfund-kit", editable = true }
 afterpython = ">=0.3.16"
-basedpyright = ">=1.39.7"
-marimo = { version = ">=0.23.9", extras = ["recommended", "lsp"] }
+basedpyright = ">=1.39.9"
+marimo = { version = ">=0.23.13", extras = ["recommended", "lsp"] }
 jupytext = ">=1.19.3"
 jupyterlab = ">=4.5.7"
-pandas-stubs = ">=2.2.3.250527"
+pandas-stubs = ">=3.0.3.260530"
 financetoolkit = ">=2.0.7"
 defeatbeta-api = ">=0.0.43"
 
 [feature.test.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-pytest = ">=9.1.0"
+pytest = ">=9.1.1"
 pytest-cov = ">=7.1.0"
 pytest-mock = ">=3.15.1"
 pytest-xdist = ">=3.8.0"

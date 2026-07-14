@@ -27,7 +27,7 @@ class StreamingMessage(
     ts: Annotated[int, Meta(gt=10_000_000_000)]
     msg_ts: Annotated[int, Meta(gt=10_000_000_000)] | None = None
     _created_at: int = field(default_factory=time.time_ns)
-    extra_data: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @property
     def created_at(self) -> float:

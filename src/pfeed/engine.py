@@ -16,8 +16,6 @@ import asyncio
 import logging
 from threading import Thread
 
-from pfund_kit.style import RichColor, TextStyle, cprint
-
 from pfeed.enums import DataCategory, DataSource
 
 
@@ -119,7 +117,7 @@ class DataEngine:
             )
         return is_streaming_feeds
 
-    def run(self, **prefect_kwargs: Any) -> dict[BaseFeed, IntoFrame | None] | None:
+    def run(self, **prefect_kwargs: Any) -> dict[BaseFeed, IntoFrame | None]:
         if self.is_running():
             raise RuntimeError("Data Engine is already running, cannot run again")
         self._is_running = True
@@ -140,12 +138,10 @@ class DataEngine:
                 # No running event loop, safe to use asyncio.run()
                 pass
             else:
-                cprint(
+                raise RuntimeError(
                     "Cannot call engine.run() from within a running event loop.\n"
-                    + "Did you mean to call engine.run_async()?",
-                    style=TextStyle.BOLD + RichColor.YELLOW,
+                    + "Did you mean to call engine.run_async()?"
                 )
-                return
             return asyncio.run(self.run_async())
 
     async def run_async(self) -> None:

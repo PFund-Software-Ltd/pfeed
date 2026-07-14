@@ -21,8 +21,8 @@ class NewsMetadataModel(TimeBasedMetadataModel):
 
 
 class NewsDataModel(TimeBasedDataModel):
-    data_handler_class: ClassVar[type[NewsDataHandler]] = NewsDataHandler
-    metadata_class: ClassVar[type[NewsMetadataModel]] = NewsMetadataModel
+    DataHandler: ClassVar[type[NewsDataHandler]] = NewsDataHandler
+    Metadata: ClassVar[type[NewsMetadataModel]] = NewsMetadataModel
 
     env: Environment
     product: BaseProduct | None = (

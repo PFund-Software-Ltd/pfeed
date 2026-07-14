@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 if TYPE_CHECKING:
+    from pfund_kit.logging.loggers import ColoredLogger
     from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue
 
@@ -25,11 +26,9 @@ from abc import ABC, abstractmethod
 
 from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
 
-__all__ = []
-
 
 class BaseFeed(ABC):
-    data_model_class: ClassVar[type[BaseDataModel]]
+    DataModel: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
 
     def __init__(self, pipeline_mode: bool = False, num_workers: int | None = None):
@@ -44,7 +43,9 @@ class BaseFeed(ABC):
 
         setup_logging()
         self.data_source: BaseSource = self._create_data_source()
-        self.logger: logging.Logger = logging.getLogger(f"pfeed.{self.name.lower()}")
+        self.logger: ColoredLogger = cast(
+            "ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}")
+        )
         self._pipeline_mode = pipeline_mode
         self._dataflows: dict[BaseRequest, list[DataFlow]] = {}
         # Flat list of result-bearing dataflows from the most recent run.
@@ -201,9 +202,9 @@ class BaseFeed(ABC):
             and request.is_streaming() != self._requests[-1].is_streaming()
         ):
             raise ValueError(
-                f"cannot mix streaming and batch requests in one pipeline: "
-                f"{request.extract_type} request is incompatible with the queued "
-                f"{self._requests[-1].extract_type} request"
+                "cannot mix streaming and batch requests in one pipeline: "
+                + f"{request.extract_type} request is incompatible with the queued "
+                + f"{self._requests[-1].extract_type} request"
             )
         self._requests.append(request)
 

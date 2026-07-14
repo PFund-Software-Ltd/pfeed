@@ -9,11 +9,11 @@ if TYPE_CHECKING:
 
     from pfund.datas.data_bar import BarData
     from pfund.entities.products.product_base import BaseProduct
+    from pfund.venues._apis.typing import ResponseData
 
     from pfeed.dataflow.result import RunResult
     from pfeed.feeds.streaming_feed_mixin import (
         ChannelKey,
-        ParsedMessage,
         RawMessage,
         ReplayData,
         WebSocketName,
@@ -45,11 +45,9 @@ from pfeed.storages.base_storage import BaseStorage
 from pfeed.storages.storage_config import StorageConfig
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
-__all__ = []
-
 
 class MarketFeed(TimeBasedFeed, ABC):
-    data_model_class: ClassVar[type[MarketDataModel]] = MarketDataModel
+    DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     data_source: DataProviderSource
     SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = False
@@ -67,12 +65,12 @@ class MarketFeed(TimeBasedFeed, ABC):
 
     @staticmethod
     @abstractmethod
-    def _parse_message(product: BaseProduct, msg: Any) -> ParsedMessage:
+    def _parse_message(product: BaseProduct, msg: Any) -> ResponseData:
         pass
 
     @staticmethod
     @abstractmethod
-    def _normalize_timestamps(msg: ParsedMessage) -> ParsedMessage:
+    def _normalize_timestamps(msg: ResponseData) -> ResponseData:
         """Convert source's native time unit to int ns since epoch.
         Touches top-level `ts` and any timestamp fields inside `data`."""
         pass
@@ -128,7 +126,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             data_origin: Origin label for the data.
             product_specs: Additional product specifications (e.g. strike_price, expiration for options).
         """
-        DataModel = self.data_model_class
+        DataModel = self.DataModel
         return DataModel(
             env=env,
             data_source=self.data_source,
@@ -251,7 +249,10 @@ class MarketFeed(TimeBasedFeed, ABC):
     ) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
+        from pfeed.config import get_config
         from pfeed.utils import lambda_with_name
+
+        config = get_config()
 
         default_transformations = [
             lambda_with_name(
@@ -281,7 +282,10 @@ class MarketFeed(TimeBasedFeed, ABC):
                 ]
             )
         default_transformations.append(
-            lambda_with_name("convert_to_user_df", lambda df: convert_dataframe(df))
+            lambda_with_name(
+                "convert_to_user_df",
+                lambda df: convert_dataframe(df, data_tool=config.data_tool),
+            )
         )
         return default_transformations
 
@@ -440,7 +444,10 @@ class MarketFeed(TimeBasedFeed, ABC):
     ) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
+        from pfeed.config import get_config
         from pfeed.utils import lambda_with_name
+
+        config = get_config()
 
         storage_config = request.storage_config_for_retrieval
         is_retrieving_streaming_data = request.env in (
@@ -473,7 +480,8 @@ class MarketFeed(TimeBasedFeed, ABC):
                 )
             default_transformations.append(
                 lambda_with_name(
-                    "convert_to_user_df", lambda df: convert_dataframe(df)
+                    "convert_to_user_df",
+                    lambda df: convert_dataframe(df, data_tool=config.data_tool),
                 ),
             )
         else:
@@ -580,7 +588,6 @@ class MarketFeed(TimeBasedFeed, ABC):
         data_resolution = resolution
         if not is_replaying:
             if resolution.is_bar():
-                from pfund.components.mixin import ComponentMixin
                 from pfund.datas.data_config import DataConfig
 
                 # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
@@ -589,14 +596,16 @@ class MarketFeed(TimeBasedFeed, ABC):
                     data_source=self.data_source.name, data_origin=data_origin
                 )
                 data_config.data_resolutions = [data_resolution]
-                resampled_data_config = data_config.auto_resample(
-                    ComponentMixin.get_supported_resolutions(product)
-                )
-                if resampled_data_config.resample != data_config.resample:
-                    data_resolution = resampled_data_config.resample[resolution]
-                    self.logger.warning(
-                        f"{product.name} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
+                if product.venue is not None:
+                    VenueClass = product.venue.venue_class
+                    resampled_data_config = data_config.auto_resample(
+                        VenueClass.METADATA.supported_resolutions
                     )
+                    if resampled_data_config.resample != data_config.resample:
+                        data_resolution = resampled_data_config.resample[resolution]
+                        self.logger.warning(
+                            f"{product.desc_str()} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
+                        )
         else:
             # NOTE: in replay mode, storage_config means loading data FROM storage, not TO storage, so it must exist
             storage_config = self._normalize_storage_config(
@@ -727,8 +736,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                 data_bar = BarData(
                     product=request.product,
                     resolution=request.target_resolution,
-                    data_config=request.data_config,
-                    storage_config=request.storage_config,
+                    config=request.data_config,
                 )
             else:
                 data_bar = None
@@ -756,7 +764,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         product: BaseProduct,
         target_resolution: Resolution,
         data_resolution: Resolution,
-        msg: ParsedMessage,
+        msg: ResponseData,
         data_bar: BarData | None = None,
         tick_counter: Iterator[int] | None = None,
     ) -> MarketDataMessage:
@@ -783,7 +791,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                     "ts": data["ts"],
                     "price": data["price"],
                     "volume": data["volume"],
-                    "extra_data": data.get("extra_data", {}),
+                    "extra": data.get("extra", {}),
                 },
                 TickMessage,
             )
@@ -802,7 +810,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                         "close": data["close"],
                         "volume": data["volume"],
                         "is_incremental": data["is_incremental"],
-                        "extra_data": data.get("extra_data", {}),
+                        "extra": data.get("extra", {}),
                     },
                     BarMessage,
                 )
@@ -842,7 +850,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                         # pfund Bar is seconds-based; pfeed timestamps are int ns.
                         ts=ns_to_seconds(data["ts"]),
                         # NOTE: extra data is about tick data, don't pass it to bar data
-                        # extra_data=data.get('extra_data', {}),
+                        # extra=data.get('extra', {}),
                         is_incremental=True,
                         msg_ts=ns_to_seconds(msg.get("ts")),
                     )
@@ -863,7 +871,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                         msg_ts=ns_to_seconds(msg.get("ts")),
                         is_incremental=True,
                         # extra data is about the data with data resolution, don't pass it to bar data (target resolution)
-                        # extra_data=data.get('extra_data', {}),
+                        # extra=data.get('extra', {}),
                     )
 
                 if data_resolution.is_tick():
@@ -896,7 +904,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                         message = _create_bar_message(data_bar, is_incremental=True)
                 else:
                     raise NotImplementedError(
-                        f"{product.name} unexpected data resolution {data_resolution} for data bar"
+                        f"{product.desc_str()} unexpected data resolution {data_resolution} for data bar"
                     )
         else:
             raise NotImplementedError(

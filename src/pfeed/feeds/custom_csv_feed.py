@@ -1,7 +1,5 @@
 from pfeed.feeds.base_feed import BaseFeed
 
-__all__ = ["CustomCsvFeed"]
-
 
 # TODO
 class CustomCsvFeed(BaseFeed):

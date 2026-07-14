@@ -8,13 +8,14 @@ if TYPE_CHECKING:
     import datetime
 
     from pfund.datas.resolution import Resolution
+    from pfund.venues._apis.typing import ResponseData
 
     from pfeed.dataflow.result import RunResult
-    from pfeed.feeds.streaming_feed_mixin import ParsedMessage, RawMessage
+    from pfeed.feeds.streaming_feed_mixin import RawMessage
     from pfeed.storages.storage_config import StorageConfig
 
 import polars as pl
-from pfund.entities.products.product_bybit import BybitProduct
+from pfund.venues.bybit.product import BybitProduct
 
 from pfeed._io.io_config import IOConfig
 from pfeed.enums import MarketDataType
@@ -23,11 +24,9 @@ from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
 from pfeed.sources.bybit.mixin import BybitMixin
 
-__all__ = []
-
 
 class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
-    data_model_class: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
+    DataModel: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
     date_columns_in_raw_data: ClassVar[list[str]] = ["timestamp"]
 
     @staticmethod
@@ -130,18 +129,30 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
         return data
 
     @staticmethod
-    def _parse_message(product: BybitProduct, msg: RawMessage) -> ParsedMessage:
-        from pfund.brokers.crypto.exchanges.bybit.ws_api import WebSocketAPI
-        from pfund.brokers.crypto.exchanges.bybit.ws_api_bybit import BybitWebSocketAPI
+    def _parse_message(product: BybitProduct, msg: RawMessage) -> ResponseData:
+        from pfund.venues.bybit._ws_apis.ws_api_base import BybitBaseWebSocketAPI
+        from pfund.venues.bybit.ws_api import BybitWebSocketAPI
 
         assert product.category is not None, "product.category is not initialized"
-        BybitWebSocketAPIClass: type[BybitWebSocketAPI] = WebSocketAPI._get_api_class(
+        WebSocketAPI: type[BybitBaseWebSocketAPI] = BybitWebSocketAPI.APIS[
             product.category
-        )
-        return BybitWebSocketAPIClass._parse_message(msg)
+        ]
+
+        channel: str = msg["topic"]
+        if channel.startswith("kline"):
+            return WebSocketAPI._parse_candlestick(msg)
+        elif channel.startswith("publicTrade"):
+            return WebSocketAPI._parse_tradebook(msg)
+        # TODO: handle orderbook
+        # elif channel.startswith('orderbook'):
+        #     return WebSocketAPI._parse_orderbook(msg)
+        else:
+            raise NotImplementedError(
+                f"{WebSocketAPI.venue} {product.category} {channel=} is not supported"
+            )
 
     @staticmethod
-    def _normalize_timestamps(msg: ParsedMessage) -> ParsedMessage:
+    def _normalize_timestamps(msg: ResponseData) -> ResponseData:
         """Bybit timestamps are in milliseconds, convert to nanoseconds"""
         msg["ts"] = int(msg["ts"] * 10**6)
         data = msg["data"]

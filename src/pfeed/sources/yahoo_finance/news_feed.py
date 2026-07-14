@@ -12,8 +12,6 @@ if TYPE_CHECKING:
 from pfeed.feeds.news_feed import NewsFeed
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 
-__all__ = ["YahooFinanceNewsFeed"]
-
 
 class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
     # REVIEW: better handle some potentially useful attributes: "storyline" and "editorsPick"

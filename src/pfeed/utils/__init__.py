@@ -18,13 +18,13 @@ def lambda_with_name(name: str, lambda_func: Callable[..., Any]):
 def is_prefect_running() -> bool:
     import os
 
-    import httpx
+    import httpx2
 
     url = os.getenv("PREFECT_API_URL", "http://127.0.0.1:4200/api").rstrip("/")
     if not url.startswith("http"):
         url = f"http://{url}"
     try:
-        response = httpx.get(f"{url}/health", timeout=2.0)
+        response = httpx2.get(f"{url}/health", timeout=2.0)
         return response.status_code == 200
     except Exception:
         # Catch all exceptions - if we can't verify Prefect is running, assume it's not

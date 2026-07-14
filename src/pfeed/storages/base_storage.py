@@ -26,8 +26,6 @@ from pfeed.data_handlers.base_data_handler import BaseDataMetadata, SourcePath
 from pfeed.enums import DataLayer, DataSink, IOFormat
 from pfeed.utils.file_path import FilePath
 
-__all__ = []
-
 
 class StorageMetadata(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
@@ -219,7 +217,7 @@ class BaseStorage:
         return self
 
     def _initialize_data_handler(self) -> None:
-        DataHandler: type[BaseDataHandler] = self.data_model.data_handler_class
+        DataHandler: type[BaseDataHandler] = self.data_model.DataHandler
         self._data_handler = DataHandler(
             data_path=self.data_path,
             data_layer=self.data_layer,

@@ -11,6 +11,15 @@ if TYPE_CHECKING:
     from pfeed.engine import DataEngine
     from pfeed.sources.alphafund import AlphaFund
     from pfeed.sources.bybit import Bybit
+    from pfeed.sources.ibkr import (
+        InteractiveBrokers,
+    )
+    from pfeed.sources.ibkr import (
+        InteractiveBrokers as IB,  # noqa: N817
+    )
+    from pfeed.sources.ibkr import (
+        InteractiveBrokers as IBKR,  # noqa: N814
+    )
     from pfeed.sources.pfund import PFund
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
@@ -70,6 +79,10 @@ def __getattr__(name: str):
         from pfeed.sources.yahoo_finance import YahooFinance
 
         return YahooFinance
+    elif name.lower() in ("interactivebrokers", "ibkr", "ib"):
+        from pfeed.sources.ibkr import InteractiveBrokers
+
+        return InteractiveBrokers
     elif name.lower() == "bybit":
         from pfeed.sources.bybit import Bybit
 
@@ -89,11 +102,15 @@ def __getattr__(name: str):
 
 
 __all__ = (
+    "IB",
+    "IBKR",
+    "YF",
     "YF",
     "AlphaFund",
     "Bybit",
     "DataEngine",
     "IOConfig",
+    "InteractiveBrokers",
     "PFund",
     "SinkConfig",
     "StorageConfig",

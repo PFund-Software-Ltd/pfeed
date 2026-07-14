@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 if TYPE_CHECKING:
     from pfund.enums import ComponentType
 
 import datetime
 
+from pfeed.enums import DataCategory
 from pfeed.feeds.base_feed import BaseFeed
-from pfeed.sources.pfund.engine_data_model import EngineDataModel
+from pfeed.sources.pfund.engine_data_model import PFundEngineDataModel
 from pfeed.sources.pfund.mixin import PFundMixin
+from pfeed.storages.storage_config import StorageConfig
+from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.enums.env import Environment
 
 
@@ -18,7 +22,20 @@ from pfund.enums.env import Environment
 # some functions require api calls (e.g. get dynamic backtest results) and some do not (e.g. load backtest hisory)
 # TODO: need to specify which engine if there are multiple engines running
 class PFundEngineFeed(PFundMixin, BaseFeed):
-    data_model_class: ClassVar[type[EngineDataModel]] = EngineDataModel
+    DataModel: ClassVar[type[PFundEngineDataModel]] = PFundEngineDataModel
+    data_domain: ClassVar[DataCategory] = DataCategory.ENGINE_DATA
+
+    # def __init__(
+    #     self,
+    #     pipeline_mode: bool = False,
+    #     num_workers: int | None = None,
+    # ):
+    #     super().__init__(pipeline_mode=pipeline_mode, num_workers=num_workers)
+
+    def transform(self, *funcs: Callable[..., Any]) -> Self:
+        raise NotImplementedError(
+            f"{self.name} does not support transform(): artifacts are persisted as-is"
+        )
 
     def create_data_model(
         self,
@@ -26,16 +43,23 @@ class PFundEngineFeed(PFundMixin, BaseFeed):
         end_date: datetime.date | None = None,
         component_name: str | None = None,
         component_type: ComponentType | None = None,
-    ) -> EngineDataModel:
-        return EngineDataModel(...)
+    ) -> PFundEngineDataModel:
+        return PFundEngineDataModel(...)
 
     def _create_data_model_from_request(self, request):
         pass
 
-    def download(self):
+    def download(
+        self,
+        engine_name: str = "engine",
+        env: Environment | str = Environment.BACKTEST,
+        project_name: str = BaseEngineContext.DEFAULT_PROJECT_NAME,
+        run_id: str = BaseEngineContext.DEFAULT_RUN_NAME,
+        storage_config: StorageConfig | None = None,
+    ):
         pass
 
-    def _download_impl(self, data_model: EngineDataModel):
+    def _download_impl(self, data_model: PFundEngineDataModel):
         pass
 
     def _get_default_transformations_for_download(self, *args, **kwargs):
@@ -44,7 +68,7 @@ class PFundEngineFeed(PFundMixin, BaseFeed):
     def retrieve(self, engine_name: str = "engine"):
         pass
 
-    def _retrieve_impl(self, data_model: EngineDataModel):
+    def _retrieve_impl(self, data_model: PFundEngineDataModel):
         pass
 
     def _get_default_transformations_for_retrieve(self, *args, **kwargs):
@@ -56,11 +80,11 @@ class PFundEngineFeed(PFundMixin, BaseFeed):
     ):
         pass
 
-    def _stream_impl(self, data_model: EngineDataModel):
+    def _stream_impl(self, data_model: PFundEngineDataModel):
         pass
 
     def _create_batch_dataflows(self, *args, **kwargs):
         pass
 
-    def run(self, **prefect_kwargs):
+    def run(self, **prefect_kwargs: Any):
         pass

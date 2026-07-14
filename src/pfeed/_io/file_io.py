@@ -95,10 +95,14 @@ class FileIO(BaseIO, ABC):
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
     def write_metadata(
-        self, metadata: BaseDataMetadata, file_path: FilePath, *args: Any, **kwargs: Any
+        self, file_path: FilePath, metadata: BaseDataMetadata, *args: Any, **kwargs: Any
     ) -> None:
         metadata_path = FilePath(file_path.parent / self.METADATA_FILENAME)
-        payload = metadata.model_dump(mode="json") if metadata is not None else {}
+        payload = (
+            metadata.model_dump(mode="json", fallback=str)
+            if metadata is not None
+            else {}
+        )
         self._mkdir(metadata_path)
         with self._filesystem.open_output_stream(metadata_path.schemeless) as f:
             f.write(json.dumps(payload, indent=2).encode())

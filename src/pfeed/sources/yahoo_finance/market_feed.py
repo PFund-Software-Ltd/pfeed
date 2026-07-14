@@ -8,10 +8,11 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
+    from pfund.venues._apis.typing import ResponseData
     from yfinance import Ticker
 
     from pfeed.dataflow.result import RunResult
-    from pfeed.feeds.streaming_feed_mixin import ParsedMessage, RawMessage
+    from pfeed.feeds.streaming_feed_mixin import RawMessage
     from pfeed.storages.storage_config import StorageConfig
 
 import datetime
@@ -25,15 +26,11 @@ from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
 
-__all__ = []
-
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
 class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
-    data_model_class: ClassVar[type[YahooFinanceMarketDataModel]] = (
-        YahooFinanceMarketDataModel
-    )
+    DataModel: ClassVar[type[YahooFinanceMarketDataModel]] = YahooFinanceMarketDataModel
     # "Date" is used for daily data and "Datetime" is used for other resolutions in yfinance
     date_columns_in_raw_data: ClassVar[list[str]] = ["Datetime", "Date"]
     SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = True
@@ -264,7 +261,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         return pl.from_pandas(df).lazy() if df is not None else None
 
     @staticmethod
-    def _parse_message(product: BaseProduct, msg: RawMessage) -> ParsedMessage:
+    def _parse_message(product: BaseProduct, msg: RawMessage) -> ResponseData:
         """
         Args:
             msg: raw message from yahoo finance streaming data
@@ -314,14 +311,14 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         # ts = current_time_in_mts / 1000  # convert to seconds
         # self.stream_api.update_last_time_in_mts(channel_key, current_time_in_mts)
 
-        parsed_msg: ParsedMessage = {
+        parsed_msg: ResponseData = {
             "ts": ts,  # pyright: ignore[reportAssignmentType]
             "channel": product.symbol,
             "data": {
                 "ts": ts,
                 "price": msg["price"],
                 "volume": day_volume,
-                "extra_data": {
+                "extra": {
                     "exchange": msg.get("exchange", None),
                     "market_hours": msg.get("market_hours", None),
                     "last_size": msg.get("last_size", None),
@@ -331,7 +328,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         return parsed_msg
 
     @staticmethod
-    def _normalize_timestamps(msg: ParsedMessage) -> ParsedMessage:
+    def _normalize_timestamps(msg: ResponseData) -> ResponseData:
         """Yahoo Finance timestamps are in milliseconds, convert to nanoseconds"""
         # Yahoo Finance sends 'time' as a string, cast before scaling ms -> ns
         msg["ts"] = int(msg["ts"]) * 10**6

@@ -33,7 +33,7 @@ class BaseDataMetadata(BaseModel):
 
 
 class BaseDataHandler(ABC):
-    metadata_class: ClassVar[type[BaseDataMetadata]]
+    Metadata: ClassVar[type[BaseDataMetadata]]
     PARTITION_COLUMNS: ClassVar[list[str]] = []
     IO_USING_PARTITION_COLUMNS: ClassVar[set[IOClassName]] = set()
 
@@ -134,7 +134,7 @@ class BaseDataHandler(ABC):
         metadata_dict: dict[SourcePath, MetadataDict] = self.io.read_metadata(
             source_paths
         )
-        Metadata = self.metadata_class
+        Metadata = self.Metadata
         metadata = {
             source_path: Metadata(**metadata_value)
             for source_path, metadata_value in metadata_dict.items()

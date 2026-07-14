@@ -22,7 +22,7 @@ project_name = "pfeed"
 _config: PFeedConfig | None = None
 
 
-def setup_logging(env: Environment | None = None, reset: bool = False) -> None:
+def setup_logging(env: Environment | str | None = None, reset: bool = False) -> None:
     env = Environment[env.upper()] if env else None
     kit_logging.setup_logging(get_config(), env=env, reset=reset)
 

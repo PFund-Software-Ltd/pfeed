@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable
@@ -19,22 +19,16 @@ if TYPE_CHECKING:
 
     ReplayData: TypeAlias = dict[str, Any]
     WebSocketName: TypeAlias = str
-    RawMessage: TypeAlias = dict[str, Any]
     WorkerName: TypeAlias = str
     DataFlowName: TypeAlias = str
     ChannelKey: TypeAlias = str | tuple[str, str]
-
-    class ParsedMessage(TypedDict):
-        ts: float
-        channel: str
-        data: dict[str, Any]
-
-    StreamingData = dict[str, Any] | StreamingMessage
+    RawMessage: TypeAlias = dict[str, Any]
+    StreamingData = RawMessage | StreamingMessage
 
 import asyncio
 from collections import defaultdict
 
-from pfund_kit.style import RichColor, TextStyle, cprint
+from pfund_kit.style import RichColor, TextStyle
 
 from pfeed.requests.market_feed_stream_request import MarketFeedStreamRequest
 
@@ -415,7 +409,7 @@ class StreamingFeedMixin:
             self._last_run_dataflows = last_run_dataflows
             self._cleanup_after_run()
 
-    def run(self, **prefect_kwargs: Any) -> RunResult | None:
+    def run(self, **prefect_kwargs: Any) -> RunResult | list[DataFlow]:
         if self.streaming_dataflows:
             try:
                 _ = asyncio.get_running_loop()
@@ -425,17 +419,15 @@ class StreamingFeedMixin:
                 # No running event loop, safe to use asyncio.run()
                 pass
             else:
-                cprint(
+                raise RuntimeError(
                     "Cannot call feed.run() from within a running event loop.\n"
-                    + "Did you mean to call feed.run_async() or forget to set 'pipeline_mode=True'?",
-                    style=TextStyle.BOLD + RichColor.YELLOW,
+                    + "Did you mean to call feed.run_async() or forget to set 'pipeline_mode=True'?"
                 )
-                return
             return asyncio.run(self.run_async())
         else:
             return super().run(**prefect_kwargs)  # pyright: ignore[reportUnknownVariableType]
 
-    async def run_async(self):
+    async def run_async(self) -> list[DataFlow]:
         if not self.streaming_dataflows:
             raise RuntimeError(
                 f"{self.name} run_async() is only for streaming dataflows. Use run() instead."

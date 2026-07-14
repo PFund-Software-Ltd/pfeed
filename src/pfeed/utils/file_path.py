@@ -1,7 +1,7 @@
 # VIBE-CODED
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
     from cloudpathlib import CloudPath
@@ -150,16 +150,16 @@ class FilePath:
     def __str__(self):
         return str(self._path)
 
-    def __repr__(self):
-        return f"FilePath({str(self._path)!r})"
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({str(self._path)!r})"
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: Any) -> Self:
         """Support path / 'subpath' syntax."""
-        return FilePath(self._path / other)
+        return type(self)(self._path / other)
 
     def __rtruediv__(self, other):
         """Support 'base' / path syntax."""
-        return FilePath(other) / self
+        return type(self)(other) / self
 
     def __eq__(self, other):
         if isinstance(other, FilePath):

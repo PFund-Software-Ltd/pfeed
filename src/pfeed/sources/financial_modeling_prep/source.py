@@ -5,8 +5,6 @@ from fmp_api_client import FMPClient, FMPPlan
 
 from pfeed.sources.data_provider_source import DataProviderSource
 
-__all__ = ["FinancialModelingPrepSource"]
-
 
 class FinancialModelingPrepSource(DataProviderSource):
     def __init__(

@@ -10,7 +10,7 @@ class PFundBaseRequest(BaseRequest):
 
     env: Environment | str
     project_name: str
-    run_id: str
+    run_name: str
 
     @field_validator("env", mode="before")
     @classmethod
@@ -24,7 +24,7 @@ class PFundBaseRequest(BaseRequest):
     def _lower_project_name(cls, value: str) -> str:
         return value.lower()
 
-    @field_validator("run_id", mode="before")
+    @field_validator("run_name", mode="before")
     @classmethod
-    def _lower_run_id(cls, value: str) -> str:
+    def _lower_run_name(cls, value: str) -> str:
         return value.lower()

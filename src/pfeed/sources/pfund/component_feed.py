@@ -10,11 +10,11 @@ if TYPE_CHECKING:
 
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.result import DataFlowResult, RunResult
-    from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
     from pfeed.sources.pfund.requests import (
         PFundComponentFeedDownloadRequest,
         PFundComponentFeedRetrieveRequest,
     )
+    from pfund.components.models.model_base import BaseModel
     from pfund.enums import ComponentType
     from pfund.typing import Component
 
@@ -22,20 +22,17 @@ if TYPE_CHECKING:
         PFundComponentFeedDownloadRequest | PFundComponentFeedRetrieveRequest
     )
 
-from pathlib import Path
-
 import polars as pl
 from pfund_kit.style import RichColor, TextStyle
 
 from pfeed._io.io_config import IOConfig
 from pfeed.config import setup_logging
-from pfeed.data_models.base_data_model import BaseDataModel
 from pfeed.enums import DataCategory, DataStorage, DataTool, IOFormat
 from pfeed.feeds.base_feed import BaseFeed
+from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
 from pfeed.sources.pfund.mixin import PFundMixin
 from pfeed.storages.storage_config import StorageConfig
-from pfund.engines.engine_context import EngineContext
-from pfund.enums import ArtifactType, Environment
+from pfund.enums import ArtifactType
 
 
 class PFundComponentFeed(PFundMixin, BaseFeed):
@@ -53,9 +50,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         serialization happens — FileIO/DeltaLakeIO hand the persisted bytes/frame back.
     """
 
-    # not really used (the concrete model varies per artifact_type) but satisfies the
-    # BaseFeed annotation; the real per-request model is built in _create_data_model_from_request.
-    data_model_class: ClassVar[type[BaseDataModel]] = BaseDataModel
+    DataModel: ClassVar[type[PFundComponentDataModel]] = PFundComponentDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.COMPONENT_DATA
 
     def __init__(
@@ -103,18 +98,6 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
     def component_type(self) -> ComponentType:
         return self.component.component_type
 
-    @property
-    def component_source_file(self) -> Path:
-        """Locate the component's original `.py` source file on disk."""
-        import inspect
-
-        source_file = inspect.getsourcefile(type(self.component))
-        if source_file is None:
-            raise ValueError(
-                f"cannot locate source file for {type(self.component).__name__}"
-            )
-        return Path(source_file)
-
     def _append_request(self, request: PFundComponentFeedRequest) -> None:
         # A component feed has exactly one purpose per run: download/retrieve ONE
         # artifact type. Artifacts can't be combined (a data frame and model/source
@@ -138,55 +121,61 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
             f"{self.name} does not support transform(): artifacts are persisted as-is"
         )
 
-    def _get_default_transformations_for_download(
-        self, request: PFundComponentFeedDownloadRequest
-    ) -> list[Callable[..., Any]]:
-        from pfeed._etl.base import convert_dataframe
-        from pfeed.utils import lambda_with_name
-
-        default_transformations = []
-        if request.artifact_type == ArtifactType.data:
-            default_transformations.append(
-                lambda_with_name(
-                    "convert_to_user_df", lambda df: convert_dataframe(df)
-                ),
+    def _check_artifact_type(
+        self,
+        artifact_type: ArtifactType | str,
+        checkpoint_step: int | None,
+    ) -> ArtifactType:
+        artifact_type = ArtifactType[artifact_type.lower()]
+        if (
+            artifact_type in (ArtifactType.model, ArtifactType.checkpoint)
+            and not self.component.is_model()
+        ):
+            raise ValueError(
+                f"{self.component.name} must be a model for model/checkpoint artifacts"
             )
-        return default_transformations
-
-    def _get_default_transformations_for_retrieve(
-        self, request: PFundComponentFeedRetrieveRequest
-    ) -> list[Callable[..., Any]]:
-        from pfeed._etl.base import convert_dataframe
-        from pfeed.utils import lambda_with_name
-
-        default_transformations = []
-        if request.artifact_type == ArtifactType.data:
-            default_transformations.append(
-                lambda_with_name(
-                    "convert_to_user_df", lambda df: convert_dataframe(df)
-                ),
-            )
-        return default_transformations
+        if artifact_type == ArtifactType.checkpoint and checkpoint_step is None:
+            raise ValueError("checkpoint_step is required for a checkpoint")
+        elif artifact_type != ArtifactType.checkpoint and checkpoint_step is not None:
+            raise ValueError("checkpoint_step is only valid for checkpoints")
+        return artifact_type
 
     def download(
         self,
-        artifact_type: ArtifactType | str = ArtifactType.data,
-        env: Environment | str = Environment.BACKTEST,
-        project_name: str = EngineContext.DEFAULT_PROJECT_NAME,
-        run_id: str = EngineContext.DEFAULT_RUN_NAME,
+        artifact_type: ArtifactType | str,
         storage_config: StorageConfig | None = None,
+        checkpoint_step: int | None = None,
     ) -> Self | RunResult:
-        """Extract the component's artifact (e.g. .py source code, model weights, or output dataframe)c"""
+        """Extract a component artifact and optionally persist it to storage.
+
+        Args:
+            artifact_type: The artifact to extract.
+            storage_config: Storage destination. If omitted, the artifact is only
+                returned by the dataflow.
+            checkpoint_step: Step identifying the checkpoint artifact. Required
+                when ``artifact_type`` is ``checkpoint`` and invalid otherwise.
+
+        Returns:
+            The feed in pipeline mode; otherwise the completed run result.
+        """
         from pfeed.sources.pfund.requests import PFundComponentFeedDownloadRequest
 
-        env = Environment[env.upper()]
+        engine_context = self.component.context
+        env = engine_context.env
         setup_logging(env=env)
+        artifact_type = self._check_artifact_type(artifact_type, checkpoint_step)
+        io_format = (
+            IOFormat.DELTALAKE if artifact_type == ArtifactType.data else IOFormat.BLOB
+        )
+        io_config = self._normalize_io_config(IOConfig(io_format=io_format))
         request = PFundComponentFeedDownloadRequest(
             artifact_type=artifact_type,
             env=env,
-            project_name=project_name,
-            run_id=run_id,
+            project_name=engine_context.project_name,
+            run_name=engine_context.run_name,
             storage_config=storage_config,
+            io_config=io_config,
+            checkpoint_step=checkpoint_step,
         )
         self._append_request(request)
         _ = self._create_batch_dataflows(extract_func=self._download_impl)
@@ -197,15 +186,24 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
     ) -> pl.DataFrame | bytes:
         artifact_type = data_model.artifact_type
         if artifact_type == ArtifactType.source:
-            return self.component_source_file.read_bytes()
+            return self.component._source_artifact.read_bytes()
         elif artifact_type == ArtifactType.model:
-            return self.component.dump()
+            return cast("BaseModel", self.component)._model_artifact
         elif artifact_type == ArtifactType.data:
             from pfeed._etl.base import convert_dataframe
 
-            user_df = self.component.get_df(kind="output", to_native=True)
-            # convert to polars for consistency with _download_impl return type in market feed
-            return convert_dataframe(user_df, data_tool=DataTool.polars)
+            return cast(
+                pl.DataFrame,
+                convert_dataframe(
+                    self.component._data_artifact,
+                    data_tool=DataTool.polars,
+                ),
+            )
+        elif artifact_type == ArtifactType.checkpoint:
+            checkpoint_artifact = cast("BaseModel", self.component)._checkpoint_artifact
+            if checkpoint_artifact is None:
+                raise RuntimeError("No checkpoint is staged for download")
+            return checkpoint_artifact
         else:
             raise ValueError(f"Unsupported artifact type: {artifact_type}")
 
@@ -213,33 +211,35 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         self, request: PFundComponentFeedRequest
     ) -> PFundComponentDataModel:
         return self.create_data_model(
-            artifact_type=request.artifact_type, run_id=request.run_id
+            artifact_type=request.artifact_type,
+            checkpoint_step=request.checkpoint_step,
         )
 
     def create_data_model(
         self,
-        artifact_type: ArtifactType | str = ArtifactType.data,
-        env: Environment | str = Environment.BACKTEST,
-        project_name: str = EngineContext.DEFAULT_PROJECT_NAME,
-        run_id: str = EngineContext.DEFAULT_RUN_NAME,
+        artifact_type: ArtifactType | str,
+        checkpoint_step: int | None = None,
     ) -> PFundComponentDataModel:
+        engine_context = self.component.context
         artifact_type = ArtifactType[artifact_type.lower()]
         artifact_kwargs: dict[str, Any] = {
-            "env": env,
-            "project_name": project_name,
-            "run_id": run_id,
+            "data_source": self.data_source,
+            "data_origin": "",
+            "env": engine_context.env,
+            "project_name": engine_context.project_name,
+            "run_name": engine_context.run_name,
             **self.component.to_dict(),
         }
         match artifact_type:
             case ArtifactType.model:
                 from pfeed.sources.pfund.component_data_model import ModelArtifact
-                from pfund.components.models.jax_model import JaxModel
-                from pfund.components.models.pytorch_model import PytorchModel
-                from pfund.components.models.sklearn_model import SklearnModel
+                from pfund.components.models.jax_model import JAXModel
+                from pfund.components.models.pytorch_model import PyTorchModel
+                from pfund.components.models.sklearn_model import SKLearnModel
 
-                if isinstance(self.component, SklearnModel):
+                if isinstance(self.component, SKLearnModel):
                     extension = ".joblib"
-                elif isinstance(self.component, (PytorchModel, JaxModel)):
+                elif isinstance(self.component, (PyTorchModel, JAXModel)):
                     extension = ".safetensors"
                 else:
                     raise ValueError(f"Unsupported model type: {type(self.component)}")
@@ -252,25 +252,64 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
                 from pfeed.sources.pfund.component_data_model import SourceArtifact
 
                 return SourceArtifact(
-                    filename=self.component_source_file.name, **artifact_kwargs
+                    filename=self.component._source_artifact.name, **artifact_kwargs
+                )
+            case ArtifactType.checkpoint:
+                from pfeed.sources.pfund.component_data_model import CheckpointArtifact
+                from pfund.components.models.jax_model import JAXModel
+                from pfund.components.models.pytorch_model import PyTorchModel
+
+                if checkpoint_step is None:
+                    raise ValueError("checkpoint_step is required for a checkpoint")
+
+                if isinstance(self.component, PyTorchModel):
+                    extension = ".pth"
+                elif isinstance(self.component, JAXModel):
+                    extension = ".pkl"
+                else:
+                    raise ValueError(
+                        f"Unsupported checkpoint model type: {type(self.component)}"
+                    )
+                return CheckpointArtifact(
+                    extension=extension,
+                    step=checkpoint_step,
+                    **artifact_kwargs,
                 )
             case _:
                 assert_never(artifact_type)
 
+    def _get_default_transformations_for_download(
+        self, request: PFundComponentFeedDownloadRequest
+    ) -> list[Callable[..., Any]]:
+        from pfeed._etl.base import convert_dataframe
+        from pfeed.config import get_config
+        from pfeed.utils import lambda_with_name
+
+        config = get_config()
+
+        default_transformations = []
+        if request.artifact_type == ArtifactType.data:
+            default_transformations.append(
+                lambda_with_name(
+                    "convert_to_user_df",
+                    lambda df: convert_dataframe(df, data_tool=config.data_tool),
+                ),
+            )
+        return default_transformations
+
     def retrieve(
         self,
-        artifact_type: ArtifactType | str = ArtifactType.data,
-        project_name: str = EngineContext.DEFAULT_PROJECT_NAME,
-        run_id: str = EngineContext.DEFAULT_RUN_NAME,
-        env: Environment | str = Environment.BACKTEST,
+        artifact_type: ArtifactType | str,
         storage_config: StorageConfig | None = None,
+        checkpoint_step: int | None = None,
     ) -> Self | RunResult:
         """Read a component artifact back FROM STORAGE (read-back twin of download+load)."""
         from pfeed.sources.pfund.requests import PFundComponentFeedRetrieveRequest
 
-        env = Environment[env.upper()]
+        engine_context = self.component.context
+        env = engine_context.env
         setup_logging(env=env)
-        artifact_type = ArtifactType[artifact_type.lower()]
+        artifact_type = self._check_artifact_type(artifact_type, checkpoint_step)
         storage_config = self._normalize_storage_config(
             storage_config or StorageConfig()
         )
@@ -280,10 +319,11 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         io_config = self._normalize_io_config(IOConfig(io_format=io_format))
         request = PFundComponentFeedRetrieveRequest(
             env=env,
-            project_name=project_name,
-            run_id=run_id,
+            project_name=engine_context.project_name,
+            run_name=engine_context.run_name,
             data_source=self.name,
             artifact_type=artifact_type,
+            checkpoint_step=checkpoint_step,
             storage_config_for_retrieval=storage_config,
             io_config_for_retrieval=io_config,
         )
@@ -309,6 +349,25 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         else:
             self.logger.debug(f"no artifact found for {data_model} in {storage}")
         return artifact
+
+    def _get_default_transformations_for_retrieve(
+        self, request: PFundComponentFeedRetrieveRequest
+    ) -> list[Callable[..., Any]]:
+        from pfeed._etl.base import convert_dataframe
+        from pfeed.config import get_config
+        from pfeed.utils import lambda_with_name
+
+        config = get_config()
+
+        default_transformations = []
+        if request.artifact_type == ArtifactType.data:
+            default_transformations.append(
+                lambda_with_name(
+                    "convert_to_user_df",
+                    lambda df: convert_dataframe(df, data_tool=config.data_tool),
+                ),
+            )
+        return default_transformations
 
     # TODO: connect to mtflow's ws server
     def stream(self, *args: Any, **kwargs: Any) -> Self:

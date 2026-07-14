@@ -123,7 +123,7 @@ class TypeMapper:
         Convert a concrete dict instance to PyArrow struct type.
 
         This preserves individual field types instead of forcing all values to the same type.
-        Used for mixed-type dicts like extra_data with int, str, bool values.
+        Used for mixed-type dicts like extra with int, str, bool values.
         """
         struct_fields = []
 

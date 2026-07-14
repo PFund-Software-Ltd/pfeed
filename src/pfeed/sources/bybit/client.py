@@ -8,8 +8,6 @@ if TYPE_CHECKING:
 from pfeed.data_client import DataClient
 from pfeed.sources.bybit.mixin import BybitMixin
 
-__all__ = ["Bybit"]
-
 
 class Bybit(BybitMixin, DataClient):
     market_feed: BybitMarketFeed

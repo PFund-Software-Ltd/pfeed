@@ -17,8 +17,6 @@ from pfeed.sources.financial_modeling_prep import (
 )
 from pfeed.sources.financial_modeling_prep.source import FinancialModelingPrepSource
 
-__all__ = ["FinancialModelingPrep"]
-
 
 class FMPCategory(StrEnum):
     economic = "economic"

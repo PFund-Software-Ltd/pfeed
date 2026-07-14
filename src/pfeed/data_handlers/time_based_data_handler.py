@@ -40,7 +40,7 @@ class TimeBasedDataHandler(BaseDataHandler, ABC):
     IO_USING_PARTITION_COLUMNS: ClassVar[set[IOClassName]] = {"DeltaLakeIO"}
 
     _data_model: TimeBasedDataModel
-    metadata_class: ClassVar[type[TimeBasedDataMetadata]] = TimeBasedDataMetadata
+    Metadata: ClassVar[type[TimeBasedDataMetadata]] = TimeBasedDataMetadata
 
     def __init__(
         self,

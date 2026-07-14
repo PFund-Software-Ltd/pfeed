@@ -41,7 +41,7 @@
 
 ## TL;DR: use pfeed to manage your trading data; other traders will help you clean it
 
-<img alt="PFeed Architecture" src="afterpython/static/pfeed.png">
+<!--<img alt="PFeed Architecture" src="afterpython/static/pfeed.png">-->
 
 > For illustration purposes only, not everything shown is currently supported.
 
@@ -85,8 +85,8 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 ## Installation
 > For more installation options, please refer to the [documentation](https://pfeed.pfund.ai/doc/installation).
 ```bash
-# [RECOMMENDED]: Core Features, including Ray, ZeroMQ, DeltaLake, etc.
-pip install "pfeed[core,yfinance]"
+# pick your data source, e.g. yfinance
+pip install "pfeed[yfinance]"
 ```
 
 

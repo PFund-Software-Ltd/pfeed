@@ -79,3 +79,6 @@ class DataArtifact(PFundComponentDataModel):
     artifact_type: Literal[ArtifactType.data] = ArtifactType.data
     # .delta is just the convention for the deltalake folder
     extension: Literal[".delta"] = ".delta"
+    # None appends. A predicate atomically replaces matching rows through
+    # DeltaLakeIO's existing delete_where contract.
+    replace_where: str | None = None

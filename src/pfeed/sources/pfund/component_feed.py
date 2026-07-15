@@ -280,7 +280,12 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
             case ArtifactType.data:
                 from pfeed.sources.pfund.component_data_model import DataArtifact
 
-                return DataArtifact(**artifact_kwargs)
+                return DataArtifact(
+                    replace_where="true"
+                    if engine_context.env == Environment.BACKTEST
+                    else None,
+                    **artifact_kwargs,
+                )
             case ArtifactType.source:
                 from pfeed.sources.pfund.component_data_model import SourceArtifact
 

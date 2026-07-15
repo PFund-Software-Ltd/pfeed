@@ -6,6 +6,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+def _utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC)
+
+
 class ComponentMetadata(BaseModel):
     """A persisted snapshot of a pfund component's definition."""
 
@@ -42,6 +46,7 @@ class PFundComponentDataMetadata(BaseModel):
     """The component-level manifest persisted as ``metadata.json``."""
 
     schema_version: Literal[1] = 1
+    created_at: datetime.datetime = Field(default_factory=_utc_now, frozen=True)
     component_id: str
     component_type: str
     component: ComponentMetadata

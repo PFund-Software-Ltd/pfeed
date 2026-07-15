@@ -157,11 +157,17 @@ class PFundComponentDataHandler(BaseDataHandler):
                     )
             else:  # data artifact writing to deltalake
                 from pfeed._etl.base import convert_dataframe
+                from pfeed.sources.pfund.component_data_model import DataArtifact
 
                 table_path = self._table_path
                 assert table_path is not None, "table path is not initialized"
+                artifact = cast(DataArtifact, self._data_model)
                 lf = cast(pl.LazyFrame, convert_dataframe(data, DataTool.polars))
-                self.io.write(lf.collect().to_arrow(), table_path)
+                self.io.write(
+                    lf.collect().to_arrow(),
+                    table_path,
+                    delete_where=artifact.replace_where,
+                )
 
     def read(self) -> pl.LazyFrame | bytes | None:
         match self._io_type:

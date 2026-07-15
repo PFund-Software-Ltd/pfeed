@@ -30,6 +30,11 @@ from pfeed.config import setup_logging
 from pfeed.enums import DataCategory, DataStorage, DataTool, IOFormat
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
+from pfeed.sources.pfund.component_metadata import (
+    ComponentMetadata,
+    PFundComponentDataMetadata,
+    RunMetadata,
+)
 from pfeed.sources.pfund.mixin import PFundMixin
 from pfeed.storages.storage_config import StorageConfig
 from pfund.enums import ArtifactType, Environment
@@ -228,13 +233,35 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
     ) -> PFundComponentDataModel:
         engine_context = self.component.context
         artifact_type = ArtifactType[artifact_type.lower()]
+        component_snapshot = self.component.to_dict()
+        component_type = component_snapshot.pop("component_type")
+        run_mode = component_snapshot.pop("run_mode")
+        data_start = component_snapshot.pop("data_start")
+        data_end = component_snapshot.pop("data_end")
+        settings = component_snapshot.pop("settings")
+        metadata = PFundComponentDataMetadata(
+            component_id=self.component.component_id,
+            component_type=str(component_type),
+            component=ComponentMetadata(**component_snapshot),
+            run=RunMetadata(
+                env=str(engine_context.env),
+                project_name=engine_context.project_name,
+                run_name=engine_context.run_name,
+                run_mode=str(run_mode),
+                data_start=data_start,
+                data_end=data_end,
+                settings=settings,
+            ),
+        )
         artifact_kwargs: dict[str, Any] = {
             "data_source": self.data_source,
             "data_origin": "",
             "env": engine_context.env,
             "project_name": engine_context.project_name,
             "run_name": engine_context.run_name,
-            **self.component.to_dict(),
+            "component_type": component_type,
+            "component_id": self.component.component_id,
+            "metadata": metadata,
         }
         match artifact_type:
             case ArtifactType.model:

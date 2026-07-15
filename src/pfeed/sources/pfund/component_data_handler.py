@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, assert_never, cast
+from typing import TYPE_CHECKING, Any, ClassVar, assert_never, cast
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
@@ -10,30 +10,14 @@ if TYPE_CHECKING:
     from pfeed._sinks.base_sink import BaseSink
     from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
 
-import datetime
-
 import polars as pl
-from pydantic import BaseModel, Field
 
 from pfeed._io.table_io import TablePath
 from pfeed.data_handlers.base_data_handler import BaseDataHandler
 from pfeed.enums import DataLayer, DataTool, IOType
+from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
 from pfeed.utils.file_path import FilePath
 from pfund.enums import ArtifactType, ComponentType, Environment
-
-
-# REVIEW
-class PFundComponentDataMetadata(BaseModel):
-    """Persisted snapshot describing one component artifact."""
-
-    version: Literal[1] = 1
-    created_at: datetime.datetime = Field(
-        default_factory=lambda: datetime.datetime.now(datetime.UTC)
-    )
-    size_bytes: int | None = None
-    # e.g. sha256=hashlib.sha256(data).hexdigest(),
-    # sha256: str | None = None
-
 
 # TODO (mtflow): add tags to components, parent/child relationships/lineage (component in refinement is from which experiment?)
 """
@@ -52,7 +36,11 @@ pfund_data_path/
             {component_class_name}/
                 {version}/  (if registered)
                     metadata.json
-                    artifacts, e.g. strategy.py, model.pkl, delta table etc.
+                    artifacts, e.g.
+                    - strategy.py
+                    - trained model (e.g. .safetensors)
+                    - trading_df.delta (delta table)
+                    - etc.
     runs/
         env=BACKTEST or SANDBOX or PAPER or LIVE/
             {project_name}/
@@ -153,7 +141,7 @@ class PFundComponentDataHandler(BaseDataHandler):
             run_path
             / "artifacts"
             / ComponentType[artifact.component_type].to_plural()
-            / artifact.component_name  # NOTE: unique
+            / artifact.component_id
         )
 
     def _create_db_path(self, *args: Any, **kwargs: Any) -> DBPath:
@@ -165,8 +153,10 @@ class PFundComponentDataHandler(BaseDataHandler):
                 # source (.py) and model weights (.safetensors / .joblib) arrive as
                 # opaque bytes pfund already serialized; FileIO writes them verbatim.
                 self.io.write(data, self.file_path)
-                metadata = self._create_metadata(size_bytes=len(data))
-                self.io.write_metadata(self.file_path, metadata)
+                if self._data_model.artifact_type == ArtifactType.source:
+                    self.io.write_metadata(
+                        self.file_path, metadata=self._create_metadata()
+                    )
             else:  # data artifact writing to deltalake
                 from pfeed._etl.base import convert_dataframe
 
@@ -174,7 +164,6 @@ class PFundComponentDataHandler(BaseDataHandler):
                 assert table_path is not None, "table path is not initialized"
                 lf = cast(pl.LazyFrame, convert_dataframe(data, DataTool.polars))
                 self.io.write(lf.collect().to_arrow(), table_path)
-                self.io.write_metadata(table_path, metadata=self._create_metadata())
 
     def read(self) -> pl.LazyFrame | bytes | None:
         match self._io_type:
@@ -195,9 +184,8 @@ class PFundComponentDataHandler(BaseDataHandler):
     def _validate_schema(self, df: pl.LazyFrame) -> Any:
         return df
 
-    def _create_metadata(
-        self,
-        *,
-        size_bytes: int | None = None,
-    ) -> PFundComponentDataMetadata:
-        return PFundComponentDataMetadata(size_bytes=size_bytes)
+    def _create_metadata(self) -> PFundComponentDataMetadata:
+        metadata = self._data_model.metadata
+        if metadata is None:
+            raise ValueError("component metadata is required when writing an artifact")
+        return metadata

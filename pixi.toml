@@ -18,7 +18,7 @@ depends-on = [
 [dependencies]
 
 [pypi-dependencies]
-pfund = ">=0.0.19"
+pfund = ">=0.0.20"
 polars = ">=1.42.1"
 pyarrow = ">=24.0.0"
 pandera = ">=0.32.1"

@@ -18,7 +18,7 @@ depends-on = [
 [dependencies]
 
 [pypi-dependencies]
-# pfund = ">=0.0.19"
+pfund = ">=0.0.19"
 polars = ">=1.42.1"
 pyarrow = ">=24.0.0"
 pandera = ">=0.32.1"
@@ -63,8 +63,8 @@ lancedb = ">=0.34.0"
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
 # TEMP
-pfund = { path = "../pfund", editable = true }
-pfund-kit = { path = "../pfund-kit", editable = true }
+# pfund = { path = "../pfund", editable = true }
+# pfund-kit = { path = "../pfund-kit", editable = true }
 afterpython = ">=0.3.16"
 basedpyright = ">=1.39.9"
 marimo = { version = ">=0.23.13", extras = ["recommended", "lsp"] }

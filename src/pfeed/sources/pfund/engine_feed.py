@@ -54,7 +54,7 @@ class PFundEngineFeed(PFundMixin, BaseFeed):
         engine_name: str = "engine",
         env: Environment | str = Environment.BACKTEST,
         project_name: str = BaseEngineContext.DEFAULT_PROJECT_NAME,
-        run_id: str = BaseEngineContext.DEFAULT_RUN_NAME,
+        run_id: str = BaseEngineContext.DEFAULT_RUN_ID,
         storage_config: StorageConfig | None = None,
     ):
         pass

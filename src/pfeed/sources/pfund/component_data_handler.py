@@ -33,7 +33,7 @@ pfund_data_path/
     mtflow.db  (components lifecycle tracking, e.g. component status (retired?), metrics in different envs)
     registry/  (focuses on components lifecycle)
         {component_type}/
-            {component_class_name}/
+            {component_class_name-component_id}/
                 {version}/  (if registered)
                     metadata.json
                     artifacts, e.g.
@@ -50,15 +50,14 @@ pfund_data_path/
                     (engine states (e.g. used to match back client order ids),
                         also used to host a fake server in SANDBOX trading)
                     pfund.db
-                    artifacts/
-                        {component_type}/
-                            {unique_component_name}/
-                                metadata.json
-                                artifacts, e.g.
-                                - strategy.py
-                                - trained model (e.g. .safetensors)
-                                - trading_df.delta (delta table)
-                                - etc.
+                    {component_type}/
+                        {component_class_name-component_id}/
+                            metadata.json
+                            artifacts, e.g.
+                            - strategy.py
+                            - trained model (e.g. .safetensors)
+                            - trading_df.delta (delta table)
+                            - etc.
 """
 
 
@@ -135,11 +134,10 @@ class PFundComponentDataHandler(BaseDataHandler):
             data_path=cast(FilePath, self._data_path),
             env=Environment[artifact.env],
             project_name=artifact.project_name,
-            run_name=artifact.run_name,
+            run_id=artifact.run_id,
         )
         return TablePath(
             run_path
-            / "artifacts"
             / ComponentType[artifact.component_type].to_plural()
             / artifact.component_id
         )

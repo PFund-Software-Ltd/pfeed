@@ -25,7 +25,7 @@ class PFundComponentDataModel(BaseDataModel):
 
     env: Environment | str
     project_name: str
-    run_name: str = Field(
+    run_id: str = Field(
         description="""
         mtflow\'s run_id (e.g. "run_001") if mtflow is used, otherwise it is "default_run" by default in pfund
         """

@@ -1,7 +1,7 @@
 # ruff: noqa
 # /// script
 # dependencies = [
-#     "marimo",
+#     "marimo==0.23.8",
 #     "pfeed==0.0.11",
 # ]
 # requires-python = ">=3.11"

@@ -18,7 +18,7 @@ depends-on = [
 [dependencies]
 
 [pypi-dependencies]
-pfund = ">=0.0.20"
+pfund = ">=0.0.22"
 polars = ">=1.42.1"
 pyarrow = ">=24.0.0"
 pandera = ">=0.32.1"
@@ -67,7 +67,8 @@ pfeed = { path = ".", editable = true }
 # pfund-kit = { path = "../pfund-kit", editable = true }
 afterpython = ">=0.3.16"
 basedpyright = ">=1.39.9"
-marimo = { version = ">=0.23.13", extras = ["recommended", "lsp"] }
+# latest marimo version breaks WASM support
+marimo = { version = "==0.23.8", extras = ["recommended", "lsp"] }
 jupytext = ">=1.19.3"
 jupyterlab = ">=4.5.7"
 pandas-stubs = ">=3.0.3.260530"

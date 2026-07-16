@@ -1,5 +1,11 @@
 import re
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from pfeed.storages.deltalake_storage_mixin import DeltaLakeStorageMixin
 
 import click
 from pfund_kit.style import RichColor, TextStyle, cprint
@@ -7,6 +13,10 @@ from pfund_kit.style import RichColor, TextStyle, cprint
 from pfeed._io.io_config import IOConfig
 from pfeed.enums import DataStorage, IOFormat
 from pfeed.storages.file_based_storage import FileBasedStorage
+
+OptionDecorator = Callable[[Callable[..., Any]], Callable[..., Any]]
+PathResolver = Callable[..., "DeltaLakePaths"]
+_PATHS_CONTEXT_KEY = "pfeed.deltalake.paths"
 
 # Supported partition filter operators (order matters: check multi-char operators first)
 PARTITION_FILTER_OPERATORS = [">=", "<=", "!=", ">", "<", "="]
@@ -63,12 +73,42 @@ def discover_delta_tables(data_path: str | Path) -> list[Path]:
     return sorted([p.parent for p in data_path.rglob("_delta_log") if p.is_dir()])
 
 
-@click.group()
-def deltalake():
-    pass
+@dataclass(frozen=True)
+class DeltaLakePaths:
+    data_path: Path
+    cache_path: Path
+
+    def for_storage(self, storage: DataStorage) -> Path:
+        if storage == DataStorage.CACHE:
+            return self.cache_path
+        if storage == DataStorage.LOCAL:
+            return self.data_path
+        raise ValueError(f"Unsupported Delta Lake storage: {storage}")
 
 
-@deltalake.command()
+def _resolve_pfeed_paths(
+    *,
+    data_path: Path | None,
+    cache_path: Path | None,
+    **_: Any,
+) -> DeltaLakePaths:
+    from pfeed.config import get_config
+
+    config = get_config()
+    return DeltaLakePaths(
+        data_path=data_path or config.data_path,
+        cache_path=cache_path or config.cache_path,
+    )
+
+
+def _get_deltalake_paths(ctx: click.Context) -> DeltaLakePaths:
+    paths = ctx.meta.get(_PATHS_CONTEXT_KEY)
+    if not isinstance(paths, DeltaLakePaths):
+        raise click.ClickException("Delta Lake paths were not initialized")
+    return paths
+
+
+@click.command()
 @click.option(
     "--storage",
     "-s",
@@ -86,7 +126,9 @@ def deltalake():
     is_flag=True,
     help="Disable enforcement of retention duration",
 )
+@click.pass_context
 def vacuum(
+    ctx: click.Context,
     storage: DataStorage,
     no_dry_run: bool,
     retention_hours: int | None = None,
@@ -132,14 +174,14 @@ def vacuum(
             style="bold yellow",
         )
 
-    # Get storage class and its data_path
+    # Get storage class and its selected data path
     Storage = storage.storage_class
     assert issubclass(Storage, FileBasedStorage), (
         f"{Storage} is not a subclass of {FileBasedStorage}, which doesn't support Delta Lake"
     )
-    storage = Storage()
-    storage.with_io(IOConfig(io_format=IOFormat.DELTALAKE))
-    data_path = storage.data_path
+    storage_obj = Storage(data_path=_get_deltalake_paths(ctx).for_storage(storage))
+    _ = storage_obj.with_io(IOConfig(io_format=IOFormat.DELTALAKE))
+    data_path = storage_obj.data_path
 
     # Discover all delta tables under this storage
     delta_tables = discover_delta_tables(str(data_path))
@@ -168,7 +210,7 @@ def vacuum(
                 style=TextStyle.BOLD + RichColor.RED,
             )
             continue
-        storage.vacuum_delta_table(
+        _ = cast("DeltaLakeStorageMixin", cast(object, storage_obj)).vacuum_delta_table(
             delta_table,
             dry_run=dry_run,
             retention_hours=retention_hours,
@@ -176,7 +218,7 @@ def vacuum(
         )
 
 
-@deltalake.command()
+@click.command()
 @click.option(
     "--storage",
     "-s",
@@ -206,9 +248,11 @@ def vacuum(
     type=int,
     help="Minimum interval before creating a new commit (in seconds)",
 )
+@click.pass_context
 def optimize(
+    ctx: click.Context,
     storage: DataStorage,
-    partition_filter: tuple,
+    partition_filter: tuple[str, ...],
     target_size: int | None = None,
     max_concurrent_tasks: int | None = None,
     min_commit_interval: int | None = None,
@@ -246,14 +290,14 @@ def optimize(
     # before any code path (e.g. storage.with_io) transitively imports it.
     DeltaTable = _import_delta_table()
 
-    # Get storage class and its data_path
+    # Get storage class and its selected data path
     Storage = storage.storage_class
     assert issubclass(Storage, FileBasedStorage), (
         f"{Storage} is not a subclass of {FileBasedStorage}, which doesn't support Delta Lake"
     )
-    storage = Storage()
-    storage.with_io(IOConfig(io_format=IOFormat.DELTALAKE))
-    data_path = storage.data_path
+    storage_obj = Storage(data_path=_get_deltalake_paths(ctx).for_storage(storage))
+    _ = storage_obj.with_io(IOConfig(io_format=IOFormat.DELTALAKE))
+    data_path = storage_obj.data_path
 
     # Discover all delta tables under this storage
     delta_tables = discover_delta_tables(str(data_path))
@@ -271,7 +315,7 @@ def optimize(
     )
 
     # Parse partition filters if provided
-    partition_filters = None
+    partition_filters: list[tuple[str, str, str]] | None = None
     if partition_filter:
         partition_filters = []
         for filt in partition_filter:
@@ -294,10 +338,57 @@ def optimize(
                 style=TextStyle.BOLD + RichColor.RED,
             )
             continue
-        storage.optimize_delta_table(
+        _ = cast(
+            "DeltaLakeStorageMixin", cast(object, storage_obj)
+        ).optimize_delta_table(
             delta_table,
             partition_filters=partition_filters,
             target_size=target_size,
             max_concurrent_tasks=max_concurrent_tasks,
             min_commit_interval=min_commit_interval,
         )
+
+
+def create_deltalake_command(
+    *,
+    path_resolver: PathResolver = _resolve_pfeed_paths,
+    extra_options: tuple[OptionDecorator, ...] = (),
+) -> click.Group:
+    """Create a Delta Lake maintenance group around the shared commands."""
+
+    def group_callback(
+        ctx: click.Context,
+        data_path: Path | None,
+        cache_path: Path | None,
+        **resolver_kwargs: Any,
+    ) -> None:
+        ctx.meta[_PATHS_CONTEXT_KEY] = path_resolver(
+            data_path=data_path,
+            cache_path=cache_path,
+            **resolver_kwargs,
+        )
+
+    callback: Callable[..., Any] = click.pass_context(group_callback)
+    callback = click.option(
+        "--data-path",
+        type=click.Path(path_type=Path, file_okay=False),
+        help="Override the local Delta Lake data path",
+    )(callback)
+    callback = click.option(
+        "--cache-path",
+        type=click.Path(path_type=Path, file_okay=False),
+        help="Override the Delta Lake cache path",
+    )(callback)
+    for option in extra_options:
+        callback = option(callback)
+
+    group = click.group(
+        name="deltalake",
+        help="Maintain Delta Lake tables.",
+    )(callback)
+    group.add_command(vacuum)
+    group.add_command(optimize)
+    return group
+
+
+deltalake = create_deltalake_command()

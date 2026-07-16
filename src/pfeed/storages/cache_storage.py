@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pfeed.enums import DataLayer
 from pfeed.storages.local_storage import LocalStorage
+from pfeed.utils.file_path import FilePath
 
 
 class CacheStorage(LocalStorage):
@@ -39,11 +40,7 @@ class CacheStorage(LocalStorage):
         from pfund_kit.utils import get_last_modified_time
         from pfund_kit.utils.temporal import get_today
 
-        from pfeed.config import get_config
-
-        config = get_config()
-
-        cache_path = config.cache_path
+        cache_path = Path(cast(FilePath, self.data_path).schemeless)
         today = get_today()
 
         if not cache_path.exists():

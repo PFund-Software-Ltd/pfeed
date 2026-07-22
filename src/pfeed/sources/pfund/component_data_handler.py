@@ -73,6 +73,8 @@ class PFundComponentDataHandler(BaseDataHandler):
 
     _data_model: PFundComponentDataModel
     Metadata: ClassVar[type[PFundComponentDataMetadata]] = PFundComponentDataMetadata
+    PARTITION_COLUMNS: ClassVar[list[str]] = ["chunk_num"]
+    IO_USING_PARTITION_COLUMNS: ClassVar[set[str]] = {"DeltaLakeIO"}
 
     def __init__(
         self,
@@ -145,6 +147,48 @@ class PFundComponentDataHandler(BaseDataHandler):
     def _create_db_path(self, *args: Any, **kwargs: Any) -> DBPath:
         raise NotImplementedError
 
+    def _requires_partitioning(self) -> bool:
+        """Partition standalone strategy backtests within one data artifact.
+
+        ``chunk_num`` is a pfund-owned dataframe column. Pfeed only gives that
+        logical result boundary a physical representation when persisting a
+        strategy's BACKTEST data to a table format that supports partitioning.
+        Model/feature data and strategy data from other environments retain
+        their existing unpartitioned layout.
+        """
+        artifact = self._data_model
+        return (
+            artifact.artifact_type == ArtifactType.data
+            and artifact.env == Environment.BACKTEST
+            and artifact.component_type == ComponentType.strategy
+            and super()._requires_partitioning()
+        )
+
+    def _validate_partition_columns(self, df: pl.DataFrame) -> None:
+        missing_columns = [
+            column for column in self.PARTITION_COLUMNS if column not in df.columns
+        ]
+        if missing_columns:
+            raise ValueError(
+                "BACKTEST strategy data is missing required partition "
+                + f"column(s): {missing_columns}"
+            )
+
+        chunk_num = df.get_column("chunk_num")
+        if not chunk_num.dtype.is_integer():
+            raise TypeError(
+                "BACKTEST strategy data column 'chunk_num' must have an integer "
+                + f"dtype, got {chunk_num.dtype}"
+            )
+        if chunk_num.null_count() > 0:
+            raise ValueError(
+                "BACKTEST strategy data column 'chunk_num' cannot contain nulls"
+            )
+        if not chunk_num.is_empty() and cast(int, chunk_num.min()) < 0:
+            raise ValueError(
+                "BACKTEST strategy data column 'chunk_num' cannot contain negative values"
+            )
+
     def write_batch(self, data: IntoFrame | bytes) -> None:
         with self.io:
             if isinstance(data, bytes):
@@ -163,11 +207,18 @@ class PFundComponentDataHandler(BaseDataHandler):
                 assert table_path is not None, "table path is not initialized"
                 artifact = cast(DataArtifact, self._data_model)
                 lf = cast(pl.LazyFrame, convert_dataframe(data, DataTool.polars))
+                df = lf.collect()
+                write_kwargs: dict[str, Any] = {}
+                if self._requires_partitioning():
+                    self._validate_partition_columns(df)
+                    write_kwargs["partition_by"] = self.PARTITION_COLUMNS
                 self.io.write(
-                    lf.collect().to_arrow(),
+                    df.to_arrow(),
                     table_path,
                     delete_where=artifact.replace_where,
+                    **write_kwargs,
                 )
+                self.io.write_metadata(table_path, metadata=self._create_metadata())
 
     def read(self) -> pl.LazyFrame | bytes | None:
         match self._io_type:

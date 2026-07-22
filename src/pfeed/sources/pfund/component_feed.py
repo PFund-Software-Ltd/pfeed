@@ -151,6 +151,19 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
                 raise ValueError("checkpoint_step is only valid for checkpoints")
         return artifact_type
 
+    def _create_artifact_io_config(
+        self,
+        artifact_type: ArtifactType | str,
+    ) -> IOConfig:
+        """Create the IO configuration owned by a component artifact type."""
+        artifact_type = ArtifactType[artifact_type.lower()]
+        io_format = (
+            self.component.settings.datalake
+            if artifact_type == ArtifactType.data
+            else IOFormat.BLOB
+        )
+        return self._normalize_io_config(IOConfig(io_format=io_format))
+
     def download(
         self,
         artifact_type: ArtifactType | str,
@@ -175,10 +188,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         env = engine_context.env
         setup_logging(env=env)
         artifact_type = self._check_artifact_type(artifact_type, checkpoint_step)
-        io_format = (
-            IOFormat.DELTALAKE if artifact_type == ArtifactType.data else IOFormat.BLOB
-        )
-        io_config = self._normalize_io_config(IOConfig(io_format=io_format))
+        io_config = self._create_artifact_io_config(artifact_type)
         request = PFundComponentFeedDownloadRequest(
             artifact_type=artifact_type,
             env=env,
@@ -351,10 +361,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         storage_config = self._normalize_storage_config(
             storage_config or StorageConfig()
         )
-        io_format = (
-            IOFormat.DELTALAKE if artifact_type == ArtifactType.data else IOFormat.BLOB
-        )
-        io_config = self._normalize_io_config(IOConfig(io_format=io_format))
+        io_config = self._create_artifact_io_config(artifact_type)
         request = PFundComponentFeedRetrieveRequest(
             env=env,
             project_name=engine_context.project_name,
@@ -383,6 +390,11 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         _ = storage.with_data_model(data_model)
         artifact: pl.LazyFrame | bytes | None = storage.read()
         if artifact is not None:
+            metadata_by_path = storage.data_handler.read_metadata()
+            if metadata_by_path:
+                data_model.metadata = PFundComponentDataMetadata.model_validate(
+                    next(iter(metadata_by_path.values())),
+                )
             self.logger.debug(f"retrieved artifact {data_model} from {storage}")
         else:
             self.logger.debug(f"no artifact found for {data_model} in {storage}")

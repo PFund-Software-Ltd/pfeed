@@ -126,7 +126,9 @@ class DatabaseIO(BaseIO, ABC):
         else:
             # if its opening a different file
             if uri != self._conn_uri:
-                self._close_connection()
+                # Reset state before opening the replacement. If opening the new
+                # URI fails, do not leave a closed connection cached as usable.
+                self.disconnect()
                 self._open_connection(uri)
         return self._conn
 

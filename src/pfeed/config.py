@@ -46,6 +46,7 @@ def configure(
     log_path: str | None = None,
     cache_path: str | None = None,
     data_tool: DataTool | str | None = None,
+    show_progress_bar: bool | None = None,
     persist: bool = False,
 ) -> PFeedConfig:
     """
@@ -55,6 +56,7 @@ def configure(
         log_path: Path to the log directory.
         cache_path: Path to the cache directory.
         data_tool: Data tool to use, e.g. pandas, polars, etc.
+        show_progress_bar: Whether pfeed progress bars are displayed.
         persist: If True, the config will be saved to the config file.
     """
     config = get_config()
@@ -97,11 +99,13 @@ class PFeedConfig(Configuration):
     def _initialize_from_data(self):
         """Initialize PFeedConfig-specific attributes from config data."""
         self.data_tool = DataTool[self._data.get("data_tool", DataTool.polars).lower()]
+        self.show_progress_bar = self._data.get("show_progress_bar", True)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             "data_tool": self.data_tool,
+            "show_progress_bar": self.show_progress_bar,
         }
 
     def prepare_docker_context(self):

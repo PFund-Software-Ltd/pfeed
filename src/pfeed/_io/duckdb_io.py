@@ -156,6 +156,24 @@ class DuckDBIO(DatabaseIO, FileIO):
                 SELECT * FROM data WHERE 1=0
             """)
 
+            # BY NAME safely handles reordered columns, but DuckDB may fill a
+            # missing target column with NULL/default. Require the exact same
+            # column set so schema drift cannot be accepted silently.
+            source_columns = list(nw.from_native(data).collect_schema().keys())
+            target_columns = [
+                row[0]
+                for row in conn.execute(
+                    f"DESCRIBE {schema_qualified_table_name}"
+                ).fetchall()
+            ]
+            if set(source_columns) != set(target_columns):
+                missing = sorted(set(target_columns) - set(source_columns))
+                extra = sorted(set(source_columns) - set(target_columns))
+                raise ValueError(
+                    f"Schema mismatch for {schema_qualified_table_name}: "
+                    + f"missing columns={missing}, extra columns={extra}"
+                )
+
             # Delete any overlapping data before inserting
             if delete_where:
                 conn.execute(f"""
@@ -163,8 +181,10 @@ class DuckDBIO(DatabaseIO, FileIO):
                     WHERE {delete_where}
                 """)
 
+            # Match by name so a reordered input cannot silently swap values
+            # between same-typed columns.
             conn.execute(
-                f"INSERT INTO {schema_qualified_table_name} SELECT * FROM data"
+                f"INSERT INTO {schema_qualified_table_name} BY NAME SELECT * FROM data"
             )
             conn.execute("COMMIT")
         except Exception as exc:

@@ -24,12 +24,12 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "pfund>=0.0.22",
+    "pfund>=0.0.23",
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
-    "polars>=1.42.1 ; sys_platform != 'emscripten'",
-    "pyarrow>=24.0.0 ; sys_platform != 'emscripten'",
+    "polars>=1.43.0 ; sys_platform != 'emscripten'",
+    "pyarrow>=25.0.0 ; sys_platform != 'emscripten'",
     "pandera>=0.32.1",
     "msgspec>=0.21.1 ; sys_platform != 'emscripten'",
     "pydantic>=2.13.4 ; sys_platform != 'emscripten'",
@@ -37,17 +37,17 @@ dependencies = [
     "zstandard>=0.22.0",
     "cloudpathlib>=0.24.0",
     "beautifulsoup4>=4.12.3",
-    "ray[default]>=2.56.0 ; sys_platform != 'emscripten'",
+    "ray[default]>=2.56.1 ; sys_platform != 'emscripten'",
     "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
     "deltalake>=1.6.2 ; sys_platform != 'emscripten'"
 ]
 
 [project.optional-dependencies]
 yfinance = ["yfinance>=1.5.1"]
-hf = ["huggingface-hub>=1.23.0"]
+hf = ["huggingface-hub>=1.24.0"]
 prefect = ["prefect>=3.7.8"]
 pandas = ["pandas>=3.0.3"]
-duckdb = ["duckdb>=1.5.4"]
+duckdb = ["duckdb>=1.5.5"]
 lancedb = ["lancedb>=0.34.0"]
 # s3 = ["minio>=7.2.20", "cloudpathlib[s3]>=0.24.0"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
@@ -69,7 +69,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.29,<0.12.0"]
+requires = ["uv_build>=0.11.31,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pyright]

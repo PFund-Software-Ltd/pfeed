@@ -361,9 +361,11 @@ class BaseFeed(ABC):
     def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> list[DataFlow]:
         from pfund_kit.utils.progress_bar import ProgressBar, track
 
+        from pfeed.config import get_config
         from pfeed.utils import is_prefect_running
 
         use_prefect = is_prefect_running()
+        disable_progress_bar = not get_config().show_progress_bar
         self._prepare_before_run()
 
         def _run_dataflow(dataflow: DataFlow) -> DataFlowResult:
@@ -415,6 +417,7 @@ class BaseFeed(ABC):
                         with ProgressBar(
                             total=len(self.dataflows),
                             description=f"Running {self.name} dataflows",
+                            disable=disable_progress_bar,
                         ) as pbar:
                             for dataflow_batch in dataflow_batches:
                                 futures = [
@@ -447,7 +450,9 @@ class BaseFeed(ABC):
                 # shutdown_ray()
             else:
                 for dataflow in track(
-                    self.dataflows, description=f"Running {self.name} dataflows"
+                    self.dataflows,
+                    description=f"Running {self.name} dataflows",
+                    disable=disable_progress_bar,
                 ):
                     try:
                         _ = _run_dataflow(dataflow)

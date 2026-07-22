@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 import click
 
-BackendFormat = Literal["parquet", "deltalake", "duckdb", "lancedb"]
+BackendFormat = Literal["parquet", "deltalake", "sqlite", "duckdb", "lancedb"]
 
 PFEED_PARQUET_FILE_RE = re.compile(
     r"^(?P<symbol>.+)_(?P<date>\d{4}-\d{2}-\d{2})\.parquet$"
@@ -507,6 +507,143 @@ def _process_duckdb_file(
             pass
 
 
+# ---------- Discovery: SQLite ----------
+
+
+def _discover_sqlite(
+    roots: list[tuple[str, Path]], errors: list[str] | None = None
+) -> Iterator[DataUnit]:
+    """Walk configured roots for pfeed-managed *.sqlite files."""
+    seen: set[Path] = set()
+    for storage_label, root in roots:
+        if not root.exists():
+            continue
+        for db_file in sorted(root.rglob("*.sqlite")):
+            try:
+                resolved = db_file.resolve()
+            except OSError:
+                resolved = db_file
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            yield from _process_sqlite_file(db_file, root, storage_label, errors)
+
+
+def _process_sqlite_file(
+    db_file: Path, root: Path, storage_label: str, errors: list[str] | None
+) -> Iterator[DataUnit]:
+    """Emit DataUnit(s) from SQLiteIO's quoted `schema.table` layout."""
+    import sqlite3
+
+    env_from_stem = db_file.stem.upper()
+    try:
+        db_mtime = datetime.datetime.fromtimestamp(db_file.stat().st_mtime)
+        db_size = db_file.stat().st_size
+    except OSError:
+        db_mtime = None
+        db_size = 0
+
+    con = None
+    try:
+        uri = db_file.resolve().as_uri() + "?mode=ro"
+        con = sqlite3.connect(uri, uri=True, timeout=0.1)
+        physical_tables = {
+            row[0]
+            for row in con.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        metadata_suffix = ".metadata"
+        metadata_tables = sorted(
+            name for name in physical_tables if name.endswith(metadata_suffix)
+        )
+        units: list[DataUnit] = []
+        schema_count = max(len(metadata_tables), 1)
+
+        for metadata_table in metadata_tables:
+            schema_name = metadata_table[: -len(metadata_suffix)]
+            parsed = _split_duckdb_schema_name(schema_name)
+            if not parsed:
+                continue
+            layer, domain, source, origin = parsed
+            quoted_metadata = '"' + metadata_table.replace('"', '""') + '"'
+            rows = con.execute(
+                f"SELECT table_name, metadata_json FROM {quoted_metadata}"
+            ).fetchall()
+            table_count = max(len(rows), 1)
+
+            for table_name, metadata_json in rows:
+                if f"{schema_name}.{table_name}" not in physical_tables:
+                    continue
+                md: dict[str, Any] = {}
+                if metadata_json:
+                    try:
+                        md = json.loads(metadata_json)
+                    except (TypeError, json.JSONDecodeError):
+                        pass
+
+                asset_type = (md.get("asset_type") or "").upper()
+                resolution = md.get("resolution") or ""
+                products = md.get("products") or {}
+                symbols = sorted(products.keys()) if isinstance(products, dict) else []
+                dates = sorted(set(_parse_dates_field(md.get("dates"))))
+                if not asset_type or not resolution:
+                    tokens = table_name.split("_")
+                    if tokens:
+                        asset_type = asset_type or tokens[0].upper()
+                        resolution = resolution or "_".join(tokens[1:]).upper()
+
+                units.append(
+                    DataUnit(
+                        storage=storage_label,
+                        backend="sqlite",
+                        env=env_from_stem,
+                        data_layer=layer,
+                        data_domain=domain,
+                        data_source=source,
+                        data_origin=origin,
+                        asset_type=asset_type,
+                        resolution=resolution,
+                        symbols=symbols,
+                        dates=dates,
+                        size_bytes=db_size // (schema_count * table_count),
+                        last_modified=db_mtime,
+                        path=f"{db_file}::{schema_name}.{table_name}",
+                    )
+                )
+        yield from units
+    except Exception as exc:
+        message = str(exc)
+        is_locked = "locked" in message.lower()
+        if errors is not None:
+            status = "locked" if is_locked else "unreadable"
+            errors.append(
+                f"SQLite {status}: {db_file} — {message.splitlines()[0][:160]}"
+            )
+        hive_ctx = _extract_hive_context_from_path(db_file, root)
+        yield DataUnit(
+            storage=storage_label,
+            backend="sqlite",
+            env=hive_ctx.get("env", env_from_stem),
+            data_layer=hive_ctx.get("data_layer", ""),
+            data_domain=hive_ctx.get("data_domain", ""),
+            data_source=hive_ctx.get("data_source", ""),
+            data_origin=hive_ctx.get("data_origin", ""),
+            asset_type=hive_ctx.get("asset_type", ""),
+            resolution=hive_ctx.get("resolution", ""),
+            size_bytes=db_size,
+            last_modified=db_mtime,
+            path=str(db_file),
+            status="locked" if is_locked else "unreadable",
+        )
+    finally:
+        if con is not None:
+            try:
+                con.close()
+            except Exception:
+                pass
+
+
 # ---------- Gather + filter ----------
 
 
@@ -516,7 +653,7 @@ def _gather_all_units(errors: list[str] | None = None) -> list[DataUnit]:
     `Storage` reflects the pfeed storage class (LOCAL/CACHE for file-based,
     DUCKDB/LANCEDB for database-backed). `Backend` is the on-disk format.
     Database storages are discovered by scanning *every* configured root since
-    a duckdb/lancedb file can live under either data_path or cache_path
+    a sqlite/duckdb/lancedb file can live under either data_path or cache_path
     (or anywhere, if the user has configured custom paths).
     """
     from pfeed.config import get_config
@@ -529,6 +666,7 @@ def _gather_all_units(errors: list[str] | None = None) -> list[DataUnit]:
     units: list[DataUnit] = []
     units.extend(_discover_file_based("LOCAL", data_root))
     units.extend(_discover_file_based("CACHE", cache_root))
+    units.extend(_discover_sqlite(labeled_roots, errors=errors))
     units.extend(_discover_duckdb(labeled_roots, errors=errors))
     return units
 
@@ -564,7 +702,7 @@ def _apply_filters(units: list[DataUnit], **filters: str | None) -> list[DataUni
     return [u for u in units if keep(u)]
 
 
-def _hierarchical_sort_key(u: DataUnit) -> tuple:
+def _hierarchical_sort_key(u: DataUnit) -> tuple[str, ...]:
     return (
         u.storage,
         u.data_layer,
@@ -865,7 +1003,7 @@ def tree(storage: str | None):
     """Tree view of everything pfeed has, reflecting on-disk layout.
 
     File-based backends (parquet, delta) sit inside the hive tree.
-    Database-backed files (duckdb, lancedb) are physical files at the storage
+    Database-backed files (sqlite, duckdb, lancedb) are physical files at the storage
     root, so they appear as siblings of the hive tree, not nested inside it.
     """
     from rich.tree import Tree
@@ -904,9 +1042,11 @@ def tree(storage: str | None):
             label += f"  [dim]{storage_path}[/dim]"
         storage_node = root.add(label)
 
-        db_units = [u for u in storage_units if u.backend in {"duckdb", "lancedb"}]
+        db_units = [
+            u for u in storage_units if u.backend in {"sqlite", "duckdb", "lancedb"}
+        ]
         hive_units = [
-            u for u in storage_units if u.backend not in {"duckdb", "lancedb"}
+            u for u in storage_units if u.backend not in {"sqlite", "duckdb", "lancedb"}
         ]
 
         # Database-backed files: sibling of hive tree at the storage root.

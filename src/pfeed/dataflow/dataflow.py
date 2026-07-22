@@ -259,7 +259,6 @@ class DataFlow:
         if not self.has_storage():
             return
         try:
-            log_level = logging.DEBUG if self.is_streaming() else logging.INFO
             if self.is_streaming():
                 self._storage.write(data, streaming=True)
             else:
@@ -270,9 +269,7 @@ class DataFlow:
                 else:
                     write = self._storage.write
                 write(data)
-            self._logger.log(
-                log_level, f"loaded {self.data_model} data to {self._storage}"
-            )
+            self._logger.debug(f"loaded {self.data_model} data to {self._storage}")
         except Exception:
             self._logger.exception(
                 f"failed to load {self.data_model} data to {self._storage}:"

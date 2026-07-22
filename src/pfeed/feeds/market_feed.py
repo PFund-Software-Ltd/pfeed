@@ -599,7 +599,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                 if product.venue is not None:
                     VenueClass = product.venue.venue_class
                     resampled_data_config = data_config.auto_resample(
-                        VenueClass.METADATA.supported_resolutions
+                        VenueClass.METADATA.get_supported_resolutions(product)
                     )
                     if resampled_data_config.resample != data_config.resample:
                         data_resolution = resampled_data_config.resample[resolution]

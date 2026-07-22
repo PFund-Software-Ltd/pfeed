@@ -40,6 +40,7 @@ class IOFormat(StrEnum):
     CSV = "csv"
     PARQUET = "parquet"
     DELTALAKE = "deltalake"
+    SQLITE = "sqlite"
     DUCKDB = "duckdb"
     LANCEDB = "lancedb"
     # BLOB is the opaque-bytes "format": no serialization of its own — it writes/reads
@@ -62,6 +63,10 @@ class IOFormat(StrEnum):
             from pfeed._io.deltalake_io import DeltaLakeIO
 
             return DeltaLakeIO
+        elif self == IOFormat.SQLITE:
+            from pfeed._io.sqlite_io import SQLiteIO
+
+            return SQLiteIO
         elif self == IOFormat.DUCKDB:
             # this import will throw ImportError if duckdb is not installed
             from pfeed._io.duckdb_io import DuckDBIO

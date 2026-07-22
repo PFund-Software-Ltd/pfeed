@@ -18,8 +18,7 @@ class ComponentMetadata(BaseModel):
     component_name: str
     resolution: str
     df_form: Literal["wide", "long"]
-    # NOTE: signal_cols is always empty when metadata is being written, skip it for now
-    # signal_cols: list[str]
+    signal_cols: list[str] = Field(default_factory=list)
     model: str | None = None
     signature: tuple[tuple[Any, ...], dict[str, Any]]
     config: dict[str, Any]

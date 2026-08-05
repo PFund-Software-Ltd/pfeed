@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING, ClassVar, assert_never, cast
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
 
-    from pfeed._io.base_io import BaseIO
-    from pfeed._io.database_io import DatabaseIO
-    from pfeed._sinks.base_sink import BaseSink
     from pfeed.data_handlers.base_data_handler import IOClassName, SourcePath
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+    from pfeed.io.base_io import BaseIO
+    from pfeed.io.database_io import DatabaseIO
+    from pfeed.sinks.base_sink import BaseSink
     from pfeed.storages.database_storage import DatabaseURI
 
 import datetime
@@ -19,10 +19,10 @@ from abc import ABC
 import polars as pl
 import pyarrow as pa
 
-from pfeed._io.database_io import DBPath
-from pfeed._io.table_io import TablePath
 from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
 from pfeed.enums import DataLayer, DataTool, IOType
+from pfeed.io.database_io import DBPath
+from pfeed.io.table_io import TablePath
 from pfeed.utils.file_path import FilePath
 
 

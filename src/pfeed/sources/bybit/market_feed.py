@@ -17,10 +17,10 @@ if TYPE_CHECKING:
 import polars as pl
 from pfund.venues.bybit.product import BybitProduct
 
-from pfeed._io.io_config import IOConfig
 from pfeed.enums import MarketDataType
 from pfeed.feeds.market_feed import MarketFeed
 from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
+from pfeed.io.io_config import IOConfig
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
 from pfeed.sources.bybit.mixin import BybitMixin
 

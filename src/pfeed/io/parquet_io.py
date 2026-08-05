@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pyarrow.parquet import FileMetaData as PyArrowParquetFileMetaData
 
-    from pfeed._io.base_io import MetadataDict
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+    from pfeed.io.base_io import MetadataDict
     from pfeed.utils.file_path import FilePath
 
 import json
@@ -16,7 +16,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from pfeed._io.file_io import FileIO
+from pfeed.io.file_io import FileIO
 
 
 class ParquetIO(FileIO):

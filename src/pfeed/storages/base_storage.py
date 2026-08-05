@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
 
-    from pfeed._io.base_io import BaseIO
-    from pfeed._io.io_config import IOConfig
-    from pfeed._sinks.base_sink import BaseSink
-    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.feeds.streaming_feed_mixin import StreamingData
+    from pfeed.io.base_io import BaseIO
+    from pfeed.io.io_config import IOConfig
+    from pfeed.sinks.base_sink import BaseSink
+    from pfeed.sinks.sink_config import SinkConfig
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed.storages.storage_config import StorageConfig
 

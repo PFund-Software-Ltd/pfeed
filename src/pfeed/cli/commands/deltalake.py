@@ -10,8 +10,8 @@ if TYPE_CHECKING:
 import click
 from pfund_kit.style import RichColor, TextStyle, cprint
 
-from pfeed._io.io_config import IOConfig
 from pfeed.enums import DataStorage, IOFormat
+from pfeed.io.io_config import IOConfig
 from pfeed.storages.file_based_storage import FileBasedStorage
 
 OptionDecorator = Callable[[Callable[..., Any]], Callable[..., Any]]

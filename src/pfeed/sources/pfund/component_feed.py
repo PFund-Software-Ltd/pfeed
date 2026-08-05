@@ -25,10 +25,10 @@ if TYPE_CHECKING:
 import polars as pl
 from pfund_kit.style import RichColor, TextStyle
 
-from pfeed._io.io_config import IOConfig
 from pfeed.config import setup_logging
 from pfeed.enums import DataCategory, DataStorage, DataTool, IOFormat
 from pfeed.feeds.base_feed import BaseFeed
+from pfeed.io.io_config import IOConfig
 from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
 from pfeed.sources.pfund.component_metadata import (
     ComponentMetadata,
@@ -193,7 +193,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
             artifact_type=artifact_type,
             env=env,
             project_name=engine_context.project_name,
-            run_id=engine_context.run_id,
+            run_name=engine_context.run_name,
             storage_config=storage_config,
             io_config=io_config,
             checkpoint_step=checkpoint_step,
@@ -256,7 +256,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
             run=RunMetadata(
                 env=str(engine_context.env),
                 project_name=engine_context.project_name,
-                run_id=engine_context.run_id,
+                run_name=engine_context.run_name,
                 run_mode=str(run_mode),
                 data_start=data_start,
                 data_end=data_end,
@@ -268,7 +268,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
             "data_origin": "",
             "env": engine_context.env,
             "project_name": engine_context.project_name,
-            "run_id": engine_context.run_id,
+            "run_name": engine_context.run_name,
             "component_type": component_type,
             "component_id": self.component.component_id,
             "metadata": metadata,
@@ -365,7 +365,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         request = PFundComponentFeedRetrieveRequest(
             env=env,
             project_name=engine_context.project_name,
-            run_id=engine_context.run_id,
+            run_name=engine_context.run_name,
             data_source=self.name,
             artifact_type=artifact_type,
             checkpoint_step=checkpoint_step,

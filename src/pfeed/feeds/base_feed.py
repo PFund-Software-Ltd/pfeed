@@ -9,13 +9,13 @@ if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue
 
-    from pfeed._io.io_config import IOConfig
-    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult
+    from pfeed.io.io_config import IOConfig
     from pfeed.requests.base_request import BaseRequest
+    from pfeed.sinks.sink_config import SinkConfig
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.storages.storage_config import StorageConfig
@@ -271,7 +271,7 @@ class BaseFeed(ABC):
         else:
             storage_config = self._normalize_storage_config(storage_config)
 
-        from pfeed._io.io_config import IOConfig
+        from pfeed.io.io_config import IOConfig
 
         # Only a LIVE stream writes through a sink. A replaying stream reads FROM
         # storage, so it takes the read path (default io, no write sink) just like a
@@ -280,7 +280,7 @@ class BaseFeed(ABC):
         streaming_write = request.is_streaming() and not request.is_replaying()
 
         if streaming_write:
-            from pfeed._sinks.sink_config import SinkConfig
+            from pfeed.sinks.sink_config import SinkConfig
 
             sink_config = self._normalize_sink_config(sink_config or SinkConfig())
             io_format_associated_with_sink = sink_config.sink.io_format

@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     import pyarrow as pa
     from duckdb import DuckDBPyConnection
 
-    from pfeed._io.base_io import MetadataDict
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+    from pfeed.io.base_io import MetadataDict
 
 import json
 
@@ -18,9 +18,9 @@ import narwhals as nw
 import polars as pl
 import pyarrow.fs as pa_fs
 
-from pfeed._io.database_io import DatabaseIO, DBPath
-from pfeed._io.file_io import FileIO
 from pfeed.enums import TimestampPrecision
+from pfeed.io.database_io import DatabaseIO, DBPath
+from pfeed.io.file_io import FileIO
 
 
 class DuckDBIO(DatabaseIO, FileIO):

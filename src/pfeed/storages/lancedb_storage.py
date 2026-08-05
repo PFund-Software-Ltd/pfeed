@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
     from lancedb import LanceDBConnection
 
-    from pfeed._io.lancedb_io import LanceDBIO
+    from pfeed.io.lancedb_io import LanceDBIO
 
 from pfeed.enums import IOFormat
 from pfeed.storages.file_backed_database_storage import FileBackedDatabaseStorage

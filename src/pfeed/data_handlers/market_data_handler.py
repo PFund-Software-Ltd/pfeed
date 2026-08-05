@@ -16,8 +16,6 @@ import polars as pl
 from pfund.datas.resolution import Resolution
 from pydantic import BaseModel, Field
 
-from pfeed._io.database_io import DBPath
-from pfeed._io.table_io import TablePath
 from pfeed.data_handlers.base_data_handler import SourcePath
 from pfeed.data_handlers.streaming_data_handler_mixin import StreamingDataHandlerMixin
 from pfeed.data_handlers.time_based_data_handler import (
@@ -25,6 +23,8 @@ from pfeed.data_handlers.time_based_data_handler import (
     TimeBasedDataMetadata,
 )
 from pfeed.enums import DataSource, IOType
+from pfeed.io.database_io import DBPath
+from pfeed.io.table_io import TablePath
 from pfeed.utils.file_path import FilePath
 
 ProductSymbol: TypeAlias = str

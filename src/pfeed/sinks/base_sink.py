@@ -5,9 +5,9 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pfeed._io.base_io import BaseIO
-    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.data_handlers.base_data_handler import SourcePath
+    from pfeed.io.base_io import BaseIO
+    from pfeed.sinks.sink_config import SinkConfig
 
 import time
 from abc import ABC, abstractmethod

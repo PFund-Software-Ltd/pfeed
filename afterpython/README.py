@@ -58,7 +58,7 @@ async def _():
         # Pyodide polars has no native parquet scanner; marimo's fallback
         # only handles a single source. Iterate and concat instead.
         import polars as pl
-        import pfeed._io.parquet_io as _pio
+        import pfeed.io.parquet_io as _pio
 
         def _patched_read(self, file_paths, **io_kwargs):
             io_kwargs = io_kwargs or self._read_options

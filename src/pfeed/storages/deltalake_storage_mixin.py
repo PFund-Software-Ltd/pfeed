@@ -11,8 +11,8 @@ if TYPE_CHECKING:
     )
     from deltalake.writer.properties import WriterProperties
 
-    from pfeed._io.deltalake_io import DeltaLakeIO
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
+    from pfeed.io.deltalake_io import DeltaLakeIO
     from pfeed.storages.file_based_storage import FileBasedStorage
 
 from datetime import timedelta

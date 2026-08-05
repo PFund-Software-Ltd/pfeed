@@ -25,11 +25,7 @@ class PFundComponentDataModel(BaseDataModel):
 
     env: Environment | str
     project_name: str
-    run_id: str = Field(
-        description="""
-        mtflow\'s run_id (e.g. "run_001") if mtflow is used, otherwise it is "default_run" by default in pfund
-        """
-    )
+    run_name: str
     component_type: ComponentType | str
     component_id: str
     metadata: PFundComponentDataMetadata | None = None

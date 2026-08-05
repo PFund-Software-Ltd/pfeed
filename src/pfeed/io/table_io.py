@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     from deltalake import DeltaTable
     from lancedb.table import LanceTable
 
-    from pfeed._io.base_io import MetadataDict
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+    from pfeed.io.base_io import MetadataDict
 
     Table: TypeAlias = DeltaTable | LanceTable
 
@@ -21,7 +21,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.fs as pa_fs
 
-from pfeed._io.parquet_io import ParquetIO
+from pfeed.io.parquet_io import ParquetIO
 from pfeed.utils.file_path import FilePath
 
 

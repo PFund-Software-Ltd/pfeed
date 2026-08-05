@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
     from sqlite3 import Connection as SQLiteConnection
 
-    from pfeed._io.sqlite_io import SQLiteIO
+    from pfeed.io.sqlite_io import SQLiteIO
 
 from pfeed.enums import IOFormat
 from pfeed.storages.file_backed_database_storage import FileBackedDatabaseStorage

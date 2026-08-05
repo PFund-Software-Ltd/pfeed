@@ -6,9 +6,9 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
 
-    from pfeed._io.io_config import IOConfig
-    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.engine import DataEngine
+    from pfeed.io.io_config import IOConfig
+    from pfeed.sinks.sink_config import SinkConfig
     from pfeed.sources.alphafund import AlphaFund
     from pfeed.sources.bybit import Bybit
     from pfeed.sources.ibkr import (
@@ -64,11 +64,11 @@ def __getattr__(name: str):
 
         return StorageConfig
     elif name == "IOConfig":
-        from pfeed._io.io_config import IOConfig
+        from pfeed.io.io_config import IOConfig
 
         return IOConfig
     elif name == "SinkConfig":
-        from pfeed._sinks.sink_config import SinkConfig
+        from pfeed.sinks.sink_config import SinkConfig
 
         return SinkConfig
     elif name == "DataEngine":

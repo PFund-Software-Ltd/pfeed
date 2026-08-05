@@ -5,60 +5,19 @@ from typing import TYPE_CHECKING, Any, ClassVar, assert_never, cast
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
 
-    from pfeed._io.database_io import DBPath
-    from pfeed._io.file_io import FileIO
-    from pfeed._sinks.base_sink import BaseSink
+    from pfeed.io.database_io import DBPath
+    from pfeed.io.file_io import FileIO
+    from pfeed.sinks.base_sink import BaseSink
     from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
 
 import polars as pl
 
-from pfeed._io.table_io import TablePath
 from pfeed.data_handlers.base_data_handler import BaseDataHandler
 from pfeed.enums import DataLayer, DataTool, IOType
+from pfeed.io.table_io import TablePath
 from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
 from pfeed.utils.file_path import FilePath
 from pfund.enums import ArtifactType, ComponentType, Environment
-
-# TODO (mtflow): add tags to components, parent/child relationships/lineage (component in refinement is from which experiment?)
-"""
-pfund_data_path/
-    # TODO: add more details like pfund version, pfeed version, etc.
-    # mtflow.db looks sth like this:
-    # templates (list[dict]): e.g. {'name': 'pfund_official/backtest_template', 'version': '0.0.1'}
-    # run_id  group run_name python_version	strategy_version	mtflow_version	artifact_path	sharpe	max_dd	templates	created_at
-    # run_001	...  ...    3.11.14	        0.1.0	3	artifacts/run_001/	1.2	-0.08	{"window": 20}	...
-    # run_002	...  ...    3.11.14	        0.1.0	3	artifacts/run_002/	1.5	-0.06	{"window": 50}	...
-    # - component signature (includes __version__)
-    # (chosen components from registry, deployment metadata, live trading tracking)
-    mtflow.db  (components lifecycle tracking, e.g. component status (retired?), metrics in different envs)
-    registry/  (focuses on components lifecycle)
-        {component_type}/
-            {component_class_name-component_id}/
-                {version}/  (if registered)
-                    metadata.json
-                    artifacts, e.g.
-                    - strategy.py
-                    - trained model (e.g. .safetensors)
-                    - trading_df.delta (delta table)
-                    - etc.
-    runs/
-        env=BACKTEST or SANDBOX or PAPER or LIVE/
-            {project_name}/
-                trackio.db  (optional)
-                optuna.db  (optional for BACKTEST env)
-                run_001/
-                    (engine states (e.g. used to match back client order ids),
-                        also used to host a fake server in SANDBOX trading)
-                    pfund.db
-                    {component_type}/
-                        {component_class_name-component_id}/
-                            metadata.json
-                            artifacts, e.g.
-                            - strategy.py
-                            - trained model (e.g. .safetensors)
-                            - trading_df.delta (delta table)
-                            - etc.
-"""
 
 
 class PFundComponentDataHandler(BaseDataHandler):
@@ -69,6 +28,27 @@ class PFundComponentDataHandler(BaseDataHandler):
     no (de)serialization itself: it just routes the payload to the IO at a path
     derived from the component's identity. With the blob path (IOFormat.BLOB -> FileIO)
     the payload is bytes; the IO writes/reads them verbatim.
+
+    Storage Layout:
+    data_path/  (e.g. pfund's config.data_path)
+        runs/
+            env=BACKTEST or SANDBOX or PAPER or LIVE/
+                {project_name}/
+                    trackio.db  (when mtflow is used)
+                    optuna.db  (optional, when mtflow is used)
+                    default_run/  (or run_00x when mtflow is used)
+                        pfund.db (engine states (e.g. used to match back client order ids),
+                                  also used to host a fake server in SANDBOX trading)
+                        {component_type}/
+                            {component_class_name-component_id}/
+                                artifacts, e.g.
+                                - trading_df.delta  (delta table of trading df (df in pfud's trading store))
+                                - metadata.json
+                                - model.safetensors, model.joblib (trained model)
+                                - {component}.py  (component source code)
+                                checkpoints/
+                                    step=0/
+                                        checkpoint.pt or checkpoint.pkl
     """
 
     _data_model: PFundComponentDataModel
@@ -136,7 +116,7 @@ class PFundComponentDataHandler(BaseDataHandler):
             data_path=cast(FilePath, self._data_path),
             env=Environment[artifact.env],
             project_name=artifact.project_name,
-            run_id=artifact.run_id,
+            run_name=artifact.run_name,
         )
         return TablePath(
             run_path

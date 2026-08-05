@@ -8,8 +8,8 @@ if TYPE_CHECKING:
 
     import pandas as pd
 
-    from pfeed._io.base_io import MetadataDict
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+    from pfeed.io.base_io import MetadataDict
 
 import datetime
 import json
@@ -25,9 +25,10 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.fs as pa_fs
 
-from pfeed._io.database_io import DatabaseIO, DBPath
-from pfeed._io.file_io import FileIO
 from pfeed.enums import TimestampPrecision
+from pfeed.io.database_io import DatabaseIO, DBPath
+from pfeed.io.file_io import FileIO
+from pfeed.utils.file_path import FilePath
 
 
 class SQLiteIO(DatabaseIO, FileIO):
@@ -85,13 +86,16 @@ class SQLiteIO(DatabaseIO, FileIO):
         return self._quote_identifier(self._metadata_table_name(db_path))
 
     def _open_connection(self, uri: str):
-        if "://" in uri and not uri.startswith("file:"):
+        file_path = FilePath(uri)
+        if not file_path.is_local:
             raise NotImplementedError(
                 "SQLiteIO only supports local database files and SQLite file: URIs"
             )
-        if uri != ":memory:" and not uri.startswith("file:"):
-            Path(uri).parent.mkdir(parents=True, exist_ok=True)
-        self._conn: SQLiteConnection = sqlite3.connect(uri, **self._connect_options)
+        if file_path.schemeless != ":memory:":
+            Path(file_path.schemeless).parent.mkdir(parents=True, exist_ok=True)
+        connect_options = self._connect_options.copy()
+        connect_options["uri"] = True
+        self._conn: SQLiteConnection = sqlite3.connect(uri, **connect_options)
         self._conn_uri = uri
 
     def _close_connection(self):

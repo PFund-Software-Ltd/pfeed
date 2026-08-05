@@ -4,17 +4,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pfeed._io.base_io import MetadataDict
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
     from pfeed.enums import Compression
+    from pfeed.io.base_io import MetadataDict
 
 import json
 from abc import ABC
 
 import pyarrow.fs as pa_fs
 
-from pfeed._io.base_io import BaseIO
 from pfeed.enums import Compression
+from pfeed.io.base_io import BaseIO
 from pfeed.utils.file_path import FilePath
 
 

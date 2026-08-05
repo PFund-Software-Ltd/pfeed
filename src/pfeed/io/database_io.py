@@ -18,8 +18,8 @@ from abc import ABC, abstractmethod
 
 import narwhals as nw
 
-from pfeed._io.base_io import BaseIO
 from pfeed.enums import TimestampPrecision
+from pfeed.io.base_io import BaseIO
 
 _NARWHALS_TIMEUNIT: dict[TimestampPrecision, Literal["ms", "us", "ns"]] = {
     TimestampPrecision.MILLISECOND: "ms",

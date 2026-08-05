@@ -3,15 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 if TYPE_CHECKING:
-    from pfeed._io.database_io import DatabaseIO, DBConnection, DBPath
+    from pfeed.io.database_io import DatabaseIO, DBConnection, DBPath
 
     DatabaseURI: TypeAlias = str
 
 from abc import ABC, abstractmethod
 
-from pfeed._io.io_config import IOConfig
-from pfeed._sinks.sink_config import SinkConfig
 from pfeed.enums import DataLayer
+from pfeed.io.io_config import IOConfig
+from pfeed.sinks.sink_config import SinkConfig
 from pfeed.storages.base_storage import BaseStorage
 
 

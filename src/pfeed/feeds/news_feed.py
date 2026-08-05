@@ -15,7 +15,7 @@ from functools import partial
 
 from pfund.enums.env import Environment
 
-from pfeed._io.io_config import IOConfig
+from pfeed.io.io_config import IOConfig
 from pfeed.config import get_config, setup_logging
 from pfeed.data_models.news_data_model import NewsDataModel
 from pfeed.enums import DataCategory, DataLayer

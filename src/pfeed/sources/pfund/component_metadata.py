@@ -34,7 +34,7 @@ class RunMetadata(BaseModel):
 
     env: str
     project_name: str
-    run_id: str
+    run_name: str
     run_mode: str
     data_start: datetime.date
     data_end: datetime.date

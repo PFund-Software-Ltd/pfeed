@@ -9,16 +9,16 @@ if TYPE_CHECKING:
     from lancedb.pydantic import LanceModel
     from lancedb.table import LanceTable
 
-    from pfeed._io.base_io import MetadataDict
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+    from pfeed.io.base_io import MetadataDict
 
 import lancedb
 import polars as pl
 import pyarrow.fs as pa_fs
 
-from pfeed._io.database_io import DatabaseIO, DBPath
-from pfeed._io.table_io import TableIO, TablePath
 from pfeed.enums import TimestampPrecision
+from pfeed.io.database_io import DatabaseIO, DBPath
+from pfeed.io.table_io import TableIO, TablePath
 
 
 class LanceDBIO(DatabaseIO, TableIO):

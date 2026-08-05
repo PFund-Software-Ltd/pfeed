@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, assert_never
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
 
-    from pfeed._io.base_io import BaseIO, MetadataDict
-    from pfeed._sinks.base_sink import BaseSink
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.io.base_io import BaseIO, MetadataDict
+    from pfeed.sinks.base_sink import BaseSink
     from pfeed.storages.database_storage import DatabaseURI
 
     IOClassName: TypeAlias = str
@@ -17,9 +17,9 @@ from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, ConfigDict
 
-from pfeed._io.database_io import DBPath
-from pfeed._io.table_io import TablePath
 from pfeed.enums import DataLayer, DataSource, IOType
+from pfeed.io.database_io import DBPath
+from pfeed.io.table_io import TablePath
 from pfeed.utils.file_path import FilePath
 
 SourcePath: TypeAlias = FilePath | TablePath | DBPath

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfeed._io.base_io import BaseIO
+    from pfeed.io.base_io import BaseIO
 
 from enum import StrEnum
 
@@ -52,29 +52,29 @@ class IOFormat(StrEnum):
     @property
     def io_class(self) -> type[BaseIO]:
         if self == IOFormat.PARQUET:
-            from pfeed._io.parquet_io import ParquetIO
+            from pfeed.io.parquet_io import ParquetIO
 
             return ParquetIO
         elif self == IOFormat.BLOB:
-            from pfeed._io.file_io import FileIO
+            from pfeed.io.file_io import FileIO
 
             return FileIO
         elif self == IOFormat.DELTALAKE:
-            from pfeed._io.deltalake_io import DeltaLakeIO
+            from pfeed.io.deltalake_io import DeltaLakeIO
 
             return DeltaLakeIO
         elif self == IOFormat.SQLITE:
-            from pfeed._io.sqlite_io import SQLiteIO
+            from pfeed.io.sqlite_io import SQLiteIO
 
             return SQLiteIO
         elif self == IOFormat.DUCKDB:
             # this import will throw ImportError if duckdb is not installed
-            from pfeed._io.duckdb_io import DuckDBIO
+            from pfeed.io.duckdb_io import DuckDBIO
 
             return DuckDBIO
         elif self == IOFormat.LANCEDB:
             # this import will throw ImportError if lancedb is not installed
-            from pfeed._io.lancedb_io import LanceDBIO
+            from pfeed.io.lancedb_io import LanceDBIO
 
             return LanceDBIO
         else:

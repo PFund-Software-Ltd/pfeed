@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
 
-    from pfeed._io.io_config import IOConfig
+    from pfeed.io.io_config import IOConfig
 
 from abc import abstractmethod
 from pathlib import Path

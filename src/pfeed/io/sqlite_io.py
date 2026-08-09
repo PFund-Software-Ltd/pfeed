@@ -70,6 +70,8 @@ class SQLiteIO(DatabaseIO, FileIO):
         return '"' + name.replace('"', '""') + '"'
 
     def _physical_table_name(self, db_path: DBPath) -> str:
+        if db_path.schema_name is None:
+            return self._sanitize_identifier(db_path.table_name)
         # SQLite has no user-defined schemas. Quoting the full dotted name makes
         # `schema.table` one physical identifier instead of an attached DB name.
         return self._get_schema_qualified_table_name(db_path)
@@ -79,7 +81,7 @@ class SQLiteIO(DatabaseIO, FileIO):
 
     def _metadata_table_name(self, db_path: DBPath) -> str:
         if db_path.schema_name is None:
-            raise ValueError("schema_name must be provided")
+            return self.METADATA_TABLE_NAME
         schema_name = self._sanitize_identifier(db_path.schema_name)
         return f"{schema_name}.{self.METADATA_TABLE_NAME}"
 
@@ -582,17 +584,23 @@ class SQLiteIO(DatabaseIO, FileIO):
 
     def list_tables(self, db_path: DBPath, include_schema: bool = True) -> list[str]:
         conn: SQLiteConnection = self.connect(db_path.db_uri)
-        if db_path.schema_name is None:
-            raise ValueError("schema_name must be provided")
-        schema_name = self._sanitize_identifier(db_path.schema_name)
-        prefix = f"{schema_name}."
-        metadata_name = f"{prefix}{self.METADATA_TABLE_NAME}"
         physical_names = [
             row[0]
             for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
             ).fetchall()
         ]
+
+        if db_path.schema_name is None:
+            return [
+                name
+                for name in physical_names
+                if "." not in name and name != self.METADATA_TABLE_NAME
+            ]
+
+        schema_name = self._sanitize_identifier(db_path.schema_name)
+        prefix = f"{schema_name}."
+        metadata_name = f"{prefix}{self.METADATA_TABLE_NAME}"
         logical_names = [
             name[len(prefix) :]
             for name in physical_names

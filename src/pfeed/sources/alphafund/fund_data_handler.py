@@ -99,7 +99,6 @@ class AlphaFundDataHandler(BaseDataHandler):
         return DBPath(
             db_uri=db_uri,
             db_name=db_name,
-            schema_name=db_name,
             table_name=data_model.table_name,
         )
 

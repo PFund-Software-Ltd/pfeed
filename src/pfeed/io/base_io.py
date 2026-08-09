@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import SourcePath
@@ -12,8 +12,11 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 
+from pfeed.enums.io_format import IOFormat
+
 
 class BaseIO(ABC):
+    IO_FORMAT: ClassVar[IOFormat | None] = None
     SUPPORTS_PARALLEL_WRITES: bool = (
         False  # if supports parallel writes to the same destination
     )

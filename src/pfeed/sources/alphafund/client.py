@@ -1,10 +1,13 @@
 from pfeed.data_client import DataClient
-from pfeed.sources.alphafund.chat_feed import AlphaFundChatFeed
+from pfeed.sources.alphafund.fund_feed import AlphaFundFeed
 from pfeed.sources.alphafund.mixin import AlphaFundMixin
 
 
 class AlphaFund(AlphaFundMixin, DataClient):
-    chat_feed: AlphaFundChatFeed
+    fund_feed: AlphaFundFeed
+    # TODO: move chat into AgentFeed, remove ChatFeed
+    # agent_feed: AlphaFundAgentFeed
 
     def _create_feeds(self):
-        self.chat_feed = AlphaFundChatFeed()
+        self.fund_feed = AlphaFundFeed()
+        # self.agent_feed = AlphaFundAgentFeed()

@@ -230,7 +230,12 @@ class DuckDBIO(DatabaseIO, FileIO):
                 f"Failed to write metadata (type={type(metadata)}) ({db_path=}): {exc}"
             ) from exc
 
-    def read(self, db_path: DBPath, where: str | None = None) -> pl.LazyFrame | None:
+    def read(
+        self,
+        db_path: DBPath,
+        where: str | None = None,
+        params: tuple[Any, ...] = (),
+    ) -> pl.LazyFrame | None:
         """Read a table from DuckDB, optionally filtered.
 
         Args:
@@ -247,7 +252,7 @@ class DuckDBIO(DatabaseIO, FileIO):
                 sql = f"SELECT * FROM {schema_qualified_table_name}"
                 if where:
                     sql += f" WHERE {where}"
-                result = conn.execute(sql)
+                result = conn.execute(sql, params)
                 # REVIEW: result.pl(lazy=True) returns a LazyFrame backed by the DuckDB result.
                 # Any pushdown op (e.g. .head(1), .filter(...).collect()) triggers:
                 #   INTERNAL Error: Attempted to dereference shared_ptr that is NULL!

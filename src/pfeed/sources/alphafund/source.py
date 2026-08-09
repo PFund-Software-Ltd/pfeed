@@ -8,4 +8,4 @@ class AlphaFundSource(BaseSource):
     name: ClassVar[DataSource] = DataSource.ALPHAFUND
 
     def get_data_categories(self) -> list[DataCategory]:
-        return [DataCategory.CHAT_DATA]
+        return [DataCategory.FUND_DATA, DataCategory.AGENT_DATA]

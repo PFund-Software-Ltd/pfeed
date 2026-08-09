@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 if TYPE_CHECKING:
+    import polars as pl
+
     from pfeed.io.database_io import DatabaseIO, DBConnection, DBPath
 
     DatabaseURI: TypeAlias = str
@@ -51,6 +53,20 @@ class DatabaseStorage(BaseStorage, ABC):
     def conn(self) -> DBConnection | None:
         db_path = self._get_db_path()
         return self.io.connect(db_path.db_uri)
+
+    def read(
+        self,
+        where: str | None = None,
+        params: tuple[Any, ...] = (),
+    ) -> pl.LazyFrame | None:
+        if where is None:
+            if params:
+                raise ValueError("params cannot be provided without where")
+            return cast("pl.LazyFrame | None", super().read())
+        return cast(
+            "pl.LazyFrame | None",
+            self.data_handler.read(where=where, params=params),
+        )
 
     def with_io(self, io_config: IOConfig) -> BaseStorage:
         # database storage should only support one IO format

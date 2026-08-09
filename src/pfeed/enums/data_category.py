@@ -2,7 +2,8 @@ from enum import StrEnum
 
 
 class AlphaFundDataCategory(StrEnum):
-    CHAT_DATA = "CHAT_DATA"
+    FUND_DATA = "FUND_DATA"
+    AGENT_DATA = "AGENT_DATA"
 
 
 class PFundDataCategory(StrEnum):
@@ -15,7 +16,8 @@ class DataCategory(StrEnum):
     # NEWS_DATA = "NEWS_DATA"
     ENGINE_DATA = PFundDataCategory.ENGINE_DATA
     COMPONENT_DATA = PFundDataCategory.COMPONENT_DATA
-    CHAT_DATA = AlphaFundDataCategory.CHAT_DATA
+    FUND_DATA = AlphaFundDataCategory.FUND_DATA
+    AGENT_DATA = AlphaFundDataCategory.AGENT_DATA
 
     @property
     def feed_name(self) -> str:

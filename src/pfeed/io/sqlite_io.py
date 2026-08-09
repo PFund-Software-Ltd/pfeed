@@ -25,15 +25,16 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.fs as pa_fs
 
-from pfeed.enums import TimestampPrecision
+from pfeed.enums import IOFormat, TimestampPrecision
 from pfeed.io.database_io import DatabaseIO, DBPath
 from pfeed.io.file_io import FileIO
 from pfeed.utils.file_path import FilePath
 
 
 class SQLiteIO(DatabaseIO, FileIO):
+    IO_FORMAT = IOFormat.SQLITE
     SUPPORTS_PARALLEL_WRITES: bool = False
-    FILE_EXTENSION = ".sqlite"
+    FILE_EXTENSION = ".db"  # or ".sqlite"
     TIMESTAMP_PRECISION: TimestampPrecision = TimestampPrecision.MICROSECOND
     DATE_FILTER_PREDICATE = (
         "{date_col} >= '{start_date}' AND {date_col} <= '{end_date}'"
@@ -375,8 +376,16 @@ class SQLiteIO(DatabaseIO, FileIO):
         data: pd.DataFrame | pl.DataFrame | pl.LazyFrame | pa.Table,
         db_path: DBPath,
         delete_where: str | None = None,
+        column_nullability: dict[str, bool] | None = None,
+        table_sql: str = "",
+        insert_sql: str = "",
     ):
-        """Atomically delete matching rows and insert data into SQLite."""
+        """Atomically delete matching rows and insert data into SQLite.
+
+        ``column_nullability`` is derived from the SQL data model. ``table_sql``
+        and ``insert_sql`` are trusted SQL fragments declared by that model. They
+        must not contain runtime or user-provided values.
+        """
         conn: SQLiteConnection = self.connect(db_path.db_uri)
         table = self._to_arrow(data)
         display_name = self._physical_table_name(db_path)
@@ -415,11 +424,46 @@ class SQLiteIO(DatabaseIO, FileIO):
                     table = self._align_table(table, target_schema)
                 else:
                     target_schema = table.schema
-                    column_defs = ", ".join(
-                        f"{self._quote_identifier(field.name)} {self._sqlite_affinity(field.type)}"
+                    if column_nullability is not None:
+                        unknown_columns = set(column_nullability) - set(
+                            target_schema.names
+                        )
+                        if unknown_columns:
+                            raise ValueError(
+                                "Unknown columns in column_nullability: "
+                                + f"{sorted(unknown_columns)}"
+                            )
+                        target_schema = pa.schema(
+                            [
+                                pa.field(
+                                    field.name,
+                                    field.type,
+                                    nullable=column_nullability.get(
+                                        field.name, field.nullable
+                                    ),
+                                )
+                                for field in target_schema
+                            ]
+                        )
+                        table = self._align_table(table, target_schema)
+                    definitions = [
+                        " ".join(
+                            part
+                            for part in (
+                                self._quote_identifier(field.name),
+                                self._sqlite_affinity(field.type),
+                                "" if field.nullable else "NOT NULL",
+                            )
+                            if part
+                        )
                         for field in target_schema
+                    ]
+                    if table_sql := table_sql.strip():
+                        definitions.append(table_sql)
+
+                    conn.execute(
+                        f"CREATE TABLE {quoted_table} ({', '.join(definitions)})"
                     )
-                    conn.execute(f"CREATE TABLE {quoted_table} ({column_defs})")
 
                 self._ensure_metadata_table(conn, db_path)
                 table_name = self._sanitize_identifier(db_path.table_name)
@@ -446,16 +490,21 @@ class SQLiteIO(DatabaseIO, FileIO):
                 columns = ", ".join(
                     self._quote_identifier(field.name) for field in target_schema
                 )
-                conn.executemany(
-                    f"INSERT INTO {quoted_table} ({columns}) VALUES ({placeholders})",
-                    zip(*encoded_columns, strict=True),
-                )
+                sql = f"INSERT INTO {quoted_table} ({columns}) VALUES ({placeholders})"
+                if insert_sql := insert_sql.strip():
+                    sql += f" {insert_sql}"
+                conn.executemany(sql, zip(*encoded_columns, strict=True))
         except Exception as exc:
             raise Exception(
                 f"Failed to write data (type={type(data)}) ({db_path=}): {exc}"
             ) from exc
 
-    def read(self, db_path: DBPath, where: str | None = None) -> pl.LazyFrame | None:
+    def read(
+        self,
+        db_path: DBPath,
+        where: str | None = None,
+        params: tuple[Any, ...] = (),
+    ) -> pl.LazyFrame | None:
         try:
             conn: SQLiteConnection = self.connect(db_path.db_uri)
             physical_name = self._physical_table_name(db_path)
@@ -465,7 +514,7 @@ class SQLiteIO(DatabaseIO, FileIO):
             sql = f"SELECT * FROM {self._quoted_table_name(db_path)}"
             if where:
                 sql += f" WHERE {where}"
-            cursor = conn.execute(sql)
+            cursor = conn.execute(sql, params)
             rows = cursor.fetchall()
             column_names = [description[0] for description in cursor.description]
             schema = self._read_stored_schema(conn, db_path)

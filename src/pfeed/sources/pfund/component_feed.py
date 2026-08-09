@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
     from narwhals.typing import IntoFrame
 
-    from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.result import DataFlowResult, RunResult
     from pfeed.sources.pfund.requests import (
         PFundComponentFeedDownloadRequest,
@@ -23,7 +22,6 @@ if TYPE_CHECKING:
     )
 
 import polars as pl
-from pfund_kit.style import RichColor, TextStyle
 
 from pfeed.config import setup_logging
 from pfeed.enums import DataCategory, DataStorage, DataTool, IOFormat
@@ -423,23 +421,6 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
     def stream(self, *args: Any, **kwargs: Any) -> Self:
         # streaming a component's live signals — separate (StreamingFeedMixin) path
         raise NotImplementedError(f"{self.name} stream() is not implemented yet")
-
-    def _create_batch_dataflows(
-        self, extract_func: Callable[[PFundComponentDataModel], Any]
-    ) -> list[DataFlow]:
-        request = cast("PFundComponentFeedRequest", self._get_current_request())
-        self.logger.debug(
-            f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
-        )
-        data_model = self._create_data_model_from_request(request)
-        faucet = self._create_faucet(
-            data_source=data_model.data_source,
-            extract_func=extract_func,
-            extract_type=request.extract_type,
-        )
-        dataflows = [self._create_dataflow(faucet=faucet, data_model=data_model)]
-        self._dataflows[request] = dataflows
-        return dataflows
 
     def run(self, **prefect_kwargs: Any) -> RunResult:
         from pfeed._etl.base import convert_dataframe

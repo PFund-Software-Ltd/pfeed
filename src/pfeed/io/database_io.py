@@ -150,7 +150,13 @@ class DatabaseIO(BaseIO, ABC):
         pass
 
     @abstractmethod
-    def read(self, db_path: DBPath, where: str | None = None, **io_kwargs: Any) -> Any:
+    def read(
+        self,
+        db_path: DBPath,
+        where: str | None = None,
+        params: tuple[Any, ...] = (),
+        **io_kwargs: Any,
+    ) -> Any:
         pass
 
     @abstractmethod

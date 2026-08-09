@@ -105,7 +105,6 @@ __all__ = (
     "IB",
     "IBKR",
     "YF",
-    "YF",
     "AlphaFund",
     "Bybit",
     "DataEngine",

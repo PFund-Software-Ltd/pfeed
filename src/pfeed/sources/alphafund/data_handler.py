@@ -103,11 +103,19 @@ class AlphaFundDataHandler(BaseDataHandler):
 
         model = self._data_model
         match model:
-            case AlphaFundDataModel():
+            case AlphaFundDataModel() if model.fund_id is not None:
+                return '"fund_id" = ?', (str(model.fund_id),)
+            case AlphaFundDataModel() if (
+                model.user_id is not None and model.fund_name is not None
+            ):
                 return (
                     '"user_id" = ? AND "fund_name" = ?',
                     (str(model.user_id), model.fund_name),
                 )
+            case AlphaFundDataModel() if model.user_id is not None:
+                return '"user_id" = ?', (str(model.user_id),)
+            case AlphaFundDataModel():
+                raise ValueError("A fund lookup requires user_id or fund_id")
             case AlphaFundAgentDataModel():
                 return (
                     '"fund_id" = ? AND "agent_name" = ?',

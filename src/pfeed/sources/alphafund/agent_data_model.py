@@ -23,7 +23,7 @@ class AlphaFundAgentDataModel(BaseSQLDataModel):
 
     fund_id: UUID5 | None = None
     agent_name: str | None = None
-    agent_id: UUID5
+    agent_id: UUID5 | None = None
 
     @classmethod
     def column_nullability(cls) -> dict[str, bool]:

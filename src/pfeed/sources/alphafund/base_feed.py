@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
     import polars as pl
@@ -26,6 +26,15 @@ if TYPE_CHECKING:
     from pfeed.sources.alphafund.requests.chat_retrieve_request import (
         AlphaFundChatFeedRetrieveRequest,
     )
+    from pfeed.sources.alphafund.requests.fund_download_request import (
+        AlphaFundFeedDownloadRequest,
+    )
+    from pfeed.sources.alphafund.requests.agent_download_request import (
+        AlphaFundAgentFeedDownloadRequest,
+    )
+    from pfeed.sources.alphafund.requests.chat_download_request import (
+        AlphaFundChatFeedDownloadRequest,
+    )
 
     AlphaFundBaseRequest = (
         AlphaFundFeedBaseRequest
@@ -38,6 +47,11 @@ if TYPE_CHECKING:
         AlphaFundFeedRetrieveRequest
         | AlphaFundAgentFeedRetrieveRequest
         | AlphaFundChatFeedRetrieveRequest
+    )
+    AlphaFundDownloadRequest = (
+        AlphaFundFeedDownloadRequest
+        | AlphaFundAgentFeedDownloadRequest
+        | AlphaFundChatFeedDownloadRequest
     )
 
 from pfeed.feeds.base_feed import BaseFeed
@@ -53,7 +67,12 @@ class AlphaFundBaseFeed(BaseFeed, ABC):
     data_domain: ClassVar[AlphaFundDataCategory]
 
     @abstractmethod
-    def _ensure_unique_key(self, *args: Any, **kwargs: Any): ...
+    def _handle_storage_result(
+        self,
+        data_model: AlphaFundSQLDataModel,
+        storage_config: StorageConfig,
+        io_config: IOConfig,
+    ) -> pl.LazyFrame | None: ...
 
     def _resolve_configs(
         self,
@@ -93,25 +112,21 @@ class AlphaFundBaseFeed(BaseFeed, ABC):
         self,
         data_model: AlphaFundSQLDataModel,
     ) -> pl.DataFrame | pl.LazyFrame:
-        # _append_request() allows one request at a time, so the queued request is
-        # this dataflow's. Reading it here keeps the signature to the single kwarg
-        # Faucet.open_batch() passes, so feeds hand over _download_impl unbound.
-        [request] = self._requests
-        storage_config = request.storage_config
-        io_config = request.io_config
-        assert storage_config is not None
-        assert io_config is not None
-        existing = self._read_from_storage(data_model, storage_config, io_config)
-        if existing is not None and not existing.limit(1).collect().is_empty():
-            return existing
-        return data_model.to_frame()
+        [request] = cast("list[AlphaFundDownloadRequest]", self._requests)
+        existing = self._handle_storage_result(
+            data_model, request.storage_config, request.io_config
+        )
+        # No existing agent: create it from the model.
+        if existing is None:
+            return data_model.to_frame()
+        return existing
 
     def _retrieve_impl(
         self,
         data_model: AlphaFundSQLDataModel,
         request: AlphaFundRetrieveRequest,
     ) -> pl.LazyFrame | None:
-        return self._read_from_storage(
+        return self._handle_storage_result(
             data_model,
             request.storage_config_for_retrieval,
             request.io_config_for_retrieval,

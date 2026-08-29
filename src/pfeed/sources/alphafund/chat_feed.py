@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
+import polars as pl
+
 from pfeed.enums import DataCategory
 from pfeed.sources.alphafund.base_feed import AlphaFundBaseFeed
 from pfeed.io.io_config import IOConfig
@@ -42,19 +44,101 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
     data_domain: ClassVar[DataCategory] = DataCategory.CHAT_DATA
 
     @staticmethod
-    def _ensure_unique_key(
-        *, fund_id: UUID | None, channel_name: str | None, channel_id: UUID | None
-    ) -> UUID:
-        if fund_id is None or channel_name is None:
+    def _resolve_channel_id(
+        *,
+        fund_id: UUID | None,
+        channel_name: str | None,
+        channel_id: UUID | None,
+        chat_id: UUID | None,
+    ) -> UUID | None:
+        if fund_id is not None and channel_name is not None:
+            channel_id = create_channel_id(fund_id, channel_name)
+        else:
             if channel_id is None:
-                raise ValueError(
-                    "Either fund_id and channel_name must be provided, or channel_id must be provided"
-                )
+                if fund_id is None:
+                    raise ValueError("Either fund_id or channel_id must be provided")
+                elif chat_id is not None:
+                    raise ValueError(
+                        "channel_id must be provided when chat_id is provided"
+                    )
+                else:
+                    # NOTE: only fund_id is provided + channel_id is None = get all channels for that fund
+                    return None
             else:
                 return channel_id
-        else:
-            channel_id = create_channel_id(fund_id, channel_name)
         return channel_id
+
+    def _handle_storage_result(
+        self,
+        data_model: AlphaFundChannelDataModel | AlphaFundChatDataModel,
+        storage_config: StorageConfig,
+        io_config: IOConfig,
+    ) -> pl.LazyFrame | None:
+        existing = self._read_from_storage(
+            data_model,
+            storage_config,
+            io_config,
+        )
+
+        is_fund_channels_lookup = (
+            isinstance(data_model, AlphaFundChannelDataModel)
+            and data_model.fund_id is not None
+            and data_model.channel_id is None
+        )
+        is_unique_channel_lookup = (
+            isinstance(data_model, AlphaFundChannelDataModel)
+            and data_model.channel_id is not None
+        )
+        is_unique_chat_lookup = (
+            isinstance(data_model, AlphaFundChatDataModel)
+            and data_model.channel_id is not None  # pyright: ignore[reportUnnecessaryComparison]
+            and data_model.chat_id is not None  # pyright: ignore[reportUnnecessaryComparison]
+        )
+
+        # Fund-only lookup: return zero or more channels.
+        if is_fund_channels_lookup:
+            if existing is not None:
+                return existing
+            else:
+                return (
+                    pl.DataFrame(schema=data_model.polars_schema()).lazy()
+                    if existing is None
+                    else existing
+                )
+
+        # Unique-channel lookup: expect zero or one channel.
+        if is_unique_channel_lookup:
+            # the channel doesn't exist
+            if existing is None:
+                return None
+            row_count = existing.limit(2).collect().height
+            if row_count == 0:
+                raise LookupError(f"Channel {data_model.channel_id} was not found")
+            if row_count > 1:
+                raise RuntimeError(
+                    f"Expected one channel for {data_model.channel_id}, but multiple were found"
+                )
+            return existing
+
+        # Unique-chat lookup: expect zero or one chat.
+        if is_unique_chat_lookup:
+            assert isinstance(data_model, AlphaFundChatDataModel)
+            # the chat doesn't exist
+            if existing is None:
+                return None
+            row_count = existing.limit(2).collect().height
+            if row_count == 0:
+                raise LookupError(f"Chat {data_model.chat_id} was not found")
+            if row_count > 1:
+                raise RuntimeError(
+                    f"Expected one chat for {data_model.chat_id}, but multiple were found"
+                )
+            return existing
+
+        raise RuntimeError(
+            "Invalid chat lookup state: expected either a fund-only channel lookup, "
+            + "a unique-channel lookup, or a unique-chat lookup"
+        )
 
     def download(
         self,
@@ -75,9 +159,6 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         and all of their messages in that channel. Providing ``chat_id``
         persists only that chat and its messages.
         """
-        channel_id = self._ensure_unique_key(
-            fund_id=fund_id, channel_name=channel_name, channel_id=channel_id
-        )
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundChatFeedDownloadRequest(
             data_source=self.name,
@@ -101,9 +182,6 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
-        channel_id = self._ensure_unique_key(
-            fund_id=fund_id, channel_name=channel_name, channel_id=channel_id
-        )
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundChatFeedRetrieveRequest(
             data_source=self.name,
@@ -127,10 +205,13 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         channel_id: UUID | None = None,
         chat_id: UUID | None = None,
     ) -> AlphaFundChannelDataModel | AlphaFundChatDataModel:
-        channel_id = self._ensure_unique_key(
-            fund_id=fund_id, channel_name=channel_name, channel_id=channel_id
+        channel_id = self._resolve_channel_id(
+            fund_id=fund_id,
+            channel_name=channel_name,
+            channel_id=channel_id,
+            chat_id=chat_id,
         )
-        if chat_id is not None:
+        if channel_id is not None and chat_id is not None:
             return self.ChatDataModel(
                 data_source=self.data_source,
                 channel_id=channel_id,

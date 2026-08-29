@@ -36,12 +36,9 @@ class AlphaFundChannelDataModel(BaseSQLDataModel):
         """,
     }
 
-    # fund_id and channel_name may be absent while resolving an existing channel
-    # by its other unique key; both remain NOT NULL in persisted rows.
     fund_id: UUID5 | None = None
     channel_name: str | None = None
-    # None only while resolving a channel by its natural key.
-    channel_id: UUID5
+    channel_id: UUID5 | None = None
     channel_type: Literal["direct_message", "group_message"] = "direct_message"
     user_ids: list[UUID4] = Field(default_factory=list)
     agent_ids: list[UUID5] = Field(default_factory=list)

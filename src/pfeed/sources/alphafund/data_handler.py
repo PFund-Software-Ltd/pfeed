@@ -88,7 +88,15 @@ class AlphaFundDataHandler(BaseDataHandler):
             where, params = self._default_read_filter()
         assert self._db_path is not None
         with self.io:
-            return self.io.read(self._db_path, where=where, params=params)
+            result = cast(
+                "pl.LazyFrame | None",
+                self.io.read(self._db_path, where=where, params=params),
+            )
+        # A missing table returns None, while an existing table with no matching
+        # rows returns an empty LazyFrame. Both mean no stored AlphaFund result.
+        if result is None or result.limit(1).collect().is_empty():
+            return None
+        return result
 
     def _default_read_filter(self) -> tuple[str, tuple[Any, ...]]:
         from pfeed.sources.alphafund.agent_data_model import AlphaFundAgentDataModel
@@ -116,11 +124,19 @@ class AlphaFundDataHandler(BaseDataHandler):
                 return '"user_id" = ?', (str(model.user_id),)
             case AlphaFundDataModel():
                 raise ValueError("A fund lookup requires user_id or fund_id")
-            case AlphaFundAgentDataModel():
+            case AlphaFundAgentDataModel() if model.agent_id is not None:
+                return '"agent_id" = ?', (str(model.agent_id),)
+            case AlphaFundAgentDataModel() if (
+                model.fund_id is not None and model.agent_name is not None
+            ):
                 return (
                     '"fund_id" = ? AND "agent_name" = ?',
                     (str(model.fund_id), model.agent_name),
                 )
+            case AlphaFundAgentDataModel() if model.fund_id is not None:
+                return '"fund_id" = ?', (str(model.fund_id),)
+            case AlphaFundAgentDataModel():
+                raise ValueError("An agent lookup requires fund_id or agent_id")
             case AlphaFundChannelDataModel() if model.channel_id is not None:
                 return '"channel_id" = ?', (str(model.channel_id),)
             case AlphaFundChannelDataModel() if (
@@ -130,8 +146,10 @@ class AlphaFundDataHandler(BaseDataHandler):
                     '"fund_id" = ? AND "channel_name" = ?',
                     (str(model.fund_id), model.channel_name),
                 )
-            case AlphaFundChannelDataModel():
+            case AlphaFundChannelDataModel() if model.fund_id is not None:
                 return '"fund_id" = ?', (str(model.fund_id),)
+            case AlphaFundChannelDataModel():
+                raise ValueError("A channel lookup requires fund_id or channel_id")
             case AlphaFundChatDataModel():
                 return (
                     '"channel_id" = ? AND "chat_id" = ?',

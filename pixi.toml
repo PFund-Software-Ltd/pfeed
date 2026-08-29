@@ -3,8 +3,8 @@ authors = ["softwareentrepreneer <softwareentrepreneer+pfeed@gmail.com>"]
 channels = ["conda-forge"]
 name = "pfeed"
 platforms = ["osx-arm64", "linux-64"]
-# NOTE: the minimum supports relative exclude-newer; the maximum matches setup-pixi in ci.yml
-requires-pixi = ">=0.67.0,<=0.72.2"
+# NOTE: should match with setup-pixi in ci.yml
+requires-pixi = ">=0.78.0,<0.79.0"
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0d"
 
@@ -26,18 +26,18 @@ depends-on = [
 
 [pypi-dependencies]
 pfund = ">=0.0.25"
-polars = ">=1.43.2"
+polars = ">=1.44.1"
 pyarrow = ">=24.0.0"
 pandera = ">=0.32.1"
 msgspec = ">=0.21.1"
-pydantic = ">=2.13.4"
-narwhals = ">=2.24.0"
+pydantic = ">=2.13.5"
+narwhals = ">=2.25.0"
 zstandard = ">=0.22.0"  # REVIEW: this is included in python 3.14
-cloudpathlib = ">=0.24.0"
+cloudpathlib = ">=0.25.0"
 beautifulsoup4 = ">=4.12.3"
-ray = { version = ">=2.56.1", extras = ["default"] }
-pyzmq = ">=27.1.0"
-deltalake = ">=1.6.2"
+ray = { version = ">=2.58.0", extras = ["default"] }
+pyzmq = ">=27.2.0"
+deltalake = ">=1.6.3"
 
 [environments]
 default = ["py311", "dev", "optional"]
@@ -55,12 +55,12 @@ PATH      = "$JAVA_HOME/bin:$PATH"
 libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
-yfinance = ">=1.5.2"
-huggingface-hub = ">=1.26.0"
-prefect = ">=3.8.1"
+yfinance = ">=1.7.0"
+huggingface-hub = ">=1.29.0"
+prefect = ">=3.8.4"
 pandas = ">=3.0.3"
 duckdb = ">=1.5.5"
-lancedb = ">=0.36.0"
+lancedb = ">=0.37.1"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 # dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
 # pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }

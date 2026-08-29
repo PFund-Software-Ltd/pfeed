@@ -342,6 +342,34 @@ class BaseFeed(ABC):
             raise ValueError(f"Unknown extract type: {request.extract_type}")
         return default_transformations
 
+    def _get_default_transformations_for_download(
+        self,
+        _request: BaseRequest,
+    ) -> list[Callable[..., Any]]:
+        from pfeed._etl.base import convert_dataframe
+        from pfeed.config import get_config
+        from pfeed.utils import lambda_with_name
+
+        config = get_config()
+        return [
+            lambda_with_name(
+                "convert_to_user_df",
+                lambda df: convert_dataframe(df, data_tool=config.data_tool),
+            ),
+        ]
+
+    def _get_default_transformations_for_retrieve(
+        self,
+        _request: BaseRequest,
+    ) -> list[Callable[..., Any]]:
+        return self._get_default_transformations_for_download(_request)
+
+    def _get_default_transformations_for_stream(
+        self,
+        _request: BaseRequest,
+    ) -> list[Callable[..., Any]]:
+        return []
+
     def _finalize_run(self) -> None:
         # run-time method: finalize EVERY queued request, not just the latest.
         # In pipeline mode multiple download()/retrieve()/stream() calls accumulate

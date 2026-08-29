@@ -99,6 +99,7 @@ class SQLiteIO(DatabaseIO, FileIO):
         connect_options = self._connect_options.copy()
         connect_options["uri"] = True
         self._conn: SQLiteConnection = sqlite3.connect(uri, **connect_options)
+        _ = self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn_uri = uri
 
     def _close_connection(self):
@@ -380,13 +381,14 @@ class SQLiteIO(DatabaseIO, FileIO):
         delete_where: str | None = None,
         column_nullability: dict[str, bool] | None = None,
         table_sql: str = "",
+        index_sql: tuple[str, ...] = (),
         insert_sql: str = "",
     ):
         """Atomically delete matching rows and insert data into SQLite.
 
-        ``column_nullability`` is derived from the SQL data model. ``table_sql``
-        and ``insert_sql`` are trusted SQL fragments declared by that model. They
-        must not contain runtime or user-provided values.
+        ``column_nullability`` is derived from the SQL data model. ``table_sql``,
+        ``index_sql`` and ``insert_sql`` are trusted SQL fragments declared by
+        that model. They must not contain runtime or user-provided values.
         """
         conn: SQLiteConnection = self.connect(db_path.db_uri)
         table = self._to_arrow(data)
@@ -466,6 +468,10 @@ class SQLiteIO(DatabaseIO, FileIO):
                     conn.execute(
                         f"CREATE TABLE {quoted_table} ({', '.join(definitions)})"
                     )
+
+                for statement in index_sql:
+                    if statement := statement.strip():
+                        conn.execute(statement)
 
                 self._ensure_metadata_table(conn, db_path)
                 table_name = self._sanitize_identifier(db_path.table_name)

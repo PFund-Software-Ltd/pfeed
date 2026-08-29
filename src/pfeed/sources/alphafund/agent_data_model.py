@@ -1,29 +1,29 @@
 from typing import ClassVar
 
-from pydantic import UUID4, UUID5
+from pydantic import UUID5
 
 from pfeed.data_models.base_sql_data_model import BaseSQLDataModel
 from pfeed.enums import IOFormat
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 
-class AlphaFundDataModel(BaseSQLDataModel):
+class AlphaFundAgentDataModel(BaseSQLDataModel):
     DataHandler: ClassVar[type[AlphaFundDataHandler]] = AlphaFundDataHandler
 
-    table_name: ClassVar[str] = "funds"
+    table_name: ClassVar[str] = "agents"
     table_sql: ClassVar[str] = """
-        PRIMARY KEY ("fund_id"),
-        UNIQUE ("user_id", "fund_name")
+        PRIMARY KEY ("agent_id"),
+        UNIQUE ("fund_id", "agent_name")
     """
     insert_sql: ClassVar[dict[IOFormat, str]] = {
         IOFormat.SQLITE: """
-            ON CONFLICT ("user_id", "fund_name") DO NOTHING
+            ON CONFLICT ("fund_id", "agent_name") DO NOTHING
         """,
     }
 
-    user_id: UUID4 | None = None
-    fund_name: str | None = None
-    fund_id: UUID5
+    fund_id: UUID5 | None = None
+    agent_name: str | None = None
+    agent_id: UUID5
 
     @classmethod
     def column_nullability(cls) -> dict[str, bool]:

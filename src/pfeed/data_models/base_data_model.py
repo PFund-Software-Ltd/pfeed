@@ -16,7 +16,7 @@ class BaseDataModel(BaseModel):
     DataHandler: ClassVar[type[BaseDataHandler]]
 
     data_source: BaseSource
-    data_origin: str
+    data_origin: str = ""
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:

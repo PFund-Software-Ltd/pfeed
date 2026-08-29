@@ -28,27 +28,27 @@ dependencies = [
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
-    "polars>=1.43.2 ; sys_platform != 'emscripten'",
+    "polars>=1.44.1 ; sys_platform != 'emscripten'",
     "pyarrow>=24.0.0 ; sys_platform != 'emscripten'",
     "pandera>=0.32.1",
     "msgspec>=0.21.1 ; sys_platform != 'emscripten'",
-    "pydantic>=2.13.4 ; sys_platform != 'emscripten'",
-    "narwhals>=2.24.0 ; sys_platform != 'emscripten'",
+    "pydantic>=2.13.5 ; sys_platform != 'emscripten'",
+    "narwhals>=2.25.0 ; sys_platform != 'emscripten'",
     "zstandard>=0.22.0",
-    "cloudpathlib>=0.24.0",
+    "cloudpathlib>=0.25.0",
     "beautifulsoup4>=4.12.3",
-    "ray[default]>=2.56.1 ; sys_platform != 'emscripten'",
-    "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
-    "deltalake>=1.6.2 ; sys_platform != 'emscripten'"
+    "ray[default]>=2.58.0 ; sys_platform != 'emscripten'",
+    "pyzmq>=27.2.0 ; sys_platform != 'emscripten'",
+    "deltalake>=1.6.3 ; sys_platform != 'emscripten'"
 ]
 
 [project.optional-dependencies]
-yfinance = ["yfinance>=1.5.2"]
-huggingface = ["huggingface-hub>=1.26.0"]
-prefect = ["prefect>=3.8.1"]
+yfinance = ["yfinance>=1.7.0"]
+huggingface = ["huggingface-hub>=1.29.0"]
+prefect = ["prefect>=3.8.4"]
 pandas = ["pandas>=3.0.3"]
 duckdb = ["duckdb>=1.5.5"]
-lancedb = ["lancedb>=0.36.0"]
+lancedb = ["lancedb>=0.37.1"]
 # s3 = ["minio>=7.2.20", "cloudpathlib[s3]>=0.24.0"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # fmp = ["fmp-api-client>=0.0.1"]
@@ -69,7 +69,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.12.1,<0.13.0"]
+requires = ["uv_build>=0.12.7,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv]

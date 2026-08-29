@@ -48,7 +48,7 @@ class PFundComponentDataHandler(BaseDataHandler):
                                 - {component}.py  (component source code)
                                 checkpoints/
                                     step=0/
-                                        checkpoint.pt or checkpoint.pkl
+                                        checkpoint.pth or checkpoint.pkl
     """
 
     _data_model: PFundComponentDataModel

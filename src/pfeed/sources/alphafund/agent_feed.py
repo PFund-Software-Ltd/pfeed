@@ -10,63 +10,59 @@ from uuid import NAMESPACE_DNS, UUID, uuid5
 
 from pfeed.enums import DataCategory
 from pfeed.sources.alphafund.base_feed import AlphaFundBaseFeed
-from pfeed.sources.alphafund.fund_data_model import AlphaFundDataModel
+from pfeed.sources.alphafund.agent_data_model import AlphaFundAgentDataModel
 from pfeed.sources.alphafund.mixin import AlphaFundMixin
 from pfeed.sources.alphafund.requests import (
-    AlphaFundFeedDownloadRequest,
-    AlphaFundFeedRetrieveRequest,
+    AlphaFundAgentFeedDownloadRequest,
+    AlphaFundAgentFeedRetrieveRequest,
 )
 
 
-FUND_ID_NAMESPACE = uuid5(NAMESPACE_DNS, "fund.alphafund.pfund.ai")
+AGENT_ID_NAMESPACE = uuid5(NAMESPACE_DNS, "agent.alphafund.pfund.ai")
 
 
-def create_fund_id(user_id: UUID, fund_name: str) -> UUID:
-    return uuid5(FUND_ID_NAMESPACE, f"{user_id}:{fund_name}")
+def create_agent_id(fund_id: UUID, agent_name: str) -> UUID:
+    return uuid5(AGENT_ID_NAMESPACE, f"{fund_id}:{agent_name}")
 
 
-class AlphaFundFeed(AlphaFundMixin, AlphaFundBaseFeed):
-    DataModel: ClassVar[type[AlphaFundDataModel]] = AlphaFundDataModel
-    data_domain: ClassVar[DataCategory] = DataCategory.FUND_DATA
+class AlphaFundAgentFeed(AlphaFundMixin, AlphaFundBaseFeed):
+    DataModel: ClassVar[type[AlphaFundAgentDataModel]] = AlphaFundAgentDataModel
+    data_domain: ClassVar[DataCategory] = DataCategory.AGENT_DATA
 
     @staticmethod
     def _ensure_unique_key(
-        *, user_id: UUID | None, fund_name: str | None, fund_id: UUID | None
+        *, fund_id: UUID | None, agent_name: str | None, agent_id: UUID | None
     ) -> UUID:
-        if user_id is None or fund_name is None:
-            if fund_id is None:
+        if fund_id is None or agent_name is None:
+            if agent_id is None:
                 raise ValueError(
-                    "Either user_id and fund_name must be provided, or fund_id must be provided"
+                    "Either fund_id and agent_name must be provided, or agent_id must be provided"
                 )
             else:
-                return fund_id
+                return agent_id
         else:
-            fund_id = create_fund_id(user_id, fund_name)
-        return fund_id
+            return create_agent_id(fund_id, agent_name)
 
     def download(
         self,
-        user_id: UUID | None = None,
-        fund_name: str | None = None,
         fund_id: UUID | None = None,
+        agent_name: str | None = None,
+        agent_id: UUID | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
-        """Persist a fund, or return the existing one for (user_id, fund_name).
+        """Load or create the persistent identity for an agent.
 
-        Args:
-            fund_id: An existing deterministic ID. When omitted, it is derived
-                from ``(user_id, fund_name)``.
+        The authoritative key is ``(fund_id, agent_name)``. When omitted,
+        ``agent_id`` is derived deterministically from that key.
         """
-        fund_id = self._ensure_unique_key(
-            user_id=user_id, fund_name=fund_name, fund_id=fund_id
+        agent_id = self._ensure_unique_key(
+            fund_id=fund_id, agent_name=agent_name, agent_id=agent_id
         )
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
-        request = AlphaFundFeedDownloadRequest(
+        request = AlphaFundAgentFeedDownloadRequest(
             data_source=self.name,
-            user_id=user_id,
-            fund_name=fund_name,
-            fund_id=fund_id,
+            agent_id=agent_id,
             storage_config=storage_config,
             io_config=io_config,
         )
@@ -76,19 +72,19 @@ class AlphaFundFeed(AlphaFundMixin, AlphaFundBaseFeed):
 
     def retrieve(
         self,
-        user_id: UUID | None = None,
-        fund_name: str | None = None,
         fund_id: UUID | None = None,
+        agent_name: str | None = None,
+        agent_id: UUID | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
-        fund_id = self._ensure_unique_key(
-            user_id=user_id, fund_name=fund_name, fund_id=fund_id
+        agent_id = self._ensure_unique_key(
+            fund_id=fund_id, agent_name=agent_name, agent_id=agent_id
         )
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
-        request = AlphaFundFeedRetrieveRequest(
+        request = AlphaFundAgentFeedRetrieveRequest(
             data_source=self.name,
-            fund_id=fund_id,
+            agent_id=agent_id,
             storage_config_for_retrieval=storage_config,
             io_config_for_retrieval=io_config,
         )
@@ -100,26 +96,26 @@ class AlphaFundFeed(AlphaFundMixin, AlphaFundBaseFeed):
 
     def create_data_model(
         self,
-        user_id: UUID | None = None,
-        fund_name: str | None = None,
         fund_id: UUID | None = None,
-    ) -> AlphaFundDataModel:
-        fund_id = self._ensure_unique_key(
-            user_id=user_id, fund_name=fund_name, fund_id=fund_id
+        agent_name: str | None = None,
+        agent_id: UUID | None = None,
+    ) -> AlphaFundAgentDataModel:
+        agent_id = self._ensure_unique_key(
+            fund_id=fund_id, agent_name=agent_name, agent_id=agent_id
         )
         return self.DataModel(
             data_source=self.data_source,
-            user_id=user_id,
-            fund_name=fund_name,
             fund_id=fund_id,
+            agent_name=agent_name,
+            agent_id=agent_id,
         )
 
     def _create_data_model_from_request(
         self,
-        request: AlphaFundFeedDownloadRequest | AlphaFundFeedRetrieveRequest,
-    ) -> AlphaFundDataModel:
+        request: AlphaFundAgentFeedDownloadRequest | AlphaFundAgentFeedRetrieveRequest,
+    ) -> AlphaFundAgentDataModel:
         return self.create_data_model(
-            user_id=request.user_id,
-            fund_name=request.fund_name,
             fund_id=request.fund_id,
+            agent_name=request.agent_name,
+            agent_id=request.agent_id,
         )

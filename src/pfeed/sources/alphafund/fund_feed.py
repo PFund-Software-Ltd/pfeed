@@ -88,6 +88,8 @@ class AlphaFundFeed(AlphaFundMixin, AlphaFundBaseFeed):
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundFeedRetrieveRequest(
             data_source=self.name,
+            user_id=user_id,
+            fund_name=fund_name,
             fund_id=fund_id,
             storage_config_for_retrieval=storage_config,
             io_config_for_retrieval=io_config,

@@ -62,6 +62,8 @@ class AlphaFundAgentFeed(AlphaFundMixin, AlphaFundBaseFeed):
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundAgentFeedDownloadRequest(
             data_source=self.name,
+            fund_id=fund_id,
+            agent_name=agent_name,
             agent_id=agent_id,
             storage_config=storage_config,
             io_config=io_config,
@@ -84,6 +86,8 @@ class AlphaFundAgentFeed(AlphaFundMixin, AlphaFundBaseFeed):
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundAgentFeedRetrieveRequest(
             data_source=self.name,
+            fund_id=fund_id,
+            agent_name=agent_name,
             agent_id=agent_id,
             storage_config_for_retrieval=storage_config,
             io_config_for_retrieval=io_config,

@@ -1,12 +1,11 @@
-from __future__ import annotations
+from typing import ClassVar, Literal, Self
 
 import time
-from typing import ClassVar, Literal
+from uuid import uuid4
 
-from pydantic import UUID4, UUID5, Field
+from pydantic import UUID4, Field, model_validator, PrivateAttr
 
 from pfeed.data_models.base_sql_data_model import BaseSQLDataModel
-from pfeed.enums import IOFormat
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 
@@ -17,40 +16,50 @@ class AlphaFundMessageDataModel(BaseSQLDataModel):
     table_name: ClassVar[str] = "messages"
     table_sql: ClassVar[str] = """
         PRIMARY KEY ("message_id"),
-        UNIQUE ("chat_id", "seq"),
+        UNIQUE ("chat_id", "message_seq"),
+        CHECK ("message_seq" >= 0),
+        CHECK ("author_role" IN ('user', 'agent')),
         FOREIGN KEY ("chat_id") REFERENCES "chats" ("chat_id")
             ON DELETE CASCADE
     """
-    insert_sql: ClassVar[dict[IOFormat, str]] = {
-        IOFormat.SQLITE: """
-            ON CONFLICT ("message_id") DO UPDATE SET
-                "content" = excluded."content",
-                "edited_at" = excluded."edited_at",
-                "is_deleted" = excluded."is_deleted"
-        """,
-    }
+    # CRUD operations, no delete
+    _op: Literal["create", "read", "update"] = PrivateAttr(init=False)
+    created_at: float | None = None
+    updated_at: float | None = None
+    is_deleted: bool = False
+    is_archived: bool = False
 
-    chat_id: UUID4
-    # The fields below are None only while retrieving a chat's history.
+    chat_id: UUID4 | None = None
+    content: str | None = None
     message_id: UUID4 | None = None
-    # Per-chat monotonic ordering. uuid4 + a float clock is not a sort key:
-    # ids are unordered and two messages can share a timestamp.
-    seq: int | None = None
-    author_id: UUID4 | UUID5 | None = Field(
+    message_seq: int | None = Field(
+        default=None,
+        description="The message's monotonically increasing position within its chat.",
+    )
+    author_id: UUID4 | None = Field(
         default=None,
         description="The user or agent that wrote the message; role alone does not say who.",
     )
-    role: Literal["user", "agent"] = "user"
-    content: str = ""
-    created_at: float = Field(default_factory=time.time)
-    edited_at: float | None = None
-    is_deleted: bool = False
+    author_role: Literal["user", "agent"] = "user"
 
     @classmethod
     def column_nullability(cls) -> dict[str, bool]:
         return {
-            **super().column_nullability(),
-            "message_id": False,
-            "seq": False,
-            "author_id": False,
+            **{column_name: False for column_name in cls.column_names()},
+            "updated_at": True,
         }
+
+    @property
+    def op(self) -> Literal["create", "read", "update"]:
+        return self._op
+
+    @op.setter
+    def op(self, value: Literal["create", "read", "update"]) -> None:
+        self._op = value
+        if self._op == "create":
+            if self.message_id is not None:
+                raise ValueError("message_id must be None for create operation")
+            self.message_id = uuid4()
+            self.created_at = time.time()
+        elif self._op == "update":
+            self.updated_at = time.time()

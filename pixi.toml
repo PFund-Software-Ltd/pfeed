@@ -28,7 +28,7 @@ depends-on = [
 pfund = ">=0.0.25"
 polars = ">=1.44.1"
 pyarrow = ">=24.0.0"
-pandera = ">=0.32.1"
+pandera = ">=0.33.1"
 msgspec = ">=0.21.1"
 pydantic = ">=2.13.5"
 narwhals = ">=2.25.0"
@@ -60,7 +60,7 @@ huggingface-hub = ">=1.29.0"
 prefect = ">=3.8.4"
 pandas = ">=3.0.3"
 duckdb = ">=1.5.5"
-lancedb = ">=0.37.1"
+lancedb = ">=0.38.0"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 # dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
 # pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }

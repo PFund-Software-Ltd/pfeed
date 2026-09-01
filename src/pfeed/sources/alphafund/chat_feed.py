@@ -1,14 +1,10 @@
 from __future__ import annotations
-
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Literal, Self, Any, cast
 
 if TYPE_CHECKING:
     from pfeed.dataflow.result import RunResult
-    from pfeed.sources.alphafund.requests.chat_base_request import (
-        AlphaFundChatFeedBaseRequest,
-    )
 
-from uuid import NAMESPACE_DNS, UUID, uuid5
+from uuid import UUID
 
 import polars as pl
 
@@ -21,16 +17,11 @@ from pfeed.sources.alphafund.message_data_model import AlphaFundMessageDataModel
 from pfeed.sources.alphafund.mixin import AlphaFundMixin
 from pfeed.storages.storage_config import StorageConfig
 from pfeed.sources.alphafund.requests import (
-    AlphaFundChatFeedDownloadRequest,
+    AlphaFundChatFeedChannelDownloadRequest,
+    AlphaFundChatFeedChatDownloadRequest,
+    AlphaFundChatFeedMessageDownloadRequest,
     AlphaFundChatFeedRetrieveRequest,
 )
-
-
-CHANNEL_ID_NAMESPACE = uuid5(NAMESPACE_DNS, "channel.alphafund.pfund.ai")
-
-
-def create_channel_id(fund_id: UUID, channel_name: str) -> UUID:
-    return uuid5(CHANNEL_ID_NAMESPACE, f"{fund_id}:{channel_name}")
 
 
 class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
@@ -43,129 +34,92 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
     )
     data_domain: ClassVar[DataCategory] = DataCategory.CHAT_DATA
 
-    @staticmethod
-    def _resolve_channel_id(
-        *,
-        fund_id: UUID | None,
-        channel_name: str | None,
-        channel_id: UUID | None,
-        chat_id: UUID | None,
-    ) -> UUID | None:
-        if fund_id is not None and channel_name is not None:
-            channel_id = create_channel_id(fund_id, channel_name)
-        else:
-            if channel_id is None:
-                if fund_id is None:
-                    raise ValueError("Either fund_id or channel_id must be provided")
-                elif chat_id is not None:
-                    raise ValueError(
-                        "channel_id must be provided when chat_id is provided"
-                    )
-                else:
-                    # NOTE: only fund_id is provided + channel_id is None = get all channels for that fund
-                    return None
-            else:
-                return channel_id
-        return channel_id
-
-    def _handle_storage_result(
+    def save_channel(
         self,
-        data_model: AlphaFundChannelDataModel | AlphaFundChatDataModel,
-        storage_config: StorageConfig,
-        io_config: IOConfig,
-    ) -> pl.LazyFrame | None:
-        existing = self._read_from_storage(
-            data_model,
-            storage_config,
-            io_config,
-        )
-
-        is_fund_channels_lookup = (
-            isinstance(data_model, AlphaFundChannelDataModel)
-            and data_model.fund_id is not None
-            and data_model.channel_id is None
-        )
-        is_unique_channel_lookup = (
-            isinstance(data_model, AlphaFundChannelDataModel)
-            and data_model.channel_id is not None
-        )
-        is_unique_chat_lookup = (
-            isinstance(data_model, AlphaFundChatDataModel)
-            and data_model.channel_id is not None  # pyright: ignore[reportUnnecessaryComparison]
-            and data_model.chat_id is not None  # pyright: ignore[reportUnnecessaryComparison]
-        )
-
-        # Fund-only lookup: return zero or more channels.
-        if is_fund_channels_lookup:
-            if existing is not None:
-                return existing
-            else:
-                return (
-                    pl.DataFrame(schema=data_model.polars_schema()).lazy()
-                    if existing is None
-                    else existing
-                )
-
-        # Unique-channel lookup: expect zero or one channel.
-        if is_unique_channel_lookup:
-            # the channel doesn't exist
-            if existing is None:
-                return None
-            row_count = existing.limit(2).collect().height
-            if row_count == 0:
-                raise LookupError(f"Channel {data_model.channel_id} was not found")
-            if row_count > 1:
-                raise RuntimeError(
-                    f"Expected one channel for {data_model.channel_id}, but multiple were found"
-                )
-            return existing
-
-        # Unique-chat lookup: expect zero or one chat.
-        if is_unique_chat_lookup:
-            assert isinstance(data_model, AlphaFundChatDataModel)
-            # the chat doesn't exist
-            if existing is None:
-                return None
-            row_count = existing.limit(2).collect().height
-            if row_count == 0:
-                raise LookupError(f"Chat {data_model.chat_id} was not found")
-            if row_count > 1:
-                raise RuntimeError(
-                    f"Expected one chat for {data_model.chat_id}, but multiple were found"
-                )
-            return existing
-
-        raise RuntimeError(
-            "Invalid chat lookup state: expected either a fund-only channel lookup, "
-            + "a unique-channel lookup, or a unique-chat lookup"
-        )
-
-    def download(
-        self,
-        fund_id: UUID | None = None,
-        channel_name: str | None = None,
+        fund_id: UUID,
+        channel_name: str,
+        user_ids: list[UUID],
+        agent_ids: list[UUID] | None = None,
         channel_id: UUID | None = None,
-        chat_id: UUID | None = None,
+        channel_type: Literal["direct_message", "group_chat"] = "direct_message",
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
-        """Write an existing channel's chats and messages to storage.
-
-        Identify the channel with ``channel_id``, or resolve
-        ``(fund_id, channel_name) -> channel_id``. For direct-message channels,
-        ``channel_name`` is the agent's ``agent_name``.
-
-        Once the channel is resolved, omitting ``chat_id`` persists every chat
-        and all of their messages in that channel. Providing ``chat_id``
-        persists only that chat and its messages.
+        """
+        Save a channel to storage.
+        Args:
+            channel_id: if provided, it means update the existing channel
         """
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
-        request = AlphaFundChatFeedDownloadRequest(
+        request = AlphaFundChatFeedChannelDownloadRequest(
             data_source=self.name,
-            channel_name=channel_name,
             fund_id=fund_id,
+            channel_name=channel_name,
             channel_id=channel_id,
+            channel_type=channel_type,
+            user_ids=user_ids,
+            agent_ids=agent_ids or [],
+            storage_config=storage_config,
+            io_config=io_config,
+        )
+        self._append_request(request)
+        _ = self._create_batch_dataflows(extract_func=self._download_impl)
+        return self.run() if not self.is_pipeline() else self
+
+    def save_chat(
+        self,
+        channel_id: UUID,
+        chat_name: str,
+        chat_id: UUID | None = None,
+        is_main: bool = False,
+        parent_message_id: UUID | None = None,
+        storage_config: StorageConfig | None = None,
+        io_config: IOConfig | None = None,
+    ) -> Self | RunResult:
+        """Save a chat to a channel
+        Args:
+            chat_id: if provided, it means update the existing chat
+        """
+        storage_config, io_config = self._resolve_configs(storage_config, io_config)
+        request = AlphaFundChatFeedChatDownloadRequest(
+            data_source=self.name,
+            channel_id=channel_id,
+            chat_name=chat_name,
             chat_id=chat_id,
+            is_main=is_main,
+            parent_message_id=parent_message_id,
+            storage_config=storage_config,
+            io_config=io_config,
+        )
+        self._append_request(request)
+        _ = self._create_batch_dataflows(extract_func=self._download_impl)
+        return self.run() if not self.is_pipeline() else self
+
+    def save_message(
+        self,
+        chat_id: UUID,
+        content: str,
+        message_seq: int,
+        author_id: UUID,
+        author_role: Literal["user", "agent"],
+        message_id: UUID | None = None,
+        storage_config: StorageConfig | None = None,
+        io_config: IOConfig | None = None,
+    ) -> Self | RunResult:
+        """Save a message to a chat
+        Args:
+            author_id: user id or agent id
+            message_id: if provided, it means update the existing message
+        """
+        storage_config, io_config = self._resolve_configs(storage_config, io_config)
+        request = AlphaFundChatFeedMessageDownloadRequest(
+            data_source=self.name,
+            chat_id=chat_id,
+            content=content,
+            message_seq=message_seq,
+            author_id=author_id,
+            author_role=author_role,
+            message_id=message_id,
             storage_config=storage_config,
             io_config=io_config,
         )
@@ -176,16 +130,21 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
     def retrieve(
         self,
         fund_id: UUID | None = None,
-        channel_name: str | None = None,
         channel_id: UUID | None = None,
         chat_id: UUID | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
+        """Retrieve child chat data from storage.
+
+        Args:
+            fund_id: Retrieve all channels in this fund.
+            channel_id: Retrieve all chats in this channel.
+            chat_id: Retrieve all messages in this chat.
+        """
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundChatFeedRetrieveRequest(
             data_source=self.name,
-            channel_name=channel_name,
             fund_id=fund_id,
             channel_id=channel_id,
             chat_id=chat_id,
@@ -198,40 +157,176 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         )
         return self.run() if not self.is_pipeline() else self
 
+    def _retrieve_impl(
+        self,
+        data_model: AlphaFundChannelDataModel
+        | AlphaFundChatDataModel
+        | AlphaFundMessageDataModel,
+        request: AlphaFundChatFeedRetrieveRequest,
+    ) -> pl.LazyFrame | None:
+        existing = self._read_from_storage(
+            data_model,
+            request.storage_config_for_retrieval,
+            request.io_config_for_retrieval,
+        )
+
+        is_fund_channels_lookup = (
+            isinstance(data_model, AlphaFundChannelDataModel)
+            and data_model.fund_id is not None
+            and data_model.channel_id is None
+        )
+        is_channel_chats_lookup = (
+            isinstance(data_model, AlphaFundChatDataModel)
+            and data_model.channel_id is not None
+            and data_model.chat_id is None
+        )
+        is_chat_messages_lookup = (
+            isinstance(data_model, AlphaFundMessageDataModel)
+            and data_model.chat_id is not None
+            # and data_model.message_id is None
+        )
+
+        # Collection lookups return an empty frame when no children are stored.
+        if (
+            is_fund_channels_lookup
+            or is_channel_chats_lookup
+            or is_chat_messages_lookup
+        ):
+            return (
+                existing
+                if existing is not None
+                else pl.DataFrame(schema=data_model.polars_schema()).lazy()
+            )
+
+        raise RuntimeError(
+            "Invalid chat lookup state: expected fund_id for channels, "
+            + "channel_id for chats, or chat_id for messages"
+        )
+
     def create_data_model(
         self,
-        fund_id: UUID | None = None,
-        channel_name: str | None = None,
-        channel_id: UUID | None = None,
-        chat_id: UUID | None = None,
-    ) -> AlphaFundChannelDataModel | AlphaFundChatDataModel:
-        channel_id = self._resolve_channel_id(
-            fund_id=fund_id,
-            channel_name=channel_name,
-            channel_id=channel_id,
-            chat_id=chat_id,
-        )
-        if channel_id is not None and chat_id is not None:
-            return self.ChatDataModel(
-                data_source=self.data_source,
-                channel_id=channel_id,
-                chat_id=chat_id,
-            )
+        data_type: Literal["channel", "chat", "message"],
+        *args: Any,
+        **kwargs: Any,
+    ) -> AlphaFundChannelDataModel | AlphaFundChatDataModel | AlphaFundMessageDataModel:
+        kwargs.setdefault("data_source", self.data_source)
+        if data_type == "channel":
+            return self.ChannelDataModel(*args, **kwargs)
+        elif data_type == "chat":
+            return self.ChatDataModel(*args, **kwargs)
+        elif data_type == "message":
+            return self.MessageDataModel(*args, **kwargs)
         else:
-            return self.ChannelDataModel(
-                data_source=self.data_source,
-                fund_id=fund_id,
-                channel_name=channel_name,
-                channel_id=channel_id,
-            )
+            raise ValueError(f"Invalid data type: {data_type}")
 
     def _create_data_model_from_request(
         self,
-        request: AlphaFundChatFeedBaseRequest,
-    ) -> AlphaFundChannelDataModel | AlphaFundChatDataModel:
-        return self.create_data_model(
-            fund_id=request.fund_id,
-            channel_name=request.channel_name,
-            channel_id=request.channel_id,
-            chat_id=request.chat_id,
+        request: AlphaFundChatFeedChannelDownloadRequest
+        | AlphaFundChatFeedChatDownloadRequest
+        | AlphaFundChatFeedMessageDownloadRequest
+        | AlphaFundChatFeedRetrieveRequest,
+    ) -> AlphaFundChannelDataModel | AlphaFundChatDataModel | AlphaFundMessageDataModel:
+        if isinstance(request, AlphaFundChatFeedChannelDownloadRequest):
+            return self._create_channel_data_model_from_request(request)
+        elif isinstance(request, AlphaFundChatFeedChatDownloadRequest):
+            return self._create_chat_data_model_from_request(request)
+        elif isinstance(request, AlphaFundChatFeedMessageDownloadRequest):
+            return self._create_message_data_model_from_request(request)
+        elif isinstance(request, AlphaFundChatFeedRetrieveRequest):
+            if request.chat_id is not None:
+                data_model = self.create_data_model(
+                    data_type="message",
+                    chat_id=request.chat_id,
+                )
+            elif request.channel_id is not None:
+                data_model = self.create_data_model(
+                    data_type="chat",
+                    channel_id=request.channel_id,
+                )
+            elif request.fund_id is not None:
+                data_model = self.create_data_model(
+                    data_type="channel",
+                    fund_id=request.fund_id,
+                )
+            else:
+                raise ValueError(
+                    "One of fund_id, channel_id, or chat_id must be provided"
+                )
+            data_model.op = "read"
+            return data_model
+        else:
+            raise ValueError(f"Invalid request type: {type(request)}")
+
+    def _create_channel_data_model_from_request(
+        self,
+        request: AlphaFundChatFeedChannelDownloadRequest,
+    ) -> AlphaFundChannelDataModel:
+        data_model = cast(
+            AlphaFundChannelDataModel,
+            self.create_data_model(
+                data_type="channel",
+                data_source=self.data_source,
+                fund_id=request.fund_id,
+                channel_name=request.channel_name,
+                channel_id=request.channel_id,
+                channel_type=request.channel_type,
+                user_ids=request.user_ids,
+                agent_ids=request.agent_ids,
+            ),
         )
+        if isinstance(request, AlphaFundChatFeedRetrieveRequest):
+            data_model.op = "read"
+        elif isinstance(request, AlphaFundChatFeedChannelDownloadRequest):
+            data_model.op = "create" if request.channel_id is None else "update"
+        else:
+            raise ValueError(f"Unknown request type: {type(request)}")
+        return data_model
+
+    def _create_chat_data_model_from_request(
+        self,
+        request: AlphaFundChatFeedChatDownloadRequest,
+    ) -> AlphaFundChatDataModel:
+        data_model = cast(
+            AlphaFundChatDataModel,
+            self.create_data_model(
+                data_type="chat",
+                data_source=self.data_source,
+                channel_id=request.channel_id,
+                chat_name=request.chat_name,
+                chat_id=request.chat_id,
+                is_main=request.is_main,
+                parent_message_id=request.parent_message_id,
+            ),
+        )
+        if isinstance(request, AlphaFundChatFeedRetrieveRequest):
+            data_model.op = "read"
+        elif isinstance(request, AlphaFundChatFeedChatDownloadRequest):
+            data_model.op = "create" if request.chat_id is None else "update"
+        else:
+            raise ValueError(f"Unknown request type: {type(request)}")
+        return data_model
+
+    def _create_message_data_model_from_request(
+        self,
+        request: AlphaFundChatFeedMessageDownloadRequest,
+    ) -> AlphaFundMessageDataModel:
+        data_model = cast(
+            AlphaFundMessageDataModel,
+            self.create_data_model(
+                data_type="message",
+                data_source=self.data_source,
+                chat_id=request.chat_id,
+                content=request.content,
+                message_seq=request.message_seq,
+                author_id=request.author_id,
+                author_role=request.author_role,
+                message_id=request.message_id,
+            ),
+        )
+        if isinstance(request, AlphaFundChatFeedRetrieveRequest):
+            data_model.op = "read"
+        elif isinstance(request, AlphaFundChatFeedMessageDownloadRequest):
+            data_model.op = "create" if request.message_id is None else "update"
+        else:
+            raise ValueError(f"Unknown request type: {type(request)}")
+        return data_model

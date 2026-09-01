@@ -11,7 +11,9 @@ from pfeed.sources.alphafund.requests.fund_retrieve_request import (
     AlphaFundFeedRetrieveRequest,
 )
 from pfeed.sources.alphafund.requests.chat_download_request import (
-    AlphaFundChatFeedDownloadRequest,
+    AlphaFundChatFeedChannelDownloadRequest,
+    AlphaFundChatFeedChatDownloadRequest,
+    AlphaFundChatFeedMessageDownloadRequest,
 )
 from pfeed.sources.alphafund.requests.chat_retrieve_request import (
     AlphaFundChatFeedRetrieveRequest,
@@ -20,7 +22,9 @@ from pfeed.sources.alphafund.requests.chat_retrieve_request import (
 __all__ = [
     "AlphaFundAgentFeedDownloadRequest",
     "AlphaFundAgentFeedRetrieveRequest",
-    "AlphaFundChatFeedDownloadRequest",
+    "AlphaFundChatFeedChannelDownloadRequest",
+    "AlphaFundChatFeedChatDownloadRequest",
+    "AlphaFundChatFeedMessageDownloadRequest",
     "AlphaFundChatFeedRetrieveRequest",
     "AlphaFundFeedDownloadRequest",
     "AlphaFundFeedRetrieveRequest",

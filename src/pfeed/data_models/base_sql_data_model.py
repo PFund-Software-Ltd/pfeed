@@ -1,6 +1,6 @@
 import json
 from types import NoneType
-from typing import Annotated, Any, ClassVar, Literal, get_args, get_origin
+from typing import Annotated, Any, ClassVar, Literal, cast, get_args, get_origin
 from uuid import UUID
 
 import polars as pl
@@ -69,7 +69,7 @@ class BaseSQLDataModel(BaseDataModel):
         if not isinstance(data, dict):
             return data
 
-        decoded = data.copy()
+        decoded = cast(dict[str, Any], data.copy())
         for column_name in cls.column_names():
             annotation = cls.model_fields[column_name].annotation
             value = decoded.get(column_name)
@@ -117,7 +117,7 @@ class BaseSQLDataModel(BaseDataModel):
         columns = set(self.column_names())
         record = self.model_dump(mode="json", include=columns)
         for column_name in columns:
-            annotation = self.model_fields[column_name].annotation
+            annotation = type(self).model_fields[column_name].annotation
             value = record.get(column_name)
             if _is_list_annotation(annotation) and value is not None:
                 record[column_name] = json.dumps(value)

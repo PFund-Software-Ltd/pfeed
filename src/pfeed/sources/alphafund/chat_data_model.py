@@ -1,9 +1,9 @@
-from __future__ import annotations
+from typing import ClassVar, Self, Literal
 
 import time
-from typing import ClassVar
+from uuid import uuid4
 
-from pydantic import UUID4, UUID5, Field, model_validator
+from pydantic import UUID4, Field, model_validator, PrivateAttr
 
 from pfeed.data_models.base_sql_data_model import BaseSQLDataModel
 from pfeed.enums import IOFormat
@@ -17,6 +17,7 @@ class AlphaFundChatDataModel(BaseSQLDataModel):
     table_name: ClassVar[str] = "chats"
     table_sql: ClassVar[str] = """
         PRIMARY KEY ("chat_id"),
+        UNIQUE ("channel_id", "chat_name"),
         UNIQUE ("channel_id", "parent_message_id"),
         CHECK (
             ("is_main" = 1 AND "parent_message_id" IS NULL)
@@ -29,47 +30,59 @@ class AlphaFundChatDataModel(BaseSQLDataModel):
     index_sql: ClassVar[dict[IOFormat, tuple[str, ...]]] = {
         IOFormat.SQLITE: (
             'CREATE UNIQUE INDEX IF NOT EXISTS "idx_chats_one_main_per_channel" '
-            'ON "chats" ("channel_id") WHERE "is_main" = 1',
+            + 'ON "chats" ("channel_id") WHERE "is_main" = 1',
         ),
     }
-    insert_sql: ClassVar[dict[IOFormat, str]] = {
-        IOFormat.SQLITE: """
-            ON CONFLICT ("chat_id") DO UPDATE SET
-                "chat_name" = excluded."chat_name",
-                "is_archived" = excluded."is_archived"
-        """,
-    }
 
-    channel_id: UUID5
-    chat_id: UUID4
-    chat_name: str = Field(default="", description="The chat name used as its title.")
-    # None identifies a lookup model containing only channel_id and chat_id.
-    # Persisted chat rows must provide whether they are the channel's main chat.
-    is_main: bool | None = None
-    # Points at the lobby message this chat was opened from. A reference, not
-    # ownership: the chat belongs to the channel either way. NULL for the lobby.
-    # This cannot be an SQLite FK while tables are created on first write: chats
-    # and messages would otherwise each require the other table to exist first.
-    parent_message_id: UUID4 | None = None
-    created_at: float = Field(default_factory=time.time)
+    # CRUD operations, no delete
+    _op: Literal["create", "read", "update"] = PrivateAttr(init=False)
+    created_at: float | None = None
+    updated_at: float | None = None
+    is_deleted: bool = False
     is_archived: bool = False
+
+    channel_id: UUID4 | None = None
+    chat_name: str | None = Field(
+        default=None, description="The chat name used as its title."
+    )
+    chat_id: UUID4 | None = None
+    is_main: bool = Field(
+        default=False,
+        description="True if this is the main chat; False if this is a thread chat.",
+    )
+    parent_message_id: UUID4 | None = Field(
+        default=None,
+        description="The lobby message that started this thread; None for the main chat.",
+    )
 
     @classmethod
     def column_nullability(cls) -> dict[str, bool]:
         return {
-            **super().column_nullability(),
-            "chat_id": False,
-            "is_main": False,
+            **{column_name: False for column_name in cls.column_names()},
+            "updated_at": True,
+            "parent_message_id": True,
         }
 
-    @model_validator(mode="after")
-    def validate_chat_kind(self) -> AlphaFundChatDataModel:
-        # A model without chat-kind metadata is a read filter.
-        if self.is_main is None:
-            return self
-        if self.is_main != (self.parent_message_id is None):
-            raise ValueError(
-                "main chats must not have parent_message_id; "
-                "thread chats must have parent_message_id"
-            )
-        return self
+    def _validate_chat_kind(self):
+        if self.is_main and self.parent_message_id is not None:
+            raise ValueError("main chat must not have parent_message_id")
+
+        if not self.is_main and self.parent_message_id is None:
+            raise ValueError("thread chat must have parent_message_id")
+
+    @property
+    def op(self) -> Literal["create", "read", "update"]:
+        return self._op
+
+    @op.setter
+    def op(self, value: Literal["create", "read", "update"]) -> None:
+        self._op = value
+        if self._op == "create":
+            if self.chat_id is not None:
+                raise ValueError("chat_id must be None for create operation")
+            self.chat_id = uuid4()
+            self.created_at = time.time()
+        elif self._op == "update":
+            self.updated_at = time.time()
+        if self._op in {"create", "update"}:
+            self._validate_chat_kind()

@@ -1,12 +1,12 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, ClassVar, Self, cast
+from typing import TYPE_CHECKING, ClassVar, Self
 
 if TYPE_CHECKING:
     from pfeed.dataflow.result import RunResult
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.io.io_config import IOConfig
 
-from uuid import NAMESPACE_DNS, UUID, uuid5
+from uuid import UUID
 
 import polars as pl
 
@@ -20,94 +20,22 @@ from pfeed.sources.alphafund.requests import (
 )
 
 
-FUND_ID_NAMESPACE = uuid5(NAMESPACE_DNS, "fund.alphafund.pfund.ai")
-
-
-def create_fund_id(user_id: UUID, fund_name: str) -> UUID:
-    return uuid5(FUND_ID_NAMESPACE, f"{user_id}:{fund_name}")
-
-
 class AlphaFundFeed(AlphaFundMixin, AlphaFundBaseFeed):
     DataModel: ClassVar[type[AlphaFundDataModel]] = AlphaFundDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.FUND_DATA
 
-    @staticmethod
-    def _resolve_fund_id(
-        *, user_id: UUID | None, fund_name: str | None, fund_id: UUID | None
-    ) -> UUID | None:
-        if user_id is not None and fund_name is not None:
-            fund_id = create_fund_id(user_id, fund_name)
-        else:
-            if fund_id is None:
-                if user_id is None:
-                    raise ValueError("Either user_id or fund_id must be provided")
-                else:
-                    # NOTE: only user_id is provided + fund_id is None = get all funds for that user
-                    return None
-            else:
-                return fund_id
-        return fund_id
-
-    def _handle_storage_result(
+    def save_fund(
         self,
-        data_model: AlphaFundDataModel,
-        storage_config: StorageConfig,
-        io_config: IOConfig,
-    ) -> pl.LazyFrame | None:
-        existing = self._read_from_storage(
-            data_model,
-            storage_config,
-            io_config,
-        )
-
-        is_user_funds_lookup = (
-            data_model.user_id is not None and data_model.fund_id is None
-        )
-        is_unique_fund_lookup = data_model.fund_id is not None
-
-        # User-only lookup: return zero or more funds.
-        if is_user_funds_lookup:
-            if existing is not None:
-                return existing
-            else:
-                return (
-                    pl.DataFrame(schema=data_model.polars_schema()).lazy()
-                    if existing is None
-                    else existing
-                )
-
-        # Unique-fund lookup: expect zero or one fund.
-        if is_unique_fund_lookup:
-            # the fund doesn't exist
-            if existing is None:
-                return None
-            row_count = existing.limit(2).collect().height
-            if row_count == 0:
-                raise LookupError(f"Fund {data_model.fund_id} was not found")
-            if row_count > 1:
-                raise RuntimeError(
-                    f"Expected one fund for {data_model.fund_id}, but multiple were found"
-                )
-            return existing
-
-        raise RuntimeError(
-            "Invalid fund lookup state: expected either a user-only lookup "
-            + "or a unique-fund lookup"
-        )
-
-    def download(
-        self,
-        user_id: UUID | None = None,
-        fund_name: str | None = None,
+        user_id: UUID,
+        fund_name: str,
         fund_id: UUID | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
-        """Persist a fund, or return the existing one for (user_id, fund_name).
-
+        """
+        Save a fund to storage.
         Args:
-            fund_id: An existing deterministic ID. When omitted, it is derived
-                from ``(user_id, fund_name)``.
+            fund_id: if provided, it means update the existing fund
         """
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundFeedDownloadRequest(
@@ -145,15 +73,58 @@ class AlphaFundFeed(AlphaFundMixin, AlphaFundBaseFeed):
         )
         return self.run() if not self.is_pipeline() else self
 
+    def _retrieve_impl(
+        self,
+        data_model: AlphaFundDataModel,
+        request: AlphaFundFeedRetrieveRequest,
+    ) -> pl.LazyFrame | None:
+        existing = self._read_from_storage(
+            data_model,
+            request.storage_config_for_retrieval,
+            request.io_config_for_retrieval,
+        )
+
+        is_user_funds_lookup = (
+            data_model.user_id is not None and data_model.fund_id is None
+        )
+        is_unique_fund_lookup = data_model.fund_id is not None
+
+        # User-only lookup: return zero or more funds.
+        if is_user_funds_lookup:
+            if existing is not None:
+                return existing
+            else:
+                return (
+                    pl.DataFrame(schema=data_model.polars_schema()).lazy()
+                    if existing is None
+                    else existing
+                )
+
+        # Unique-fund lookup: expect zero or one fund.
+        if is_unique_fund_lookup:
+            # the fund doesn't exist
+            if existing is None:
+                return None
+            row_count = existing.limit(2).collect().height
+            if row_count == 0:
+                raise LookupError(f"Fund {data_model.fund_id} was not found")
+            if row_count > 1:
+                raise RuntimeError(
+                    f"Expected one fund for {data_model.fund_id}, but multiple were found"
+                )
+            return existing
+
+        raise RuntimeError(
+            "Invalid fund lookup state: expected either a user-only lookup "
+            + "or a unique-fund lookup"
+        )
+
     def create_data_model(
         self,
         user_id: UUID | None = None,
         fund_name: str | None = None,
         fund_id: UUID | None = None,
     ) -> AlphaFundDataModel:
-        fund_id = self._resolve_fund_id(
-            user_id=user_id, fund_name=fund_name, fund_id=fund_id
-        )
         return self.DataModel(
             data_source=self.data_source,
             user_id=user_id,
@@ -165,8 +136,16 @@ class AlphaFundFeed(AlphaFundMixin, AlphaFundBaseFeed):
         self,
         request: AlphaFundFeedDownloadRequest | AlphaFundFeedRetrieveRequest,
     ) -> AlphaFundDataModel:
-        return self.create_data_model(
+        fund_id = request.fund_id
+        data_model = self.create_data_model(
             user_id=request.user_id,
             fund_name=request.fund_name,
-            fund_id=request.fund_id,
+            fund_id=fund_id,
         )
+        if isinstance(request, AlphaFundFeedRetrieveRequest):
+            data_model.op = "read"
+        elif isinstance(request, AlphaFundFeedDownloadRequest):
+            data_model.op = "create" if fund_id is None else "update"
+        else:
+            raise ValueError(f"Unknown request type: {request}")
+        return data_model

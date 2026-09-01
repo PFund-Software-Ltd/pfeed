@@ -1,6 +1,5 @@
 from __future__ import annotations
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     import polars as pl
@@ -8,15 +7,6 @@ if TYPE_CHECKING:
 
     from pfeed.dataflow.result import DataFlowResult
     from pfeed.sources.alphafund.data_handler import AlphaFundSQLDataModel
-    from pfeed.sources.alphafund.requests.fund_base_request import (
-        AlphaFundFeedBaseRequest,
-    )
-    from pfeed.sources.alphafund.requests.agent_base_request import (
-        AlphaFundAgentFeedBaseRequest,
-    )
-    from pfeed.sources.alphafund.requests.chat_base_request import (
-        AlphaFundChatFeedBaseRequest,
-    )
     from pfeed.sources.alphafund.requests.fund_retrieve_request import (
         AlphaFundFeedRetrieveRequest,
     )
@@ -33,16 +23,11 @@ if TYPE_CHECKING:
         AlphaFundAgentFeedDownloadRequest,
     )
     from pfeed.sources.alphafund.requests.chat_download_request import (
-        AlphaFundChatFeedDownloadRequest,
+        AlphaFundChatFeedChannelDownloadRequest,
+        AlphaFundChatFeedChatDownloadRequest,
+        AlphaFundChatFeedMessageDownloadRequest,
     )
 
-    AlphaFundBaseRequest = (
-        AlphaFundFeedBaseRequest
-        | AlphaFundAgentFeedBaseRequest
-        | AlphaFundChatFeedBaseRequest
-    )
-    # Only the retrieve requests carry the *_for_retrieval configs; each declares
-    # them itself, so the union — not AlphaFundBaseRequest — is what types them.
     AlphaFundRetrieveRequest = (
         AlphaFundFeedRetrieveRequest
         | AlphaFundAgentFeedRetrieveRequest
@@ -51,8 +36,12 @@ if TYPE_CHECKING:
     AlphaFundDownloadRequest = (
         AlphaFundFeedDownloadRequest
         | AlphaFundAgentFeedDownloadRequest
-        | AlphaFundChatFeedDownloadRequest
+        | AlphaFundChatFeedChannelDownloadRequest
+        | AlphaFundChatFeedChatDownloadRequest
+        | AlphaFundChatFeedMessageDownloadRequest
     )
+
+from abc import ABC
 
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.enums import DataStorage, IOFormat
@@ -65,14 +54,6 @@ from pfeed.dataflow.result import RunResult
 
 class AlphaFundBaseFeed(BaseFeed, ABC):
     data_domain: ClassVar[AlphaFundDataCategory]
-
-    @abstractmethod
-    def _handle_storage_result(
-        self,
-        data_model: AlphaFundSQLDataModel,
-        storage_config: StorageConfig,
-        io_config: IOConfig,
-    ) -> pl.LazyFrame | None: ...
 
     def _resolve_configs(
         self,
@@ -87,7 +68,9 @@ class AlphaFundBaseFeed(BaseFeed, ABC):
         )
         return storage_config, io_config
 
-    def _append_request(self, request: AlphaFundBaseRequest) -> None:
+    def _append_request(
+        self, request: AlphaFundRetrieveRequest | AlphaFundDownloadRequest
+    ) -> None:
         if self._requests:
             raise ValueError(f"{self.name} can only run one request at a time")
         return super()._append_request(request)
@@ -108,29 +91,8 @@ class AlphaFundBaseFeed(BaseFeed, ABC):
             raise TypeError(f"{self.name} {self.data_domain} requires database storage")
         return storage.read()
 
-    def _download_impl(
-        self,
-        data_model: AlphaFundSQLDataModel,
-    ) -> pl.DataFrame | pl.LazyFrame:
-        [request] = cast("list[AlphaFundDownloadRequest]", self._requests)
-        existing = self._handle_storage_result(
-            data_model, request.storage_config, request.io_config
-        )
-        # No existing agent: create it from the model.
-        if existing is None:
-            return data_model.to_frame()
-        return existing
-
-    def _retrieve_impl(
-        self,
-        data_model: AlphaFundSQLDataModel,
-        request: AlphaFundRetrieveRequest,
-    ) -> pl.LazyFrame | None:
-        return self._handle_storage_result(
-            data_model,
-            request.storage_config_for_retrieval,
-            request.io_config_for_retrieval,
-        )
+    def _download_impl(self, data_model: AlphaFundSQLDataModel) -> pl.DataFrame:
+        return data_model.to_frame()
 
     def run(self, **prefect_kwargs: Any) -> RunResult:
         from pfeed._etl.base import convert_dataframe

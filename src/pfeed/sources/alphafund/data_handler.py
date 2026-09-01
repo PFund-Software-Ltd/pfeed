@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, assert_never, cast
 
 if TYPE_CHECKING:
+    from sqlite3 import Connection as SQLiteConnection
+
     from narwhals.typing import IntoFrame
 
     from pfeed.io.database_io import DatabaseIO
@@ -12,10 +14,10 @@ if TYPE_CHECKING:
         AlphaFundChannelDataModel,
     )
     from pfeed.sources.alphafund.chat_data_model import AlphaFundChatDataModel
+    from pfeed.sources.alphafund.fund_data_model import AlphaFundDataModel
     from pfeed.sources.alphafund.message_data_model import (
         AlphaFundMessageDataModel,
     )
-    from pfeed.sources.alphafund.fund_data_model import AlphaFundDataModel
     from pfeed.storages.database_storage import DatabaseURI
 
     AlphaFundSQLDataModel: TypeAlias = (
@@ -30,14 +32,15 @@ import polars as pl
 
 from pfeed._etl.base import convert_dataframe
 from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
-from pfeed.enums import DataLayer, DataSource, DataTool
+from pfeed.enums import DataLayer, DataSource, DataTool, IOFormat
 from pfeed.io.database_io import DBPath
 from pfeed.io.table_io import TablePath
 from pfeed.utils.file_path import FilePath
 
 
+# TODO: add agent's metadata?
 class AlphaFundDataHandler(BaseDataHandler):
-    """Persists every AlphaFund SQL model in its table in one SQLite database."""
+    """Persist AlphaFund entities with strict create/read/update semantics."""
 
     _data_model: AlphaFundSQLDataModel
     Metadata: ClassVar[type[BaseDataMetadata]] = BaseDataMetadata
@@ -65,19 +68,84 @@ class AlphaFundDataHandler(BaseDataHandler):
     def write_batch(self, data: IntoFrame, *args: Any, **kwargs: Any) -> None:
         frame = cast(pl.LazyFrame, convert_dataframe(data, DataTool.polars))
         frame = self._validate_schema(frame)
+        rows = frame.collect()
+        if rows.height != 1:
+            raise ValueError(
+                "An AlphaFund create or update operation must contain exactly one row"
+            )
+
+        try:
+            operation = self._data_model.op
+        except AttributeError as exc:
+            raise ValueError(
+                "The data model operation must be set before writing"
+            ) from exc
+
+        if operation == "read":
+            raise ValueError("A read data model cannot be written")
+        if operation == "update":
+            self._update_batch(rows)
+            return
+        if operation != "create":
+            raise ValueError(f"Unsupported AlphaFund operation: {operation!r}")
+
         assert self._db_path is not None
         io_format = self.io.IO_FORMAT
         index_sql = self._data_model.index_sql.get(io_format, ()) if io_format else ()
-        insert_sql = self._data_model.insert_sql.get(io_format, "") if io_format else ""
         with self.io:
             self.io.write(
-                frame.collect().to_arrow(),
+                rows.to_arrow(),
                 self._db_path,
                 column_nullability=self._data_model.column_nullability(),
                 table_sql=self._data_model.table_sql,
                 index_sql=index_sql,
-                insert_sql=insert_sql,
             )
+
+    def _update_batch(self, frame: pl.DataFrame) -> None:
+        """Update one existing entity by its UUID without touching ``created_at``."""
+        if self.io.IO_FORMAT != IOFormat.SQLITE:
+            raise NotImplementedError("AlphaFund updates currently require SQLite IO")
+        io = cast("DatabaseIO", self.io)
+
+        identity_column = self._data_model.identity_column
+        identity = getattr(self._data_model, identity_column)
+        if identity is None:
+            raise ValueError(
+                f"{identity_column} must be provided for an update operation"
+            )
+        identity_name = self._quote_identifier(identity_column)
+        if self.read(where=f"{identity_name} = ?", params=(str(identity),)) is None:
+            raise LookupError(
+                f"Cannot update missing {self._data_model.table_name} row with "
+                + f"{identity_column}={identity}"
+            )
+
+        row = frame.row(0, named=True)
+        mutable_columns = tuple(
+            column
+            for column in self._data_model.column_names()
+            if column not in {identity_column, "created_at"}
+        )
+        assignments = ", ".join(
+            f"{self._quote_identifier(column)} = ?" for column in mutable_columns
+        )
+        params = tuple(row[column] for column in mutable_columns) + (
+            row[identity_column],
+        )
+
+        assert self._db_path is not None
+        table_name = self._quote_identifier(self._data_model.table_name)
+        sql = f"UPDATE {table_name} SET {assignments} WHERE {identity_name} = ?"
+
+        with io:
+            conn = cast("SQLiteConnection", io.connect(self._db_path.db_uri))
+            with conn:
+                cursor = conn.execute(sql, params)
+                if cursor.rowcount != 1:
+                    raise LookupError(
+                        f"Expected to update one {self._data_model.table_name} row; "
+                        + f"updated {cursor.rowcount}"
+                    )
 
     def read(
         self,
@@ -104,10 +172,10 @@ class AlphaFundDataHandler(BaseDataHandler):
             AlphaFundChannelDataModel,
         )
         from pfeed.sources.alphafund.chat_data_model import AlphaFundChatDataModel
+        from pfeed.sources.alphafund.fund_data_model import AlphaFundDataModel
         from pfeed.sources.alphafund.message_data_model import (
             AlphaFundMessageDataModel,
         )
-        from pfeed.sources.alphafund.fund_data_model import AlphaFundDataModel
 
         model = self._data_model
         match model:
@@ -124,8 +192,25 @@ class AlphaFundDataHandler(BaseDataHandler):
                 return '"user_id" = ?', (str(model.user_id),)
             case AlphaFundDataModel():
                 raise ValueError("A fund lookup requires user_id or fund_id")
+            case AlphaFundAgentDataModel() if (
+                model.agent_id is not None and model.agent_role is not None
+            ):
+                return (
+                    '"agent_id" = ? AND LOWER("agent_role") = LOWER(?)',
+                    (str(model.agent_id), model.agent_role),
+                )
             case AlphaFundAgentDataModel() if model.agent_id is not None:
                 return '"agent_id" = ?', (str(model.agent_id),)
+            case AlphaFundAgentDataModel() if (
+                model.fund_id is not None
+                and model.agent_name is not None
+                and model.agent_role is not None
+            ):
+                return (
+                    '"fund_id" = ? AND "agent_name" = ? '
+                    + 'AND LOWER("agent_role") = LOWER(?)',
+                    (str(model.fund_id), model.agent_name, model.agent_role),
+                )
             case AlphaFundAgentDataModel() if (
                 model.fund_id is not None and model.agent_name is not None
             ):
@@ -133,10 +218,24 @@ class AlphaFundDataHandler(BaseDataHandler):
                     '"fund_id" = ? AND "agent_name" = ?',
                     (str(model.fund_id), model.agent_name),
                 )
+            case AlphaFundAgentDataModel() if (
+                model.fund_id is not None and model.agent_role is not None
+            ):
+                return (
+                    '"fund_id" = ? AND LOWER("agent_role") = LOWER(?)',
+                    (str(model.fund_id), model.agent_role),
+                )
             case AlphaFundAgentDataModel() if model.fund_id is not None:
                 return '"fund_id" = ?', (str(model.fund_id),)
+            case AlphaFundAgentDataModel() if (
+                model.agent_role is not None and model.agent_name is None
+            ):
+                return 'LOWER("agent_role") = LOWER(?)', (model.agent_role,)
             case AlphaFundAgentDataModel():
-                raise ValueError("An agent lookup requires fund_id or agent_id")
+                raise ValueError(
+                    "An agent lookup requires fund_id, agent_role, or agent_id; "
+                    + "agent_name also requires fund_id"
+                )
             case AlphaFundChannelDataModel() if model.channel_id is not None:
                 return '"channel_id" = ?', (str(model.channel_id),)
             case AlphaFundChannelDataModel() if (
@@ -151,12 +250,29 @@ class AlphaFundDataHandler(BaseDataHandler):
             case AlphaFundChannelDataModel():
                 raise ValueError("A channel lookup requires fund_id or channel_id")
             case AlphaFundChatDataModel():
+                if model.chat_id is not None:
+                    return '"chat_id" = ?', (str(model.chat_id),)
+                if model.channel_id is not None and model.chat_name is not None:
+                    return (
+                        '"channel_id" = ? AND "chat_name" = ?',
+                        (str(model.channel_id), model.chat_name),
+                    )
+                if model.channel_id is not None:
+                    return '"channel_id" = ?', (str(model.channel_id),)
+                raise ValueError("A chat lookup requires channel_id or chat_id")
+            case AlphaFundMessageDataModel() if model.message_id is not None:
+                return '"message_id" = ?', (str(model.message_id),)
+            case AlphaFundMessageDataModel() if (
+                model.chat_id is not None and model.content is not None
+            ):
                 return (
-                    '"channel_id" = ? AND "chat_id" = ?',
-                    (str(model.channel_id), str(model.chat_id)),
+                    '"chat_id" = ? AND "content" = ?',
+                    (str(model.chat_id), model.content),
                 )
-            case AlphaFundMessageDataModel():
+            case AlphaFundMessageDataModel() if model.chat_id is not None:
                 return '"chat_id" = ?', (str(model.chat_id),)
+            case AlphaFundMessageDataModel():
+                raise ValueError("A message lookup requires chat_id or message_id")
             case _:
                 assert_never(model)
 
@@ -166,6 +282,11 @@ class AlphaFundDataHandler(BaseDataHandler):
             pl.col(column_name).cast(dtype)
             for column_name, dtype in self._data_model.polars_schema().items()
         )
+
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        """Quote a trusted model-declared SQLite identifier."""
+        return '"' + identifier.replace('"', '""') + '"'
 
     def _create_file_path(self, *args: Any, **kwargs: Any) -> FilePath:
         raise NotImplementedError("AlphaFund data requires database IO")

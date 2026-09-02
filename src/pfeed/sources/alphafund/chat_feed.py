@@ -42,6 +42,8 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         agent_ids: list[UUID] | None = None,
         channel_id: UUID | None = None,
         channel_type: Literal["direct_message", "group_chat"] = "direct_message",
+        is_deleted: bool | None = None,
+        is_archived: bool | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
@@ -49,6 +51,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         Save a channel to storage.
         Args:
             channel_id: if provided, it means update the existing channel
+            is_deleted, is_archived: None leaves the stored flag untouched
         """
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundChatFeedChannelDownloadRequest(
@@ -59,6 +62,8 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
             channel_type=channel_type,
             user_ids=user_ids,
             agent_ids=agent_ids or [],
+            is_deleted=is_deleted,
+            is_archived=is_archived,
             storage_config=storage_config,
             io_config=io_config,
         )
@@ -73,6 +78,8 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         chat_id: UUID | None = None,
         is_main: bool = False,
         parent_message_id: UUID | None = None,
+        is_deleted: bool | None = None,
+        is_archived: bool | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
@@ -88,6 +95,8 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
             chat_id=chat_id,
             is_main=is_main,
             parent_message_id=parent_message_id,
+            is_deleted=is_deleted,
+            is_archived=is_archived,
             storage_config=storage_config,
             io_config=io_config,
         )
@@ -103,6 +112,8 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         author_id: UUID,
         author_role: Literal["user", "agent"],
         message_id: UUID | None = None,
+        is_deleted: bool | None = None,
+        is_archived: bool | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
     ) -> Self | RunResult:
@@ -120,6 +131,8 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
             author_id=author_id,
             author_role=author_role,
             message_id=message_id,
+            is_deleted=is_deleted,
+            is_archived=is_archived,
             storage_config=storage_config,
             io_config=io_config,
         )
@@ -257,6 +270,22 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         else:
             raise ValueError(f"Invalid request type: {type(request)}")
 
+    @staticmethod
+    def _provided_flags(
+        *,
+        is_deleted: bool | None,
+        is_archived: bool | None,
+    ) -> dict[str, bool]:
+        """Drop unset status flags so updates leave their stored values unchanged."""
+        return {
+            key: value
+            for key, value in {
+                "is_deleted": is_deleted,
+                "is_archived": is_archived,
+            }.items()
+            if value is not None
+        }
+
     def _create_channel_data_model_from_request(
         self,
         request: AlphaFundChatFeedChannelDownloadRequest,
@@ -272,6 +301,10 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
                 channel_type=request.channel_type,
                 user_ids=request.user_ids,
                 agent_ids=request.agent_ids,
+                **self._provided_flags(
+                    is_deleted=request.is_deleted,
+                    is_archived=request.is_archived,
+                ),
             ),
         )
         if isinstance(request, AlphaFundChatFeedRetrieveRequest):
@@ -296,6 +329,10 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
                 chat_id=request.chat_id,
                 is_main=request.is_main,
                 parent_message_id=request.parent_message_id,
+                **self._provided_flags(
+                    is_deleted=request.is_deleted,
+                    is_archived=request.is_archived,
+                ),
             ),
         )
         if isinstance(request, AlphaFundChatFeedRetrieveRequest):
@@ -321,6 +358,10 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
                 author_id=request.author_id,
                 author_role=request.author_role,
                 message_id=request.message_id,
+                **self._provided_flags(
+                    is_deleted=request.is_deleted,
+                    is_archived=request.is_archived,
+                ),
             ),
         )
         if isinstance(request, AlphaFundChatFeedRetrieveRequest):

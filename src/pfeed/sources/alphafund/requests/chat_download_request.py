@@ -12,6 +12,9 @@ class AlphaFundChatFeedBaseDownloadRequest(BaseRequest):
     extract_type: ExtractType = ExtractType.download
     storage_config: StorageConfig  # pyright: ignore[reportGeneralTypeIssues]
     io_config: IOConfig  # pyright: ignore[reportGeneralTypeIssues]
+    # None means "leave as is": an update only writes the flags it was given.
+    is_deleted: bool | None = None
+    is_archived: bool | None = None
 
 
 class AlphaFundChatFeedChannelDownloadRequest(AlphaFundChatFeedBaseDownloadRequest):

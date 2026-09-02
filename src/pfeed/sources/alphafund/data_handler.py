@@ -102,7 +102,12 @@ class AlphaFundDataHandler(BaseDataHandler):
             )
 
     def _update_batch(self, frame: pl.DataFrame) -> None:
-        """Update one existing entity by its UUID without touching ``created_at``."""
+        """Patch one existing entity by its UUID.
+
+        Only the fields the caller set are written, so an update that carries
+        new content does not reset ``is_deleted`` or ``is_archived`` to their
+        defaults. ``created_at`` is never written.
+        """
         if self.io.IO_FORMAT != IOFormat.SQLITE:
             raise NotImplementedError("AlphaFund updates currently require SQLite IO")
         io = cast("DatabaseIO", self.io)
@@ -121,11 +126,14 @@ class AlphaFundDataHandler(BaseDataHandler):
             )
 
         row = frame.row(0, named=True)
+        provided = self._data_model.model_fields_set
         mutable_columns = tuple(
             column
             for column in self._data_model.column_names()
-            if column not in {identity_column, "created_at"}
+            if column not in {identity_column, "created_at"} and column in provided
         )
+        if not mutable_columns:
+            raise ValueError("An update operation must set at least one column")
         assignments = ", ".join(
             f"{self._quote_identifier(column)} = ?" for column in mutable_columns
         )
@@ -262,13 +270,6 @@ class AlphaFundDataHandler(BaseDataHandler):
                 raise ValueError("A chat lookup requires channel_id or chat_id")
             case AlphaFundMessageDataModel() if model.message_id is not None:
                 return '"message_id" = ?', (str(model.message_id),)
-            case AlphaFundMessageDataModel() if (
-                model.chat_id is not None and model.content is not None
-            ):
-                return (
-                    '"chat_id" = ? AND "content" = ?',
-                    (str(model.chat_id), model.content),
-                )
             case AlphaFundMessageDataModel() if model.chat_id is not None:
                 return '"chat_id" = ?', (str(model.chat_id),)
             case AlphaFundMessageDataModel():

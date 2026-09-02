@@ -255,6 +255,50 @@ class SQLiteIO(DatabaseIO, FileIO):
             fields.append(pa.field(name, dtype, nullable=not bool(not_null)))
         return pa.schema(fields)
 
+    def _add_missing_columns(
+        self,
+        conn: SQLiteConnection,
+        quoted_table: str,
+        stored_schema: pa.Schema,
+        incoming_schema: pa.Schema,
+        column_nullability: dict[str, bool] | None,
+    ) -> pa.Schema:
+        """Grow an existing table by the nullable columns the data now carries.
+
+        A column a data model gained after the table was created would
+        otherwise reject every later write. Only nullable columns can be added,
+        since existing rows have no value for them; ``ADD COLUMN`` appends, so
+        the returned schema appends too and stays in ``SELECT *`` order.
+        """
+        stored_names = set(stored_schema.names)
+        added: list[pa.Field] = []
+        for field in incoming_schema:
+            if field.name in stored_names:
+                continue
+            nullable = (
+                column_nullability.get(field.name, field.nullable)
+                if column_nullability is not None
+                else field.nullable
+            )
+            if not nullable:
+                raise ValueError(
+                    f"Cannot add NOT NULL column {field.name!r} to an existing table; "
+                    + "existing rows would have no value for it"
+                )
+            if pa.types.is_null(field.type):
+                raise ValueError(
+                    f"Cannot add column {field.name!r} from all-null data; "
+                    + "cast it to a concrete dtype before writing"
+                )
+            conn.execute(
+                f"ALTER TABLE {quoted_table} ADD COLUMN "
+                + f"{self._quote_identifier(field.name)} {self._sqlite_affinity(field.type)}"
+            )
+            added.append(pa.field(field.name, field.type, nullable=True))
+        if not added:
+            return stored_schema
+        return pa.schema([*stored_schema, *added])
+
     @staticmethod
     def _align_table(table: pa.Table, target_schema: pa.Schema) -> pa.Table:
         source_names = set(table.column_names)
@@ -425,6 +469,13 @@ class SQLiteIO(DatabaseIO, FileIO):
                     target_schema = self._read_stored_schema(conn, db_path)
                     if target_schema is None:
                         target_schema = self._infer_schema(conn, display_name)
+                    target_schema = self._add_missing_columns(
+                        conn,
+                        quoted_table,
+                        target_schema,
+                        table.schema,
+                        column_nullability,
+                    )
                     table = self._align_table(table, target_schema)
                 else:
                     target_schema = table.schema

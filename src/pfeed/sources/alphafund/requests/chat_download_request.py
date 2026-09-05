@@ -39,5 +39,8 @@ class AlphaFundChatFeedMessageDownloadRequest(AlphaFundChatFeedBaseDownloadReque
     content: str
     message_seq: int
     author_id: UUID4 = Field(description="user id or agent id")
-    author_role: Literal["user", "agent"]
+    author_role: Literal["user", "agent", "system"]
+    message_type: Literal["text", "compaction"] = "text"
+    start_message_id: UUID4 | None = None
+    end_message_id: UUID4 | None = None
     message_id: UUID4 | None = None

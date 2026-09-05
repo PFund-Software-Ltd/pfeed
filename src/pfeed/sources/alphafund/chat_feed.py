@@ -110,7 +110,10 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         content: str,
         message_seq: int,
         author_id: UUID,
-        author_role: Literal["user", "agent"],
+        author_role: Literal["user", "agent", "system"],
+        message_type: Literal["text", "compaction"] = "text",
+        start_message_id: UUID | None = None,
+        end_message_id: UUID | None = None,
         message_id: UUID | None = None,
         is_deleted: bool | None = None,
         is_archived: bool | None = None,
@@ -119,7 +122,9 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
     ) -> Self | RunResult:
         """Save a message to a chat
         Args:
-            author_id: user id or agent id
+            author_id: user id, agent id, or fund id for a system message
+            message_type: 'compaction' means the content stands in for the
+                messages from start_message_id to end_message_id
             message_id: if provided, it means update the existing message
         """
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
@@ -130,6 +135,9 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
             message_seq=message_seq,
             author_id=author_id,
             author_role=author_role,
+            message_type=message_type,
+            start_message_id=start_message_id,
+            end_message_id=end_message_id,
             message_id=message_id,
             is_deleted=is_deleted,
             is_archived=is_archived,
@@ -357,6 +365,9 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
                 message_seq=request.message_seq,
                 author_id=request.author_id,
                 author_role=request.author_role,
+                message_type=request.message_type,
+                start_message_id=request.start_message_id,
+                end_message_id=request.end_message_id,
                 message_id=request.message_id,
                 **self._provided_flags(
                     is_deleted=request.is_deleted,

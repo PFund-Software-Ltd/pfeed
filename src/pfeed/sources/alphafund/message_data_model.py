@@ -18,7 +18,8 @@ class AlphaFundMessageDataModel(BaseSQLDataModel):
         PRIMARY KEY ("message_id"),
         UNIQUE ("chat_id", "message_seq"),
         CHECK ("message_seq" >= 0),
-        CHECK ("author_role" IN ('user', 'agent')),
+        CHECK ("author_role" IN ('user', 'agent', 'system')),
+        CHECK ("message_type" IN ('text', 'compaction')),
         FOREIGN KEY ("chat_id") REFERENCES "chats" ("chat_id")
             ON DELETE CASCADE
     """
@@ -40,13 +41,24 @@ class AlphaFundMessageDataModel(BaseSQLDataModel):
         default=None,
         description="The user or agent that wrote the message; role alone does not say who.",
     )
-    author_role: Literal["user", "agent"] = "user"
+    author_role: Literal["user", "agent", "system"] = "user"
+    message_type: Literal["text", "compaction"] = "text"
+    start_message_id: UUID4 | None = Field(
+        default=None,
+        description="Compactions only: the first message this one stands in for.",
+    )
+    end_message_id: UUID4 | None = Field(
+        default=None,
+        description="Compactions only: the last message this one stands in for.",
+    )
 
     @classmethod
     def column_nullability(cls) -> dict[str, bool]:
         return {
             **{column_name: False for column_name in cls.column_names()},
             "updated_at": True,
+            "start_message_id": True,
+            "end_message_id": True,
         }
 
     @property

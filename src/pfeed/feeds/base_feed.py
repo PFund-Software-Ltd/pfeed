@@ -407,9 +407,9 @@ class BaseFeed(ABC):
         from pfund_kit.utils.progress_bar import ProgressBar, track
 
         from pfeed.config import get_config
-        from pfeed.utils import is_prefect_running
+        from pfeed.utils import is_using_prefect
 
-        use_prefect = is_prefect_running()
+        use_prefect = is_using_prefect()
         disable_progress_bar = not get_config().show_progress_bar
         self._prepare_before_run()
 

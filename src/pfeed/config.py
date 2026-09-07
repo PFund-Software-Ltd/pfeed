@@ -47,6 +47,7 @@ def configure(
     cache_path: str | None = None,
     data_tool: DataTool | str | None = None,
     show_progress_bar: bool | None = None,
+    use_prefect: bool | None = None,
     persist: bool = False,
 ) -> PFeedConfig:
     """
@@ -57,11 +58,12 @@ def configure(
         cache_path: Path to the cache directory.
         data_tool: Data tool to use, e.g. pandas, polars, etc.
         show_progress_bar: Whether pfeed progress bars are displayed.
+        use_prefect: Whether to run batch dataflows as Prefect flows/tasks.
+            Requires the `prefect` extra. Defaults to False.
         persist: If True, the config will be saved to the config file.
     """
     config = get_config()
     config_dict = config.to_dict()
-    config_dict.pop("__version__")
 
     # Apply updates for non-None values
     for k in config_dict:
@@ -100,12 +102,14 @@ class PFeedConfig(Configuration):
         """Initialize PFeedConfig-specific attributes from config data."""
         self.data_tool = DataTool[self._data.get("data_tool", DataTool.polars).lower()]
         self.show_progress_bar = self._data.get("show_progress_bar", True)
+        self.use_prefect = self._data.get("use_prefect", False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             "data_tool": self.data_tool,
             "show_progress_bar": self.show_progress_bar,
+            "use_prefect": self.use_prefect,
         }
 
     def prepare_docker_context(self):

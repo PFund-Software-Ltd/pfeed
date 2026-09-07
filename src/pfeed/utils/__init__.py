@@ -15,17 +15,21 @@ def lambda_with_name(name: str, lambda_func: Callable[..., Any]):
     return lambda_func
 
 
-def is_prefect_running() -> bool:
-    import os
+def is_using_prefect() -> bool:
+    """Whether batch dataflows should run as Prefect flows, per `pfeed.configure(use_prefect=...)`.
 
-    import httpx2
+    Raises:
+        ImportError: if use_prefect is enabled but the `prefect` package is not installed.
+    """
+    from importlib.util import find_spec
 
-    url = os.getenv("PREFECT_API_URL", "http://127.0.0.1:4200/api").rstrip("/")
-    if not url.startswith("http"):
-        url = f"http://{url}"
-    try:
-        response = httpx2.get(f"{url}/health", timeout=2.0)
-        return response.status_code == 200
-    except Exception:
-        # Catch all exceptions - if we can't verify Prefect is running, assume it's not
+    from pfeed.config import get_config
+
+    if not get_config().use_prefect:
         return False
+    if find_spec("prefect") is None:
+        raise ImportError(
+            "use_prefect is enabled but `prefect` is not installed. "
+            'Install it with `pip install "pfeed[prefect]"`.'
+        )
+    return True

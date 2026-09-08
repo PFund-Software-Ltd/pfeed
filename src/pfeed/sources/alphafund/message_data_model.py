@@ -1,15 +1,15 @@
-from typing import ClassVar, Literal, Self
+from typing import Any, ClassVar, Literal, Self
 
 import time
 from uuid import uuid4
 
 from pydantic import UUID4, Field, model_validator, PrivateAttr
 
-from pfeed.data_models.base_sql_data_model import BaseSQLDataModel
+from pfeed.data_models.base_table_data_model import BaseTableDataModel
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 
-class AlphaFundMessageDataModel(BaseSQLDataModel):
+class AlphaFundMessageDataModel(BaseTableDataModel):
     DataHandler: ClassVar[type[AlphaFundDataHandler]] = AlphaFundDataHandler
 
     identity_column: ClassVar[str] = "message_id"
@@ -20,6 +20,7 @@ class AlphaFundMessageDataModel(BaseSQLDataModel):
         CHECK ("message_seq" >= 0),
         CHECK ("author_role" IN ('user', 'agent', 'system')),
         CHECK ("message_type" IN ('text', 'compaction')),
+        CHECK ("stop_reason" IS NULL OR "stop_reason" IN ('end_turn', 'max_tokens', 'max_turn_requests', 'refusal', 'cancelled')),
         FOREIGN KEY ("chat_id") REFERENCES "chats" ("chat_id")
             ON DELETE CASCADE
     """
@@ -30,6 +31,7 @@ class AlphaFundMessageDataModel(BaseSQLDataModel):
     is_deleted: bool = False
     is_archived: bool = False
 
+    fund_id: UUID4 | None = None
     chat_id: UUID4 | None = None
     content: str | None = None
     message_id: UUID4 | None = None
@@ -51,6 +53,14 @@ class AlphaFundMessageDataModel(BaseSQLDataModel):
         default=None,
         description="Compactions only: the last message this one stands in for.",
     )
+    stop_reason: Literal["end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"] | None = Field(
+        default=None,
+        description="Agent replies only: why the turn ended.",
+    )
+    tool_calls: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Agent replies only: the tool calls made during the turn, as the caller shaped them.",
+    )
 
     @classmethod
     def column_nullability(cls) -> dict[str, bool]:
@@ -59,6 +69,8 @@ class AlphaFundMessageDataModel(BaseSQLDataModel):
             "updated_at": True,
             "start_message_id": True,
             "end_message_id": True,
+            "stop_reason": True,
+            "tool_calls": True,
         }
 
     @property

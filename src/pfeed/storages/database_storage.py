@@ -58,15 +58,22 @@ class DatabaseStorage(BaseStorage, ABC):
         self,
         where: str | None = None,
         params: tuple[Any, ...] = (),
+        columns: list[str] | None = None,
     ) -> pl.LazyFrame | None:
-        if where is None:
+        if where is None and columns is None:
             if params:
                 raise ValueError("params cannot be provided without where")
             return cast("pl.LazyFrame | None", super().read())
         return cast(
             "pl.LazyFrame | None",
-            self.data_handler.read(where=where, params=params),
+            self.data_handler.read(where=where, params=params, columns=columns),
         )
+
+    def search(self, **kwargs: Any) -> pl.LazyFrame | None:
+        return cast("pl.LazyFrame | None", self.data_handler.search(**kwargs))
+
+    def create_search_index(self, **kwargs: Any) -> None:
+        self.data_handler.create_search_index(**kwargs)
 
     def with_io(self, io_config: IOConfig) -> BaseStorage:
         # database storage should only support one IO format

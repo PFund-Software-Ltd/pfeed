@@ -13,10 +13,14 @@ from pfeed.sources.alphafund.requests.fund_retrieve_request import (
 from pfeed.sources.alphafund.requests.chat_download_request import (
     AlphaFundChatFeedChannelDownloadRequest,
     AlphaFundChatFeedChatDownloadRequest,
+    AlphaFundChatFeedEmbeddingDownloadRequest,
     AlphaFundChatFeedMessageDownloadRequest,
+    AlphaFundEmbeddingWindow,
 )
 from pfeed.sources.alphafund.requests.chat_retrieve_request import (
+    AlphaFundChatFeedEmbeddingRetrieveRequest,
     AlphaFundChatFeedRetrieveRequest,
+    AlphaFundChatFeedSearchRequest,
 )
 
 __all__ = [
@@ -24,8 +28,12 @@ __all__ = [
     "AlphaFundAgentFeedRetrieveRequest",
     "AlphaFundChatFeedChannelDownloadRequest",
     "AlphaFundChatFeedChatDownloadRequest",
+    "AlphaFundChatFeedEmbeddingDownloadRequest",
+    "AlphaFundChatFeedEmbeddingRetrieveRequest",
     "AlphaFundChatFeedMessageDownloadRequest",
     "AlphaFundChatFeedRetrieveRequest",
+    "AlphaFundChatFeedSearchRequest",
+    "AlphaFundEmbeddingWindow",
     "AlphaFundFeedDownloadRequest",
     "AlphaFundFeedRetrieveRequest",
 ]

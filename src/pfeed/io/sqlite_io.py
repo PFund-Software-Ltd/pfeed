@@ -524,19 +524,7 @@ class SQLiteIO(DatabaseIO, FileIO):
                     if statement := statement.strip():
                         conn.execute(statement)
 
-                self._ensure_metadata_table(conn, db_path)
-                table_name = self._sanitize_identifier(db_path.table_name)
-                conn.execute(
-                    f"""
-                    INSERT INTO {self._quoted_metadata_table_name(db_path)}
-                        (table_name, schema_ipc, updated_at)
-                    VALUES (?, ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT(table_name) DO UPDATE SET
-                        schema_ipc = excluded.schema_ipc,
-                        updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (table_name, target_schema.serialize().to_pybytes()),
-                )
+                self._store_schema(conn, db_path, target_schema)
 
                 if delete_where:
                     conn.execute(f"DELETE FROM {quoted_table} WHERE {delete_where}")
@@ -595,6 +583,48 @@ class SQLiteIO(DatabaseIO, FileIO):
             return frame.lazy()
         except Exception as exc:
             raise Exception(f"Failed to read data ({db_path=}): {exc}") from exc
+
+    def _store_schema(
+        self, conn: SQLiteConnection, db_path: DBPath, schema: pa.Schema
+    ) -> None:
+        self._ensure_metadata_table(conn, db_path)
+        table_name = self._sanitize_identifier(db_path.table_name)
+        conn.execute(
+            f"""
+            INSERT INTO {self._quoted_metadata_table_name(db_path)}
+                (table_name, schema_ipc, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(table_name) DO UPDATE SET
+                schema_ipc = excluded.schema_ipc,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (table_name, schema.serialize().to_pybytes()),
+        )
+
+    def add_missing_columns(
+        self,
+        db_path: DBPath,
+        schema: pa.Schema,
+        column_nullability: dict[str, bool] | None = None,
+    ) -> None:
+        """Grow an existing table by the nullable columns ``schema`` carries.
+
+        ``write`` does this on its own; an ``UPDATE`` issued directly against
+        the table must call it first, or a column the model gained after the
+        table was created has nowhere to go.
+        """
+        conn: SQLiteConnection = self.connect(db_path.db_uri)
+        if not self._table_exists(conn, self._physical_table_name(db_path)):
+            return
+        with self._savepoint(conn, "pfeed_add_columns"):
+            stored_schema = self._read_stored_schema(conn, db_path)
+            if stored_schema is None:
+                stored_schema = self._infer_schema(conn, self._physical_table_name(db_path))
+            grown = self._add_missing_columns(
+                conn, self._quoted_table_name(db_path), stored_schema, schema, column_nullability
+            )
+            if grown is not stored_schema:
+                self._store_schema(conn, db_path, grown)
 
     def write_metadata(self, db_path: DBPath, metadata: BaseDataMetadata) -> None:
         try:

@@ -27,13 +27,14 @@ class AlphaFundAgentFeed(AlphaFundMixin, AlphaFundBaseFeed):
 
     def save_agent(
         self,
-        fund_id: UUID,
         agent_name: str,
         agent_role: str,
         agent_class: str,
         agent_id: UUID | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
+        *,
+        fund_id: UUID | None = None,
     ) -> Self | RunResult:
         """Save an agent to storage.
         Args:
@@ -42,7 +43,7 @@ class AlphaFundAgentFeed(AlphaFundMixin, AlphaFundBaseFeed):
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundAgentFeedDownloadRequest(
             data_source=self.name,
-            fund_id=fund_id,
+            fund_id=self._resolve_fund_id(fund_id),
             agent_name=agent_name,
             agent_role=agent_role,
             agent_class=agent_class,
@@ -66,7 +67,7 @@ class AlphaFundAgentFeed(AlphaFundMixin, AlphaFundBaseFeed):
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundAgentFeedRetrieveRequest(
             data_source=self.name,
-            fund_id=fund_id,
+            fund_id=self._resolve_fund_id(fund_id),
             agent_name=agent_name,
             agent_role=agent_role,
             agent_id=agent_id,
@@ -135,7 +136,7 @@ class AlphaFundAgentFeed(AlphaFundMixin, AlphaFundBaseFeed):
     ) -> AlphaFundAgentDataModel:
         return self.DataModel(
             data_source=self.data_source,
-            fund_id=fund_id,
+            fund_id=self._resolve_fund_id(fund_id),
             agent_name=agent_name,
             agent_role=agent_role,
             agent_class=agent_class,

@@ -56,7 +56,7 @@ def _resolve_dtype(annotation: Any) -> pl.DataType:
         annotation = args[0]
 
 
-class BaseSQLDataModel(BaseDataModel):
+class BaseTableDataModel(BaseDataModel):
     table_name: ClassVar[str]
     table_sql: ClassVar[str] = ""
     index_sql: ClassVar[dict[IOFormat, tuple[str, ...]]] = {}

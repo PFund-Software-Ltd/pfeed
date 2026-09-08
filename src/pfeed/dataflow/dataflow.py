@@ -271,9 +271,12 @@ class DataFlow:
                 write(data)
             self._logger.debug(f"loaded {self.data_model} data to {self._storage}")
         except Exception:
+            # Re-raise so the batch runner marks the dataflow failed; a write
+            # error must surface in RunResult, not only in the log.
             self._logger.exception(
                 f"failed to load {self.data_model} data to {self._storage}:"
             )
+            raise
 
     def to_prefect_dataflow(self, **kwargs: Any) -> PrefectDataFlow:
         """

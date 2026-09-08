@@ -4,11 +4,11 @@ from uuid import uuid4
 
 from pydantic import UUID4, PrivateAttr
 
-from pfeed.data_models.base_sql_data_model import BaseSQLDataModel
+from pfeed.data_models.base_table_data_model import BaseTableDataModel
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 
-class AlphaFundAgentDataModel(BaseSQLDataModel):
+class AlphaFundAgentDataModel(BaseTableDataModel):
     DataHandler: ClassVar[type[AlphaFundDataHandler]] = AlphaFundDataHandler
 
     identity_column: ClassVar[str] = "agent_id"

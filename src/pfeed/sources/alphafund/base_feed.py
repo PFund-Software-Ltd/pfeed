@@ -25,13 +25,18 @@ if TYPE_CHECKING:
     from pfeed.sources.alphafund.requests.chat_download_request import (
         AlphaFundChatFeedChannelDownloadRequest,
         AlphaFundChatFeedChatDownloadRequest,
+        AlphaFundChatFeedEmbeddingDownloadRequest,
         AlphaFundChatFeedMessageDownloadRequest,
+    )
+    from pfeed.sources.alphafund.requests.chat_retrieve_request import (
+        AlphaFundChatFeedEmbeddingRetrieveRequest,
     )
 
     AlphaFundRetrieveRequest = (
         AlphaFundFeedRetrieveRequest
         | AlphaFundAgentFeedRetrieveRequest
         | AlphaFundChatFeedRetrieveRequest
+        | AlphaFundChatFeedEmbeddingRetrieveRequest
     )
     AlphaFundDownloadRequest = (
         AlphaFundFeedDownloadRequest
@@ -39,9 +44,11 @@ if TYPE_CHECKING:
         | AlphaFundChatFeedChannelDownloadRequest
         | AlphaFundChatFeedChatDownloadRequest
         | AlphaFundChatFeedMessageDownloadRequest
+        | AlphaFundChatFeedEmbeddingDownloadRequest
     )
 
 from abc import ABC
+from uuid import UUID
 
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.enums import DataStorage, IOFormat
@@ -54,6 +61,27 @@ from pfeed.dataflow.result import RunResult
 
 class AlphaFundBaseFeed(BaseFeed, ABC):
     data_domain: ClassVar[AlphaFundDataCategory]
+
+    def __init__(
+        self,
+        pipeline_mode: bool = False,
+        num_workers: int | None = None,
+        *,
+        fund_id: UUID | str | None = None,
+    ):
+        self._fund_id = UUID(str(fund_id)) if fund_id is not None else None
+        super().__init__(pipeline_mode=pipeline_mode, num_workers=num_workers)
+
+    @property
+    def fund_id(self) -> UUID | None:
+        return self._fund_id
+
+    def _resolve_fund_id(self, fund_id: UUID | None = None) -> UUID:
+        if self._fund_id is None:
+            raise ValueError("Bind the feed with pe.AlphaFund(fund_id=...) first")
+        if fund_id is not None and UUID(str(fund_id)) != self._fund_id:
+            raise ValueError("fund_id does not match the fund bound to this feed")
+        return self._fund_id
 
     def _resolve_configs(
         self,
@@ -71,16 +99,18 @@ class AlphaFundBaseFeed(BaseFeed, ABC):
     def _append_request(
         self, request: AlphaFundRetrieveRequest | AlphaFundDownloadRequest
     ) -> None:
+        if self.data_domain != "FUND_DATA":
+            self._resolve_fund_id(getattr(request, "fund_id", None))
         if self._requests:
             raise ValueError(f"{self.name} can only run one request at a time")
         return super()._append_request(request)
 
-    def _read_from_storage(
+    def _create_storage(
         self,
         data_model: AlphaFundSQLDataModel,
         storage_config: StorageConfig,
         io_config: IOConfig,
-    ) -> pl.LazyFrame | None:
+    ) -> DatabaseStorage:
         Storage = DataStorage(storage_config.storage).storage_class
         storage = (
             Storage.from_storage_config(storage_config)
@@ -89,7 +119,17 @@ class AlphaFundBaseFeed(BaseFeed, ABC):
         )
         if not isinstance(storage, DatabaseStorage):
             raise TypeError(f"{self.name} {self.data_domain} requires database storage")
-        return storage.read()
+        return storage
+
+    def _read_from_storage(
+        self,
+        data_model: AlphaFundSQLDataModel,
+        storage_config: StorageConfig,
+        io_config: IOConfig,
+        columns: list[str] | None = None,
+    ) -> pl.LazyFrame | None:
+        storage = self._create_storage(data_model, storage_config, io_config)
+        return storage.read(columns=columns)
 
     def _download_impl(self, data_model: AlphaFundSQLDataModel) -> pl.DataFrame:
         return data_model.to_frame()

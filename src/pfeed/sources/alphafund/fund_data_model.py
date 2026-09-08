@@ -5,11 +5,11 @@ from uuid import uuid4
 
 from pydantic import UUID4, PrivateAttr, model_validator
 
-from pfeed.data_models.base_sql_data_model import BaseSQLDataModel
+from pfeed.data_models.base_table_data_model import BaseTableDataModel
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 
-class AlphaFundDataModel(BaseSQLDataModel):
+class AlphaFundDataModel(BaseTableDataModel):
     DataHandler: ClassVar[type[AlphaFundDataHandler]] = AlphaFundDataHandler
 
     identity_column: ClassVar[str] = "fund_id"

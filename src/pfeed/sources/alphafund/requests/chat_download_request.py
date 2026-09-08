@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import UUID4, Field
+from pydantic import UUID4, BaseModel, Field
 
 from pfeed.enums import ExtractType
 from pfeed.requests.base_request import BaseRequest
@@ -43,4 +43,27 @@ class AlphaFundChatFeedMessageDownloadRequest(AlphaFundChatFeedBaseDownloadReque
     message_type: Literal["text", "compaction"] = "text"
     start_message_id: UUID4 | None = None
     end_message_id: UUID4 | None = None
+    stop_reason: Literal["end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"] | None = None
+    tool_calls: list[dict[str, Any]] | None = None
     message_id: UUID4 | None = None
+
+
+class AlphaFundEmbeddingWindow(BaseModel):
+    start_message_seq: int
+    end_message_seq: int
+    text: str
+    vector: list[float]
+
+
+class AlphaFundChatFeedEmbeddingDownloadRequest(BaseRequest):
+    """One batch of embedded windows from a single chat under one model."""
+
+    extract_type: ExtractType = ExtractType.download
+    storage_config: StorageConfig  # pyright: ignore[reportGeneralTypeIssues]
+    io_config: IOConfig  # pyright: ignore[reportGeneralTypeIssues]
+
+    fund_id: UUID4
+    chat_id: UUID4
+    embedding_model: str = Field(description="'provider::model' reference")
+    dimension: int
+    windows: list[AlphaFundEmbeddingWindow] = Field(min_length=1)

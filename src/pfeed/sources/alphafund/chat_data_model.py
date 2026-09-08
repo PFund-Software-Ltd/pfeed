@@ -5,12 +5,12 @@ from uuid import uuid4
 
 from pydantic import UUID4, Field, model_validator, PrivateAttr
 
-from pfeed.data_models.base_sql_data_model import BaseSQLDataModel
+from pfeed.data_models.base_table_data_model import BaseTableDataModel
 from pfeed.enums import IOFormat
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 
-class AlphaFundChatDataModel(BaseSQLDataModel):
+class AlphaFundChatDataModel(BaseTableDataModel):
     DataHandler: ClassVar[type[AlphaFundDataHandler]] = AlphaFundDataHandler
 
     identity_column: ClassVar[str] = "chat_id"
@@ -41,6 +41,7 @@ class AlphaFundChatDataModel(BaseSQLDataModel):
     is_deleted: bool = False
     is_archived: bool = False
 
+    fund_id: UUID4 | None = None
     channel_id: UUID4 | None = None
     chat_name: str | None = Field(
         default=None, description="The chat name used as its title."

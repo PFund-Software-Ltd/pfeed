@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, assert_never
 
 if TYPE_CHECKING:
+    import polars as pl
     from narwhals.typing import IntoFrame
 
     from pfeed.data_models.base_data_model import BaseDataModel
@@ -73,6 +74,16 @@ class BaseDataHandler(ABC):
     @abstractmethod
     def read(self, **kwargs: Any) -> Any | None:
         pass
+
+    def search(self, **kwargs: Any) -> pl.LazyFrame | None:
+        """Rank stored rows when this handler supports search."""
+        raise NotImplementedError(f"{self.__class__.__name__} does not support search")
+
+    def create_search_index(self, **kwargs: Any) -> None:
+        """Build search indexes when this handler supports them."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support search indexes"
+        )
 
     @abstractmethod
     def _validate_schema(self, data: Any) -> Any:

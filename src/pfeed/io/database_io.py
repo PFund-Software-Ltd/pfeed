@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, TypeAlias
 from typing_extensions import override
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import polars as pl
     import pyarrow as pa
     from narwhals.typing import IntoFrame
 
@@ -158,6 +161,38 @@ class DatabaseIO(BaseIO, ABC):
         **io_kwargs: Any,
     ) -> Any:
         pass
+
+    def search(
+        self,
+        db_path: DBPath,
+        query_vector: Sequence[float] | None = None,
+        query_text: str | None = None,
+        limit: int = 10,
+        where: str | None = None,
+        vector_column: str = "vector",
+        text_column: str = "text",
+        min_similarity: float | None = None,
+        **io_kwargs: Any,
+    ) -> pl.LazyFrame | None:
+        """Rank rows by similarity to a query.
+
+        ``query_vector`` alone is a nearest-neighbour search, ``query_text`` alone
+        is full-text search, both together is a hybrid search fused by rank.
+        ``min_similarity`` drops vector hits below that cosine similarity.
+        Results carry a ``score`` column where higher is better.
+        Backends without a search capability leave this unimplemented.
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} does not support search")
+
+    def create_search_index(
+        self,
+        db_path: DBPath,
+        vector_column: str = "vector",
+        text_column: str = "text",
+        **io_kwargs: Any,
+    ) -> None:
+        """Build or refresh the approximate indexes that make ``search`` fast at scale."""
+        raise NotImplementedError(f"{self.__class__.__name__} does not support search indexes")
 
     @abstractmethod
     def exists(self, db_path: DBPath) -> bool:

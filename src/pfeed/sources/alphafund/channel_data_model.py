@@ -5,12 +5,12 @@ from uuid import UUID, uuid4
 
 from pydantic import UUID4, Field, field_validator, model_validator, PrivateAttr
 
-from pfeed.data_models.base_sql_data_model import BaseSQLDataModel
+from pfeed.data_models.base_table_data_model import BaseTableDataModel
 from pfeed.enums import IOFormat
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 
-class AlphaFundChannelDataModel(BaseSQLDataModel):
+class AlphaFundChannelDataModel(BaseTableDataModel):
     DataHandler: ClassVar[type[AlphaFundDataHandler]] = AlphaFundDataHandler
 
     identity_column: ClassVar[str] = "channel_id"

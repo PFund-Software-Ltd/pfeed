@@ -183,7 +183,10 @@ class StreamingFeedMixin:
                 from pfeed.utils.ray import (
                     ray_logging_context,
                     setup_logger_in_ray_task,
+                    setup_ray,
                 )
+
+                setup_ray()
 
                 @ray.remote
                 def ray_task(

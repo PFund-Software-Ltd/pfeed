@@ -144,6 +144,8 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         is_archived: bool | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
+        *,
+        cancellation_reason: str | None = None,
     ) -> Self | RunResult:
         """Save a message to a chat
         Args:
@@ -164,6 +166,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
             start_message_id=start_message_id,
             end_message_id=end_message_id,
             stop_reason=stop_reason,
+            cancellation_reason=cancellation_reason,
             tool_calls=tool_calls,
             message_id=message_id,
             is_deleted=is_deleted,
@@ -612,6 +615,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
                 start_message_id=request.start_message_id,
                 end_message_id=request.end_message_id,
                 stop_reason=request.stop_reason,
+                cancellation_reason=request.cancellation_reason,
                 tool_calls=request.tool_calls,
                 message_id=request.message_id,
                 **self._provided_flags(

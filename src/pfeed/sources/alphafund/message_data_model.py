@@ -57,6 +57,10 @@ class AlphaFundMessageDataModel(BaseTableDataModel):
         default=None,
         description="Agent replies only: why the turn ended.",
     )
+    cancellation_reason: str | None = Field(
+        default=None,
+        description="Application context explaining why an agent reply was cancelled.",
+    )
     tool_calls: list[dict[str, Any]] | None = Field(
         default=None,
         description="Agent replies only: the tool calls made during the turn, as the caller shaped them.",
@@ -70,6 +74,7 @@ class AlphaFundMessageDataModel(BaseTableDataModel):
             "start_message_id": True,
             "end_message_id": True,
             "stop_reason": True,
+            "cancellation_reason": True,
             "tool_calls": True,
         }
 

@@ -42,6 +42,9 @@ class AlphaFundChatFeedSearchRequest(AlphaFundChatFeedEmbeddingRetrieveRequest):
     query_vector: list[float] | None = None
     query_text: str | None = None
     limit: int = Field(default=10, gt=0)
+    chat_id: UUID4 | list[UUID4] | None = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+        default=None, description="One chat or a set of chats; None means every chat in the fund"
+    )
     search_kwargs: dict[str, Any] = Field(
         default_factory=dict,
         description="Backend tuning knobs passed through to the IO, e.g. nprobes, refine_factor.",
@@ -51,4 +54,12 @@ class AlphaFundChatFeedSearchRequest(AlphaFundChatFeedEmbeddingRetrieveRequest):
     def validate_query(self):
         if self.query_vector is None and self.query_text is None:
             raise ValueError("search requires query_vector, query_text, or both")
+        if isinstance(self.chat_id, list) and not self.chat_id:
+            raise ValueError("chat_id must not be an empty list")
         return self
+
+    @property
+    def chat_ids(self) -> list[UUID4] | None:
+        if self.chat_id is None or isinstance(self.chat_id, list):
+            return self.chat_id
+        return [self.chat_id]

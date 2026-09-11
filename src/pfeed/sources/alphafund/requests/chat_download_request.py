@@ -45,6 +45,7 @@ class AlphaFundChatFeedMessageDownloadRequest(AlphaFundChatFeedBaseDownloadReque
     end_message_id: UUID4 | None = None
     stop_reason: Literal["end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"] | None = None
     cancellation_reason: str | None = None
+    pinned_at: float | None = None
     tool_calls: list[dict[str, Any]] | None = None
     message_id: UUID4 | None = None
 

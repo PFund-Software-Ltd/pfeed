@@ -146,6 +146,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         io_config: IOConfig | None = None,
         *,
         cancellation_reason: str | None = None,
+        pinned_at: float | None = None,
     ) -> Self | RunResult:
         """Save a message to a chat
         Args:
@@ -153,6 +154,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
             message_type: 'compaction' means the content stands in for the
                 messages from start_message_id to end_message_id
             message_id: if provided, it means update the existing message
+            pinned_at: when the message was pinned; None means not pinned
         """
         storage_config, io_config = self._resolve_configs(storage_config, io_config)
         request = AlphaFundChatFeedMessageDownloadRequest(
@@ -167,6 +169,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
             end_message_id=end_message_id,
             stop_reason=stop_reason,
             cancellation_reason=cancellation_reason,
+            pinned_at=pinned_at,
             tool_calls=tool_calls,
             message_id=message_id,
             is_deleted=is_deleted,
@@ -275,6 +278,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
                 query_vector=request.query_vector,
                 query_text=request.query_text,
                 limit=request.limit,
+                chat_ids=request.chat_ids,
                 **request.search_kwargs,
             )
         else:
@@ -370,7 +374,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
         query_vector: list[float] | None = None,
         query_text: str | None = None,
         limit: int = 10,
-        chat_id: UUID | None = None,
+        chat_id: UUID | list[UUID] | None = None,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
         fund_id: UUID | None = None,
@@ -384,7 +388,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
 
         Args:
             embedding_model: the model that produced query_vector; selects the table
-            chat_id: search one chat only; None searches the whole fund
+            chat_id: search one chat or a set of chats; None searches the whole fund
             search_kwargs: backend tuning, e.g. nprobes, refine_factor
         """
         storage_config, io_config = self._resolve_embedding_configs(
@@ -494,7 +498,10 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
             data_model = self.create_data_model(
                 data_type="embedding",
                 fund_id=request.fund_id,
-                chat_id=request.chat_id,
+                # A search scopes its chats in the handler, since it may name several.
+                chat_id=None
+                if isinstance(request, AlphaFundChatFeedSearchRequest)
+                else request.chat_id,
                 embedding_model=request.embedding_model,
             )
             data_model.op = "read"
@@ -616,6 +623,7 @@ class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
                 end_message_id=request.end_message_id,
                 stop_reason=request.stop_reason,
                 cancellation_reason=request.cancellation_reason,
+                pinned_at=request.pinned_at,
                 tool_calls=request.tool_calls,
                 message_id=request.message_id,
                 **self._provided_flags(

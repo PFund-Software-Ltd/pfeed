@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, assert_never, cast
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from sqlite3 import Connection as SQLiteConnection
+    from uuid import UUID
 
     from narwhals.typing import IntoFrame
 
@@ -330,6 +331,7 @@ class AlphaFundDataHandler(BaseDataHandler):
         query_vector: Sequence[float] | None = None,
         query_text: str | None = None,
         limit: int = 10,
+        chat_ids: Sequence[UUID] | None = None,
         **search_kwargs: Any,
     ) -> pl.LazyFrame | None:
         """Search embedding rows; the data model's chat_id/embedding_model narrow the scope."""
@@ -337,6 +339,9 @@ class AlphaFundDataHandler(BaseDataHandler):
         if not self._is_batch_model():
             raise TypeError("search is only supported for AlphaFund embeddings")
         where, _ = self._default_read_filter()
+        if chat_ids:
+            literals = ", ".join(self._quote_literal(str(value)) for value in chat_ids)
+            where = f"({where}) AND chat_id IN ({literals})"
         custom_where = search_kwargs.pop("where", None)
         if custom_where:
             where = f"({where}) AND ({custom_where})"

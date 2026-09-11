@@ -61,6 +61,10 @@ class AlphaFundMessageDataModel(BaseTableDataModel):
         default=None,
         description="Application context explaining why an agent reply was cancelled.",
     )
+    pinned_at: float | None = Field(
+        default=None,
+        description="When the message was pinned; None means not pinned.",
+    )
     tool_calls: list[dict[str, Any]] | None = Field(
         default=None,
         description="Agent replies only: the tool calls made during the turn, as the caller shaped them.",
@@ -75,6 +79,7 @@ class AlphaFundMessageDataModel(BaseTableDataModel):
             "end_message_id": True,
             "stop_reason": True,
             "cancellation_reason": True,
+            "pinned_at": True,
             "tool_calls": True,
         }
 

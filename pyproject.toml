@@ -28,12 +28,12 @@ dependencies = [
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
-    "polars>=1.44.1 ; sys_platform != 'emscripten'",
+    "polars>=1.44.2 ; sys_platform != 'emscripten'",
     "pyarrow>=24.0.0 ; sys_platform != 'emscripten'",
     "pandera>=0.33.1",
     "msgspec>=0.21.1 ; sys_platform != 'emscripten'",
     "pydantic>=2.13.5 ; sys_platform != 'emscripten'",
-    "narwhals>=2.25.0 ; sys_platform != 'emscripten'",
+    "narwhals>=2.26.0 ; sys_platform != 'emscripten'",
     "zstandard>=0.22.0",
     "cloudpathlib>=0.25.0",
     "beautifulsoup4>=4.12.3",
@@ -44,8 +44,8 @@ dependencies = [
 
 [project.optional-dependencies]
 yfinance = ["yfinance>=1.7.0"]
-huggingface = ["huggingface-hub>=1.29.0"]
-prefect = ["prefect>=3.8.4"]
+huggingface = ["huggingface-hub>=1.31.0"]
+prefect = ["prefect>=3.8.5"]
 pandas = ["pandas>=3.0.3"]
 duckdb = ["duckdb>=1.5.5"]
 lancedb = ["lancedb>=0.38.0"]
@@ -69,7 +69,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.12.8,<0.13.0"]
+requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv]

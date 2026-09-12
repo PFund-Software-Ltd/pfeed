@@ -26,12 +26,12 @@ depends-on = [
 
 [pypi-dependencies]
 pfund = ">=0.0.25"
-polars = ">=1.44.1"
+polars = ">=1.44.2"
 pyarrow = ">=24.0.0"
 pandera = ">=0.33.1"
 msgspec = ">=0.21.1"
 pydantic = ">=2.13.5"
-narwhals = ">=2.25.0"
+narwhals = ">=2.26.0"
 zstandard = ">=0.22.0"  # REVIEW: this is included in python 3.14
 cloudpathlib = ">=0.25.0"
 beautifulsoup4 = ">=4.12.3"
@@ -56,8 +56,8 @@ libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
 yfinance = ">=1.7.0"
-huggingface-hub = ">=1.29.0"
-prefect = ">=3.8.4"
+huggingface-hub = ">=1.31.0"
+prefect = ">=3.8.5"
 pandas = ">=3.0.3"
 duckdb = ">=1.5.5"
 lancedb = ">=0.38.0"

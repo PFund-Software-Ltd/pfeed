@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 name = "pfeed"
 platforms = ["osx-arm64", "linux-64"]
 # NOTE: should match with setup-pixi in ci.yml
-requires-pixi = ">=0.78.0,<0.79.0"
+requires-pixi = ">=0.81.0,<0.82.0"
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0d"
 
@@ -20,14 +20,16 @@ depends-on = [
   { task = "test", environment = "py311" },
   { task = "test", environment = "py312" },
   { task = "test", environment = "py313" },
+  # { task = "test", environment = "py314" },
+  # { task = "test", environment = "py315" },
 ]
 
 [dependencies]
 
 [pypi-dependencies]
-pfund = ">=0.0.25"
+pfund = "==0.0.25"  # use >= only when pfund is stable
 polars = ">=1.44.2"
-pyarrow = ">=24.0.0"
+pyarrow = ">=25.0.1"
 pandera = ">=0.33.1"
 msgspec = ">=0.21.1"
 pydantic = ">=2.13.5"
@@ -37,13 +39,15 @@ cloudpathlib = ">=0.25.0"
 beautifulsoup4 = ">=4.12.3"
 ray = { version = ">=2.58.0", extras = ["default"] }
 pyzmq = ">=27.2.0"
-deltalake = ">=1.6.3"
+deltalake = ">=1.6.4"
 
 [environments]
 default = ["py311", "dev", "optional"]
 py311 = ["py311", "test", "optional"]
 py312 = ["py312", "test", "optional"]
 py313 = ["py313", "test", "optional"]
+# py314 = ["py314", "test", "optional"]
+# py315 = ["py315", "test", "optional"]
 
 [activation.env]
 JAVA_HOME = "$CONDA_PREFIX/lib/jvm"
@@ -56,11 +60,11 @@ libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
 yfinance = ">=1.7.0"
-huggingface-hub = ">=1.31.0"
-prefect = ">=3.8.5"
+huggingface-hub = ">=1.32.0"
+prefect = ">=3.8.6"
 pandas = ">=3.0.3"
-duckdb = ">=1.5.5"
-lancedb = ">=0.38.0"
+duckdb = ">=1.5.3"
+lancedb = ">=0.39.0"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 # dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
 # pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }
@@ -69,14 +73,15 @@ lancedb = ">=0.38.0"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
+pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TEMP
 # pfund = { path = "../pfund", editable = true }
 # pfund-kit = { path = "../pfund-kit", editable = true }
 afterpython = ">=0.3.19"
-basedpyright = ">=1.39.9"
+basedpyright = ">=1.40.1"
 pandas-stubs = ">=3.0.3.260530"
-financetoolkit = ">=2.0.7"
-defeatbeta-api = ">=0.0.43"
+financetoolkit = ">=2.2.0"
+defeatbeta-api = ">=0.0.61"
 
 [feature.test.pypi-dependencies]
 pfeed = { path = ".", editable = true }
@@ -101,3 +106,9 @@ python = "3.12.*"
 
 [feature.py313.dependencies]
 python = "3.13.*"
+
+# [feature.py314.dependencies]
+# python = "3.14.*"
+
+# [feature.py315.dependencies]
+# python = "3.15.*"

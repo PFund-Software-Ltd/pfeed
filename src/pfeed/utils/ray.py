@@ -36,28 +36,34 @@ def setup_ray():
     from pfund_kit.style import RichColor, TextStyle, cprint
 
     with _INIT_LOCK:
-        if not ray.is_initialized():
+        if not is_ray_initialized():
             cprint(
                 f"Auto-initializing Ray with {os.cpu_count()} CPUs",
                 style=TextStyle.BOLD + RichColor.YELLOW,
             )
             ray.init(num_cpus=os.cpu_count())
             atexit.register(
-                lambda: ray.shutdown()
+                shutdown_ray, wait_for_processes=True
             )  # useful in jupyter notebook environment
 
 
-def shutdown_ray(wait_for_processes: bool = False):
+def is_ray_initialized() -> bool:
     import sys
 
-    # if ray was never imported this process, it was never used — nothing to shut
-    # down, and importing it here would needlessly pull in ray's (heavy) import chain.
+    # Ray cannot be running if nothing imported it; skip the slow import.
     if "ray" not in sys.modules:
+        return False
+    import ray
+
+    return ray.is_initialized()
+
+
+def shutdown_ray(wait_for_processes: bool = False):
+    if not is_ray_initialized():
         return
     import ray
 
-    if ray.is_initialized():
-        ray.shutdown(wait_for_processes=wait_for_processes)
+    ray.shutdown(wait_for_processes=wait_for_processes)
 
 
 def setup_logger_in_ray_task(logger_name: str, log_queue: Queue) -> logging.Logger:

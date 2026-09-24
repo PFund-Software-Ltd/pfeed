@@ -39,14 +39,14 @@ cloudpathlib = ">=0.25.0"
 beautifulsoup4 = ">=4.12.3"
 ray = { version = ">=2.58.0", extras = ["default"] }
 pyzmq = ">=27.2.0"
-deltalake = ">=1.6.4"
+# 1.6.4/1.6.5 are yanked (delta-rs#4784); revisit when 1.6.6 has macOS wheels.
+deltalake = ">=1.6.3,<1.6.4"
 
 [environments]
-default = ["py311", "dev", "optional"]
-py311 = ["py311", "test", "optional"]
+default = ["py312", "dev", "optional"]
 py312 = ["py312", "test", "optional"]
 py313 = ["py313", "test", "optional"]
-# py314 = ["py314", "test", "optional"]
+py314 = ["py314", "test", "optional"]
 # py315 = ["py315", "test", "optional"]
 
 [activation.env]
@@ -60,7 +60,7 @@ libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
 yfinance = ">=1.7.0"
-huggingface-hub = ">=1.32.0"
+huggingface-hub = ">=2.0.0"
 prefect = ">=3.8.6"
 pandas = ">=3.0.3"
 duckdb = ">=1.5.3"
@@ -78,7 +78,8 @@ pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # pfund = { path = "../pfund", editable = true }
 # pfund-kit = { path = "../pfund-kit", editable = true }
 afterpython = ">=0.3.19"
-basedpyright = ">=1.40.1"
+ty = ">=0.0.83"
+# basedpyright = ">=1.40.1"
 pandas-stubs = ">=3.0.3.260530"
 financetoolkit = ">=2.2.0"
 defeatbeta-api = ">=0.0.61"
@@ -98,17 +99,14 @@ test-rate-limit = "pytest -m 'rate_limit'"
 test-new = "pytest --record-mode=all"  # record new interactions, useful to update recordings in case data formats returned have changed
 test-ci = "pytest --record-mode=none"  # fail a test if no recording is found
 
-[feature.py311.dependencies]
-python = "3.11.*"
-
 [feature.py312.dependencies]
 python = "3.12.*"
 
 [feature.py313.dependencies]
 python = "3.13.*"
 
-# [feature.py314.dependencies]
-# python = "3.14.*"
+[feature.py314.dependencies]
+python = "3.14.*"
 
 # [feature.py315.dependencies]
 # python = "3.15.*"

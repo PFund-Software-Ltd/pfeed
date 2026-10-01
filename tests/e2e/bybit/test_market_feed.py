@@ -8,8 +8,6 @@ import polars as pl
 from pfund.datas.resolution import Resolution
 
 import pfeed as pe
-from pfeed._etl.base import convert_dataframe
-from pfeed.enums import DataTool
 from pfeed.dataflow.result import RunResult
 
 
@@ -81,36 +79,6 @@ def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, re
 #     _assert_df(df, start_date, end_date)
 
 
-@pytest.mark.parametrize(('product', 'resolution'), [('ETH_USDT_PERP', '1t')])
-def test_download_and_retrieve_mixed(tmp_path, bybit_mixed, product, resolution):
-
-    def _assert_df(df, start_date, end_date):
-        assert df is not None
-        df = convert_dataframe(df, DataTool.pandas)
-        print(df.head())
-
-    pe.configure(data_path=tmp_path / 'data')
-    start_date, end_date = '2025-09-01', '2025-09-02'
-    auto_transform = False  # raw df from bybit, not normalized
-    feed = bybit_mixed.market_feed
-    df = feed.download(
-        product=product,
-        resolution=resolution,
-        start_date=start_date,
-        end_date=end_date,
-        auto_transform=auto_transform,
-    )
-    _assert_df(df, start_date, end_date)
-    # df = feed.retrieve(
-    #     product=product,
-    #     resolution=resolution,
-    #     start_date=start_date,
-    #     end_date=end_date,
-    #     auto_transform=auto_transform,
-    # )
-    # _assert_df(df, start_date, end_date)
-
-
 # TODO
 @pytest.mark.parametrize(('product', 'resolution'), [
     ('HYPE_USDT_PERP', '1q_L2'),
@@ -129,11 +97,6 @@ def test_stream_and_retrieve(tmp_path, bybit, product, resolution):
 async def test_stream_and_retrieve_async(tmp_path, bybit, product, resolution):
     async for msg in bybit.stream(product=product, resolution=resolution):
         print(msg)
-
-
-# TODO
-def test_stream_and_retrieve_mixed(tmp_path, bybit_mixed):
-    pass
 
 
 # TODO

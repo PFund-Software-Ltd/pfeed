@@ -155,7 +155,6 @@ class MarketFeed(TimeBasedFeed, ABC):
         self,
         product: str,
         resolution: Resolution | MarketDataType | str,
-        symbol: str = "",
         rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
         start_date: datetime.date | str | None = None,
         end_date: datetime.date | str | None = None,
@@ -173,8 +172,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             resolution: Target data resolution (e.g. '1m', '1h', '1d'). If the source
                 doesn't provide this resolution natively, finer-grained source data is
                 downloaded and resampled down.
-            symbol: Source-specific symbol. If empty, derived from `product` — but the
-                derivation may be wrong, in which case pass it explicitly.
             rollback_period: Lookback from today, only used when `start_date` is empty.
                 Accepts a resolution string (e.g. '7d'), 'ytd', or 'max'. With 'max',
                 the source's own `start_date` attribute is used.
@@ -206,9 +203,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         )
         env = Environment.BACKTEST
         setup_logging(env=env)
-        product: BaseProduct = self.data_source.create_product(
-            product, symbol=symbol, **product_specs
-        )
+        product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
         start_date, end_date = self._standardize_dates(
             resolution, start_date, end_date, rollback_period

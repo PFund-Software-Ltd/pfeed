@@ -80,6 +80,7 @@ pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 pfund = { path = "../pfund", editable = true }
 afterpython = ">=0.4.0"
 financetoolkit = ">=2.2.0"
+pyrefly = ">=1.3.2"
 
 [feature.test.pypi-dependencies]
 pfeed = { path = ".", editable = true }

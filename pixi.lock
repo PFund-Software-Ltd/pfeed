@@ -316,6 +316,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/d4/2b/04b8a15f3a1c77bc79ddf5c73875327f34b4fa75982df2b76e45e402d364/asttokens-3.0.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d5/11/e3df59614bebe0ca50c905442603eda64ae7ac19811d4e4f74aa2d51ca85/pytz-2026.4-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/ef/0a7ed06585fe54239be3c3706758cdc4a27bccdafc8cc9519b49f195b52e/pyrefly-1.4.0.dev2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/d8/9c/6fe8931fd9f381042a9e4c7d5a7b4cbf7016b252bec0c99a49fce42c3326/httpx2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d9/33/1f075bf72b0b747cb3288d011319aaf64083cf2efef8354174e3ed4540e2/ipython_pygments_lexers-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d9/f4/78229a1066068ca14fc60fb26cf7381cabe4382261392b90e5f9552722d4/oauthlib-4.0.0-py3-none-any.whl
@@ -456,6 +457,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3d/bd/35b5691919859a906cd098d62e2a1399cb8ede3e05b6480cf15d472ad5b1/apscheduler-4.0.0a6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3d/ca/36133653e00939922dd1416f4c56177361289172a30563fcb9552c9ccde4/readchar-4.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/3f/1f/49948514b59a7149a86907f042a0f81ed6443d9b3b8cf9142768020ef225/pyrefly-1.4.0.dev2-py3-none-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/27/78a89b55b0904d222183164e079b4ca56208e94eff1d35ad1f1ad5be9b06/alembic-1.20.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/44/3159af4fb3c868970a412e294320ed6bb1a9fbdfa6431050eda8e0b34b6e/xarray-2026.9.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/56/83af6ef6a8bac9fdf2059de0276008e9eab40a315b8b732eba466bf6cc74/amplitude_analytics-1.2.3-py3-none-any.whl
@@ -5758,6 +5760,11 @@ packages:
   - cffi~=1.17 ; python_full_version < '3.14' and platform_python_implementation != 'PyPy' and extra == 'cffi'
   - cffi>=2.0.0b0 ; python_full_version >= '3.14' and platform_python_implementation != 'PyPy' and extra == 'cffi'
   requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/3f/1f/49948514b59a7149a86907f042a0f81ed6443d9b3b8cf9142768020ef225/pyrefly-1.4.0.dev2-py3-none-macosx_11_0_arm64.whl
+  name: pyrefly
+  version: 1.4.0.dev2
+  sha256: d08139d1dafa3d93a5cd70554571e08c33b2c92f95c4e09f602d04bd2f054c7e
+  requires_python: '>=3.8'
 - pypi: https://files.pythonhosted.org/packages/3f/27/78a89b55b0904d222183164e079b4ca56208e94eff1d35ad1f1ad5be9b06/alembic-1.20.0-py3-none-any.whl
   name: alembic
   version: 1.20.0
@@ -11110,6 +11117,11 @@ packages:
   - tornado>=4.5 ; extra == 'test'
   - typeguard ; extra == 'test'
   requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/d7/ef/0a7ed06585fe54239be3c3706758cdc4a27bccdafc8cc9519b49f195b52e/pyrefly-1.4.0.dev2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+  name: pyrefly
+  version: 1.4.0.dev2
+  sha256: f0a2cf640fe0a03f6e1a66a5dae95d78a3d038129109fe0523a44a705e88f557
+  requires_python: '>=3.8'
 - pypi: https://files.pythonhosted.org/packages/d8/66/9a386a92561f402389a4fc70c18838bf6d35eb5eb5c6850b4b2dc64f5048/pillow-12.3.0-cp312-cp312-macosx_11_0_arm64.whl
   name: pillow
   version: 12.3.0

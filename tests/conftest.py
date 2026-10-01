@@ -6,6 +6,21 @@ import pytest
 import pfeed as pe
 
 
+def pytest_addoption(parser: pytest.Parser):
+    parser.addoption(
+        "--keep-log-path",
+        "--kl",
+        action="store_true",
+        help="write pfeed logs to the configured log_path instead of a tmp dir",
+    )
+
+
+def pytest_configure(config: pytest.Config):
+    # xdist workers would compete to rotate the same log files in the real log_path
+    if config.getoption("keep_log_path") and config.getoption("numprocesses", default=None):
+        raise pytest.UsageError("--keep-log-path can't be used with -n (workers would share log files)")
+
+
 @pytest.fixture(scope="session")
 def vcr_config():
     cassette_dir = (Path(__file__).parent / "cassettes").resolve()
@@ -27,27 +42,31 @@ def vcr_config():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def configure_test_env():
+def configure_test_env(request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory):
     # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
     os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
-    # Silence logs below WARNING and disable file handlers entirely for tests
-    pe.configure(
-        logging_config={
-            "handlers": {"stream_handler": {"level": "WARNING"}},
-            # File handlers removed to avoid race conditions in parallel tests (pytest-xdist)
-            # Multiple workers would compete to rotate the same log file, causing FileNotFoundError
-            "loggers": {
-                "root": {
-                    "handlers": ["stream_handler"],  # Remove file handler
-                    "level": "WARNING",
-                },
-                "pfeed": {
-                    "handlers": ["stream_handler"],  # Remove file handler
-                    "level": "WARNING",
-                },
-            },
-        }
-    )
+    # redirect log files to a temp dir; xdist gives each worker its own basetemp,
+    # so workers never rotate the same log file
+    if not request.config.getoption("keep_log_path"):
+        pe.configure(log_path=tmp_path_factory.mktemp("logs"))
+    # # Silence logs below WARNING and disable file handlers entirely for tests
+    # pe.configure_logging(
+    #     {
+    #         "handlers": {"stream_handler": {"level": "WARNING"}},
+    #         # File handlers removed to avoid race conditions in parallel tests (pytest-xdist)
+    #         # Multiple workers would compete to rotate the same log file, causing FileNotFoundError
+    #         "loggers": {
+    #             "root": {
+    #                 "handlers": ["stream_handler"],  # Remove file handler
+    #                 "level": "WARNING",
+    #             },
+    #             "pfeed": {
+    #                 "handlers": ["stream_handler"],  # Remove file handler
+    #                 "level": "WARNING",
+    #             },
+    #         },
+    #     }
+    # )
 
 
 @pytest.fixture(scope="function", autouse=True)

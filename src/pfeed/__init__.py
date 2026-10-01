@@ -31,6 +31,11 @@ if TYPE_CHECKING:
     from pfeed.sources.yahoo_finance import (
         YahooFinance as YFinance,
     )
+    from pfeed.sources.crypto_hft_data import (
+        CryptoHftData,
+        CryptoHftData as CHD,  # noqa: N817
+        CryptoHftData as CryptoHFTData
+    )
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.utils.aliases import ALIASES as alias  # noqa: N811
     # from pfeed.sources.financial_modeling_prep import (
@@ -88,6 +93,10 @@ def __getattr__(name: str):
         from pfeed.sources.bybit import Bybit
 
         return Bybit
+    elif name.lower() in ("cryptohftdata", "chd"):
+        from pfeed.sources.crypto_hft_data import CryptoHftData
+
+        return CryptoHftData
     elif name.lower() == "pfund":
         from pfeed.sources.pfund import PFund
 
@@ -107,11 +116,14 @@ def __getattr__(name: str):
 
 
 __all__ = (
+    "CHD",
     "IB",
     "IBKR",
     "YF",
     "AlphaFund",
     "Bybit",
+    "CryptoHFTData",
+    "CryptoHftData",
     "DataEngine",
     "FXMacroData",
     "IOConfig",

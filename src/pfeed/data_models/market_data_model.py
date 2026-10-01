@@ -12,7 +12,7 @@ from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 
 class MarketDataModel(TimeBasedDataModel):
-    data_handler_class: ClassVar[type[MarketDataHandler]] = MarketDataHandler
+    DataHandler: ClassVar[type[MarketDataHandler]] = MarketDataHandler
 
     env: Environment | str
     product: BaseProduct

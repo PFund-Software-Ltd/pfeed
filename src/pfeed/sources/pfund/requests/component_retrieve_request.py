@@ -4,8 +4,8 @@ from typing import Any
 
 from pydantic import Field
 
-from pfeed._io.io_config import IOConfig
 from pfeed.enums import ExtractType
+from pfeed.io.io_config import IOConfig
 from pfeed.sources.pfund.requests.component_base_request import (
     PFundComponentFeedBaseRequest,
 )

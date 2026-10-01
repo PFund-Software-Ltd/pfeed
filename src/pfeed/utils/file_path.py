@@ -1,7 +1,7 @@
 # VIBE-CODED
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
     from cloudpathlib import CloudPath
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfeed.utils.hf_path import HfPath
 
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 class FilePath:
@@ -27,7 +27,8 @@ class FilePath:
     """
 
     # Cloud schemes supported by cloudpathlib
-    _CLOUDPATH_SCHEMES = frozenset({"s3", "gs", "az", "file"})
+    _CLOUDPATH_SCHEMES = frozenset({"s3", "gs", "az"})
+    _LOCAL_FILE_SCHEME = "file"
     # HuggingFace scheme
     _HF_SCHEME = "hf"
 
@@ -52,6 +53,13 @@ class FilePath:
 
             if scheme == self._HF_SCHEME:
                 self._path = HfPath(path_str, **kwargs)
+            elif scheme == self._LOCAL_FILE_SCHEME:
+                parsed = urlparse(path_str)
+                if parsed.netloc not in {"", "localhost"}:
+                    raise ValueError(
+                        f"file URI must refer to the local machine, got {path_str!r}"
+                    )
+                self._path = Path(unquote(parsed.path))
             elif scheme in self._CLOUDPATH_SCHEMES:
                 self._path = CloudPath(path_str)
             else:
@@ -98,6 +106,12 @@ class FilePath:
     def is_remote(self) -> bool:
         """Check if this is a remote path (cloud or HuggingFace)."""
         return self.is_cloud or self.is_hf
+
+    @property
+    def is_local(self) -> bool:
+        """Check if this is a local path, including a normalized file URI."""
+        scheme = self._get_scheme(str(self._path))
+        return scheme is None or scheme == self._LOCAL_FILE_SCHEME
 
     @property
     def schemeless(self) -> str:
@@ -150,16 +164,16 @@ class FilePath:
     def __str__(self):
         return str(self._path)
 
-    def __repr__(self):
-        return f"FilePath({str(self._path)!r})"
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({str(self._path)!r})"
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: Any) -> Self:
         """Support path / 'subpath' syntax."""
-        return FilePath(self._path / other)
+        return type(self)(self._path / other)
 
     def __rtruediv__(self, other):
         """Support 'base' / path syntax."""
-        return FilePath(other) / self
+        return type(self)(other) / self
 
     def __eq__(self, other):
         if isinstance(other, FilePath):

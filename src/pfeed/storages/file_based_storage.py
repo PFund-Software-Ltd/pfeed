@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     import pyarrow.fs as pa_fs
 
-    from pfeed._io.io_config import IOConfig
+    from pfeed.io.io_config import IOConfig
 
 from abc import abstractmethod
 from pathlib import Path
@@ -18,6 +18,7 @@ from pfeed.utils.file_path import FilePath
 class FileBasedStorage(BaseStorage):
     # EXTEND: add more file-based formats, iceberg, etc.
     SUPPORTED_IO_FORMATS: ClassVar[list[IOFormat]] = [
+        IOFormat.BLOB,
         IOFormat.PARQUET,
         IOFormat.DELTALAKE,
     ]

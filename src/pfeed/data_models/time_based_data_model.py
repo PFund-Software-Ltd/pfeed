@@ -13,7 +13,7 @@ from pfeed.data_models.base_data_model import BaseDataModel
 
 
 class TimeBasedDataModel(BaseDataModel):
-    data_handler_class: ClassVar[type[TimeBasedDataHandler]]
+    DataHandler: ClassVar[type[TimeBasedDataHandler]]
 
     start_date: datetime.date = Field(description="Start of the date range.")
     end_date: datetime.date = Field(

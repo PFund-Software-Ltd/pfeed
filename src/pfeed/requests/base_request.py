@@ -4,9 +4,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pfeed._io.io_config import IOConfig
-from pfeed._sinks.sink_config import SinkConfig
 from pfeed.enums import DataLayer, DataSource, ExtractType
+from pfeed.io.io_config import IOConfig
+from pfeed.sinks.sink_config import SinkConfig
 from pfeed.storages.storage_config import StorageConfig
 
 

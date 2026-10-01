@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
 
-    from pfeed._io.base_io import BaseIO
-    from pfeed._io.io_config import IOConfig
-    from pfeed._sinks.base_sink import BaseSink
-    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.feeds.streaming_feed_mixin import StreamingData
+    from pfeed.io.base_io import BaseIO
+    from pfeed.io.io_config import IOConfig
+    from pfeed.sinks.base_sink import BaseSink
+    from pfeed.sinks.sink_config import SinkConfig
     from pfeed.storages.database_storage import DatabaseURI
     from pfeed.storages.storage_config import StorageConfig
 
@@ -25,8 +25,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from pfeed.data_handlers.base_data_handler import BaseDataMetadata, SourcePath
 from pfeed.enums import DataLayer, DataSink, IOFormat
 from pfeed.utils.file_path import FilePath
-
-__all__ = []
 
 
 class StorageMetadata(BaseModel):
@@ -219,7 +217,7 @@ class BaseStorage:
         return self
 
     def _initialize_data_handler(self) -> None:
-        DataHandler: type[BaseDataHandler] = self.data_model.data_handler_class
+        DataHandler: type[BaseDataHandler] = self.data_model.DataHandler
         self._data_handler = DataHandler(
             data_path=self.data_path,
             data_layer=self.data_layer,

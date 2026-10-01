@@ -1,6 +1,6 @@
 [project]
 name = "pfeed"
-version = "0.0.16"
+version = "0.0.20"
 description = "Data pipeline for algo-trading, getting and storing both real-time and historical data made easy."
 license = "Apache-2.0"
 authors = [
@@ -18,43 +18,39 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Software Development :: Libraries",
     "Typing :: Typed",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    # "Programming Language :: Python :: 3.15",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
-    "pfund>=0.0.19",
+    "pfund==0.0.25",  # use >= only when pfund is stable
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
-    "polars>=1.41.2 ; sys_platform != 'emscripten'",
-    "pyarrow>=24.0.0 ; sys_platform != 'emscripten'",
-    "pandera>=0.31.1",
-    "msgspec>=0.21.1 ; sys_platform != 'emscripten'",
-    "pydantic>=2.13.4 ; sys_platform != 'emscripten'",
-    "narwhals>=2.22.1 ; sys_platform != 'emscripten'",
+    "polars>=1.44.2 ; sys_platform != 'emscripten'",
+    "pyarrow>=25.0.1 ; sys_platform != 'emscripten'",
+    "pandera>=0.33.1",
+    "msgspec>=0.22.0 ; sys_platform != 'emscripten'",
+    "pydantic>=2.13.5 ; sys_platform != 'emscripten'",
+    "narwhals>=2.26.0 ; sys_platform != 'emscripten'",
     "zstandard>=0.22.0",
-    "cloudpathlib>=0.24.0",
+    "cloudpathlib>=0.25.0",
     "beautifulsoup4>=4.12.3",
+    "ray[default]>=2.58.0 ; sys_platform != 'emscripten'",
+    "pyzmq>=27.2.0 ; sys_platform != 'emscripten'",
+    "deltalake>=1.6.6 ; sys_platform != 'emscripten'"
 ]
 
 [project.optional-dependencies]
-core = [
-    "ray[default]>=2.55.1 ; sys_platform != 'emscripten'",
-    "pyzmq>=27.1.0 ; sys_platform != 'emscripten'",
-    "deltalake>=1.6.0 ; sys_platform != 'emscripten'",
-]
-yfinance = ["yfinance>=1.4.1"]
+yfinance = ["yfinance>=1.7.0"]
 cryptohftdata = ["cryptohftdata>=0.4.0"]
-hf = ["huggingface-hub>=1.19.0"]
-prefect = ["prefect>=3.7.4"]
-pandas = ["pandas>=2.2.3"]
-dask = ["dask[complete,dataframe]>=2026.6.0"]
-spark = ["pyspark[connect,pandas-on-spark,sql]>=4.1.2"]
-daft = ["daft>=0.7.15", "narwhals-daft>=0.4.1"]
-duckdb = ["duckdb>=1.5.3"]
-lancedb = ["lancedb>=0.33.0"]
+huggingface = ["huggingface-hub>=1.33.0"]
+prefect = ["prefect>=3.8.7"]
+pandas = ["pandas>=3.0.3"]
+duckdb = ["duckdb>=1.5.6"]
+lancedb = ["lancedb>=0.39.0"]
 # s3 = ["minio>=7.2.20", "cloudpathlib[s3]>=0.24.0"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # fmp = ["fmp-api-client>=0.0.1"]
@@ -75,8 +71,13 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.11.21,<0.12.0"]
+requires = ["uv_build>=0.12.21,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv]
+# FIXME: set it back to "14 days" when the package is stable
+exclude-newer = "0 days"
+exclude-newer-package = { pfund = false, pfund-kit = false }
 
 [tool.pyright]
 # typeCheckingMode = "basic"
@@ -97,12 +98,12 @@ reportImplicitOverride = false
 module-name = "pfeed"
 module-root = "src"
 
-[tool.pytest.ini_options]
+[tool.pytest]
 markers = [
     "smoke: Run the most important tests",
     "rate_limit: Run tests that can be rate-limited, e.g. calling Yahoo Finance API",
 ]
-addopts = [
-    "--strict-markers",
-    "--no-header",
-]
+# strict = true
+strict_markers = true
+addopts = ["--no-header", "--import-mode=importlib"]
+testpaths = ["tests"]

@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pyarrow.parquet import FileMetaData as PyArrowParquetFileMetaData
 
-    from pfeed._io.base_io import MetadataDict
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+    from pfeed.io.base_io import MetadataDict
     from pfeed.utils.file_path import FilePath
 
 import json
@@ -16,7 +16,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from pfeed._io.file_io import FileIO
+from pfeed.io.file_io import FileIO
 
 
 class ParquetIO(FileIO):
@@ -80,7 +80,9 @@ class ParquetIO(FileIO):
         """This only writes metadata to the table schema, not to the file.
         You must call _write_pyarrow_table to actually write the metadata to the file.
         """
-        metadata_json = json.dumps(metadata.model_dump(mode="json") if metadata else {})
+        metadata_json = json.dumps(
+            metadata.model_dump(mode="json", fallback=str) if metadata else {}
+        )
         schema = data.schema.with_metadata({b"metadata_json": metadata_json})
         return data.replace_schema_metadata(schema.metadata)
 

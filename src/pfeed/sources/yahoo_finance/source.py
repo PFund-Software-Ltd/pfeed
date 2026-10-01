@@ -21,11 +21,9 @@ from pfeed.sources.data_provider_source import DataProviderSource
 from pfeed.sources.source_metadata import SourceMetadata
 from pfeed.sources.yahoo_finance.stream_api import StreamAPI
 
-__all__ = ["YahooFinanceSource"]
-
 
 class YahooFinanceSource(DataProviderSource):
-    NAME: ClassVar[DataSource] = DataSource.YAHOO_FINANCE
+    name: ClassVar[DataSource] = DataSource.YAHOO_FINANCE
     METADATA: ClassVar[SourceMetadata] = SourceMetadata(
         data_origin="https://www.csidata.com",
         data_categories={

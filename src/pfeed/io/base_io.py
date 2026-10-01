@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
 if TYPE_CHECKING:
     from pfeed.data_handlers.base_data_handler import SourcePath
@@ -12,8 +12,11 @@ if TYPE_CHECKING:
 
 from abc import ABC, abstractmethod
 
+from pfeed.enums.io_format import IOFormat
+
 
 class BaseIO(ABC):
+    IO_FORMAT: ClassVar[IOFormat | None] = None
     SUPPORTS_PARALLEL_WRITES: bool = (
         False  # if supports parallel writes to the same destination
     )
@@ -84,7 +87,7 @@ class BaseIO(ABC):
                 If False, returns True if FileIO is anywhere in the inheritance chain.
                 e.g. DuckDBIO(DatabaseIO, FileIO) -> strict=True returns False, strict=False returns True.
         """
-        from pfeed._io.file_io import FileIO
+        from pfeed.io.file_io import FileIO
 
         if strict:
             # FileIO is concrete (used directly for the BLOB format), so it counts
@@ -101,7 +104,7 @@ class BaseIO(ABC):
             strict: If True, only returns True if TableIO is the first parent class.
                 If False, returns True if TableIO is anywhere in the inheritance chain.
         """
-        from pfeed._io.table_io import TableIO
+        from pfeed.io.table_io import TableIO
 
         if strict:
             return cls.__bases__[0] is TableIO
@@ -116,7 +119,7 @@ class BaseIO(ABC):
             strict: If True, only returns True if DatabaseIO is the first parent class.
                 If False, returns True if DatabaseIO is anywhere in the inheritance chain.
         """
-        from pfeed._io.database_io import DatabaseIO
+        from pfeed.io.database_io import DatabaseIO
 
         if strict:
             return cls.__bases__[0] is DatabaseIO

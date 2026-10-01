@@ -17,7 +17,7 @@ class StreamingMessageSchema:
         + subclass message fields
         + asset-type-specific flattened spec fields
 
-    extra_data is intentionally dropped from the schema. _standardize_streaming_msg
+    extra is intentionally dropped from the schema. _standardize_streaming_msg
     must drop it unconditionally; add explicit typed columns when a real use case
     appears.
     """

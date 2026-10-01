@@ -4,12 +4,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pfeed._io.deltalake_io import DeltaLakeIO
-    from pfeed._io.table_io import TablePath
+    from pfeed.io.deltalake_io import DeltaLakeIO
+    from pfeed.io.table_io import TablePath
 
 import pyarrow as pa
 
-from pfeed._sinks.base_sink import BaseSink
+from pfeed.sinks.base_sink import BaseSink
 
 
 class DeltaLakeSink(BaseSink):

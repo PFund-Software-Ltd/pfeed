@@ -5,7 +5,11 @@ from pfeed.sources.base_source import BaseSource
 
 
 class AlphaFundSource(BaseSource):
-    NAME: ClassVar[DataSource] = DataSource.ALPHAFUND
+    name: ClassVar[DataSource] = DataSource.ALPHAFUND
 
     def get_data_categories(self) -> list[DataCategory]:
-        return [DataCategory.CHAT_DATA]
+        return [
+            DataCategory.FUND_DATA,
+            DataCategory.AGENT_DATA,
+            DataCategory.CHAT_DATA,
+        ]

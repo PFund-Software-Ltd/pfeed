@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import ClassVar
 
 from pfeed.data_models.base_data_model import BaseDataModel
-from pfeed.sources.pfund.engine_data_handler import EngineDataHandler
+from pfeed.sources.pfund.engine_data_handler import PFundEngineDataHandler
 
 
-class EngineDataModel(BaseDataModel):
-    data_handler_class: ClassVar[type[EngineDataHandler]] = EngineDataHandler
+class PFundEngineDataModel(BaseDataModel):
+    DataHandler: ClassVar[type[PFundEngineDataHandler]] = PFundEngineDataHandler

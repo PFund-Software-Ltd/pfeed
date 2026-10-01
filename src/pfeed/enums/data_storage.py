@@ -16,6 +16,7 @@ class FileBasedDataStorage(StrEnum):
 
 
 class DatabaseDataStorage(StrEnum):
+    SQLITE = "SQLITE"
     DUCKDB = "DUCKDB"
     LANCEDB = "LANCEDB"
     # POSTGRESQL = 'POSTGRESQL'
@@ -24,6 +25,7 @@ class DatabaseDataStorage(StrEnum):
 class DataStorage(StrEnum):
     CACHE = FileBasedDataStorage.CACHE
     LOCAL = FileBasedDataStorage.LOCAL
+    SQLITE = DatabaseDataStorage.SQLITE
     DUCKDB = DatabaseDataStorage.DUCKDB
     LANCEDB = DatabaseDataStorage.LANCEDB
     HUGGINGFACE = HF = FileBasedDataStorage.HUGGINGFACE
@@ -44,6 +46,10 @@ class DataStorage(StrEnum):
             from pfeed.storages.cache_storage import CacheStorage
 
             return CacheStorage
+        elif self == DataStorage.SQLITE:
+            from pfeed.storages.sqlite_storage import SQLiteStorage
+
+            return SQLiteStorage
         elif self == DataStorage.DUCKDB:
             from pfeed.storages.duckdb_storage import DuckDBStorage
 

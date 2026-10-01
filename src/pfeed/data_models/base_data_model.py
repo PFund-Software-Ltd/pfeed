@@ -13,10 +13,10 @@ from pfeed.sources.base_source import BaseSource
 class BaseDataModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    data_handler_class: ClassVar[type[BaseDataHandler]]
+    DataHandler: ClassVar[type[BaseDataHandler]]
 
     data_source: BaseSource
-    data_origin: str
+    data_origin: str = ""
 
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:

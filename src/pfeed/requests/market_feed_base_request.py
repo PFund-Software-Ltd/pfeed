@@ -5,10 +5,10 @@ from pfund.entities.products.product_base import BaseProduct
 from pfund.enums.env import Environment
 from pydantic import Field, field_validator, model_validator
 
-from pfeed._io.io_config import IOConfig
-from pfeed._sinks.sink_config import SinkConfig
 from pfeed.enums import DataLayer
+from pfeed.io.io_config import IOConfig
 from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
+from pfeed.sinks.sink_config import SinkConfig
 from pfeed.storages.storage_config import StorageConfig
 
 MIN_TARGET_RESOLUTION = Resolution("1d")

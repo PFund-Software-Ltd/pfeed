@@ -3,8 +3,8 @@ from typing import Any, Literal
 from pfund.datas.resolution import Resolution
 from pydantic import Field
 
-from pfeed._io.io_config import IOConfig
 from pfeed.enums import DataLayer, ExtractType
+from pfeed.io.io_config import IOConfig
 from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
 from pfeed.storages.storage_config import StorageConfig
 

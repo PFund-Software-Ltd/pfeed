@@ -8,8 +8,14 @@ if TYPE_CHECKING:
     from ray.util.queue import Queue
 
 import logging
+import threading
 from contextlib import contextmanager
 from logging.handlers import QueueHandler, QueueListener
+
+# Callers reach `setup_ray` from worker threads, so the check and the init have
+# to be one step: two threads finding Ray uninitialized both go on to start it,
+# and the one that gets there second fails the `ray.init` twice assertion.
+_INIT_LOCK = threading.Lock()
 
 
 def get_ray_num_cpus(self) -> int:
@@ -29,22 +35,35 @@ def setup_ray():
     import ray
     from pfund_kit.style import RichColor, TextStyle, cprint
 
-    if not ray.is_initialized():
-        cprint(
-            f"Auto-initializing Ray with {os.cpu_count()} CPUs",
-            style=TextStyle.BOLD + RichColor.YELLOW,
-        )
-        ray.init(num_cpus=os.cpu_count())
-        atexit.register(
-            lambda: ray.shutdown()
-        )  # useful in jupyter notebook environment
+    with _INIT_LOCK:
+        if not is_ray_initialized():
+            cprint(
+                f"Auto-initializing Ray with {os.cpu_count()} CPUs",
+                style=TextStyle.BOLD + RichColor.YELLOW,
+            )
+            ray.init(num_cpus=os.cpu_count())
+            atexit.register(
+                shutdown_ray, wait_for_processes=True
+            )  # useful in jupyter notebook environment
 
 
-def shutdown_ray():
+def is_ray_initialized() -> bool:
+    import sys
+
+    # Ray cannot be running if nothing imported it; skip the slow import.
+    if "ray" not in sys.modules:
+        return False
     import ray
 
-    if ray.is_initialized():
-        ray.shutdown()
+    return ray.is_initialized()
+
+
+def shutdown_ray(wait_for_processes: bool = False):
+    if not is_ray_initialized():
+        return
+    import ray
+
+    ray.shutdown(wait_for_processes=wait_for_processes)
 
 
 def setup_logger_in_ray_task(logger_name: str, log_queue: Queue) -> logging.Logger:

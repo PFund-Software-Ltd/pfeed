@@ -3,38 +3,49 @@ authors = ["softwareentrepreneer <softwareentrepreneer+pfeed@gmail.com>"]
 channels = ["conda-forge"]
 name = "pfeed"
 platforms = ["osx-arm64", "linux-64"]
-# NOTE: this depends on the lock version used in setup-pixi in ci.yml
-# currently the max lock-version supported is 6
-requires-pixi = "<=0.67.2"  # command: pixi workspace requires-pixi set "<=0.67.2"
+# NOTE: should match with setup-pixi in ci.yml
+requires-pixi = ">=0.81.0,<0.82.0"
+# FIXME: set it back to "14 days" when the package is stable
+exclude-newer = "0d"
+
+[pypi-exclude-newer]
+afterpython = "0d"
+pfund = "0d"
+pfund-kit = "0d"
 
 [tasks]
 
 [tasks.test-all]
 depends-on = [
-  { task = "test", environment = "py311" },
   { task = "test", environment = "py312" },
   { task = "test", environment = "py313" },
+  { task = "test", environment = "py314" },
+  # { task = "test", environment = "py315" },
 ]
 
 [dependencies]
 
 [pypi-dependencies]
-pfund = ">=0.0.19"
-polars = ">=1.41.2"
-pyarrow = ">=24.0.0"
-pandera = ">=0.31.1"
-msgspec = ">=0.21.1"
-pydantic = ">=2.13.4"
-narwhals = ">=2.22.1"
+pfund = "==0.0.25"  # use >= only when pfund is stable
+polars = ">=1.44.2"
+pyarrow = ">=25.0.1"
+pandera = ">=0.33.1"
+msgspec = ">=0.22.0"
+pydantic = ">=2.13.5"
+narwhals = ">=2.26.0"
 zstandard = ">=0.22.0"  # REVIEW: this is included in python 3.14
-cloudpathlib = ">=0.24.0"
+cloudpathlib = ">=0.25.0"
 beautifulsoup4 = ">=4.12.3"
+ray = { version = ">=2.58.0", extras = ["default"] }
+pyzmq = ">=27.2.0"
+deltalake = ">=1.6.6"
 
 [environments]
-default = ["py311", "dev", "optional"]
-py311 = ["py311", "test", "optional"]
+default = ["py312", "dev", "test", "optional"]
 py312 = ["py312", "test", "optional"]
 py313 = ["py313", "test", "optional"]
+py314 = ["py314", "test", "optional"]
+# py315 = ["py315", "test", "optional"]
 
 [activation.env]
 JAVA_HOME = "$CONDA_PREFIX/lib/jvm"
@@ -42,39 +53,34 @@ JDK_HOME  = "$JAVA_HOME"
 PATH      = "$JAVA_HOME/bin:$PATH"
 
 [feature.optional.dependencies]
-openjdk = "21.*"  # for spark
+# openjdk = "21.*"  # for spark
 libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
-ray = { version = ">=2.55.1", extras = ["default"] }
-pyzmq = ">=27.1.0"
-deltalake = ">=1.6.0"
-yfinance = ">=1.4.1"
-huggingface-hub = ">=1.19.0"
-prefect = ">=3.7.4"
-pandas = ">=2.2.3,<3"  # TODO: pandas 3 breaks everything, e.g. pyspark. lift it when fixed
-dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
-pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }
-daft = ">=0.7.15"
-narwhals-daft = ">=0.4.1"
-duckdb = ">=1.5.3"
-lancedb = ">=0.33.0"
+yfinance = ">=1.7.0"
+huggingface-hub = ">=1.33.0"
+prefect = ">=3.8.7"
+pandas = ">=3.0.3"
+duckdb = ">=1.5.6"
+lancedb = ">=0.39.0"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
+# dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
+# pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }
+# daft = ">=0.7.15"
+# narwhals-daft = ">=0.4.1"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-afterpython = ">=0.3.16"
-basedpyright = ">=1.39.7"
-marimo = { version = ">=0.23.9", extras = ["recommended", "lsp"] }
-jupytext = ">=1.19.3"
-jupyterlab = ">=4.5.7"
-pandas-stubs = ">=2.2.3.250527"
-financetoolkit = ">=2.0.7"
-defeatbeta-api = ">=0.0.43"
+pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
+# TEMP
+# pfund = { path = "../pfund", editable = true }
+afterpython = ">=0.4.0"
+pandas-stubs = ">=3.0.3.260530"
+financetoolkit = ">=2.2.0"
 
 [feature.test.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-pytest = ">=9.1.0"
+pytest = ">=9.1.1"
 pytest-cov = ">=7.1.0"
 pytest-mock = ">=3.15.1"
 pytest-xdist = ">=3.8.0"
@@ -87,11 +93,14 @@ test-rate-limit = "pytest -m 'rate_limit'"
 test-new = "pytest --record-mode=all"  # record new interactions, useful to update recordings in case data formats returned have changed
 test-ci = "pytest --record-mode=none"  # fail a test if no recording is found
 
-[feature.py311.dependencies]
-python = "3.11.*"
-
 [feature.py312.dependencies]
 python = "3.12.*"
 
 [feature.py313.dependencies]
 python = "3.13.*"
+
+[feature.py314.dependencies]
+python = "3.14.*"
+
+# [feature.py315.dependencies]
+# python = "3.15.*"

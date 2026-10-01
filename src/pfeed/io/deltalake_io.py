@@ -13,7 +13,7 @@ import time
 import polars as pl
 from deltalake import DeltaTable, write_deltalake
 
-from pfeed._io.table_io import TableIO, TablePath
+from pfeed.io.table_io import TableIO, TablePath
 
 
 class DeltaLakeIO(TableIO):

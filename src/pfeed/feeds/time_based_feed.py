@@ -22,11 +22,9 @@ from pfund_kit.style import RichColor, TextStyle
 
 from pfeed.feeds.base_feed import BaseFeed
 
-__all__ = []
-
 
 class TimeBasedFeed(BaseFeed, ABC):
-    data_model_class: ClassVar[type[TimeBasedDataModel]]
+    DataModel: ClassVar[type[TimeBasedDataModel]]
     date_columns_in_raw_data: ClassVar[list[str]]
     DATE_COL_IN_CLEANED_DATA: ClassVar[str] = "date"
     DATE_COL_IN_RAW_DATA: ClassVar[str] = "_pfeed_date"

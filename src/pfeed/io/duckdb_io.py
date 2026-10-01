@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     import pyarrow as pa
     from duckdb import DuckDBPyConnection
 
-    from pfeed._io.base_io import MetadataDict
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
+    from pfeed.io.base_io import MetadataDict
 
 import json
 
@@ -18,9 +18,9 @@ import narwhals as nw
 import polars as pl
 import pyarrow.fs as pa_fs
 
-from pfeed._io.database_io import DatabaseIO, DBPath
-from pfeed._io.file_io import FileIO
 from pfeed.enums import TimestampPrecision
+from pfeed.io.database_io import DatabaseIO, DBPath
+from pfeed.io.file_io import FileIO
 
 
 class DuckDBIO(DatabaseIO, FileIO):
@@ -156,6 +156,24 @@ class DuckDBIO(DatabaseIO, FileIO):
                 SELECT * FROM data WHERE 1=0
             """)
 
+            # BY NAME safely handles reordered columns, but DuckDB may fill a
+            # missing target column with NULL/default. Require the exact same
+            # column set so schema drift cannot be accepted silently.
+            source_columns = list(nw.from_native(data).collect_schema().keys())
+            target_columns = [
+                row[0]
+                for row in conn.execute(
+                    f"DESCRIBE {schema_qualified_table_name}"
+                ).fetchall()
+            ]
+            if set(source_columns) != set(target_columns):
+                missing = sorted(set(target_columns) - set(source_columns))
+                extra = sorted(set(source_columns) - set(target_columns))
+                raise ValueError(
+                    f"Schema mismatch for {schema_qualified_table_name}: "
+                    + f"missing columns={missing}, extra columns={extra}"
+                )
+
             # Delete any overlapping data before inserting
             if delete_where:
                 conn.execute(f"""
@@ -163,8 +181,10 @@ class DuckDBIO(DatabaseIO, FileIO):
                     WHERE {delete_where}
                 """)
 
+            # Match by name so a reordered input cannot silently swap values
+            # between same-typed columns.
             conn.execute(
-                f"INSERT INTO {schema_qualified_table_name} SELECT * FROM data"
+                f"INSERT INTO {schema_qualified_table_name} BY NAME SELECT * FROM data"
             )
             conn.execute("COMMIT")
         except Exception as exc:
@@ -210,7 +230,12 @@ class DuckDBIO(DatabaseIO, FileIO):
                 f"Failed to write metadata (type={type(metadata)}) ({db_path=}): {exc}"
             ) from exc
 
-    def read(self, db_path: DBPath, where: str | None = None) -> pl.LazyFrame | None:
+    def read(
+        self,
+        db_path: DBPath,
+        where: str | None = None,
+        params: tuple[Any, ...] = (),
+    ) -> pl.LazyFrame | None:
         """Read a table from DuckDB, optionally filtered.
 
         Args:
@@ -227,7 +252,7 @@ class DuckDBIO(DatabaseIO, FileIO):
                 sql = f"SELECT * FROM {schema_qualified_table_name}"
                 if where:
                     sql += f" WHERE {where}"
-                result = conn.execute(sql)
+                result = conn.execute(sql, params)
                 # REVIEW: result.pl(lazy=True) returns a LazyFrame backed by the DuckDB result.
                 # Any pushdown op (e.g. .head(1), .filter(...).collect()) triggers:
                 #   INTERNAL Error: Attempted to dereference shared_ptr that is NULL!

@@ -8,8 +8,8 @@ if TYPE_CHECKING:
 
 import psycopg
 
-from pfeed._io.database_io import DatabaseIO
 from pfeed.enums import TimestampPrecision
+from pfeed.io.database_io import DatabaseIO
 
 
 # TODO

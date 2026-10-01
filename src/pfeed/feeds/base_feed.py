@@ -5,16 +5,17 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 if TYPE_CHECKING:
+    from pfund_kit.logging.loggers import ColoredLogger
     from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue
 
-    from pfeed._io.io_config import IOConfig
-    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult
+    from pfeed.io.io_config import IOConfig
     from pfeed.requests.base_request import BaseRequest
+    from pfeed.sinks.sink_config import SinkConfig
     from pfeed.sources.base_source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.storages.storage_config import StorageConfig
@@ -25,11 +26,9 @@ from abc import ABC, abstractmethod
 
 from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
 
-__all__ = []
-
 
 class BaseFeed(ABC):
-    data_model_class: ClassVar[type[BaseDataModel]]
+    DataModel: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
 
     def __init__(self, pipeline_mode: bool = False, num_workers: int | None = None):
@@ -44,7 +43,9 @@ class BaseFeed(ABC):
 
         setup_logging()
         self.data_source: BaseSource = self._create_data_source()
-        self.logger: logging.Logger = logging.getLogger(f"pfeed.{self.name.lower()}")
+        self.logger: ColoredLogger = cast(
+            "ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}")
+        )
         self._pipeline_mode = pipeline_mode
         self._dataflows: dict[BaseRequest, list[DataFlow]] = {}
         # Flat list of result-bearing dataflows from the most recent run.
@@ -71,9 +72,26 @@ class BaseFeed(ABC):
     def create_data_model(self, *args: Any, **kwargs: Any) -> BaseDataModel:
         pass
 
-    @abstractmethod
-    def _create_batch_dataflows(self, *args: Any, **kwargs: Any):
-        pass
+    def _create_batch_dataflows(
+        self,
+        extract_func: Callable[..., Any],
+    ) -> list[DataFlow]:
+        """Creates a batch dataflow for the current request"""
+        from pfund_kit.style import RichColor, TextStyle
+
+        request = self._get_current_request()
+        self.logger.debug(
+            f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
+        )
+        data_model = self._create_data_model_from_request(request)
+        faucet = self._create_faucet(
+            data_source=data_model.data_source,
+            extract_func=extract_func,
+            extract_type=request.extract_type,
+        )
+        dataflows = [self._create_dataflow(faucet=faucet, data_model=data_model)]
+        self._dataflows[request] = dataflows
+        return dataflows
 
     @abstractmethod
     def run(self, **prefect_kwargs: Any) -> Any:
@@ -144,9 +162,6 @@ class BaseFeed(ABC):
         assert num_workers > 0, "num_workers must be greater than 0"
         num_cpus: int = cast(int, os.cpu_count())
         self._num_workers = min(num_workers, num_cpus)
-        from pfeed.utils.ray import setup_ray
-
-        setup_ray()
 
     def _set_running(self, is_running: bool) -> None:
         if self.is_running() and is_running:
@@ -201,9 +216,9 @@ class BaseFeed(ABC):
             and request.is_streaming() != self._requests[-1].is_streaming()
         ):
             raise ValueError(
-                f"cannot mix streaming and batch requests in one pipeline: "
-                f"{request.extract_type} request is incompatible with the queued "
-                f"{self._requests[-1].extract_type} request"
+                "cannot mix streaming and batch requests in one pipeline: "
+                + f"{request.extract_type} request is incompatible with the queued "
+                + f"{self._requests[-1].extract_type} request"
             )
         self._requests.append(request)
 
@@ -270,7 +285,7 @@ class BaseFeed(ABC):
         else:
             storage_config = self._normalize_storage_config(storage_config)
 
-        from pfeed._io.io_config import IOConfig
+        from pfeed.io.io_config import IOConfig
 
         # Only a LIVE stream writes through a sink. A replaying stream reads FROM
         # storage, so it takes the read path (default io, no write sink) just like a
@@ -279,7 +294,7 @@ class BaseFeed(ABC):
         streaming_write = request.is_streaming() and not request.is_replaying()
 
         if streaming_write:
-            from pfeed._sinks.sink_config import SinkConfig
+            from pfeed.sinks.sink_config import SinkConfig
 
             sink_config = self._normalize_sink_config(sink_config or SinkConfig())
             io_format_associated_with_sink = sink_config.sink.io_format
@@ -324,6 +339,34 @@ class BaseFeed(ABC):
             raise ValueError(f"Unknown extract type: {request.extract_type}")
         return default_transformations
 
+    def _get_default_transformations_for_download(
+        self,
+        _request: BaseRequest,
+    ) -> list[Callable[..., Any]]:
+        from pfeed._etl.base import convert_dataframe
+        from pfeed.config import get_config
+        from pfeed.utils import lambda_with_name
+
+        config = get_config()
+        return [
+            lambda_with_name(
+                "convert_to_user_df",
+                lambda df: convert_dataframe(df, data_tool=config.data_tool),
+            ),
+        ]
+
+    def _get_default_transformations_for_retrieve(
+        self,
+        _request: BaseRequest,
+    ) -> list[Callable[..., Any]]:
+        return self._get_default_transformations_for_download(_request)
+
+    def _get_default_transformations_for_stream(
+        self,
+        _request: BaseRequest,
+    ) -> list[Callable[..., Any]]:
+        return []
+
     def _finalize_run(self) -> None:
         # run-time method: finalize EVERY queued request, not just the latest.
         # In pipeline mode multiple download()/retrieve()/stream() calls accumulate
@@ -360,9 +403,11 @@ class BaseFeed(ABC):
     def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> list[DataFlow]:
         from pfund_kit.utils.progress_bar import ProgressBar, track
 
-        from pfeed.utils import is_prefect_running
+        from pfeed.config import get_config
+        from pfeed.utils import is_using_prefect
 
-        use_prefect = is_prefect_running()
+        use_prefect = is_using_prefect()
+        disable_progress_bar = not get_config().show_progress_bar
         self._prepare_before_run()
 
         def _run_dataflow(dataflow: DataFlow) -> DataFlowResult:
@@ -383,7 +428,10 @@ class BaseFeed(ABC):
                 from pfeed.utils.ray import (
                     ray_logging_context,
                     setup_logger_in_ray_task,
+                    setup_ray,
                 )
+
+                setup_ray()
 
                 @ray.remote
                 def ray_task(
@@ -414,6 +462,7 @@ class BaseFeed(ABC):
                         with ProgressBar(
                             total=len(self.dataflows),
                             description=f"Running {self.name} dataflows",
+                            disable=disable_progress_bar,
                         ) as pbar:
                             for dataflow_batch in dataflow_batches:
                                 futures = [
@@ -446,7 +495,9 @@ class BaseFeed(ABC):
                 # shutdown_ray()
             else:
                 for dataflow in track(
-                    self.dataflows, description=f"Running {self.name} dataflows"
+                    self.dataflows,
+                    description=f"Running {self.name} dataflows",
+                    disable=disable_progress_bar,
                 ):
                     try:
                         _ = _run_dataflow(dataflow)

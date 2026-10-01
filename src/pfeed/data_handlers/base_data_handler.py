@@ -4,11 +4,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, assert_never
 
 if TYPE_CHECKING:
+    import polars as pl
     from narwhals.typing import IntoFrame
 
-    from pfeed._io.base_io import BaseIO, MetadataDict
-    from pfeed._sinks.base_sink import BaseSink
     from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.io.base_io import BaseIO, MetadataDict
+    from pfeed.sinks.base_sink import BaseSink
     from pfeed.storages.database_storage import DatabaseURI
 
     IOClassName: TypeAlias = str
@@ -17,9 +18,9 @@ from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, ConfigDict
 
-from pfeed._io.database_io import DBPath
-from pfeed._io.table_io import TablePath
 from pfeed.enums import DataLayer, DataSource, IOType
+from pfeed.io.database_io import DBPath
+from pfeed.io.table_io import TablePath
 from pfeed.utils.file_path import FilePath
 
 SourcePath: TypeAlias = FilePath | TablePath | DBPath
@@ -33,7 +34,7 @@ class BaseDataMetadata(BaseModel):
 
 
 class BaseDataHandler(ABC):
-    metadata_class: ClassVar[type[BaseDataMetadata]]
+    Metadata: ClassVar[type[BaseDataMetadata]]
     PARTITION_COLUMNS: ClassVar[list[str]] = []
     IO_USING_PARTITION_COLUMNS: ClassVar[set[IOClassName]] = set()
 
@@ -73,6 +74,16 @@ class BaseDataHandler(ABC):
     @abstractmethod
     def read(self, **kwargs: Any) -> Any | None:
         pass
+
+    def search(self, **kwargs: Any) -> pl.LazyFrame | None:
+        """Rank stored rows when this handler supports search."""
+        raise NotImplementedError(f"{self.__class__.__name__} does not support search")
+
+    def create_search_index(self, **kwargs: Any) -> None:
+        """Build search indexes when this handler supports them."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support search indexes"
+        )
 
     @abstractmethod
     def _validate_schema(self, data: Any) -> Any:
@@ -134,7 +145,7 @@ class BaseDataHandler(ABC):
         metadata_dict: dict[SourcePath, MetadataDict] = self.io.read_metadata(
             source_paths
         )
-        Metadata = self.metadata_class
+        Metadata = self.Metadata
         metadata = {
             source_path: Metadata(**metadata_value)
             for source_path, metadata_value in metadata_dict.items()

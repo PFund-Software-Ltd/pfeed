@@ -15,7 +15,7 @@ from functools import partial
 
 from pfund.enums.env import Environment
 
-from pfeed._io.io_config import IOConfig
+from pfeed.io.io_config import IOConfig
 from pfeed.config import get_config, setup_logging
 from pfeed.data_models.news_data_model import NewsDataModel
 from pfeed.enums import DataCategory, DataLayer
@@ -36,7 +36,7 @@ how to handle this? handled by metadata?
 
 
 class NewsFeed(TimeBasedFeed, ABC):
-    data_model_class: ClassVar[type[NewsDataModel]] = NewsDataModel
+    DataModel: ClassVar[type[NewsDataModel]] = NewsDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.NEWS_DATA
 
     def create_data_model(

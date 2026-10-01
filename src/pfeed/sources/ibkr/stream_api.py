@@ -1,0 +1,2 @@
+class StreamAPI:
+    pass

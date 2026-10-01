@@ -6,14 +6,20 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
 
-    from pfeed._io.io_config import IOConfig
-    from pfeed._sinks.sink_config import SinkConfig
     from pfeed.engine import DataEngine
+    from pfeed.io.io_config import IOConfig
+    from pfeed.sinks.sink_config import SinkConfig
     from pfeed.sources.alphafund import AlphaFund
     from pfeed.sources.bybit import Bybit
-    from pfeed.sources.crypto_hft_data import CryptoHftData
-    from pfeed.sources.crypto_hft_data import CryptoHftData as CHD  # noqa: N817
-    from pfeed.sources.crypto_hft_data import CryptoHftData as CryptoHFTData
+    from pfeed.sources.ibkr import (
+        InteractiveBrokers,
+    )
+    from pfeed.sources.ibkr import (
+        InteractiveBrokers as IB,  # noqa: N817
+    )
+    from pfeed.sources.ibkr import (
+        InteractiveBrokers as IBKR,  # noqa: N814
+    )
     from pfeed.sources.pfund import PFund
     from pfeed.sources.yahoo_finance import (
         YahooFinance,
@@ -23,6 +29,11 @@ if TYPE_CHECKING:
     )
     from pfeed.sources.yahoo_finance import (
         YahooFinance as YFinance,
+    )
+    from pfeed.sources.crypto_hft_data import (
+        CryptoHftData,
+        CryptoHftData as CHD,  # noqa: N817
+        CryptoHftData as CryptoHFTData
     )
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.utils.aliases import ALIASES as alias  # noqa: N811
@@ -58,11 +69,11 @@ def __getattr__(name: str):
 
         return StorageConfig
     elif name == "IOConfig":
-        from pfeed._io.io_config import IOConfig
+        from pfeed.io.io_config import IOConfig
 
         return IOConfig
     elif name == "SinkConfig":
-        from pfeed._sinks.sink_config import SinkConfig
+        from pfeed.sinks.sink_config import SinkConfig
 
         return SinkConfig
     elif name == "DataEngine":
@@ -73,6 +84,10 @@ def __getattr__(name: str):
         from pfeed.sources.yahoo_finance import YahooFinance
 
         return YahooFinance
+    elif name.lower() in ("interactivebrokers", "ibkr", "ib"):
+        from pfeed.sources.ibkr import InteractiveBrokers
+
+        return InteractiveBrokers
     elif name.lower() == "bybit":
         from pfeed.sources.bybit import Bybit
 
@@ -97,6 +112,8 @@ def __getattr__(name: str):
 
 __all__ = (
     "CHD",
+    "IB",
+    "IBKR",
     "YF",
     "AlphaFund",
     "Bybit",
@@ -104,6 +121,7 @@ __all__ = (
     "CryptoHftData",
     "DataEngine",
     "IOConfig",
+    "InteractiveBrokers",
     "PFund",
     "SinkConfig",
     "StorageConfig",

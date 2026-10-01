@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 if TYPE_CHECKING:
-    from pfeed._io.database_io import DatabaseIO, DBConnection, DBPath
+    import polars as pl
+
+    from pfeed.io.database_io import DatabaseIO, DBConnection, DBPath
 
     DatabaseURI: TypeAlias = str
 
 from abc import ABC, abstractmethod
 
-from pfeed._io.io_config import IOConfig
-from pfeed._sinks.sink_config import SinkConfig
 from pfeed.enums import DataLayer
+from pfeed.io.io_config import IOConfig
+from pfeed.sinks.sink_config import SinkConfig
 from pfeed.storages.base_storage import BaseStorage
 
 
@@ -51,6 +53,27 @@ class DatabaseStorage(BaseStorage, ABC):
     def conn(self) -> DBConnection | None:
         db_path = self._get_db_path()
         return self.io.connect(db_path.db_uri)
+
+    def read(
+        self,
+        where: str | None = None,
+        params: tuple[Any, ...] = (),
+        columns: list[str] | None = None,
+    ) -> pl.LazyFrame | None:
+        if where is None and columns is None:
+            if params:
+                raise ValueError("params cannot be provided without where")
+            return cast("pl.LazyFrame | None", super().read())
+        return cast(
+            "pl.LazyFrame | None",
+            self.data_handler.read(where=where, params=params, columns=columns),
+        )
+
+    def search(self, **kwargs: Any) -> pl.LazyFrame | None:
+        return cast("pl.LazyFrame | None", self.data_handler.search(**kwargs))
+
+    def create_search_index(self, **kwargs: Any) -> None:
+        self.data_handler.create_search_index(**kwargs)
 
     def with_io(self, io_config: IOConfig) -> BaseStorage:
         # database storage should only support one IO format

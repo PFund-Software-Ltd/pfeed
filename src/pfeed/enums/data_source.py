@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pfund.enums.trading_venue import TradingVenue
+from pfund.enums.venue import TradingVenue
 from pfund_kit.utils.text import to_camel_case
 
 

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
 
-    from pfeed._io.duckdb_io import DuckDBIO
+    from pfeed.io.duckdb_io import DuckDBIO
 
 from pfeed.enums import IOFormat
 from pfeed.storages.file_backed_database_storage import FileBackedDatabaseStorage

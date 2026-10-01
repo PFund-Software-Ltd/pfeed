@@ -1,47 +1,34 @@
 from __future__ import annotations
 
-import datetime
-from typing import Any, ClassVar, Literal
+from typing import ClassVar, Literal
 
 from pydantic import Field, field_validator
 
 from pfeed.data_models.base_data_model import BaseDataModel
-from pfeed.sources.pfund.component_data_handler import ComponentDataHandler
-from pfund.datas.resolution import Resolution
-from pfund.enums import ArtifactType, ComponentType, Environment, RunMode
-from pfund.typing import ComponentName
+from pfeed.sources.pfund.component_data_handler import PFundComponentDataHandler
+from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
+from pfund.enums import ArtifactType, ComponentType, Environment
 
 
 class PFundComponentDataModel(BaseDataModel):
-    data_handler_class: ClassVar[type[ComponentDataHandler]] = ComponentDataHandler
+    DataHandler: ClassVar[type[PFundComponentDataHandler]] = PFundComponentDataHandler
 
-    artifact_type: ArtifactType | str
-    extension: Literal[".joblib", ".safetensors", ".py", ".delta"]
+    artifact_type: ArtifactType
+    extension: Literal[
+        ".joblib",  # sklearn model
+        ".safetensors",  # torch/jax model
+        ".py",  # python source code
+        ".delta",  # trading_df delta table
+        ".pth",  # pytorch checkpoint
+        ".pkl",  # jax checkpoint
+    ]
 
     env: Environment | str
     project_name: str
-    # NOTE: run_name is mtflow's run_id (e.g. "run_001") if mtflow is used, otherwise it's "default_run" by default in pfund
     run_name: str
-    # fields from pfund component.to_dict()
-    class_name: str
-    component_name: str
-    data_start: datetime.date
-    data_end: datetime.date
-    resolution: Resolution | str
-    df_form: Literal["wide", "long"]
     component_type: ComponentType | str
-    signal_cols: list[str]
-    # fields for metadata
-    run_mode: RunMode | str
-    signature: tuple[tuple[Any, ...], dict[str, Any]]  # (args, kwargs)
-    config: dict[str, Any]
-    params: dict[str, Any]
-    settings: dict[str, Any]
-    datas: list[dict[str, Any]]
-    strategies: list[ComponentName] = Field(default_factory=list)
-    models: list[ComponentName] = Field(default_factory=list)
-    features: list[ComponentName] = Field(default_factory=list)
-    indicators: list[ComponentName] = Field(default_factory=list)
+    component_id: str
+    metadata: PFundComponentDataMetadata | None = None
 
     @field_validator("artifact_type", mode="before")
     @classmethod
@@ -55,20 +42,6 @@ class PFundComponentDataModel(BaseDataModel):
     def _validate_env(cls, v: str | Environment) -> Environment:
         if isinstance(v, str):
             return Environment[v.upper()]
-        return v
-
-    @field_validator("run_mode", mode="before")
-    @classmethod
-    def _validate_run_mode(cls, v: str | RunMode) -> RunMode:
-        if isinstance(v, str):
-            return RunMode[v.upper()]
-        return v
-
-    @field_validator("resolution", mode="before")
-    @classmethod
-    def _validate_resolution(cls, v: str | Resolution) -> Resolution:
-        if isinstance(v, str):
-            return Resolution(v)
         return v
 
     @field_validator("component_type", mode="before")
@@ -90,9 +63,18 @@ class ModelArtifact(PFundComponentDataModel):
     extension: Literal[".joblib", ".safetensors"]
 
 
+class CheckpointArtifact(PFundComponentDataModel):
+    artifact_type: Literal[ArtifactType.checkpoint] = ArtifactType.checkpoint
+    extension: Literal[".pth", ".pkl"]
+    step: int = Field(ge=0)
+
+
 class DataArtifact(PFundComponentDataModel):
-    """The output frame of a component (strategy / model / feature / indicator)."""
+    """The output frame of a component (strategy / model / feature)."""
 
     artifact_type: Literal[ArtifactType.data] = ArtifactType.data
     # .delta is just the convention for the deltalake folder
     extension: Literal[".delta"] = ".delta"
+    # None appends. A predicate atomically replaces matching rows through
+    # DeltaLakeIO's existing delete_where contract.
+    replace_where: str | None = None

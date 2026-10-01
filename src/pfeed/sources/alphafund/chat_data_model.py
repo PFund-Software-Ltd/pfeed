@@ -1,75 +1,81 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Literal
-
-if TYPE_CHECKING:
-    from pfeed.sources.alphafund.message_data_model import MessageDataModel
+from typing import ClassVar, Self, Literal
 
 import time
 from uuid import uuid4
 
-from pydantic import UUID4, BaseModel, ConfigDict, Field
+from pydantic import UUID4, Field, model_validator, PrivateAttr
+
+from pfeed.data_models.base_table_data_model import BaseTableDataModel
+from pfeed.enums import IOFormat
+from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 
-class ChatDataModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+class AlphaFundChatDataModel(BaseTableDataModel):
+    DataHandler: ClassVar[type[AlphaFundDataHandler]] = AlphaFundDataHandler
 
-    """Bounded conversation session within a Channel in AlphaFund.
-
-    A Chat exists because:
-    1. LLMs have context limits - can't send infinite history
-    2. Threads are lightweight/disposable (vs creating a new channel)
-
-    Two types:
-    - Main chat (is_main=True): The "lobby" - default space when entering channel
-    - Thread chat (is_main=False): Side conversations, like Slack threads
-
-    Inherits agents from Channel by default; can override for thread-subset scenarios.
+    identity_column: ClassVar[str] = "chat_id"
+    table_name: ClassVar[str] = "chats"
+    table_sql: ClassVar[str] = """
+        PRIMARY KEY ("chat_id"),
+        UNIQUE ("channel_id", "parent_message_id"),
+        CHECK (NOT ("is_main" = 1 AND "parent_message_id" IS NOT NULL)),
+        FOREIGN KEY ("channel_id") REFERENCES "channels" ("channel_id")
+            ON DELETE CASCADE
     """
-    chat_id: UUID4 = Field(default_factory=uuid4)
-    channel_id: UUID4  # Which channel this chat belongs to
-    agent_ids: list[int] | None = (
-        None  # None = inherit from channel; set for thread-subset
-    )
-    messages: list[MessageDataModel] = Field(default_factory=list)
-    title: str | None = None
-    is_main: bool = False  # True = lobby chat, False = thread/side chat
-    created_at: float = Field(default_factory=time.time)
+    index_sql: ClassVar[dict[IOFormat, tuple[str, ...]]] = {
+        IOFormat.SQLITE: (
+            'CREATE UNIQUE INDEX IF NOT EXISTS "idx_chats_one_main_per_channel" '
+            + 'ON "chats" ("channel_id") WHERE "is_main" = 1',
+        ),
+    }
+
+    # CRUD operations, no delete
+    _op: Literal["create", "read", "update"] = PrivateAttr(init=False)
+    created_at: float | None = None
+    updated_at: float | None = None
+    is_deleted: bool = False
     is_archived: bool = False
 
-    def create_message(
-        self,
-        content: str,
-        sender_type: Literal["user", "agent"],
-        sender_id: UUID4 | int,
-    ) -> MessageDataModel:
-        """Create a new message within this chat.
+    fund_id: UUID4 | None = None
+    channel_id: UUID4 | None = None
+    chat_name: str | None = Field(
+        default=None, description="The chat name used as its title."
+    )
+    chat_id: UUID4 | None = None
+    is_main: bool = Field(
+        default=False,
+        description="True if this is the main chat; False for any other chat in the channel.",
+    )
+    parent_message_id: UUID4 | None = Field(
+        default=None,
+        description="The lobby message that started this thread; None for the main chat and independent chats.",
+    )
 
-        Args:
-            content: The message text
-            sender_type: "user" or "agent"
-            sender_id: UUID if user, int if agent
+    @classmethod
+    def column_nullability(cls) -> dict[str, bool]:
+        return {
+            **{column_name: False for column_name in cls.column_names()},
+            "updated_at": True,
+            "parent_message_id": True,
+        }
 
-        Returns:
-            New MessageDataModel instance linked to this chat
-        """
-        from pfeed.sources.alphafund.message_data_model import MessageDataModel
+    def _validate_chat_kind(self):
+        if self.is_main and self.parent_message_id is not None:
+            raise ValueError("main chat must not have parent_message_id")
 
-        message_id = len(self.messages) + 1  # Sequential within chat
-        return MessageDataModel(
-            chat_id=self.chat_id,
-            message_id=message_id,
-            sender_type=sender_type,
-            sender_id=sender_id,
-            content=content,
-        )
+    @property
+    def op(self) -> Literal["create", "read", "update"]:
+        return self._op
 
-    def get_active_messages(self) -> list[MessageDataModel]:
-        """Get all non-deleted messages."""
-        return [msg for msg in self.messages if not msg.is_deleted]
-
-    def __str__(self) -> str:
-        main_str = "[main]" if self.is_main else "[thread]"
-        archived = " [archived]" if self.is_archived else ""
-        title = self.title or "Untitled"
-        return f"Chat({title}, {main_str}, messages={len(self.messages)}){archived}"
+    @op.setter
+    def op(self, value: Literal["create", "read", "update"]) -> None:
+        self._op = value
+        if self._op == "create":
+            if self.chat_id is not None:
+                raise ValueError("chat_id must be None for create operation")
+            self.chat_id = uuid4()
+            self.created_at = time.time()
+        elif self._op == "update":
+            self.updated_at = time.time()
+        if self._op in {"create", "update"}:
+            self._validate_chat_kind()

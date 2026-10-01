@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from httpx import Response
+    from httpx2 import Response
     from pfund.datas.resolution import Resolution
-    from pfund.entities.products.product_bybit import BybitProduct
+    from pfund.venues.bybit.product import BybitProduct
 
 import datetime
 
@@ -48,14 +48,14 @@ class BatchAPI:
     @staticmethod
     def _get_base_url(product: BybitProduct, resolution: Resolution) -> str:
         if resolution.is_quote():
-            if product.is_spot():
+            if product.is_crypto():
                 return "https://quote-saver.bycsi.com/orderbook/spot"
             elif product.is_inverse():
                 return "https://quote-saver.bycsi.com/orderbook/inverse"
             else:
                 return "https://quote-saver.bycsi.com/orderbook/linear"
         else:
-            if product.is_spot():
+            if product.is_crypto():
                 return "https://public.bybit.com/spot"
             else:
                 return "https://public.bybit.com/trading"
@@ -71,11 +71,11 @@ class BatchAPI:
             # NOTE: somehow after this date, the orderbook (non-spot) levels are changed from 500 to 200
             cutoff_date = "2025-08-21"
             is_before_cutoff = convert_to_date(date) < convert_to_date(cutoff_date)
-            if not product.is_spot() and is_before_cutoff:
+            if not product.is_crypto() and is_before_cutoff:
                 orderbook_levels = 500
             return f"{date}_{product.symbol}_ob{orderbook_levels}.data.zip"
         else:
-            if product.is_spot():
+            if product.is_crypto():
                 return f"{product.symbol}_{date}.csv.gz"
             else:
                 return f"{product.symbol}{date}.csv.gz"
@@ -84,17 +84,17 @@ class BatchAPI:
     def _get(url: str, params: dict[str, Any] | None = None) -> bytes | None:
         import time
 
-        import httpx
+        import httpx2
         from pfund_kit.style import RichColor, TextStyle, cprint
 
         num_retries: int = 3
         while num_retries:
             num_retries -= 1
             try:
-                response: Response = httpx.get(url, params=params)
+                response: Response = httpx2.get(url, params=params)
                 result = response.raise_for_status().content
                 return result
-            except httpx.RequestError as exc:
+            except httpx2.RequestError as exc:
                 cprint(
                     f"RequestError: failed to get data from {url}, {exc=}",
                     style=TextStyle.BOLD + RichColor.RED,

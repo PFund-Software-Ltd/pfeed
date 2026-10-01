@@ -38,8 +38,7 @@ def standardize_date_column(df: pl.LazyFrame, date_col: str) -> pl.LazyFrame:
 def convert_dataframe(df: Any, data_tool: DataTool | str | None = None) -> IntoFrame:
     """Convert `df` to the native dataframe type of `data_tool`.
 
-    Polars output is always returned as a LazyFrame; dask/spark/daft return their
-    native lazy type. Only pandas returns eager.
+    Polars output is always returned as a LazyFrame; Only pandas returns eager.
     """
     from pfeed.config import get_config
     from pfeed.utils.dataframe import from_native, is_dataframe
@@ -69,25 +68,25 @@ def convert_dataframe(df: Any, data_tool: DataTool | str | None = None) -> IntoF
         if isinstance(nwdf, nw.LazyFrame):
             nwdf = nwdf.collect()
         return nwdf.to_polars().lazy()
-    elif data_tool == DataTool.dask:
-        import dask.dataframe as dd
+    # elif data_tool == DataTool.dask:
+    #     import dask.dataframe as dd
 
-        if isinstance(df, dd.DataFrame):
-            return df
-        return dd.from_pandas(_to_pandas(), npartitions=1)
-    elif data_tool == DataTool.spark:
-        from pyspark.sql import DataFrame as SparkDataFrame
-        from pyspark.sql import SparkSession
+    #     if isinstance(df, dd.DataFrame):
+    #         return df
+    #     return dd.from_pandas(_to_pandas(), npartitions=1)
+    # elif data_tool == DataTool.spark:
+    #     from pyspark.sql import DataFrame as SparkDataFrame
+    #     from pyspark.sql import SparkSession
 
-        if isinstance(df, SparkDataFrame):
-            return df
-        spark = SparkSession.builder.getOrCreate()
-        return spark.createDataFrame(_to_pandas())
-    elif data_tool == DataTool.daft:
-        import daft
+    #     if isinstance(df, SparkDataFrame):
+    #         return df
+    #     spark = SparkSession.builder.getOrCreate()
+    #     return spark.createDataFrame(_to_pandas())
+    # elif data_tool == DataTool.daft:
+    #     import daft
 
-        if isinstance(df, daft.DataFrame):
-            return df
-        return daft.from_pandas(_to_pandas())
+    #     if isinstance(df, daft.DataFrame):
+    #         return df
+    #     return daft.from_pandas(_to_pandas())
     else:
         raise ValueError(f"{data_tool=}")

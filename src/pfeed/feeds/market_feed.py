@@ -160,7 +160,6 @@ class MarketFeed(TimeBasedFeed, ABC):
         start_date: datetime.date | str | None = None,
         end_date: datetime.date | str | None = None,
         data_origin: str = "",
-        dataflow_per_date: bool = True,
         clean_data: bool = True,
         storage_config: StorageConfig | None = None,
         io_config: IOConfig | None = None,
@@ -183,8 +182,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             end_date: End date. If empty, defaults to today.
             data_origin: Origin label used to distinguish data from different providers
                 of the same source.
-            dataflow_per_date: If True, one dataflow per date (enables parallelism).
-                If False, a single dataflow spans the whole range.
             clean_data: Whether to clean raw data after download.
                 Ignored when `storage_config` is provided — cleaning is then determined
                 by `data_layer`. If True, runs default transformations (normalize,
@@ -232,7 +229,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
-            dataflow_per_date=dataflow_per_date,
+            dataflow_per_date=self.DOWNLOAD_DATAFLOW_PER_DATE,
             clean_data=clean_data,
         )
         self._append_request(request)

@@ -102,7 +102,6 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            dataflow_per_date=True,
             clean_data=clean_data,
             storage_config=storage_config,
             io_config=io_config,

@@ -28,6 +28,9 @@ class TimeBasedFeed(BaseFeed, ABC):
     date_columns_in_raw_data: ClassVar[list[str]]
     DATE_COL_IN_CLEANED_DATA: ClassVar[str] = "date"
     DATE_COL_IN_RAW_DATA: ClassVar[str] = "_pfeed_date"
+    # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),
+    # False = one dataflow spanning the whole range (e.g. a range query API).
+    DOWNLOAD_DATAFLOW_PER_DATE: ClassVar[bool] = True
 
     @classmethod
     def _standardize_date_column(

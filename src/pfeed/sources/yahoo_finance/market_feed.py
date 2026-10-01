@@ -34,6 +34,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
     # "Date" is used for daily data and "Datetime" is used for other resolutions in yfinance
     date_columns_in_raw_data: ClassVar[list[str]] = ["Datetime", "Date"]
     SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = True
+    DOWNLOAD_DATAFLOW_PER_DATE: ClassVar[bool] = False
     # HACK: use '1900-01-01' as the start date for daily data since we don't know the exact start date when rollback_period == 'max'
     DAILY_DATA_ROLLBACK_MAX_START_DATE: ClassVar[str] = "1900-01-01"
 
@@ -189,7 +190,6 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             rollback_period=rollback_period,
             start_date=start_date,
             end_date=end_date,
-            dataflow_per_date=False,
             storage_config=storage_config,
             io_config=io_config,
             clean_data=clean_data,

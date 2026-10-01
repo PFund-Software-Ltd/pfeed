@@ -45,6 +45,7 @@ dependencies = [
 
 [project.optional-dependencies]
 yfinance = ["yfinance>=1.7.0"]
+cryptohftdata = ["cryptohftdata>=0.4.0"]
 huggingface = ["huggingface-hub>=1.33.0"]
 prefect = ["prefect>=3.8.7"]
 pandas = ["pandas>=3.0.3"]

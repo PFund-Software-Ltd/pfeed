@@ -24,6 +24,7 @@
 [pytrade]: https://pytrade.org
 [Yahoo Finance]: https://github.com/ranaroussi/yfinance
 [Bybit]: https://public.bybit.com
+[CryptoHFTData]: https://cryptohftdata.com
 [Binance]: https://data.binance.vision
 [OKX]: https://www.okx.com/data-download
 [Databento]: https://databento.com/
@@ -113,6 +114,26 @@ result = feed.download(
 df = result.data.collect()  # polars dataframe by default
 ```
 
+CryptoHFTData can supply exchange-specific historical crypto trades through the
+same feed API. PFeed can return ticks directly or resample them into bars:
+```bash
+pip install "pfeed[cryptohftdata]"
+```
+
+```python
+import pfeed as pe
+
+result = pe.CryptoHFTData().market_feed.download(
+    product="BTC_USDT_PERP",
+    exchange="binance_futures",
+    symbol="BTCUSDT",
+    resolution="1m",
+    start_date="2024-07-13",
+    end_date="2024-07-13",
+)
+bars = result.data.collect()
+```
+
 
 ### 2. Retrieve Downloaded Data
 Retrieve downloaded data from storage
@@ -165,6 +186,7 @@ feed.stream(
 | -------------------- | --------------- | ------------------------ | ---------------- |
 | [Yahoo Finance]      | Market Data, News Data, Fundamental Data     | 🟢                       | 🟢               |
 | [Bybit]              | Market Data     | 🟢                       | 🟢               |
+| [CryptoHFTData]      | Historical Crypto Market Data | 🟢             | ⚪               |
 | *Interactive Brokers | Market Data     | ⚪                        | 🔴               |
 | [OKX]                | Market Data     | 🔴                       | 🔴               |
 | [Binance]            | Market Data     | 🔴                       | 🔴               |

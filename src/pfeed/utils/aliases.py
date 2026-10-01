@@ -6,5 +6,6 @@ ALIASES = AliasRegistry(
         "FRD": "FIRSTRATE_DATA",
         "DBT": "DATABENTO",
         "FMP": "FINANCIAL_MODELING_PREP",
+        "CHD": "CRYPTO_HFT_DATA",
     }
 )

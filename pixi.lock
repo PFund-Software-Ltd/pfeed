@@ -3116,6 +3116,7 @@ packages:
   - pyzmq>=27.2.0 ; sys_platform != 'emscripten'
   - deltalake>=1.6.6 ; sys_platform != 'emscripten'
   - yfinance>=1.7.0 ; extra == 'yfinance'
+  - cryptohftdata>=0.4.0 ; extra == 'cryptohftdata'
   - huggingface-hub>=1.33.0 ; extra == 'huggingface'
   - prefect>=3.8.7 ; extra == 'prefect'
   - pandas>=3.0.3 ; extra == 'pandas'

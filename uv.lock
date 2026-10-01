@@ -735,6 +735,25 @@ wheels = [
 ]
 
 [[package]]
+name = "cryptohftdata"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+    { name = "tqdm" },
+    { name = "typing-extensions" },
+    { name = "zstandard" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/b1/42a3b1aa6a29f77156a2e8f003cd57e04036ea861011728fc806fa88e7c3/cryptohftdata-0.7.0.tar.gz", hash = "sha256:8ac88823964de1a5df83cb50e656f6a037f7981cfbdd36aae51a9f361d7d8528", size = 107411, upload-time = "2026-08-23T07:21:36.654Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/b9/94e84509246ad708d8306f788d7ab9f0125687253377184c519b633af1b0/cryptohftdata-0.7.0-py3-none-any.whl", hash = "sha256:a7e4f84f178a156d04d41f1c21e4b2e92515bc056a93b878784ebf2bcf5824fa", size = 62331, upload-time = "2026-08-23T07:21:35.116Z" },
+]
+
+[[package]]
 name = "curl-cffi"
 version = "0.16.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2507,6 +2526,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+cryptohftdata = [
+    { name = "cryptohftdata" },
+]
 duckdb = [
     { name = "duckdb" },
 ]
@@ -2530,6 +2552,7 @@ yfinance = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.3" },
     { name = "cloudpathlib", specifier = ">=0.25.0" },
+    { name = "cryptohftdata", marker = "extra == 'cryptohftdata'", specifier = ">=0.4.0" },
     { name = "deltalake", marker = "sys_platform != 'emscripten'", specifier = ">=1.6.6" },
     { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.5.6" },
     { name = "huggingface-hub", marker = "extra == 'huggingface'", specifier = ">=1.33.0" },
@@ -2548,7 +2571,7 @@ requires-dist = [
     { name = "yfinance", marker = "extra == 'yfinance'", specifier = ">=1.7.0" },
     { name = "zstandard", specifier = ">=0.22.0" },
 ]
-provides-extras = ["yfinance", "huggingface", "prefect", "pandas", "duckdb", "lancedb"]
+provides-extras = ["yfinance", "cryptohftdata", "huggingface", "prefect", "pandas", "duckdb", "lancedb"]
 
 [[package]]
 name = "pfund"

@@ -191,7 +191,7 @@ class TimeBasedFeed(BaseFeed, ABC):
                 df: Frame = df.sort(by="date", descending=False)
             # Storage-backed flows return raw pl.LazyFrame from storage.read,
             # bypassing the per-flow `convert_to_user_df` transformation. Convert
-            # once here so the aggregated frame matches the user's data_tool.
+            # once here so the aggregated frame is a polars LazyFrame.
             combined: IntoFrame | None = convert_dataframe(nw.to_native(df))
         else:
             combined = None

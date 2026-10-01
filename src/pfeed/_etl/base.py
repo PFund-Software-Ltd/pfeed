@@ -35,18 +35,15 @@ def standardize_date_column(df: pl.LazyFrame, date_col: str) -> pl.LazyFrame:
     return df.with_columns(pl.col(date_col).dt.cast_time_unit("ns")).sort(date_col)
 
 
-def convert_dataframe(df: Any, data_tool: DataTool | str | None = None) -> IntoFrame:
+def convert_dataframe(df: Any, data_tool: DataTool | str = DataTool.polars) -> IntoFrame:
     """Convert `df` to the native dataframe type of `data_tool`.
 
     Polars output is always returned as a LazyFrame; Only pandas returns eager.
     """
-    from pfeed.config import get_config
     from pfeed.utils.dataframe import from_native, is_dataframe
 
     if not is_dataframe(df):
         raise ValueError(f"{type(df)=}")
-    config = get_config()
-    data_tool = data_tool or config.data_tool
     data_tool = DataTool[data_tool.lower()]
 
     def _to_pandas():

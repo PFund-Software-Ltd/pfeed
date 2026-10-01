@@ -328,17 +328,14 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         self, request: PFundComponentFeedDownloadRequest
     ) -> list[Callable[..., Any]]:
         from pfeed._etl.base import convert_dataframe
-        from pfeed.config import get_config
         from pfeed.utils import lambda_with_name
-
-        config = get_config()
 
         default_transformations = []
         if request.artifact_type == ArtifactType.data:
             default_transformations.append(
                 lambda_with_name(
                     "convert_to_user_df",
-                    lambda df: convert_dataframe(df, data_tool=config.data_tool),
+                    lambda df: convert_dataframe(df),
                 ),
             )
         return default_transformations
@@ -402,17 +399,14 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         self, request: PFundComponentFeedRetrieveRequest
     ) -> list[Callable[..., Any]]:
         from pfeed._etl.base import convert_dataframe
-        from pfeed.config import get_config
         from pfeed.utils import lambda_with_name
-
-        config = get_config()
 
         default_transformations = []
         if request.artifact_type == ArtifactType.data:
             default_transformations.append(
                 lambda_with_name(
                     "convert_to_user_df",
-                    lambda df: convert_dataframe(df, data_tool=config.data_tool),
+                    lambda df: convert_dataframe(df),
                 ),
             )
         return default_transformations

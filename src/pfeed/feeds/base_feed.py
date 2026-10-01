@@ -1,4 +1,3 @@
-# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false, reportMissingTypeArgument=false, reportUnknownParameterType=false, reportUnknownArgumentType=false, reportArgumentType=false
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -344,14 +343,12 @@ class BaseFeed(ABC):
         _request: BaseRequest,
     ) -> list[Callable[..., Any]]:
         from pfeed._etl.base import convert_dataframe
-        from pfeed.config import get_config
         from pfeed.utils import lambda_with_name
 
-        config = get_config()
         return [
             lambda_with_name(
                 "convert_to_user_df",
-                lambda df: convert_dataframe(df, data_tool=config.data_tool),
+                lambda df: convert_dataframe(df),
             ),
         ]
 

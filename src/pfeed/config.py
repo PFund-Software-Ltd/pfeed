@@ -1,4 +1,3 @@
-# pyright: reportUnusedParameter=false
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,8 +6,6 @@ from typing import Any
 from pfund.enums.env import Environment
 from pfund_kit import logging as kit_logging
 from pfund_kit.config import Configuration
-
-from pfeed.enums import DataTool
 
 __all__ = [
     "configure",
@@ -45,7 +42,6 @@ def configure(
     data_path: str | None = None,
     log_path: str | None = None,
     cache_path: str | None = None,
-    data_tool: DataTool | str | None = None,
     show_progress_bar: bool | None = None,
     use_prefect: bool | None = None,
     persist: bool = False,
@@ -56,7 +52,6 @@ def configure(
         data_path: Path to the data directory.
         log_path: Path to the log directory.
         cache_path: Path to the cache directory.
-        data_tool: Data tool to use, e.g. pandas, polars, etc.
         show_progress_bar: Whether pfeed progress bars are displayed.
         use_prefect: Whether to run batch dataflows as Prefect flows/tasks.
             Requires the `prefect` extra. Defaults to False.
@@ -71,8 +66,6 @@ def configure(
         if v is not None:
             if "_path" in k:
                 v = Path(v)
-            elif k == "data_tool":
-                v = DataTool[v.lower()]
             setattr(config, k, v)
 
     config.ensure_dirs()
@@ -100,14 +93,12 @@ class PFeedConfig(Configuration):
 
     def _initialize_from_data(self):
         """Initialize PFeedConfig-specific attributes from config data."""
-        self.data_tool = DataTool[self._data.get("data_tool", DataTool.polars).lower()]
         self.show_progress_bar = self._data.get("show_progress_bar", True)
         self.use_prefect = self._data.get("use_prefect", False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
-            "data_tool": self.data_tool,
             "show_progress_bar": self.show_progress_bar,
             "use_prefect": self.use_prefect,
         }

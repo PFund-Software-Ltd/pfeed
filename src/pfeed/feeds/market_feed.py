@@ -249,10 +249,7 @@ class MarketFeed(TimeBasedFeed, ABC):
     ) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
-        from pfeed.config import get_config
         from pfeed.utils import lambda_with_name
-
-        config = get_config()
 
         default_transformations = [
             lambda_with_name(
@@ -284,7 +281,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         default_transformations.append(
             lambda_with_name(
                 "convert_to_user_df",
-                lambda df: convert_dataframe(df, data_tool=config.data_tool),
+                lambda df: convert_dataframe(df),
             )
         )
         return default_transformations
@@ -444,10 +441,7 @@ class MarketFeed(TimeBasedFeed, ABC):
     ) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed._etl.base import convert_dataframe
-        from pfeed.config import get_config
         from pfeed.utils import lambda_with_name
-
-        config = get_config()
 
         storage_config = request.storage_config_for_retrieval
         is_retrieving_streaming_data = request.env in (
@@ -481,7 +475,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             default_transformations.append(
                 lambda_with_name(
                     "convert_to_user_df",
-                    lambda df: convert_dataframe(df, data_tool=config.data_tool),
+                    lambda df: convert_dataframe(df),
                 ),
             )
         else:

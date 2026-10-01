@@ -155,6 +155,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         self,
         product: str,
         resolution: Resolution | MarketDataType | str,
+        *,
         rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
         start_date: datetime.date | str | None = None,
         end_date: datetime.date | str | None = None,

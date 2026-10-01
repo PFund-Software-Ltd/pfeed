@@ -1,24 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    import datetime
-
     from pfund.datas.resolution import Resolution
     from pfund.venues._apis.typing import ResponseData
 
-    from pfeed.dataflow.result import RunResult
     from pfeed.feeds.streaming_feed_mixin import RawMessage
-    from pfeed.storages.storage_config import StorageConfig
 
 import polars as pl
 from pfund.venues.bybit.product import BybitProduct
 
-from pfeed.enums import MarketDataType
 from pfeed.feeds.market_feed import MarketFeed
 from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
-from pfeed.io.io_config import IOConfig
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
 from pfeed.sources.bybit.mixin import BybitMixin
 
@@ -52,60 +46,6 @@ class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
             .replace_strict(MAPPING_COLS, return_dtype=pl.Int8),
             # cast to float64 to pass pandera schema validation — inverse products have int volume
             pl.col("volume").cast(pl.Float64),
-        )
-
-    def download(
-        self,
-        product: str,
-        resolution: Resolution | MarketDataType | str = "tick",
-        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
-        start_date: datetime.date | str | None = None,
-        end_date: datetime.date | str | None = None,
-        clean_data: bool = True,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
-        **product_specs: Any,
-    ) -> Self | RunResult:
-        """Download historical data from Bybit.
-
-        Args:
-            product: Product basis (e.g. 'BTC_USDT_PERP'). For products
-                with extra attributes (options, futures), pass them via `product_specs`.
-            resolution: Target data resolution (e.g. '1m', '1h', '1d'). If the source
-                doesn't provide this resolution natively, finer-grained source data is
-                downloaded and resampled down.
-            rollback_period: Lookback from today, only used when `start_date` is empty.
-                Accepts a resolution string (e.g. '7d'), 'ytd', or 'max'. With 'max',
-                the source's own `start_date` attribute is used.
-            start_date: Start date. If empty, derived from `rollback_period`.
-            end_date: End date. If empty, defaults to today.
-            clean_data: Whether to clean raw data after download.
-                Ignored when `storage_config` is provided — cleaning is then determined
-                by `data_layer`. If True, runs default transformations (normalize,
-                standardize columns, resample). If False, raw data is returned as-is.
-            storage_config: Where to persist downloaded data. If None, data is not
-                persisted to storage.
-            io_config: IO format/compression and read/write/connect options. Defaults
-                to parquet + snappy.
-            product_specs: Extra product attributes for products that need them, e.g.
-                `download(product='BTC_USDT_OPT', strike_price=10000,
-                expiration='2024-01-01', option_type='CALL')`. Leave empty first and
-                read the exception message to discover required keys.
-
-        Returns:
-            RunResult of the download operation.
-            Returns `self` when called in pipeline mode.
-        """
-        return super().download(
-            product=product,
-            resolution=resolution,
-            rollback_period=rollback_period,
-            start_date=start_date,
-            end_date=end_date,
-            clean_data=clean_data,
-            storage_config=storage_config,
-            io_config=io_config,
-            **product_specs,
         )
 
     def _download_impl(

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pfeed.sinks.sink_config import SinkConfig
     from pfeed.sources.alphafund import AlphaFund
     from pfeed.sources.bybit import Bybit
+    from pfeed.sources.fxmacrodata import FXMacroData
     from pfeed.sources.ibkr import (
         InteractiveBrokers,
     )
@@ -95,6 +96,10 @@ def __getattr__(name: str):
         from pfeed.sources.alphafund import AlphaFund
 
         return AlphaFund
+    elif name.lower() in ("fxmacrodata", "fxmd"):
+        from pfeed.sources.fxmacrodata import FXMacroData
+
+        return FXMacroData
     # elif name in ('FinancialModelingPrep', 'FMP'):
     #     from pfeed.sources.financial_modeling_prep import FinancialModelingPrep
     #     return FinancialModelingPrep
@@ -108,6 +113,7 @@ __all__ = (
     "AlphaFund",
     "Bybit",
     "DataEngine",
+    "FXMacroData",
     "IOConfig",
     "InteractiveBrokers",
     "PFund",

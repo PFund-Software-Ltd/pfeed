@@ -33,6 +33,7 @@
 [Daft]: https://www.daft.ai/
 [Hyperliquid]: https://app.hyperliquid.xyz/trade
 [FinancialModelingPrep]: https://financialmodelingprep.com/
+[FXMacroData]: https://fxmacrodata.com/documentation/reference?utm_source=github&utm_medium=referral&utm_campaign=pfeed&utm_content=readme
 [DuckDB]: https://duckdb.org/
 [LanceDB]: https://lancedb.com/
 [Vortex]: https://vortex.dev/
@@ -173,12 +174,29 @@ feed.stream(
 | *[FinancialModelingPrep] | Market Data, News Data, Fundamental Data     | 🔴                       | 🔴               |
 | *[FirstRate Data]    | Market Data     | 🔴                       | ⚪                |
 | *[Polygon]           | Market Data     | 🔴                       | 🔴               |
+| *[FXMacroData]       | Economic Announcement Data | 🟢              | ⚪               |
 
 🟢 = finished \
 🟡 = in progress \
 🔴 = todo \
 ⚪ = not applicable \
 \* = paid data
+
+[FXMacroData] economic announcements (CPI, policy rates, GDP, payrolls and so on,
+with release timestamps) are available through `announcement_feed`. The frame keeps
+FXMacroData's own columns. FXMacroData is a commercial API: without a key only USD
+is available, limited to the most recent 90 days and delayed by 15 minutes. Set
+`FXMACRODATA_API_KEY` (or `FXMD_API_KEY`) for other currencies and full history.
+
+```python
+import pfeed as pe
+
+announcements = pe.FXMacroData().announcement_feed.download(
+    currency="USD",
+    indicator="inflation",
+)
+df = announcements.collect()
+```
 
 
 

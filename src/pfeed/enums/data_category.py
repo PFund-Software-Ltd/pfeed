@@ -14,6 +14,7 @@ class PFundDataCategory(StrEnum):
 
 class DataCategory(StrEnum):
     MARKET_DATA = "MARKET_DATA"
+    ANNOUNCEMENT_DATA = "ANNOUNCEMENT_DATA"
     # NEWS_DATA = "NEWS_DATA"
     ENGINE_DATA = PFundDataCategory.ENGINE_DATA
     COMPONENT_DATA = PFundDataCategory.COMPONENT_DATA

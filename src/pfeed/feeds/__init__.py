@@ -49,7 +49,7 @@ def create_feed(
 ) -> BaseFeed:
     import importlib
 
-    from pfund_kit.utils.text import to_camel_case
+    from pfund_kit.utils.text import to_pascal_case
 
     data_source = DataSource[data_source.upper()]
     data_category = DataCategory[data_category.upper()]
@@ -58,7 +58,7 @@ def create_feed(
             importlib.import_module(
                 f"pfeed.sources.{data_source.lower()}.{data_category.feed_name}"
             ),
-            f"{to_camel_case(data_source)}{to_camel_case(data_category.feed_name)}",
+            f"{to_pascal_case(data_source)}{to_pascal_case(data_category.feed_name)}",
         )
     except Exception as err:
         raise ValueError(f"{data_source} has no feed for {data_category}") from err

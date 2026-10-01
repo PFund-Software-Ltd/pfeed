@@ -1,7 +1,7 @@
 from enum import StrEnum
 
 from pfund.enums.venue import TradingVenue
-from pfund_kit.utils.text import to_camel_case
+from pfund_kit.utils.text import to_pascal_case
 
 
 class DataSource(StrEnum):
@@ -20,7 +20,7 @@ class DataSource(StrEnum):
     def data_client_class(self):
         import pfeed as pe
 
-        return getattr(pe, to_camel_case(self))
+        return getattr(pe, to_pascal_case(self))
 
     @property
     def data_source_class(self):
@@ -28,7 +28,7 @@ class DataSource(StrEnum):
 
         return getattr(
             importlib.import_module(f"pfeed.sources.{self.lower()}.source"),
-            f"{to_camel_case(self)}Source",
+            f"{to_pascal_case(self)}Source",
         )
 
     @property
@@ -37,5 +37,5 @@ class DataSource(StrEnum):
 
         return getattr(
             importlib.import_module(f"pfeed.sources.{self.lower()}.product"),
-            f"{to_camel_case(self)}Product",
+            f"{to_pascal_case(self)}Product",
         )

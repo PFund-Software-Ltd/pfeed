@@ -6,6 +6,11 @@ import pytest
 import pfeed as pe
 
 
+@pytest.fixture
+def bybit(request):
+    return pe.Bybit(**getattr(request, "param", {}))
+
+
 def pytest_addoption(parser: pytest.Parser):
     parser.addoption(
         "--keep-log-path",

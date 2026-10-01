@@ -1,11 +1,16 @@
+from typing import Any
+
+import datetime
 from pathlib import Path
 
 import pytest
+import polars as pl
 from pfund.datas.resolution import Resolution
 
 import pfeed as pe
 from pfeed._etl.base import convert_dataframe
 from pfeed.enums import DataTool
+from pfeed.dataflow.result import RunResult
 
 
 @pytest.mark.parametrize(('product', 'resolution'), [
@@ -18,17 +23,16 @@ from pfeed.enums import DataTool
     ('BTC_USDC_SPOT', '1t'),  # spot
 ])
 def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, resolution: str):
-    import datetime
-
-    def _assert_df(df, start_date, end_date):
+    def _assert_df(df: pl.DataFrame, start_date: str, end_date: str) -> None:
         assert df is not None
-        df = convert_dataframe(df)
+        assert df.height > 0
         _resolution = Resolution(resolution)
+        assert df.columns[:3] == ['date', 'product', 'resolution']
         if _resolution.is_bar():
-            assert df.columns.tolist() == ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+            assert df.columns == ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
         elif _resolution.is_tick():
-            assert df.columns.tolist() == ['date', 'product', 'resolution', 'symbol', 'side', 'volume', 'price']
-        # TODO:
+            # vendor columns are kept, only core columns are guaranteed
+            assert {'date', 'product', 'resolution', 'symbol', 'side', 'volume', 'price'} <= set(df.columns)
         elif _resolution.is_quote():
             raise NotImplementedError('quote data is not supported yet')
         assert df['date'].is_sorted()
@@ -37,32 +41,36 @@ def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, re
         assert df['resolution'].n_unique() == 1
         assert df['symbol'].n_unique() == 1
         assert df['product'].n_unique() == 1
-        assert df['resolution'][0] == resolution
-        assert df.height >= 1  # or > 0 to ensure we got data
-        # Check date range: crypto trades 24/7, so first and last dates should match start/end dates
-        first_date = df['date'][0].date()
-        last_date = df['date'][-1].date()
-        expected_start = datetime.date.fromisoformat(start_date)
-        expected_end = datetime.date.fromisoformat(end_date)
-        assert first_date == expected_start, f"First date {first_date} doesn't match start_date {expected_start}"
-        assert last_date == expected_end, f"Last date {last_date} doesn't match end_date {expected_end}"
+        assert df['resolution'][0] == str(_resolution)
+        # crypto trades 24/7, so every day in [start_date, end_date] should have data
+        expected_dates = pl.date_range(
+            datetime.date.fromisoformat(start_date),
+            datetime.date.fromisoformat(end_date),
+            eager=True,
+        ).to_list()
+        assert df['date'].dt.date().unique().sort().to_list() == expected_dates
 
     start_date, end_date = '2026-09-01', '2026-09-02'
     expiration = '2026-09-25'
     feed = bybit.market_feed
     is_future = 'FUT' in product
     if is_future:
-        product_specs = {'expiration': expiration}
+        product_specs: dict[str, Any] = {'expiration': expiration}
     else:
-        product_specs = {}
-#     df = feed.download(
-#         product=product,
-#         resolution=resolution,
-#         start_date=start_date,
-#         end_date=end_date,
-#         **product_specs
-#     )
-#     _assert_df(df, start_date, end_date)
+        product_specs: dict[str, Any] = {}
+    result = feed.download(
+        product=product,
+        resolution=resolution,
+        start_date=start_date,
+        end_date=end_date,
+        **product_specs
+    )
+    assert isinstance(result, RunResult)
+    assert result.success
+    data = result.data
+    assert isinstance(data, pl.LazyFrame)
+    df = data.collect()
+    _assert_df(df, start_date, end_date)
 #     df = feed.retrieve(
 #         product=product,
 #         resolution=resolution,

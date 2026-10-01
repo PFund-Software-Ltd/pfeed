@@ -2,7 +2,7 @@
 # See More: https://docs.astral.sh/ruff/configuration/
 
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 extend-exclude = ["tests", "docs_OLD"]
 
 [lint]

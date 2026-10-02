@@ -145,7 +145,9 @@ class BatchAPI:
             import io
 
             # pl.read_csv handles gzip via magic bytes — no manual decompress
-            return pl.read_csv(io.BytesIO(zipped_data)).lazy()
+            # infer_schema_length=None scans all rows, e.g. inverse products' int 'size'
+            # can contain values in scientific notation (1.099309e+06) deep into the file
+            return pl.read_csv(io.BytesIO(zipped_data), infer_schema_length=None).lazy()
         else:
             raise NotImplementedError("orderbook data is not supported yet")
             # TODO: it's quote_L2 data, need to support converting to quote_L1, converting to different number of levels (e.g. 10quote_L1) etc.

@@ -6,22 +6,25 @@ from pathlib import Path
 import pytest
 import polars as pl
 from pfund.datas.resolution import Resolution
+from pfund.entities.products.product_base import BaseProduct
 
 import pfeed as pe
 from pfeed.dataflow.result import RunResult
 
 
-@pytest.mark.parametrize(('product', 'resolution'), [
-    ('BTC_USDT_PERP', '1t'),  # USDT perpetual
-    ('BTC_USDT_FUT', '1s'),  # USDT future
-    ('BTC_USDC_PERPETUAL', '1m'),  # USDC perpetual
-    ('BTC_USDC_FUTURE', '1h'),  # USDC future
-    ('BTC_USD_IPERP', '1d'),  # inverse perpetual
-    ('BTC_USD_INVERSE-FUTURE', '1t'),  # inverse future
-    ('BTC_USDC_SPOT', '1t'),  # spot
+@pytest.mark.parametrize(('product', 'resolution', 'product_specs'), [
+    ('BTC_USDT_PERP', '1t', {}),  # USDT perpetual
+    ('BTC_USDT_FUT', '1s', {'expiration': '2026-09-25'}),  # USDT future
+    ('BTC_USDC_PERPETUAL', '1m', {}),  # USDC perpetual
+    ('BTC_USDC_FUTURE', '1h', {'expiration': '2026-09-25'}),  # USDC future
+    ('BTC_USD_IPERP', '1d', {}),  # inverse perpetual
+    ('BTC_USD_INVERSE-FUTURE', '1t', {'expiration': '2026-09-25'}),  # inverse future
+    ('BTC_USDC_SPOT', '1t', {}),  # spot
 ])
-def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, resolution: str):
-    def _assert_df(df: pl.DataFrame, start_date: str, end_date: str) -> None:
+def test_download_and_retrieve(
+    tmp_path: Path, bybit: pe.Bybit, product: str, resolution: str, product_specs: dict[str, Any]
+):
+    def _assert_df(df: pl.DataFrame, _product: BaseProduct, start_date: str, end_date: str) -> None:
         assert df is not None
         assert df.height > 0
         _resolution = Resolution(resolution)
@@ -30,7 +33,11 @@ def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, re
             assert df.columns == ['date', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume', 'n_data_points']
         elif _resolution.is_tick():
             # vendor columns are kept, only core columns are guaranteed
-            assert {'date', 'product', 'resolution', 'symbol', 'side', 'volume', 'price'} <= set(df.columns)
+            core_cols = {'date', 'product', 'resolution', 'symbol', 'side', 'volume', 'price'}
+            # Bybit spot CSVs don't ship a 'symbol' column
+            if _product.is_crypto():
+                core_cols.remove('symbol')
+            assert core_cols <= set(df.columns)
         elif _resolution.is_quote():
             raise NotImplementedError('quote data is not supported yet')
         assert df['date'].is_sorted()
@@ -48,13 +55,8 @@ def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, re
         assert df['date'].dt.date().unique().sort().to_list() == expected_dates
 
     start_date, end_date = '2026-09-01', '2026-09-02'
-    expiration = '2026-09-25'
     feed = bybit.market_feed
-    is_future = 'FUT' in product
-    if is_future:
-        product_specs: dict[str, Any] = {'expiration': expiration}
-    else:
-        product_specs: dict[str, Any] = {}
+    _product = feed.data_source.create_product(product, **product_specs)
     result = feed.download(
         product=product,
         resolution=resolution,
@@ -67,7 +69,7 @@ def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, re
     data = result.data
     assert isinstance(data, pl.LazyFrame)
     df = data.collect()
-    _assert_df(df, start_date, end_date)
+    _assert_df(df, _product, start_date, end_date)
 #     df = feed.retrieve(
 #         product=product,
 #         resolution=resolution,

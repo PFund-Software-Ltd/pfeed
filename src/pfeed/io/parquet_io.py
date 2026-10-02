@@ -126,7 +126,8 @@ class ParquetIO(BaseIO):
         self,
         key: DatasetKey,
         data: pa.Table,
-        metadata: dict[Partition, Metadata],
+        *,
+        partitions: dict[Partition, Metadata],
         mode: Literal['replace', 'append'] = 'replace',
     ) -> None:
         if mode == 'append':
@@ -138,10 +139,12 @@ class ParquetIO(BaseIO):
             data_partitions = {tuple(row[col] for col in key.partition_by) for row in unique_rows}
         else:
             data_partitions = {()} if data.num_rows else set()
-        if not_in_metadata := data_partitions - metadata.keys():
-            raise ValueError(f'partitions {not_in_metadata} in data have no metadata')
+        if not_in_partitions := data_partitions - partitions.keys():
+            raise ValueError(f'partitions {not_in_partitions} in data are not in `partitions`')
+        # serialize all metadata before writing any file, so invalid metadata writes nothing
+        dumped_metadata = {partition: self._dump_metadata(md) for partition, md in partitions.items()}
 
-        for partition, partition_metadata in metadata.items():
+        for partition, partition_metadata in dumped_metadata.items():
             file_path = self._file_path(key, partition)
             if partition in data_partitions and key.partition_by:
                 mask = reduce(operator.and_, [
@@ -154,7 +157,7 @@ class ParquetIO(BaseIO):
                 table = data.schema.empty_table()
             table = table.replace_schema_metadata({
                 **(table.schema.metadata or {}),
-                self.METADATA_KEY: json.dumps(partition_metadata, default=str),
+                self.METADATA_KEY: partition_metadata,
             })
             # write to a temp file first so readers never see a half-written partition
             partition_dir = file_path.rsplit('/', 1)[0]
@@ -172,6 +175,7 @@ class ParquetIO(BaseIO):
     def read(
         self,
         key: DatasetKey,
+        *,
         partitions: list[Partition] | None = None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
         if partitions is None:

@@ -7,12 +7,14 @@ if TYPE_CHECKING:
     import pyarrow as pa
 
 import datetime
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 type PartitionValue = str | int | datetime.date
 # partition values, positionally aligned with DatasetKey.partition_by, e.g. ('BTC_USDT_PERP', date(2025, 1, 1))
 type Partition = tuple[PartitionValue, ...]
+# must be JSON-safe (str keys; str/int/float/bool/None/list/dict values), convert e.g. dates to str before writing
 type Metadata = dict[str, Any]
 
 
@@ -66,12 +68,25 @@ class BaseIO(ABC):
 
     CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities()
 
+    @staticmethod
+    def _dump_metadata(metadata: Metadata) -> str:
+        """Serializes metadata to JSON, raising TypeError if it wouldn't come back exactly as given.
+
+        json.dumps alone raises on e.g. dates, but silently changes tuples to lists,
+        int keys to str keys and writes NaN, so the round-trip is checked too.
+        """
+        dumped = json.dumps(metadata)
+        if json.loads(dumped) != metadata:
+            raise TypeError(f'metadata is not JSON-safe, it would not round-trip exactly: {metadata!r}')
+        return dumped
+
     @abstractmethod
     def write(
         self,
         key: DatasetKey,
         data: pa.Table,
-        metadata: dict[Partition, Metadata],
+        *,
+        partitions: dict[Partition, Metadata],
         mode: Literal['replace', 'append'] = 'replace',
     ) -> None:
         """Write data and its per-partition metadata to the dataset.
@@ -79,14 +94,14 @@ class BaseIO(ABC):
         Args:
             key: dataset to write to.
             data: must contain all `key.partition_by` columns.
-            metadata: metadata per partition; its keys define the partitions this write covers.
-                Every partition in `data` must be in it. A partition with metadata but no rows
-                is a valid empty partition (e.g. a date that was fetched but had no trades).
+            partitions: the partitions this write covers, each with its metadata.
+                Every partition in `data` must be in it. A partition in it but with no rows
+                in `data` is a valid empty partition (e.g. a date that was fetched but had no trades).
                 Existing metadata of these partitions is replaced, not merged.
             mode:
-                - 'replace': overwrite the partitions in `metadata` (dynamic partition overwrite);
+                - 'replace': overwrite `partitions` (dynamic partition overwrite);
                     an empty partition's existing rows are deleted. Other partitions are untouched.
-                - 'append': add rows to the partitions in `metadata`.
+                - 'append': add rows to `partitions`.
                     Only if CAPABILITIES.append, otherwise raises NotImplementedError.
         """
 
@@ -94,13 +109,14 @@ class BaseIO(ABC):
     def read(
         self,
         key: DatasetKey,
+        *,
         partitions: list[Partition] | None = None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
         """Read the dataset and its per-partition metadata.
 
         Metadata has to be read anyway to find the existing partitions (see commit marker),
         and the LazyFrame loads nothing until collected, so metadata-only callers can just
-        ignore the frame, e.g. `_, metadata = io.read(key, partitions)`.
+        ignore the frame, e.g. `_, metadata = io.read(key, partitions=partitions)`.
 
         Args:
             key: dataset to read.

@@ -199,9 +199,6 @@ class MarketFeed(TimeBasedFeed, ABC):
         """
         from pfeed.requests import MarketFeedDownloadRequest
 
-        assert any([start_date, end_date, rollback_period]), (
-            "at least one of start_date, end_date, or rollback_period must be provided"
-        )
         env = Environment.BACKTEST
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)

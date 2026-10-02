@@ -20,7 +20,7 @@ Bybit's naming conventions for different contracts (non-spot, no options data):
 BTCUSDT = BTC_USDT_PERP
 BTCUSDT-22AUG25 = BTC_USDT_FUT
 BTCPERP = BTC_USDC_PERP
-BTC-30AUG24 = BTC_USDC_FUT
+# BTC-30AUG24 = BTC_USDC_FUT  (DEPRECATED, no USDC futures anymore)
 BTCUSD = BTC_USD_IPERP
 BTCUSDH25 = BTC_USD_IFUT
 """

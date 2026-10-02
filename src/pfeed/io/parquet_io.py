@@ -42,7 +42,7 @@ class ParquetIO(BaseIO):
     METADATA_KEY: ClassVar[bytes] = b'pfeed_metadata'
     # args set by ParquetIO itself, not overridable via write_options/read_options
     _RESERVED_WRITE_OPTIONS: ClassVar[set[str]] = {'table', 'where', 'filesystem', 'compression'}
-    _RESERVED_READ_OPTIONS: ClassVar[set[str]] = {'source', 'hive_partitioning'}
+    _RESERVED_READ_OPTIONS: ClassVar[set[str]] = {'source', 'hive_partitioning', 'schema', 'missing_columns'}
 
     def __init__(
         self,
@@ -98,9 +98,10 @@ class ParquetIO(BaseIO):
         return posixpath.join(dataset_dir, *partition_dirs, self.FILE_NAME)
 
     def _find_partitions(self, key: DatasetKey) -> dict[Partition, tuple[str, FileMetaData]]:
-        """Finds all partition files of the dataset, parsing partition values back from the hive dirs.
+        """Finds all committed partition files of the dataset, parsing partition values back from the hive dirs.
 
         Returns the footer (FileMetaData) along with the file path, so each file is opened only once.
+        A file without metadata isn't committed (see commit marker), so its partition is treated as missing.
         """
         dataset_dir = self._dataset_dir(key)
         selector = pafs.FileSelector(dataset_dir, allow_not_found=True, recursive=True)
@@ -114,6 +115,8 @@ class ParquetIO(BaseIO):
             if [d.split('=', 1)[0] for d in hive_dirs] != list(key.partition_by):
                 continue  # not a partition of this dataset, e.g. a nested dataset sharing the prefix
             file_metadata = pq.read_metadata(file_path, filesystem=self._filesystem)
+            if not file_metadata.metadata or self.METADATA_KEY not in file_metadata.metadata:
+                continue
             schema = file_metadata.schema.to_arrow_schema()
             partition = tuple(
                 self._from_hive_value(d.split('=', 1)[1], schema.field(col).type)
@@ -121,6 +124,17 @@ class ParquetIO(BaseIO):
             )
             partitions[partition] = (file_path, file_metadata)
         return partitions
+
+    @staticmethod
+    def _dataset_schema(schemas: list[pa.Schema]) -> pa.Schema:
+        """Unions the columns of all partition files, since each file only has the columns it was written with.
+
+        Raises TypeError if a column has different types across schemas.
+        """
+        try:
+            return pa.unify_schemas(schemas)
+        except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
+            raise TypeError(f'a column has different types across partitions: {e}') from e
 
     def write(
         self,
@@ -145,6 +159,9 @@ class ParquetIO(BaseIO):
         # so an invalid partition value or metadata writes nothing
         file_paths = {partition: self._file_path(key, partition) for partition in partitions}
         dumped_metadata = {partition: self._dump_metadata(md) for partition, md in partitions.items()}
+        # schema drift: new/missing columns are fine, a column changing type isn't
+        existing_files = self._find_partitions(key)
+        self._dataset_schema([fm.schema.to_arrow_schema() for _, fm in existing_files.values()] + [data.schema])
 
         for partition, partition_metadata in dumped_metadata.items():
             file_path = file_paths[partition]
@@ -180,26 +197,28 @@ class ParquetIO(BaseIO):
         *,
         partitions: list[Partition] | None = None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
+        # all files are needed even for a subset, since the dataset's columns are the union of all files (schema drift)
+        all_files = self._find_partitions(key)
         if partitions is None:
-            files = self._find_partitions(key)
+            files = all_files
         else:
-            files: dict[Partition, tuple[str, FileMetaData]] = {}
-            for partition in partitions:
-                file_path = self._file_path(key, partition)
-                if self._filesystem.get_file_info(file_path).type == pafs.FileType.File:
-                    files[partition] = (file_path, pq.read_metadata(file_path, filesystem=self._filesystem))
+            files = {partition: all_files[partition] for partition in partitions if partition in all_files}
 
         metadata: dict[Partition, Metadata] = {}
         non_empty_file_paths: list[str] = []
         for partition, (file_path, file_metadata) in files.items():
-            # no metadata = not committed, treat the partition as missing
-            if not file_metadata.metadata or self.METADATA_KEY not in file_metadata.metadata:
-                continue
             metadata[partition] = json.loads(file_metadata.metadata[self.METADATA_KEY])
             if file_metadata.num_rows:
                 non_empty_file_paths.append(file_path)
 
         data = None
         if non_empty_file_paths:
-            data = pl.scan_parquet(non_empty_file_paths, hive_partitioning=False, **self._read_options)
+            schema = self._dataset_schema([fm.schema.to_arrow_schema() for _, fm in all_files.values()])
+            data = pl.scan_parquet(
+                non_empty_file_paths,
+                hive_partitioning=False,
+                schema=pl.DataFrame(schema.empty_table()).schema,
+                missing_columns='insert',  # null for columns a file doesn't have
+                **self._read_options,
+            )
         return data, metadata

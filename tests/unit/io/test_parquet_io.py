@@ -84,13 +84,14 @@ def test_unsupported_partition_column_type_raises(tmp_path: Path):
     """A partition dir whose column type can't be parsed back (e.g. float) raises TypeError on read.
 
     ParquetIO never writes such a dir (write rejects float partition values),
-    so the file is placed by hand, as if written by something else.
+    so the file is placed by hand, as if written by something else, with metadata so it counts as committed.
     """
     io = ParquetIO(base_path=str(tmp_path))
     key = DatasetKey(namespace=NAMESPACE, name=NAME, partition_by=('price',))
     partition_dir = tmp_path / DATASET_DIR / 'price=1.5'
     partition_dir.mkdir(parents=True)
-    pq.write_table(pa.table({'ts': [1], 'price': [1.5]}), partition_dir / ParquetIO.FILE_NAME)
+    table = pa.table({'ts': [1], 'price': [1.5]}).replace_schema_metadata({ParquetIO.METADATA_KEY: b'{}'})
+    pq.write_table(table, partition_dir / ParquetIO.FILE_NAME)
 
     with pytest.raises(TypeError):
         io.read(key)

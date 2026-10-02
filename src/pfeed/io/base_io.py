@@ -94,6 +94,10 @@ class BaseIO(ABC):
         Args:
             key: dataset to write to.
             data: must contain all `key.partition_by` columns.
+                Its columns may differ from the dataset's existing columns (schema drift):
+                - a new column is added to the dataset; existing rows read it as null
+                - a missing column is null in this write's rows; the dataset never loses a column
+                - a column whose type differs from the dataset's raises TypeError and writes nothing
             partitions: the partitions this write covers, each with its metadata.
                 Every partition in `data` must be in it. A partition in it but with no rows
                 in `data` is a valid empty partition (e.g. a date that was fetched but had no trades).
@@ -126,6 +130,7 @@ class BaseIO(ABC):
             (data, metadata):
             - data: LazyFrame including the `key.partition_by` columns, only from partitions that have metadata;
                 None if the dataset does not exist or none of the partitions exist or all of them are empty.
+                Has every column ever written to the dataset, null where a partition doesn't have it.
             - metadata: metadata of the existing partitions; {} if none.
                 Requested partitions not in it are missing.
         """

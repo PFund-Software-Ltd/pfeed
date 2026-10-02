@@ -268,6 +268,57 @@ def test_non_json_metadata_raises(io: BaseIO, data: pa.Table, bad_metadata: Meta
     assert io.read(KEY) == (None, {})
 
 
+def test_schema_drift(io: BaseIO, data: pa.Table):
+    """Columns may come and go across writes; the dataset keeps every column ever written.
+
+    Writes BTC/D1 with an extra 'RPI' column, then BTC/D2 without it, then BTC/D3 with a new 'tick' column,
+    e.g. a vendor dropping and adding columns over time.
+    Every read has all columns, with nulls where a partition doesn't have them,
+    including a read of a single partition.
+    """
+    d1 = data.filter(pc.field('date') == D1).append_column('RPI', pa.array([True, False]))
+    d2 = data.filter(pc.field('date') == D2)
+    d3 = pa.table({'ts': [4], 'price': [103.0], 'product': ['BTC'], 'date': [D3], 'tick': ['PlusTick']})
+    io.write(KEY, d1, partitions={('BTC', D1): {'version': 1}})
+    io.write(KEY, d2, partitions={('BTC', D2): {'version': 1}})
+    io.write(KEY, d3, partitions={('BTC', D3): {'version': 1}})
+
+    lf, _ = io.read(KEY)
+    assert lf is not None
+    expected = pl.DataFrame({
+        'ts': [1, 2, 3, 4],
+        'price': [100.0, 101.0, 102.0, 103.0],
+        'product': ['BTC'] * 4,
+        'date': [D1, D1, D2, D3],
+        'RPI': [True, False, None, None],
+        'tick': [None, None, None, 'PlusTick'],
+    })
+    assert_frame_equal(lf.collect().sort('ts'), expected, check_column_order=False)
+
+    lf, _ = io.read(KEY, partitions=[('BTC', D2)])
+    assert lf is not None
+    assert_frame_equal(lf.collect(), expected.filter(pl.col('date') == D2), check_column_order=False)
+
+
+def test_column_type_change_raises(io: BaseIO, data: pa.Table):
+    """A column whose type differs from the dataset's raises TypeError and writes nothing.
+
+    Writes `data` (price is float), then writes BTC/D3 with price as str.
+    The dataset stays as it was, BTC/D3 doesn't exist.
+    """
+    partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
+    io.write(KEY, data, partitions=partitions)
+
+    d3 = pa.table({'ts': [4], 'price': ['103.0'], 'product': ['BTC'], 'date': [D3]})
+    with pytest.raises(TypeError):
+        io.write(KEY, d3, partitions={('BTC', D3): {'version': 1}})
+    lf, read_metadata = io.read(KEY)
+
+    assert lf is not None
+    assert read_metadata == partitions
+    assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(data))
+
+
 def test_missing_partition_column_raises(io: BaseIO, data: pa.Table):
     """Data must contain every partition_by column, otherwise write raises ValueError and writes nothing.
 

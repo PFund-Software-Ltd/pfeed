@@ -15,17 +15,18 @@ def _decompress_gzip(data: bytes) -> bytes:
 
 
 def _compress_zstd(data: bytes) -> bytes:
-    import zstandard as zstd
+    import pyarrow as pa
 
-    cctx = zstd.ZstdCompressor()
-    return cctx.compress(data)
+    buffer = pa.BufferOutputStream()
+    with pa.CompressedOutputStream(buffer, "zstd") as stream:
+        stream.write(data)
+    return buffer.getvalue().to_pybytes()
 
 
 def _decompress_zstd(data: bytes) -> bytes:
-    import zstandard as zstd
+    import pyarrow as pa
 
-    dctx = zstd.ZstdDecompressor()
-    return dctx.decompress(data)
+    return pa.input_stream(pa.py_buffer(data), compression="zstd").read()
 
 
 def _compress_bz2(data: bytes, compression_level: int = 9) -> bytes:

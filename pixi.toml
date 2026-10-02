@@ -38,7 +38,6 @@ pandera = ">=0.33.1"
 msgspec = ">=0.22.0"
 pydantic = ">=2.13.5"
 narwhals = ">=2.26.0"
-zstandard = ">=0.25.0"  # REVIEW: this is included in python 3.14
 cloudpathlib = ">=0.25.0"
 beautifulsoup4 = ">=4.15.0"
 ray = { version = ">=2.58.0", extras = ["default"] }
@@ -65,6 +64,7 @@ huggingface-hub = ">=1.33.0"
 prefect = ">=3.8.7"
 pandas = ">=3.0.6"
 deltalake = ">=1.6.6"
+pyiceberg = {version = ">=0.12.0", extras = ['sql-sqlite', 'pyiceberg-core']}
 lancedb = ">=0.39.0"
 yfinance = ">=1.7.0"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }

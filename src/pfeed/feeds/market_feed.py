@@ -168,34 +168,43 @@ class MarketFeed(TimeBasedFeed, ABC):
         """Download historical data from the data source.
 
         Args:
-            product: Product basis (e.g. 'BTC_USDT_PERP', 'AAPL_USD_STK'). For products
-                with extra attributes (options, futures), pass them via `product_specs`.
-            resolution: Target data resolution (e.g. '1m', '1h', '1d'). If the source
-                doesn't provide this resolution natively, finer-grained source data is
-                downloaded and resampled down.
-            rollback_period: Lookback from today, only used when `start_date` is empty.
-                Accepts a resolution string (e.g. '7d'), 'ytd', or 'max'. With 'max',
-                the source's own `start_date` attribute is used.
-            start_date: Start date. If empty, derived from `rollback_period`.
-            end_date: End date. If empty, defaults to today.
-            data_origin: Origin label used to distinguish data from different providers
-                of the same source.
+            product: Product basis, e.g. `'BTC_USDT_PERP'`, `'AAPL_USD_STK'`.
+            resolution: Target resolution, e.g. `'1t'` (tick), `'1m'`, `'1d'`.
+                If the source doesn't provide it, the closest finer resolution is
+                downloaded and downsampled.
+            rollback_period: How far to roll back from today (UTC) when `start_date`
+                is None, e.g. `'7d'` = the last 7 days up to yesterday.
+                Also accepts `'ytd'` (year to date) and `'max'` (all available data).
+            start_date: First date (inclusive), e.g. `'2025-01-01'`.
+            end_date: Last date (inclusive). If None, defaults to yesterday (UTC).
+                Requires `start_date`.
+            data_origin: Sub-label for data from the same source but different origins.
+                Defaults to the source name.
             clean_data: Whether to clean raw data after download.
-                Ignored when `storage_config` is provided — cleaning is then determined
-                by `data_layer`. If True, runs default transformations (normalize,
-                standardize columns, resample). If False, raw data is returned as-is.
-            storage_config: Where to persist downloaded data. If None, data is not
-                persisted to storage.
-            io_config: IO format/compression and read/write/connect options. Defaults
-                to parquet + snappy.
-            product_specs: Extra product attributes for products that need them, e.g.
-                `download(product='BTC_USDT_OPT', strike_price=10000,
-                expiration='2024-01-01', option_type='CALL')`. Leave empty first and
-                read the exception message to discover required keys.
+                If True, runs default transformations (normalize, standardize columns,
+                downsample). If False, raw data is returned as-is.
+                Ignored when `storage_config` is provided: cleaning is then determined
+                by its `data_layer`.
+            storage_config: Where to store the data. If None, data is not stored.
+
+                - `storage`: backend, e.g. `'local'` (default), `'duckdb'`
+                - `data_path`: root directory, defaults to pfeed's configured `data_path`
+                - `data_layer`: `'raw'`, `'cleaned'` (default) or `'curated'`
+
+                e.g. `StorageConfig(storage='local', data_path='./data')`
+            io_config: IO format and options for writing the data. If None, uses `IOConfig()`.
+
+                - `io_format`: `'parquet'` (default), `'deltalake'`, `'duckdb'`, etc.
+                - `compression`: `'snappy'` (default), `'zstd'`, etc.
+                - `connect_options` / `write_options` / `read_options`: passed through
+                  to the IO class's `connect()` / `write()` / `read()`
+
+                e.g. `IOConfig(io_format='deltalake')`
+            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
+                futures. Leave them out to get an error listing the required ones.
 
         Returns:
-            RunResult of the download operation.
-            Returns `self` when called in pipeline mode.
+            `RunResult` with the downloaded data, or `self` in pipeline mode.
         """
         from pfeed.requests import MarketFeedDownloadRequest
 
@@ -296,40 +305,52 @@ class MarketFeed(TimeBasedFeed, ABC):
         """Retrieve data from storage.
 
         Args:
-            product: Financial product, e.g. BTC_USDT_PERP, where PERP = product type "perpetual".
-            resolution: Data resolution. e.g. '1m' = 1 minute as the unit of each data bar/candle.
-                For convenience, data types such as 'tick', 'second', 'minute' etc. are also supported.
-            symbol: Source-specific symbol. If empty, derived from `product` — but the
-                derivation may be wrong, in which case pass it explicitly.
-            rollback_period: Lookback from today, only used when `start_date` is empty.
-                Accepts a resolution string (e.g. '7d'), 'ytd', or 'max'. With 'max',
-                the source's own `start_date` attribute is used.
-            start_date: Start date. If empty, derived from `rollback_period`.
-            end_date: End date. If empty, defaults to today.
-            env: Trading Environment (e.g. 'BACKTEST') to retrieve data from.
-            data_origin: Origin label used to distinguish data from different providers
-                of the same source.
-            dataflow_per_date: Whether to create a dataflow for each date.
-                If False (default), retrieve all dates in a single dataflow —
-                one polars multi-file scan + one resample. Fastest for typical queries.
+            product: Product basis, e.g. `'BTC_USDT_PERP'`, `'AAPL_USD_STK'`.
+            resolution: Target resolution, e.g. `'1t'` (tick), `'1m'`, `'1d'`.
+                If not stored, finer stored data is retrieved and downsampled.
+            symbol: Source-specific symbol, e.g. `'BTCUSDT'` for Bybit's `BTC_USDT_PERP`.
+                If empty, derived from `product`. Pass it explicitly if the derived one is wrong.
+            rollback_period: How far to roll back from today (UTC) when `start_date`
+                is None, e.g. `'7d'` = the last 7 days up to yesterday.
+                Also accepts `'ytd'` (year to date) and `'max'` (all available data).
+            start_date: First date (inclusive), e.g. `'2025-01-01'`.
+            end_date: Last date (inclusive). If None, defaults to yesterday (UTC).
+                Requires `start_date`.
+            data_origin: Sub-label for data from the same source but different origins.
+                Defaults to the source name.
+            env: Trading environment the data was stored in: `'BACKTEST'` (default) for
+                downloaded data, `'PAPER'` or `'LIVE'` for streamed data.
+            dataflow_per_date: Whether to create one dataflow per date.
+                If False (default), all dates are retrieved in one dataflow
+                (one multi-file scan), fastest for typical queries.
                 Set True when:
-                    - The resample is too large to fit in memory (one date at a time fits).
-                    - Using Ray and want per-date tasks parallelized across workers.
-            clean_data: Whether to clean raw data.
-                If data_layer is not RAW in storage_config, this parameter will be ignored.
-                If True, raw data stored in data layer=RAW will be cleaned using the default transformations for download.
-                If False, raw data stored in data layer=RAW will be loaded as is.
-            storage_config: Where to retrieve the data from. If None, try to retrieve from the local storage.
-            io_config: IO format/compression and read/write/connect options used to retrieve data.
-                Defaults to parquet + snappy.
-            product_specs: Extra product attributes for products that need them, e.g.
-                `download(product='BTC_USDT_OPT', strike_price=10000,
-                expiration='2024-01-01', option_type='CALL')`. Leave empty first and
-                read the exception message to discover required keys.
+
+                - all dates don't fit in memory at once, e.g. when downsampling
+                - using Ray, to parallelize per-date tasks across workers
+            clean_data: Whether to clean the retrieved data.
+                If True, runs default transformations (normalize, standardize columns,
+                downsample). If False, data is returned as stored.
+                Only applies when `storage_config.data_layer` is `'raw'`; ignored otherwise.
+            storage_config: Where to retrieve the data from. If None, uses `StorageConfig()`.
+
+                - `storage`: backend, e.g. `'local'` (default), `'duckdb'`
+                - `data_path`: root directory, defaults to pfeed's configured `data_path`
+                - `data_layer`: `'raw'`, `'cleaned'` (default) or `'curated'`
+
+                e.g. `StorageConfig(storage='local', data_path='./data')`
+            io_config: IO format and options for reading the data. If None, uses `IOConfig()`.
+
+                - `io_format`: `'parquet'` (default), `'deltalake'`, `'duckdb'`, etc.
+                - `compression`: `'snappy'` (default), `'zstd'`, etc.
+                - `connect_options` / `write_options` / `read_options`: passed through
+                  to the IO class's `connect()` / `write()` / `read()`
+
+                e.g. `IOConfig(io_format='deltalake')`
+            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
+                futures. Leave them out to get an error listing the required ones.
 
         Returns:
-            RunResult of the retrieval operation.
-            Returns `self` when called in pipeline mode.
+            `RunResult` with the retrieved data, or `self` in pipeline mode.
         """
         from pfeed.requests import MarketFeedRetrieveRequest
 

@@ -283,12 +283,13 @@ class MarketFeed(TimeBasedFeed, ABC):
         self,
         product: str,
         resolution: Resolution | MarketDataType | str,
+        *,
         symbol: str = "",
-        rollback_period: str | Literal["ytd", "max"] = "1d",
-        start_date: datetime.date | str = "",
-        end_date: datetime.date | str = "",
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str | None = None,
+        end_date: datetime.date | str | None = None,
         data_origin: str = "",
-        env: Environment = Environment.BACKTEST,
+        env: Environment | str = Environment.BACKTEST,
         dataflow_per_date: bool = False,
         clean_data: bool = False,
         storage_config: StorageConfig | None = None,
@@ -335,9 +336,6 @@ class MarketFeed(TimeBasedFeed, ABC):
         """
         from pfeed.requests import MarketFeedRetrieveRequest
 
-        assert any([start_date, end_date, rollback_period]), (
-            "at least one of start_date, end_date, or rollback_period must be provided"
-        )
         env = Environment[env.upper()]
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(

@@ -3122,12 +3122,12 @@ packages:
 - pypi: ../pfund
   name: pfund
   requires_dist:
-  - pfund-kit>=0.1.20
+  - pfund-kit>=0.1.21
   - pfeed>=0.0.20
   - apscheduler>=3.11.3
   - httpx2[http2]>=2.13.1
   - websockets>=16.1.0 ; sys_platform != 'emscripten'
-  - numba>=0.67.0
+  - numba>=0.68.0
   - pfeed[yfinance]>=0.0.20 ; extra == 'core'
   - pfolio>=0.0.4 ; extra == 'core'
   - pfund-plot[marimo]>=0.0.5 ; extra == 'core'
@@ -3135,7 +3135,7 @@ packages:
   - ta-lib>=0.8.1 ; extra == 'ta-lib'
   - joblib>=1.6.0 ; extra == 'sklearn'
   - scikit-learn>=1.9.1 ; extra == 'sklearn'
-  - torch>=2.14.0 ; extra == 'torch'
+  - torch>=2.14.1 ; extra == 'torch'
   - safetensors>=0.8.0 ; extra == 'torch'
   requires_python: '>=3.12'
 - pypi: ./

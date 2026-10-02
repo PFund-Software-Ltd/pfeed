@@ -8,10 +8,10 @@ if TYPE_CHECKING:
 
 import datetime
 
-import pytest
 import polars as pl
 import pyarrow as pa
 import pyarrow.compute as pc
+import pytest
 from polars.testing import assert_frame_equal
 
 from pfeed.io.base_io import DatasetKey
@@ -128,6 +128,22 @@ def test_empty_partition(io: BaseIO, data: pa.Table):
     lf, read_metadata = io.read(KEY, partitions=[('BTC', D1)])
     assert lf is None
     assert read_metadata == {('BTC', D1): {'version': 2}}
+
+
+def test_empty_metadata(io: BaseIO, data: pa.Table):
+    """Empty metadata {} still commits the partition: it is metadata with no fields, not "no metadata".
+
+    Writes `data` (BTC/D1 and BTC/D2) with {} for both, then reads the whole dataset back.
+    Both partitions must exist with {} as their metadata, and all rows must be there.
+    """
+    partitions: dict[Partition, Metadata] = {('BTC', D1): {}, ('BTC', D2): {}}
+
+    io.write(KEY, data, partitions=partitions)
+    lf, read_metadata = io.read(KEY)
+
+    assert lf is not None
+    assert read_metadata == partitions
+    assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(data))
 
 
 def test_read_subset_partitions(io: BaseIO, data: pa.Table):

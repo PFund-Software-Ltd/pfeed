@@ -141,11 +141,13 @@ class ParquetIO(BaseIO):
             data_partitions = {()} if data.num_rows else set()
         if not_in_partitions := data_partitions - partitions.keys():
             raise ValueError(f'partitions {not_in_partitions} in data are not in `partitions`')
-        # serialize all metadata before writing any file, so invalid metadata writes nothing
+        # build all paths and serialize all metadata before writing any file,
+        # so an invalid partition value or metadata writes nothing
+        file_paths = {partition: self._file_path(key, partition) for partition in partitions}
         dumped_metadata = {partition: self._dump_metadata(md) for partition, md in partitions.items()}
 
         for partition, partition_metadata in dumped_metadata.items():
-            file_path = self._file_path(key, partition)
+            file_path = file_paths[partition]
             if partition in data_partitions and key.partition_by:
                 mask = reduce(operator.and_, [
                     pc.field(col) == value for col, value in zip(key.partition_by, partition, strict=True)

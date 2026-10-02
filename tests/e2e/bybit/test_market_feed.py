@@ -27,7 +27,7 @@ def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, re
         _resolution = Resolution(resolution)
         assert df.columns[:3] == ['date', 'product', 'resolution']
         if _resolution.is_bar():
-            assert df.columns == ['date', 'product', 'resolution', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+            assert df.columns == ['date', 'product', 'resolution', 'open', 'high', 'low', 'close', 'volume', 'n_data_points']
         elif _resolution.is_tick():
             # vendor columns are kept, only core columns are guaranteed
             assert {'date', 'product', 'resolution', 'symbol', 'side', 'volume', 'price'} <= set(df.columns)
@@ -37,7 +37,6 @@ def test_download_and_retrieve(tmp_path: Path, bybit: pe.Bybit, product: str, re
         if _resolution.is_bar():
             assert df['date'].is_unique().all()  # sorted + unique = strictly increasing
         assert df['resolution'].n_unique() == 1
-        assert df['symbol'].n_unique() == 1
         assert df['product'].n_unique() == 1
         assert df['resolution'][0] == str(_resolution)
         # crypto trades 24/7, so every day in [start_date, end_date] should have data

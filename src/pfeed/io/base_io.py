@@ -1,127 +1,115 @@
 from __future__ import annotations
 
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from pfeed.data_handlers.base_data_handler import SourcePath
+    import polars as pl
+    import pyarrow as pa
 
-    # MetadataModel (e.g. TimeBasedMetadataModel) in dict format
-    MetadataDict: TypeAlias = dict[str, Any]
-
-
+import datetime
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
-from pfeed.enums.io_format import IOFormat
+type PartitionValue = str | int | datetime.date
+# partition values, positionally aligned with DatasetKey.partition_by, e.g. ('BTC_USDT_PERP', date(2025, 1, 1))
+type Partition = tuple[PartitionValue, ...]
+type Metadata = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class DatasetKey:
+    """Logical identity of a dataset, independent of where/how it is stored.
+
+    Each IO maps it to its own physical layout, e.g.
+    - ParquetIO: hive dirs `k=v/.../k=v/` for namespace + name, then one dir per partition
+    - DuckLakeIO: schema = joined namespace values, table = joined name values
+
+    Attributes:
+        namespace: ordered (key -> value), e.g. {'env': 'BACKTEST', 'data_layer': 'CLEANED', ...}
+        name: ordered (key -> value), e.g. {'asset_type': 'PERPETUAL', 'resolution': '1t'}
+        partition_by: column names the dataset is partitioned by, e.g. ('product', 'date').
+            Empty for unpartitioned datasets.
+    """
+
+    namespace: dict[str, str]
+    name: dict[str, str]
+    partition_by: tuple[str, ...] = field(default=())
+
+
+@dataclass(frozen=True)
+class IOCapabilities:
+    """What an IO supports, so callers can check before writing.
+
+    Attributes:
+        append: supports write(mode='append').
+        concurrent_partition_writes: multiple processes (e.g. Ray workers) may call write() on the
+            same DatasetKey at the same time, as long as they cover disjoint partitions.
+            Concurrent writes to the same partition are not covered by any IO; avoid them.
+    """
+
+    append: bool = False
+    concurrent_partition_writes: bool = False
 
 
 class BaseIO(ABC):
-    IO_FORMAT: ClassVar[IOFormat | None] = None
-    SUPPORTS_PARALLEL_WRITES: bool = (
-        False  # if supports parallel writes to the same destination
-    )
-    DATE_FILTER_PREDICATE: str = ""
-    FILE_EXTENSION: str | None = None
-    SUPPORTS_PARTITIONING: bool = False
+    """Reads/writes dataframes by DatasetKey.
 
-    def __init__(
+    IO knows nothing about the data's domain (no product/date/resolution);
+    partitioning is whatever DatasetKey.partition_by declares.
+
+    Metadata is the commit marker: a partition exists if and only if it has metadata.
+    IOs must make metadata visible no earlier than its data (same transaction if supported,
+    otherwise data first, metadata last), so a crash in between leaves the partition "missing"
+    and the next 'replace' overwrites the leftover data.
+    Metadata is opaque to IO; the data handler owns its schema.
+    """
+
+    CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities()
+
+    @abstractmethod
+    def write(
         self,
-        storage_options: dict[str, Any] | None = None,
-        connect_options: dict[str, Any] | None = None,
-        read_options: dict[str, Any] | None = None,
-        write_options: dict[str, Any] | None = None,
-    ):
-        self._storage_options: dict[str, Any] = storage_options or {}
-        self._connect_options: dict[str, Any] = connect_options or {}
-        self._read_options: dict[str, Any] = read_options or {}
-        self._write_options: dict[str, Any] = write_options or {}
-
-    @property
-    def name(self) -> str:
-        return self.__class__.__name__
-
-    @abstractmethod
-    def write(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    @abstractmethod
-    def read(self, *args: Any, **kwargs: Any) -> Any:
-        pass
-
-    @abstractmethod
-    def exists(self, *args: Any, **kwargs: Any) -> bool:
-        """Check if a file exists at this path."""
-        pass
-
-    @abstractmethod
-    def is_empty(self, *args: Any, **kwargs: Any) -> bool:
-        pass
-
-    @abstractmethod
-    def write_metadata(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    @abstractmethod
-    def read_metadata(
-        self, *args: Any, **kwargs: Any
-    ) -> dict[SourcePath, MetadataDict]:
-        pass
-
-    def __enter__(self):
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
+        key: DatasetKey,
+        data: pa.Table,
+        metadata: dict[Partition, Metadata],
+        mode: Literal['replace', 'append'] = 'replace',
     ) -> None:
-        return None
-
-    @classmethod
-    def is_file_io(cls, strict: bool = True) -> bool:
-        """Check if the IO is a FileIO.
+        """Write data and its per-partition metadata to the dataset.
 
         Args:
-            strict: If True, only returns True if FileIO is the first parent class.
-                If False, returns True if FileIO is anywhere in the inheritance chain.
-                e.g. DuckDBIO(DatabaseIO, FileIO) -> strict=True returns False, strict=False returns True.
+            key: dataset to write to.
+            data: must contain all `key.partition_by` columns.
+            metadata: metadata per partition; its keys define the partitions this write covers.
+                Every partition in `data` must be in it. A partition with metadata but no rows
+                is a valid empty partition (e.g. a date that was fetched but had no trades).
+                Existing metadata of these partitions is replaced, not merged.
+            mode:
+                - 'replace': overwrite the partitions in `metadata` (dynamic partition overwrite);
+                    an empty partition's existing rows are deleted. Other partitions are untouched.
+                - 'append': add rows to the partitions in `metadata`.
+                    Only if CAPABILITIES.append, otherwise raises NotImplementedError.
         """
-        from pfeed.io.file_io import FileIO
 
-        if strict:
-            # FileIO is concrete (used directly for the BLOB format), so it counts
-            # as a FileIO itself, not only its subclasses.
-            return cls is FileIO or cls.__bases__[0] is FileIO
-        else:
-            return issubclass(cls, FileIO)
+    @abstractmethod
+    def read(
+        self,
+        key: DatasetKey,
+        partitions: list[Partition] | None = None,
+    ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
+        """Read the dataset and its per-partition metadata.
 
-    @classmethod
-    def is_table_io(cls, strict: bool = True) -> bool:
-        """Check if the IO is a TableIO.
+        Metadata has to be read anyway to find the existing partitions (see commit marker),
+        and the LazyFrame loads nothing until collected, so metadata-only callers can just
+        ignore the frame, e.g. `_, metadata = io.read(key, partitions)`.
 
         Args:
-            strict: If True, only returns True if TableIO is the first parent class.
-                If False, returns True if TableIO is anywhere in the inheritance chain.
+            key: dataset to read.
+            partitions: partitions to read; None reads the whole dataset.
+
+        Returns:
+            (data, metadata):
+            - data: LazyFrame including the `key.partition_by` columns, only from partitions that have metadata;
+                None if the dataset does not exist or none of the partitions exist or all of them are empty.
+            - metadata: metadata of the existing partitions; {} if none.
+                Requested partitions not in it are missing.
         """
-        from pfeed.io.table_io import TableIO
-
-        if strict:
-            return cls.__bases__[0] is TableIO
-        else:
-            return issubclass(cls, TableIO)
-
-    @classmethod
-    def is_database_io(cls, strict: bool = True) -> bool:
-        """Check if the IO is a DatabaseIO.
-
-        Args:
-            strict: If True, only returns True if DatabaseIO is the first parent class.
-                If False, returns True if DatabaseIO is anywhere in the inheritance chain.
-        """
-        from pfeed.io.database_io import DatabaseIO
-
-        if strict:
-            return cls.__bases__[0] is DatabaseIO
-        else:
-            return issubclass(cls, DatabaseIO)

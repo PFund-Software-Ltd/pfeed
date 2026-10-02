@@ -16,7 +16,7 @@ from pfeed.dataflow.result import RunResult
     ('BTC_USDT_PERP', '1t', {}),  # USDT perpetual
     ('BTC_USDT_FUT', '1s', {'expiration': '2026-09-25'}),  # USDT future
     ('BTC_USDC_PERPETUAL', '1m', {}),  # USDC perpetual
-    ('BTC_USDC_FUTURE', '1h', {'expiration': '2026-09-25'}),  # USDC future
+    # DEPRECATED: ('BTC_USDC_FUTURE', '1h', {'expiration': '2026-09-25'}),  # USDC futures NO LONGER EXIST
     ('BTC_USD_IPERP', '1d', {}),  # inverse perpetual
     ('BTC_USD_INVERSE-FUTURE', '1t', {'expiration': '2026-09-25'}),  # inverse future
     ('BTC_USDC_SPOT', '1t', {}),  # spot

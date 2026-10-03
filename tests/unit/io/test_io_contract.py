@@ -431,7 +431,8 @@ def test_timestamps(io: BaseIO, data: pa.Table):
     """Timestamps come back unchanged, with or without a time zone (UTC; IOs may store others in UTC).
 
     Nanosecond timestamps either come back unchanged too, or, where the format only supports
-    microseconds (Delta Lake, Iceberg), raise TypeError and write nothing, instead of being truncated.
+    microseconds (Delta Lake, Iceberg), come back as microseconds if that loses nothing,
+    else raise TypeError and write nothing, instead of being truncated.
     """
     d1 = data.filter(pc.field('date') == D1)
     us = datetime.datetime(2025, 1, 1, 1, 2, 3, 456789)
@@ -443,17 +444,44 @@ def test_timestamps(io: BaseIO, data: pa.Table):
     assert lf is not None
     assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(d1))
 
+    # ns of whole microseconds, e.g. upcast from us: every IO stores it without loss
     d2 = data.filter(pc.field('date') == D2)
+    padded_ns = pa.array([1_735_693_323_456_789_000], pa.timestamp('ns'))
+    io.write(KEY, d2.append_column('ns', padded_ns), partitions={('BTC', D2): {}})
+    lf, _ = io.read(KEY, partitions=[('BTC', D2)])
+    assert lf is not None
+    assert lf.collect()['ns'].to_list() == pl.Series(padded_ns).to_list()
+
+    d3 = d2.set_column(d2.schema.get_field_index('date'), 'date', pa.array([D3]))
     ns = pa.array([1_735_693_323_456_789_123], pa.timestamp('ns'))
-    d2 = d2.append_column('ns', ns)
+    d3 = d3.append_column('ns', ns)
     try:
-        io.write(KEY, d2, partitions={('BTC', D2): {}})
+        io.write(KEY, d3, partitions={('BTC', D3): {}})
     except TypeError:
-        assert io.read(KEY, partitions=[('BTC', D2)]) == (None, {})
+        assert io.read(KEY, partitions=[('BTC', D3)]) == (None, {})
     else:
-        lf, _ = io.read(KEY, partitions=[('BTC', D2)])
+        lf, _ = io.read(KEY, partitions=[('BTC', D3)])
         assert lf is not None
         assert lf.collect()['ns'].to_list() == pl.Series(ns).to_list()
+
+
+def test_timestamp_precision_loss_allowed(io: BaseIO, data: pa.Table, monkeypatch: pytest.MonkeyPatch):
+    """With the config's allow_timestamp_precision_loss, IOs that store microseconds truncate ns with a warning."""
+    from pfeed.config import get_config
+
+    monkeypatch.setattr(get_config(), 'allow_timestamp_precision_loss', True)
+    ns = pa.array([1_735_693_323_456_789_123], pa.timestamp('ns'))
+    d2 = data.filter(pc.field('date') == D2).append_column('ns', ns)
+    stores_us = isinstance(io, (DeltaLakeIO, IcebergIO))
+    if stores_us:
+        with pytest.warns(RuntimeWarning, match="truncated 1 timestamps of column 'ns'"):
+            io.write(KEY, d2, partitions={('BTC', D2): {}})
+    else:
+        io.write(KEY, d2, partitions={('BTC', D2): {}})
+    lf, _ = io.read(KEY, partitions=[('BTC', D2)])
+    assert lf is not None
+    expected = pl.Series(ns).dt.truncate('1us') if stores_us else pl.Series(ns)
+    assert lf.collect()['ns'].dt.cast_time_unit('ns').to_list() == expected.to_list()
 
 
 def test_column_type_change_raises(io: BaseIO, data: pa.Table):

@@ -151,11 +151,12 @@ class IcebergIO(TableIO):
     def _write(
         self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],
     ) -> None:
+        # Iceberg stores timestamps in microseconds (ns needs v3, which pyiceberg can't write yet)
+        data = self._cast_ns_timestamps_to_us(data)
         table = self._add_marker_rows(key, data, partitions)
         try:
             self._with_retries(lambda: self._write_transaction(key, table, list(partitions), mode), f'write to {key}')
         except UnsupportedPyArrowTypeException as e:
-            # e.g. timestamp[ns], which only Iceberg v3 supports, and pyiceberg can't write v3 yet
             raise TypeError(str(e)) from e
 
     def _write_transaction(self, key: DatasetKey, table: pa.Table, partitions: list[Partition], mode: str) -> None:

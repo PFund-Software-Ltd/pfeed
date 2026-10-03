@@ -102,10 +102,8 @@ class DeltaLakeIO(TableIO):
     def _write(
         self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],
     ) -> None:
-        for field in data.schema:
-            # Delta Lake stores timestamps in microseconds, delta-rs would silently truncate them
-            if pa.types.is_timestamp(field.type) and field.type.unit == 'ns':
-                raise TypeError(f'column {field.name!r} is {field.type}, Delta Lake only supports timestamps up to microseconds')
+        # Delta Lake stores timestamps in microseconds, delta-rs would silently truncate ns ones
+        data = self._cast_ns_timestamps_to_us(data)
         table = self._add_marker_rows(key, data, partitions)
         path = self._table_path(key)
         self._with_retries(lambda: self._write_transaction(key, path, table, list(partitions), mode), f'write to {key}')

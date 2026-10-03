@@ -5,11 +5,16 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 if TYPE_CHECKING:
     from pyarrow.parquet import FileMetaData
 
-    from pfeed.io.base_io import DatasetKey, Metadata, Partition, PartitionValue
+    from pfeed.io.base_io import (
+        DatasetKey,
+        Metadata,
+        Partition,
+        PartitionLevel,
+        PartitionValue,
+    )
 
 import datetime
 import json
-import operator
 import os
 import posixpath
 import uuid
@@ -22,16 +27,18 @@ import pyarrow.compute as pc
 import pyarrow.fs as pafs
 import pyarrow.parquet as pq
 
-from pfeed.io.base_io import BaseIO, IOCapabilities
+from pfeed.io.base_io import BaseIO, DatePartition, IOCapabilities
 
 
 class ParquetIO(BaseIO):
     """Stores each partition as one parquet file in a hive layout, metadata in the file's footer.
 
     Layout: <base_path>/<namespace k=v>/.../<name k=v>/.../<partition_by k=v>/.../part-0.parquet
-    e.g. ./data/env=BACKTEST/.../resolution=1t/product=BTC_USDT_PERP/date=2025-01-01/part-0.parquet
+    e.g. ./data/env=BACKTEST/.../resolution=1t/product=BTC_USDT_PERP/year=2025/month=01/day=01/part-0.parquet
 
-    - partition columns are kept inside the file too, so their types survive the round-trip
+    - a column level is one dir `col=value`; a DatePartition level is three dirs `year=YYYY/month=MM/day=DD`
+    - partition columns are kept inside the file too, so their types survive the round-trip;
+        a DatePartition's date is only in the dirs, it is computed from its column, not stored
     - an empty partition is a 0-row file carrying its metadata
     - replace is atomic per partition: write to a temp file, then rename over part-0.parquet
     - no append: a parquet file is immutable, appending means multi-file state, use DeltaLakeIO/DuckLakeIO
@@ -94,13 +101,37 @@ class ParquetIO(BaseIO):
             return value
         raise TypeError(f'unsupported partition column type {dtype}')
 
+    @staticmethod
+    def _level_dir_names(level: PartitionLevel) -> list[str]:
+        return ['year', 'month', 'day'] if isinstance(level, DatePartition) else [level]
+
+    @classmethod
+    def _partition_dir_names(cls, key: DatasetKey) -> list[str]:
+        """The hive dir names of the partition levels, raising ValueError if two levels share a dir name."""
+        dir_names = [name for level in key.partition_by for name in cls._level_dir_names(level)]
+        if len(set(dir_names)) != len(dir_names):
+            raise ValueError(f'partition_by {key.partition_by} has duplicate dir names {dir_names}')
+        return dir_names
+
+    @classmethod
+    def _to_partition_dirs(cls, level: PartitionLevel, value: PartitionValue) -> list[str]:
+        if isinstance(level, DatePartition):
+            if isinstance(value, datetime.datetime) or not isinstance(value, datetime.date):
+                raise TypeError(f'{level} partition value must be a date, got {value!r}')
+            return [f'year={value.year:04d}', f'month={value.month:02d}', f'day={value.day:02d}']
+        return [cls._to_hive_dir(level, value)]
+
     def _dataset_dir(self, key: DatasetKey) -> str:
         dataset_dirs = [self._to_hive_dir(col, value) for col, value in (key.namespace | key.name).items()]
         return posixpath.join(self._base_path, *dataset_dirs)
 
     def _file_path(self, key: DatasetKey, partition: Partition) -> str:
         dataset_dir = self._dataset_dir(key)
-        partition_dirs = [self._to_hive_dir(col, value) for col, value in zip(key.partition_by, partition, strict=True)]
+        partition_dirs = [
+            partition_dir
+            for level, value in zip(key.partition_by, partition, strict=True)
+            for partition_dir in self._to_partition_dirs(level, value)
+        ]
         return posixpath.join(dataset_dir, *partition_dirs, self.FILE_NAME)
 
     def _find_partitions(self, key: DatasetKey) -> dict[Partition, tuple[str, FileMetaData]]:
@@ -110,6 +141,7 @@ class ParquetIO(BaseIO):
         A file without metadata isn't committed (see commit marker), so its partition is treated as missing.
         """
         dataset_dir = self._dataset_dir(key)
+        dir_names = self._partition_dir_names(key)
         selector = pafs.FileSelector(dataset_dir, allow_not_found=True, recursive=True)
         file_paths = [
             info.path for info in self._filesystem.get_file_info(selector)
@@ -118,15 +150,18 @@ class ParquetIO(BaseIO):
         partitions: dict[Partition, tuple[str, FileMetaData]] = {}
         for file_path in file_paths:
             hive_dirs = file_path.removeprefix(dataset_dir + '/').split('/')[:-1]
-            if [d.split('=', 1)[0] for d in hive_dirs] != list(key.partition_by):
+            if [d.split('=', 1)[0] for d in hive_dirs] != dir_names:
                 continue  # not a partition of this dataset, e.g. a nested dataset sharing the prefix
             file_metadata = pq.read_metadata(file_path, filesystem=self._filesystem)
             if not file_metadata.metadata or self.METADATA_KEY not in file_metadata.metadata:
                 continue
             schema = file_metadata.schema.to_arrow_schema()
+            values = iter(d.split('=', 1)[1] for d in hive_dirs)
             partition = tuple(
-                self._from_hive_value(d.split('=', 1)[1], schema.field(col).type)
-                for d, col in zip(hive_dirs, key.partition_by, strict=True)
+                datetime.date(int(next(values)), int(next(values)), int(next(values)))
+                if isinstance(level, DatePartition)
+                else self._from_hive_value(next(values), schema.field(level).type)
+                for level in key.partition_by
             )
             partitions[partition] = (file_path, file_metadata)
         return partitions
@@ -153,6 +188,7 @@ class ParquetIO(BaseIO):
         if mode == 'append':
             raise NotImplementedError(f'{type(self).__name__} does not support append, use DeltaLakeIO or DuckLakeIO')
         data_partitions = self._data_partitions(key, data, partitions)
+        partition_value_arrays = self._partition_value_arrays(key, data)
         # build all paths and serialize all metadata before writing any file,
         # so an invalid partition value or metadata writes nothing
         file_paths = {partition: self._file_path(key, partition) for partition in partitions}
@@ -164,8 +200,9 @@ class ParquetIO(BaseIO):
         for partition, partition_metadata in dumped_metadata.items():
             file_path = file_paths[partition]
             if partition in data_partitions and key.partition_by:
-                mask = reduce(operator.and_, [
-                    pc.field(col) == value for col, value in zip(key.partition_by, partition, strict=True)
+                mask = reduce(pc.and_, [
+                    pc.equal(array, pa.scalar(value, type=array.type))
+                    for array, value in zip(partition_value_arrays, partition, strict=True)
                 ])
                 table = data.filter(mask)
             elif partition in data_partitions:

@@ -10,8 +10,8 @@ class TimeBasedDataSchema(pa.DataFrameModel):
 
     # Cleaned time-based data uses nanosecond precision, tz-naive. Annotating with a
     # bare `datetime.datetime` would default to Datetime("us") (polars' default) and
-    # reject ns data; pin "ns" explicitly. Coarser backends (e.g. DuckDB) downcast at
-    # write time via io.conform — not the schema's concern.
+    # reject ns data; pin "ns" explicitly. IOs that can't store ns (e.g. DeltaLakeIO) raise
+    # instead of downcasting — not the schema's concern.
     # Annotated args map to DateTime(time_zone_agnostic, time_zone, time_unit).
     date: Annotated[DateTime, False, None, "ns"]
 

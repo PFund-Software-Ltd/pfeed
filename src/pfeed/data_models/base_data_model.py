@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
-
-if TYPE_CHECKING:
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -12,8 +9,6 @@ from pfeed.sources.base_source import BaseSource
 
 class BaseDataModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
-
-    DataHandler: ClassVar[type[BaseDataHandler]]
 
     data_source: BaseSource
     data_origin: str = ""

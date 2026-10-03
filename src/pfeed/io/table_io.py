@@ -13,6 +13,7 @@ import operator
 import os
 import random
 import time
+import warnings
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from functools import reduce
@@ -131,6 +132,38 @@ class TableIO(BaseIO):
             }
         except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
             raise TypeError(f'partition values do not match the types of data\'s partition columns: {e}') from e
+
+    def _cast_ns_timestamps_to_us(self, data: pa.Table) -> pa.Table:
+        """Casts data's nanosecond timestamp columns to microseconds, for table formats that store up to microseconds.
+
+        The cast is lossless when the values are whole microseconds, e.g. data upcast from us.
+        Otherwise it raises TypeError, unless the config allows timestamp precision loss,
+        then it truncates them with a warning.
+        """
+        from pfeed.config import get_config
+
+        for i, col in enumerate(data.schema):
+            if pa.types.is_timestamp(col.type) and col.type.unit == 'ns':
+                us_type = pa.timestamp('us', tz=col.type.tz)
+                column = data.column(i)
+                try:
+                    us_column = column.cast(us_type)
+                except pa.ArrowInvalid:
+                    if not get_config().allow_timestamp_precision_loss:
+                        raise TypeError(
+                            f'column {col.name!r} has sub-microsecond timestamps, but {type(self).__name__} stores microseconds; '
+                            + 'use an IO that stores nanoseconds (e.g. DuckLakeIO, ParquetIO), '
+                            + 'or allow truncating them with pfeed.configure(allow_timestamp_precision_loss=True, persist=True)'
+                        ) from None
+                    us_column = column.cast(us_type, safe=False)
+                    num_truncated = (pl.Series(column).dt.nanosecond() % 1000 != 0).sum()
+                    warnings.warn(
+                        f'{type(self).__name__} truncated {num_truncated} timestamps of column {col.name!r} from ns to us',
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                data = data.set_column(i, col.with_type(us_type), us_column)
+        return data
 
     def _marker_partition_by(self, key: DatasetKey) -> list[str]:
         """Returns the columns to partition a table with marker rows by, see _add_marker_rows()."""

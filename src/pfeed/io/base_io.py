@@ -19,6 +19,24 @@ type Metadata = dict[str, Any]
 
 
 @dataclass(frozen=True)
+class DatePartition:
+    """A partition level whose value is the calendar date (UTC) of a timestamp/date column.
+
+    The value is computed from `column` by the IO, not stored as a column of its own,
+    e.g. DatePartition('date') puts a row with date=2025-01-01 01:00:00 in partition date(2025, 1, 1).
+
+    Attributes:
+        column: the timestamp/date column the date is computed from.
+    """
+
+    column: str
+
+
+# a column whose values are the partition values, or a DatePartition computing them from a column
+type PartitionLevel = str | DatePartition
+
+
+@dataclass(frozen=True)
 class DatasetKey:
     """Logical identity of a dataset, independent of where/how it is stored.
 
@@ -30,13 +48,20 @@ class DatasetKey:
     Attributes:
         namespace: ordered (key -> value), e.g. {'env': 'BACKTEST', 'data_layer': 'CLEANED', ...}
         name: ordered (key -> value), e.g. {'asset_type': 'PERPETUAL', 'resolution': '1t'}
-        partition_by: column names the dataset is partitioned by, e.g. ('product', 'date').
+        partition_by: partition levels of the dataset, e.g. ('product', DatePartition('date')).
             Empty for unpartitioned datasets.
+            A partition is a logical unit of write (replace), metadata and existence, not a physical layout;
+            each IO decides how (and whether) it is reflected in storage.
     """
 
     namespace: dict[str, str]
     name: dict[str, str]
-    partition_by: tuple[str, ...] = field(default=())
+    partition_by: tuple[PartitionLevel, ...] = field(default=())
+
+    @property
+    def partition_columns(self) -> list[str]:
+        """The data columns the partition values are read or computed from."""
+        return [level.column if isinstance(level, DatePartition) else level for level in self.partition_by]
 
 
 @dataclass(frozen=True)
@@ -82,16 +107,43 @@ class BaseIO(ABC):
         return dumped
 
     @staticmethod
-    def _data_partitions(key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata]) -> set[Partition]:
+    def _partition_value_arrays(key: DatasetKey, data: pa.Table) -> list[pa.Array]:
+        """Returns each row's partition values, one array per level of key.partition_by.
+
+        Raises ValueError if data is missing a partition column,
+        TypeError if a DatePartition column isn't a timestamp/date.
+        """
+        import pyarrow as pa
+
+        if missing_cols := set(key.partition_columns) - set(data.column_names):
+            raise ValueError(f'data is missing partition columns {missing_cols}')
+        arrays = []
+        for level in key.partition_by:
+            if isinstance(level, DatePartition):
+                column = data[level.column].combine_chunks()
+                if pa.types.is_timestamp(column.type):
+                    # dropping the time zone keeps the UTC instant, so the date is the UTC date
+                    column = column.cast(pa.timestamp(column.type.unit))
+                elif not pa.types.is_date(column.type):
+                    raise TypeError(f'{level} needs a timestamp/date column, got {column.type}')
+                arrays.append(column.cast(pa.date32()))
+            else:
+                arrays.append(data[level].combine_chunks())
+        return arrays
+
+    @classmethod
+    def _data_partitions(cls, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata]) -> set[Partition]:
         """Returns the partitions that have rows in data, checking write()'s `data` and `partitions` requirements.
 
         Raises ValueError if data is missing a partition column or has a partition not in `partitions`.
         """
-        if missing_cols := set(key.partition_by) - set(data.column_names):
-            raise ValueError(f'data is missing partition columns {missing_cols}')
+        import pyarrow as pa
+
+        arrays = cls._partition_value_arrays(key, data)
         if key.partition_by:
-            unique_rows = data.group_by(list(key.partition_by)).aggregate([]).to_pylist()
-            data_partitions = {tuple(row[col] for col in key.partition_by) for row in unique_rows}
+            levels = [str(i) for i in range(len(arrays))]
+            unique_rows = pa.table(dict(zip(levels, arrays, strict=True))).group_by(levels).aggregate([]).to_pylist()
+            data_partitions = {tuple(row[level] for level in levels) for row in unique_rows}
         else:
             data_partitions = {()} if data.num_rows else set()
         if not_in_partitions := data_partitions - partitions.keys():
@@ -111,7 +163,7 @@ class BaseIO(ABC):
 
         Args:
             key: dataset to write to.
-            data: must contain all `key.partition_by` columns.
+            data: must contain all `key.partition_columns`.
                 Its columns may differ from the dataset's existing columns (schema drift):
                 - a new column is added to the dataset; existing rows read it as null
                 - a missing column is null in this write's rows; the dataset never loses a column
@@ -146,7 +198,7 @@ class BaseIO(ABC):
 
         Returns:
             (data, metadata):
-            - data: LazyFrame including the `key.partition_by` columns, only from partitions that have metadata;
+            - data: LazyFrame including the `key.partition_columns`, only from partitions that have metadata;
                 None if the dataset does not exist or none of the partitions exist or all of them are empty.
                 Has every column ever written to the dataset, null where a partition doesn't have it.
             - metadata: metadata of the existing partitions; {} if none.

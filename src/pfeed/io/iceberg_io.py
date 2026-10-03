@@ -141,12 +141,11 @@ class IcebergIO(TableIO):
             pass
         return catalog.load_table(identifier)
 
-    @staticmethod
-    def _filter(key: DatasetKey, partitions: list[Partition]) -> BooleanExpression:
+    def _filter(self, key: DatasetKey, partitions: list[Partition]) -> BooleanExpression:
         """Returns a filter matching rows in `partitions`."""
         if not key.partition_by:
             return AlwaysTrue()  # one partition, every row is in it
-        return reduce(Or, [_partition_filter(key.partition_by, partition) for partition in partitions])
+        return reduce(Or, [_partition_filter(self._marker_columns(key), partition) for partition in partitions])
 
     def _write(
         self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],

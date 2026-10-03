@@ -16,6 +16,7 @@ import sqlite3
 import duckdb
 import pyarrow as pa
 
+from pfeed.io.base_io import DatePartition
 from pfeed.io.table_io import TableIO, VacuumResult
 
 
@@ -30,7 +31,9 @@ class DuckLakeIO(TableIO):
     Layout: <base_path>/pfeed.db (catalog) + <base_path>/data/ (parquet files written by DuckLake)
     - DatasetKey -> table "<schema>"."<table>", see TableIO.
     - metadata: table "<table>__metadata" in the same schema, one row per partition:
-        the partition_by columns + METADATA_COLUMN (JSON string).
+        the partition_by columns (a DatePartition's as a date) + METADATA_COLUMN (JSON string).
+    - a DatePartition level partitions the data files by its column's year/month/day (UTC);
+        its column can't be a nanosecond timestamp with a time zone, DuckLake can't partition it.
         Written in the same transaction as the data, so the commit marker comes for free.
     - replace/append are one transaction each: DELETE (replace only) + INSERT data, DELETE + INSERT metadata.
         Concurrent writes to the same dataset conflict even on disjoint partitions (DuckLake detects
@@ -123,19 +126,66 @@ class DuckLakeIO(TableIO):
 
     @staticmethod
     def _in_partitions(key: DatasetKey, partitions: list[Partition]) -> tuple[str, list[PartitionValue]]:
-        """Returns a WHERE clause matching rows in `partitions`, with its query params."""
+        """Returns a WHERE clause matching rows in `partitions`, with its query params.
+
+        Works on both the data and the metadata table: a DatePartition level matches its column
+        by the date's range [date, date + 1 day), which is the date itself in the metadata table,
+        and lets DuckLake skip the data files of other days (a CAST(column AS DATE) filter wouldn't).
+        """
         if not key.partition_by:
             return '', []  # one partition, every row is in it
-        cols = ', '.join(_quote(col) for col in key.partition_by)
-        placeholders = ', '.join('(' + ', '.join(['?'] * len(key.partition_by)) + ')' for _ in partitions)
-        return f'WHERE ({cols}) IN (VALUES {placeholders})', [value for partition in partitions for value in partition]
+        conditions: list[str] = []
+        params: list[PartitionValue] = []
+        for partition in partitions:
+            level_conditions: list[str] = []
+            for level, value in zip(key.partition_by, partition, strict=True):
+                if isinstance(level, DatePartition):
+                    if isinstance(value, datetime.datetime) or not isinstance(value, datetime.date):
+                        raise TypeError(f'{level} partition value must be a date, got {value!r}')
+                    level_conditions.append(f'{_quote(level.column)} >= ? AND {_quote(level.column)} < ?')
+                    params += [value, value + datetime.timedelta(days=1)]
+                else:
+                    level_conditions.append(f'{_quote(level)} = ?')
+                    params.append(value)
+            conditions.append('(' + ' AND '.join(level_conditions) + ')')
+        return 'WHERE ' + ' OR '.join(conditions), params
+
+    @staticmethod
+    def _partitioned_by(key: DatasetKey) -> str:
+        """Returns the SET PARTITIONED BY expressions of the data table, a DatePartition level being its column's
+        year/month/day, so each day's rows are in files of their own, e.g. product=BTC/year=2025/month=1/day=1/.
+        """
+        exprs: list[str] = []
+        for level in key.partition_by:
+            if isinstance(level, DatePartition):
+                col = _quote(level.column)
+                exprs += [f'year({col})', f'month({col})', f'day({col})']
+            else:
+                exprs.append(_quote(level))
+        return ', '.join(exprs)
+
+    @staticmethod
+    def _check_date_partition_types(key: DatasetKey, data: pa.Table) -> None:
+        """Raises TypeError if a DatePartition column is a nanosecond timestamp with a time zone,
+        since DuckLake can't compute its year/month/day (no year(TIMESTAMPTZ_NS)).
+        """
+        for level in key.partition_by:
+            if isinstance(level, DatePartition):
+                dtype = data.schema.field(level.column).type
+                if pa.types.is_timestamp(dtype) and dtype.tz is not None and dtype.unit == 'ns':
+                    raise TypeError(
+                        f'{level} column {level.column!r} is {dtype}, DuckLake can\'t partition nanosecond timestamps '
+                        'with a time zone; drop the time zone (UTC) or use microseconds'
+                    )
 
     def _write(
         self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],
     ) -> None:
-        # one row per partition: its values (typed like data's partition columns, so the IN filters match both tables) + metadata
+        self._check_date_partition_types(key, data)
+        # one row per partition: its values (typed like data's partition columns, a DatePartition's as dates,
+        # so the filters match both tables) + metadata
         partition_metadata_table = pa.table({
-            **self._partition_arrays(key, data, list(partitions)),
+            **dict(zip(key.partition_columns, self._partition_arrays(key, data, list(partitions)), strict=True)),
             self.METADATA_COLUMN: [self._dump_metadata(md) for md in partitions.values()],
         })
 
@@ -158,8 +208,7 @@ class DuckLakeIO(TableIO):
             if not self._table_exists(cursor, schema, table):
                 cursor.execute(f'CREATE TABLE {data_ref} AS SELECT * FROM _data LIMIT 0')
                 if key.partition_by:
-                    cols = ', '.join(_quote(col) for col in key.partition_by)
-                    cursor.execute(f'ALTER TABLE {data_ref} SET PARTITIONED BY ({cols})')
+                    cursor.execute(f'ALTER TABLE {data_ref} SET PARTITIONED BY ({self._partitioned_by(key)})')
                 cursor.execute(f'CREATE TABLE {metadata_ref} AS SELECT * FROM _partition_metadata LIMIT 0')
             else:
                 # schema drift: add new columns, missing ones are null-filled by INSERT BY NAME
@@ -198,7 +247,7 @@ class DuckLakeIO(TableIO):
                 return None, {}
             ((snapshot_id,),) = cursor.execute(f'SELECT id FROM {self._CATALOG_ALIAS}.current_snapshot()').fetchall()
             predicate, params = self._in_partitions(key, partitions) if partitions is not None else ('', [])
-            cols = ', '.join([*(_quote(col) for col in key.partition_by), self.METADATA_COLUMN])
+            cols = ', '.join([*(_quote(col) for col in key.partition_columns), self.METADATA_COLUMN])
             rows = cursor.execute(f'SELECT {cols} FROM {metadata_ref} {predicate}', params).fetchall()
         finally:
             cursor.execute('COMMIT')

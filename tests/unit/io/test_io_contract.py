@@ -16,7 +16,7 @@ import pyarrow.compute as pc
 import pytest
 from polars.testing import assert_frame_equal
 
-from pfeed.io.base_io import DatasetKey
+from pfeed.io.base_io import DatasetKey, DatePartition
 from pfeed.io.deltalake_io import DeltaLakeIO
 from pfeed.io.ducklake_io import DuckLakeIO
 from pfeed.io.iceberg_io import IcebergIO
@@ -514,3 +514,54 @@ def test_missing_partition_column_raises(io: BaseIO, data: pa.Table):
         io.write(KEY, data.drop_columns(['date']), partitions=partitions)
 
     assert io.read(KEY) == (None, {})
+
+
+DATE_KEY = DatasetKey(namespace=KEY.namespace, name=KEY.name, partition_by=('product', DatePartition('date')))
+
+
+@pytest.mark.parametrize('tz', [None, 'UTC', 'America/New_York'], ids=['naive', 'utc', 'new_york'])
+def test_date_partition(io: BaseIO, tz: str | None):
+    """A DatePartition level partitions rows by the UTC date of a timestamp column, whatever its time zone,
+    and the data comes back with only its own columns (whatever an IO stores to partition it is dropped).
+
+    Writes BTC rows on D1 (2 rows, the 2nd one at 23:30 UTC, still D1 in UTC but not in New York's local date
+    for a 01:00 UTC row) and D3 (1 row), plus D2 as an empty partition, then checks:
+    - read: the data comes back unchanged and partitions are keyed by date, D2 included
+    - read of a subset: only that date's rows and metadata
+    - replace: rewriting D1 leaves D3 untouched
+    """
+    if tz not in (None, 'UTC') and isinstance(io, (DeltaLakeIO, IcebergIO)):
+        pytest.skip(f'{type(io).__name__} only stores timestamps without a time zone or in UTC')
+    # us, so the table formats storing microseconds keep them as they are
+    dtype = pa.timestamp('us', tz=tz)
+    data = pa.table({
+        'date': pa.array([
+            datetime.datetime(2025, 1, 1, 1), datetime.datetime(2025, 1, 1, 23, 30), datetime.datetime(2025, 1, 3, 5),
+        ], pa.timestamp('us')).cast(dtype),
+        'product': ['BTC', 'BTC', 'BTC'],
+        'price': [1.0, 2.0, 3.0],
+    })
+    partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}, ('BTC', D3): {'version': 1}}
+
+    io.write(DATE_KEY, data, partitions=partitions)
+
+    lf, read_metadata = io.read(DATE_KEY)
+    assert lf is not None
+    assert read_metadata == partitions
+    df, expected = lf.collect().sort('price'), pl.DataFrame(data)
+    if tz is not None:
+        # IOs may store other time zones in UTC (see test_timestamps), so compare the instants
+        df, expected = (frame.with_columns(pl.col('date').dt.convert_time_zone('UTC')) for frame in (df, expected))
+    assert_frame_equal(df, expected)
+
+    lf, read_metadata = io.read(DATE_KEY, partitions=[('BTC', D1), ('BTC', D2)])
+    assert lf is not None
+    assert read_metadata == {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
+    assert lf.collect()['price'].sort().to_list() == [1.0, 2.0]
+
+    new_d1 = data.slice(0, 1).set_column(2, 'price', pa.array([10.0]))
+    io.write(DATE_KEY, new_d1, partitions={('BTC', D1): {'version': 2}})
+    lf, read_metadata = io.read(DATE_KEY)
+    assert lf is not None
+    assert read_metadata == partitions | {('BTC', D1): {'version': 2}}
+    assert lf.collect()['price'].sort().to_list() == [3.0, 10.0]

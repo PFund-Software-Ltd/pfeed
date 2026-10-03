@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 import polars as pl
 import pyarrow as pa
 
-from pfeed.io.base_io import BaseIO, IOCapabilities
+from pfeed.io.base_io import BaseIO, DatePartition, IOCapabilities
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,8 @@ class TableIO(BaseIO):
 
     Formats without multi-table transactions (Delta Lake, Iceberg) keep the metadata in the data table itself,
     as one marker row per partition, see _add_marker_rows().
-    Their columns METADATA_COLUMN and IS_METADATA_COLUMN are reserved, so data can't have them (in any TableIO).
+    Their columns METADATA_COLUMN and IS_METADATA_COLUMN are reserved, so data can't have them (in any TableIO),
+    and so is a DatePartition's day column (see _day_column()).
     """
 
     CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities(append=True, concurrent_partition_writes=True)
@@ -120,16 +121,20 @@ class TableIO(BaseIO):
                     raise TypeError(f'unsupported partition value {value!r}')
 
     @staticmethod
-    def _partition_arrays(key: DatasetKey, data: pa.Table, partitions: list[Partition]) -> dict[str, pa.Array]:
-        """Returns each partition column's values, one per partition, typed like data's column.
+    def _partition_arrays(key: DatasetKey, data: pa.Table, partitions: list[Partition]) -> list[pa.Array]:
+        """Returns each partition level's values, one per partition, typed like data's column,
+        or as dates for a DatePartition level.
 
         Raises TypeError if a value doesn't fit the column's type.
         """
         try:
-            return {
-                col: pa.array([partition[i] for partition in partitions], type=data.schema.field(col).type)
-                for i, col in enumerate(key.partition_by)
-            }
+            return [
+                pa.array(
+                    [partition[i] for partition in partitions],
+                    type=pa.date32() if isinstance(level, DatePartition) else data.schema.field(level).type,
+                )
+                for i, level in enumerate(key.partition_by)
+            ]
         except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
             raise TypeError(f'partition values do not match the types of data\'s partition columns: {e}') from e
 
@@ -165,17 +170,37 @@ class TableIO(BaseIO):
                 data = data.set_column(i, col.with_type(us_type), us_column)
         return data
 
+    @staticmethod
+    def _day_column(level: DatePartition) -> str:
+        """Returns the column a table with marker rows stores a DatePartition's dates in, e.g. 'pfeed_date_day'."""
+        return f'pfeed_{level.column}_day'
+
+    def _reserved_columns(self, key: DatasetKey) -> set[str]:
+        return {
+            self.METADATA_COLUMN,
+            self.IS_METADATA_COLUMN,
+            *(self._day_column(level) for level in key.partition_by if isinstance(level, DatePartition)),
+        }
+
+    def _marker_columns(self, key: DatasetKey) -> list[str]:
+        """Returns the columns holding each partition level's values in a table with marker rows:
+        a column level's own column, a DatePartition's day column."""
+        return [self._day_column(level) if isinstance(level, DatePartition) else level for level in key.partition_by]
+
     def _marker_partition_by(self, key: DatasetKey) -> list[str]:
         """Returns the columns to partition a table with marker rows by, see _add_marker_rows()."""
-        return [*key.partition_by, self.IS_METADATA_COLUMN]
+        return [*self._marker_columns(key), self.IS_METADATA_COLUMN]
 
     def _add_marker_rows(self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata]) -> pa.Table:
         """Returns data plus one marker row per partition, so metadata is written in the same transaction as data.
 
-        A marker row has the partition's values in the partition_by columns, its metadata (JSON) in
+        A marker row has the partition's values in the _marker_columns(), its metadata (JSON) in
         METADATA_COLUMN, True in IS_METADATA_COLUMN and null elsewhere;
         data rows have METADATA_COLUMN null and IS_METADATA_COLUMN False.
         A partition exists if and only if it has a marker row (commit marker), even with no data rows.
+
+        A DatePartition level's dates (UTC) are added as its day column, so the table is partitioned by it as is,
+        since Delta Lake has no partition transforms; read() drops it again.
 
         The table must be partitioned by _marker_partition_by(), so marker rows are in files of their own:
         replacing a partition's marker row then replaces a tiny file, instead of rewriting a file with its data,
@@ -183,13 +208,18 @@ class TableIO(BaseIO):
 
         Raises TypeError if a partition value doesn't fit its column.
         """
+        for level, values in zip(key.partition_by, self._partition_value_arrays(key, data), strict=True):
+            if isinstance(level, DatePartition):
+                data = data.append_column(self._day_column(level), values)
         # marker rows are null in the data columns, so every column has to be nullable
         schema = pa.schema([
             *(field.with_nullable(True) for field in data.schema),
             pa.field(self.METADATA_COLUMN, pa.string()),
             pa.field(self.IS_METADATA_COLUMN, pa.bool_()),
         ])
-        partition_arrays = self._partition_arrays(key, data, list(partitions))
+        partition_arrays = dict(zip(
+            self._marker_columns(key), self._partition_arrays(key, data, list(partitions)), strict=True,
+        ))
         markers = pa.table(
             [
                 *(
@@ -215,20 +245,21 @@ class TableIO(BaseIO):
 
         `lf` must be pinned to one table version, so that data and metadata match.
         """
+        marker_columns = self._marker_columns(key)
         if partitions is not None and key.partition_by:
             lf = lf.filter(reduce(operator.or_, [
                 reduce(operator.and_, [
-                    pl.col(col) == pl.lit(value) for col, value in zip(key.partition_by, partition, strict=True)
+                    pl.col(col) == pl.lit(value) for col, value in zip(marker_columns, partition, strict=True)
                 ])
                 for partition in partitions
             ]))
-        markers = lf.filter(pl.col(self.IS_METADATA_COLUMN)).select(*key.partition_by, self.METADATA_COLUMN).collect()
+        markers = lf.filter(pl.col(self.IS_METADATA_COLUMN)).select(*marker_columns, self.METADATA_COLUMN).collect()
         metadata: dict[Partition, Metadata] = {tuple(row[:-1]): json.loads(row[-1]) for row in markers.iter_rows()}
         if not metadata:
             return None, {}
         # no need to filter the data by the partitions with metadata (commit marker),
         # since a write adds a partition's data rows and its marker row in one transaction
-        data = lf.filter(~pl.col(self.IS_METADATA_COLUMN)).drop(self.METADATA_COLUMN, self.IS_METADATA_COLUMN)
+        data = lf.filter(~pl.col(self.IS_METADATA_COLUMN)).drop(self._reserved_columns(key))
         if data.head(1).collect().is_empty():
             return None, metadata
         return data, metadata
@@ -243,10 +274,10 @@ class TableIO(BaseIO):
     ) -> None:
         """See BaseIO.write(). Append also requires metadata, which replaces the given partitions' metadata.
 
-        data cannot have the columns METADATA_COLUMN and IS_METADATA_COLUMN, they are reserved.
+        data cannot have the columns METADATA_COLUMN, IS_METADATA_COLUMN and DatePartition day columns, they are reserved.
         """
         self._data_partitions(key, data, partitions)
-        if reserved := {self.METADATA_COLUMN, self.IS_METADATA_COLUMN} & set(data.column_names):
+        if reserved := self._reserved_columns(key) & set(data.column_names):
             raise ValueError(f'columns {reserved} are reserved for pfeed\'s metadata')
         if not partitions:
             return  # nothing to write; also, an empty filter would match every row of an unpartitioned dataset

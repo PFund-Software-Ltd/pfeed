@@ -14,7 +14,7 @@ import pyarrow.compute as pc
 import pytest
 from polars.testing import assert_frame_equal
 
-from pfeed.io.base_io import DatasetKey
+from pfeed.io.base_io import DatasetKey, DatePartition
 from pfeed.io.ducklake_io import DuckLakeIO
 
 KEY = DatasetKey(
@@ -120,3 +120,99 @@ def test_vacuum_is_two_step(tmp_path: Path, data: pa.Table):
     assert lf is not None
     expected = pa.concat_tables([new_data, data.filter(pc.field('date') == D2)])
     assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(expected).sort('ts'))
+
+
+DATE_KEY = DatasetKey(namespace=KEY.namespace, name=KEY.name, partition_by=('product', DatePartition('date')))
+D3 = datetime.date(2025, 1, 3)
+
+
+@pytest.fixture
+def date_data() -> pa.Table:
+    """BTC rows on D1 (2 rows, the 2nd one second before midnight) and D3 (1 row), date is a ns timestamp."""
+    return pa.table({
+        'date': pa.array([
+            datetime.datetime(2025, 1, 1, 1), datetime.datetime(2025, 1, 1, 23, 59, 59), datetime.datetime(2025, 1, 3, 5),
+        ], pa.timestamp('ns')),
+        'product': ['BTC', 'BTC', 'BTC'],
+        'price': [1.0, 2.0, 3.0],
+    })
+
+
+def test_date_partition(tmp_path: Path, date_data: pa.Table):
+    """A DatePartition level partitions the data files by the date of a timestamp column, without storing that date.
+
+    Writes BTC rows on D1 and D3, plus D2 as an empty partition, then checks:
+    - layout: one year=/month=/day= dir per date with data, e.g. product=BTC/year=2025/month=1/day=1/
+    - read: the data comes back unchanged and partitions are keyed by date, D2 included
+    - read of a subset: only that date's rows
+    - replace: rewriting D1 leaves D3 untouched
+    """
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
+    partitions = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}, ('BTC', D3): {'version': 1}}
+
+    io.write(DATE_KEY, date_data, partitions=partitions)
+
+    data_dir = tmp_path / DuckLakeIO.DATA_DIR_NAME / 'BACKTEST__BYBIT' / 'PERPETUAL__1t'
+    partition_dirs = sorted(str(p.parent.relative_to(data_dir)) for p in data_dir.rglob('*.parquet'))
+    assert partition_dirs == ['product=BTC/year=2025/month=1/day=1', 'product=BTC/year=2025/month=1/day=3']
+    df, metadata = io.read(DATE_KEY)
+    assert df is not None
+    assert_frame_equal(df.collect(), pl.from_arrow(date_data), check_row_order=False)
+    assert metadata == partitions
+
+    df, metadata = io.read(DATE_KEY, partitions=[('BTC', D1)])
+    assert df is not None
+    assert df.collect()['price'].sort().to_list() == [1.0, 2.0]
+    assert metadata == {('BTC', D1): {'version': 1}}
+
+    new_d1 = date_data.filter(pc.equal(date_data['price'], 1.0)).set_column(2, 'price', pa.array([10.0]))
+    io.write(DATE_KEY, new_d1, partitions={('BTC', D1): {'version': 2}})
+    df, metadata = io.read(DATE_KEY)
+    assert df is not None
+    assert df.collect()['price'].sort().to_list() == [3.0, 10.0]
+    assert metadata == partitions | {('BTC', D1): {'version': 2}}
+
+
+def test_date_partition_read_skips_other_days(tmp_path: Path, date_data: pa.Table):
+    """Reading one date's partition only scans that day's data file, the filter is a range on the column
+    (a CAST(column AS DATE) filter would scan every file)."""
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
+    io.write(DATE_KEY, date_data, partitions={('BTC', D1): {}, ('BTC', D3): {}})
+
+    schema, table, _ = io._dataset_tables(DATE_KEY)
+    predicate, params = io._in_partitions(DATE_KEY, [('BTC', D3)])
+    cursor = io._connect()
+    ((_, plan),) = cursor.execute(
+        f'EXPLAIN ANALYZE SELECT * FROM {io._CATALOG_ALIAS}."{schema}"."{table}" {predicate}', params
+    ).fetchall()
+    assert 'day=3' in plan
+    assert 'day=1' not in plan
+
+
+@pytest.mark.parametrize('dtype', [pa.timestamp('us', tz='UTC'), pa.timestamp('us', tz='Asia/Hong_Kong'), pa.date32()])
+def test_date_partition_column_types(io: DuckLakeIO, dtype: pa.DataType):
+    """A DatePartition column can be a date, or a timestamp with a time zone (us), partitioned by its UTC date:
+    23:30 UTC on D1 is D2 in Hong Kong, but still partition D1."""
+    values = [datetime.date(2025, 1, 1)] if pa.types.is_date(dtype) else [
+        datetime.datetime(2025, 1, 1, 23, 30, tzinfo=datetime.UTC)
+    ]
+    data = pa.table({'date': pa.array(values, dtype), 'product': ['BTC'], 'price': [1.0]})
+
+    io.write(DATE_KEY, data, partitions={('BTC', D1): {}})
+
+    df, metadata = io.read(DATE_KEY, partitions=[('BTC', D1)])
+    assert df is not None
+    assert df.collect()['price'].to_list() == [1.0]
+    assert metadata == {('BTC', D1): {}}
+
+
+def test_date_partition_tz_aware_ns_raises(io: DuckLakeIO):
+    """DuckLake can't partition a nanosecond timestamp with a time zone, so it raises TypeError and writes nothing."""
+    data = pa.table({
+        'date': pa.array([datetime.datetime(2025, 1, 1, tzinfo=datetime.UTC)], pa.timestamp('ns', tz='UTC')),
+        'product': ['BTC'],
+    })
+
+    with pytest.raises(TypeError, match='nanosecond timestamps with a time zone'):
+        io.write(DATE_KEY, data, partitions={('BTC', D1): {}})
+    assert io.read(DATE_KEY) == (None, {})

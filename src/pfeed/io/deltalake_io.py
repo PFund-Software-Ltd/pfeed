@@ -75,15 +75,15 @@ class DeltaLakeIO(TableIO):
             if os.path.isdir(os.path.join(entry.path, self._LOG_DIR_NAME))
         )
 
-    @staticmethod
-    def _sql_predicate(key: DatasetKey, partitions: list[Partition], alias: str = '') -> str | None:
+    def _sql_predicate(self, key: DatasetKey, partitions: list[Partition], alias: str = '') -> str | None:
         """Returns a delta-rs SQL predicate matching rows in `partitions`, None for an unpartitioned dataset."""
         if not key.partition_by:
             return None  # one partition, every row is in it
         prefix = f'{alias}.' if alias else ''
         return ' OR '.join(
             '(' + ' AND '.join(
-                f'{prefix}"{col}" = {_sql_literal(value)}' for col, value in zip(key.partition_by, partition, strict=True)
+                f'{prefix}"{col}" = {_sql_literal(value)}'
+                for col, value in zip(self._marker_columns(key), partition, strict=True)
             ) + ')'
             for partition in partitions
         )
@@ -130,7 +130,7 @@ class DeltaLakeIO(TableIO):
             *(f'({target})' for target in [self._sql_predicate(key, partitions, alias='t')] if target),
             f't."{is_meta}" = true',
             f's."{is_meta}" = true',
-            *(f't."{col}" = s."{col}"' for col in key.partition_by),
+            *(f't."{col}" = s."{col}"' for col in self._marker_columns(key)),
         ])
         (
             dt.merge(table, predicate=predicate, source_alias='s', target_alias='t', merge_schema=True)

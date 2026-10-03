@@ -11,9 +11,8 @@ from pfeed.enums import (
     DataProviderType,
     DataSource,
 )
-from pfeed.sources.data_provider_source import DataProviderSource
+from pfeed.source import DataProviderSource, SourceMetadata
 from pfeed.sources.ibkr.stream_api import StreamAPI
-from pfeed.sources.source_metadata import SourceMetadata
 
 
 class InteractiveBrokersSource(DataProviderSource):

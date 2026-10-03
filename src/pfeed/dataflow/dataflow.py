@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from pfeed.enums import DataLayer
     from pfeed.feeds.streaming_feed_mixin import RawMessage, StreamingData
     from pfeed.io.base_io import BaseIO
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.source import BaseSource
     from pfeed.streaming.zeromq import ZeroMQ
 
 import logging

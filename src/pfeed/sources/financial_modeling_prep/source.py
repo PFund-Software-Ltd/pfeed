@@ -3,7 +3,7 @@ from typing import Literal
 
 from fmp_api_client import FMPClient, FMPPlan
 
-from pfeed.sources.data_provider_source import DataProviderSource
+from pfeed.source import DataProviderSource
 
 
 class FinancialModelingPrepSource(DataProviderSource):

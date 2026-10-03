@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         MarketFeedStreamRequest,
     )
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
-    from pfeed.sources.data_provider_source import DataProviderSource
+    from pfeed.source import DataProviderSource
     from pfeed.streaming.market_data_message import MarketDataMessage
 
 import datetime

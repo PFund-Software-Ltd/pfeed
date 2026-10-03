@@ -19,8 +19,7 @@ from pfeed.enums import (
     DataSource,
     DataType,
 )
-from pfeed.sources.data_provider_source import DataProviderSource
-from pfeed.sources.source_metadata import SourceMetadata
+from pfeed.source import DataProviderSource, SourceMetadata
 
 __all__ = ["CryptoHftDataSource"]
 

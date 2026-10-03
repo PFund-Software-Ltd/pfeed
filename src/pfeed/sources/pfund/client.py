@@ -1,4 +1,4 @@
-from pfeed.data_client import DataClient
+from pfeed.client import DataClient
 from pfeed.enums import DataCategory
 from pfeed.sources.pfund.component_feed import PFundComponentFeed
 from pfeed.sources.pfund.engine_feed import PFundEngineFeed

@@ -1,7 +1,7 @@
 from typing import ClassVar
 
 from pfeed.enums import DataCategory, DataSource
-from pfeed.sources.base_source import BaseSource
+from pfeed.source import BaseSource
 
 
 class AlphaFundSource(BaseSource):

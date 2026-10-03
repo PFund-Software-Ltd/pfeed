@@ -3,8 +3,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from pfeed.enums import DataAccessType, DataCategory, DataProviderType, DataSource
-from pfeed.sources.data_provider_source import DataProviderSource
-from pfeed.sources.source_metadata import SourceMetadata
+from pfeed.source import DataProviderSource, SourceMetadata
 
 
 class FXMacroDataSource(DataProviderSource):

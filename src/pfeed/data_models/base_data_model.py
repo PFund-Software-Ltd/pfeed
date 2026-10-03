@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, ConfigDict
 
-from pfeed.sources.base_source import BaseSource
+from pfeed.source import BaseSource
 
 
 class BaseDataModel(BaseModel):

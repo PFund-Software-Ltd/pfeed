@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.result import DataFlowResult
     from pfeed.io.base_io import BaseIO
     from pfeed.requests.base_request import BaseRequest
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.source import BaseSource
 
 import logging
 import os

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.source import BaseSource
 
 from abc import ABC, abstractmethod
 

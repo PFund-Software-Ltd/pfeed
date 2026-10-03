@@ -15,10 +15,9 @@ from pfeed.enums import (
     DataSource,
     DataType,
 )
+from pfeed.source import DataProviderSource, SourceMetadata
 from pfeed.sources.bybit.batch_api import BatchAPI
 from pfeed.sources.bybit.stream_api import StreamAPI
-from pfeed.sources.data_provider_source import DataProviderSource
-from pfeed.sources.source_metadata import SourceMetadata
 
 
 class BybitSource(DataProviderSource):

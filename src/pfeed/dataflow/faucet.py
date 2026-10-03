@@ -15,7 +15,7 @@ if TYPE_CHECKING:
         ReplayData,
         WebSocketName,
     )
-    from pfeed.sources.base_source import BaseSource
+    from pfeed.source import BaseSource
     from pfeed.storages.base_storage import BaseStorage
     from pfeed.streaming.zeromq import ZeroMQ
 

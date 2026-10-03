@@ -3,13 +3,12 @@ from typing import Any
 import datetime
 from pathlib import Path
 
-import pytest
 import polars as pl
+import pytest
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
 
 import pfeed as pe
-from pfeed.enums import DataStorage, IOFormat
 from pfeed.dataflow.result import RunResult
 
 
@@ -58,16 +57,14 @@ def test_download_and_retrieve(
     start_date, end_date = '2026-09-01', '2026-09-02'
     feed = bybit.market_feed
     _product = feed.data_source.create_product(product, **product_specs)
-    storage_config = pe.StorageConfig(storage=DataStorage.LOCAL, data_path=tmp_path)
-    io_config = pe.IOConfig(io_format=IOFormat.PARQUET)
+    io = pe.ParquetIO(base_path=str(tmp_path))
     for func in (feed.download, feed.retrieve):
         result = func(
             product=product,
             resolution=resolution,
             start_date=start_date,
             end_date=end_date,
-            storage_config=storage_config,
-            io_config=io_config,
+            io=io,
             **product_specs,
         )
         assert isinstance(result, RunResult)

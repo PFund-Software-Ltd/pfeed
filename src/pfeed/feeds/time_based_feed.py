@@ -190,9 +190,7 @@ class TimeBasedFeed(BaseFeed, ABC):
             columns = schema.names()
             if "date" in columns and schema["date"].is_temporal():
                 df: Frame = df.sort(by="date", descending=False)
-            # Storage-backed flows return raw pl.LazyFrame from storage.read,
-            # bypassing the per-flow `convert_to_user_df` transformation. Convert
-            # once here so the aggregated frame is a polars LazyFrame.
+            # Convert once here so the aggregated frame is a polars LazyFrame.
             combined: IntoFrame | None = convert_dataframe(nw.to_native(df))
         else:
             combined = None

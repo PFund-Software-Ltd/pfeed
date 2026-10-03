@@ -35,9 +35,7 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
         super().model_post_init(context)
         is_replaying = self.env == Environment.BACKTEST
         if is_replaying:
-            if not self.storage_config:
-                raise ValueError(
-                    "storage config is missing, cannot retrieve data for replaying"
-                )
-            if self.storage_config.data_layer != DataLayer.CLEANED:
+            if not self.io:
+                raise ValueError("io is missing, cannot retrieve data for replaying")
+            if self.data_layer != DataLayer.CLEANED:
                 raise ValueError("Replaying only supports CLEANED data layer")

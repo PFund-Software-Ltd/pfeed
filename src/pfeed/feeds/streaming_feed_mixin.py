@@ -294,7 +294,7 @@ class StreamingFeedMixin:
                                     dataflow._transformations,
                                 )
                                 storages_per_worker[worker_name][dataflow.name] = (
-                                    dataflow._storage
+                                    dataflow._handler
                                 )
                                 # get ports in use for dataflow's ZMQ.ROUTER
                                 assert dataflow._msg_queue is not None, (

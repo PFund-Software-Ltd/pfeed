@@ -12,12 +12,9 @@ if TYPE_CHECKING:
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult
-    from pfeed.io.io_config import IOConfig
+    from pfeed.io.base_io import BaseIO
     from pfeed.requests.base_request import BaseRequest
-    from pfeed.sinks.sink_config import SinkConfig
     from pfeed.sources.base_source import BaseSource
-    from pfeed.storages.base_storage import BaseStorage
-    from pfeed.storages.storage_config import StorageConfig
 
 import logging
 import os
@@ -221,35 +218,11 @@ class BaseFeed(ABC):
             )
         self._requests.append(request)
 
-    def _normalize_storage_config(self, storage_config: StorageConfig) -> StorageConfig:
-        if not storage_config.data_domain:
-            storage_config.data_domain = self.data_domain
-        elif (
-            storage_config.data_domain != self.data_domain
-            and storage_config.data_layer != DataLayer.CURATED
-        ):
-            raise ValueError(
-                f"Custom data_domain={storage_config.data_domain} is only allowed when data layer is CURATED, but got data_layer={storage_config.data_layer}"
-            )
-        return storage_config
-
-    def _normalize_io_config(self, io_config: IOConfig) -> IOConfig:
-        io_format = io_config.io_format
-        IO = io_format.io_class
-        # the condition is_file_io(strict=True) allows ParquetIO for parallel writes using Ray
-        if (
-            self._is_using_ray()
-            and not IO.SUPPORTS_PARALLEL_WRITES
-            and not IO.is_file_io(strict=True)
-        ):
+    def _validate_io(self, io: BaseIO) -> None:
+        if self._is_using_ray() and not io.CAPABILITIES.concurrent_partition_writes:
             raise RuntimeError(
-                f"{io_format} does not support parallel writes, cannot be used with Ray"
+                f"{type(io).__name__} does not support concurrent partition writes, cannot be used with Ray"
             )
-        return io_config
-
-    # not doing anything yet
-    def _normalize_sink_config(self, sink_config: SinkConfig) -> SinkConfig:
-        return sink_config
 
     def transform(self, *funcs: Callable[..., Any]) -> Self:
         request = self._get_current_request()
@@ -259,64 +232,38 @@ class BaseFeed(ABC):
 
     def load(
         self,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
-        sink_config: SinkConfig | None = None,
+        io: BaseIO | None = None,
+        data_layer: DataLayer | str | None = None,
     ) -> Self:
+        """Store the data of the request just created.
+
+        Args:
+            io: Where and how to store the data. If None, data is not stored.
+            data_layer: Data layer to store the data in. If None, the request's data layer.
+                CLEANED data can be stored as CURATED (e.g. after transform()),
+                other combinations must match the request's data layer.
+        """
         # fluent-chain entry point: always targets the request just created
         return self._load_for_request(
             request=self._get_current_request(),
-            storage_config=storage_config,
-            io_config=io_config,
-            sink_config=sink_config,
+            io=io,
+            data_layer=data_layer,
         )
 
     def _load_for_request(
         self,
         request: BaseRequest,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
-        sink_config: SinkConfig | None = None,
+        io: BaseIO | None = None,
+        data_layer: DataLayer | str | None = None,
     ) -> Self:
         # allowing passing in None is useful for dynamically determining if load() is needed
-        if storage_config is None:
+        if io is None:
             return self
-        else:
-            storage_config = self._normalize_storage_config(storage_config)
-
-        from pfeed.io.io_config import IOConfig
-
-        # Only a LIVE stream writes through a sink. A replaying stream reads FROM
-        # storage, so it takes the read path (default io, no write sink) just like a
-        # batch request — attaching a sink would pair the read io (e.g. parquet) with
-        # the default DeltaLakeSink and raise in with_sink().
-        streaming_write = request.is_streaming() and not request.is_replaying()
-
-        if streaming_write:
-            from pfeed.sinks.sink_config import SinkConfig
-
-            sink_config = self._normalize_sink_config(sink_config or SinkConfig())
-            io_format_associated_with_sink = sink_config.sink.io_format
-            default_io_config = IOConfig(io_format=io_format_associated_with_sink)
-        else:
-            default_io_config = IOConfig()
-        io_config = self._normalize_io_config(io_config or default_io_config)
-
-        request.finalize_load_config(storage_config, io_config, sink_config)
-
-        Storage = storage_config.storage.storage_class
+        self._validate_io(io)
+        data_layer = request.data_layer if data_layer is None else DataLayer[str(data_layer).upper()]
+        request.finalize_load_config(io, data_layer)
         for dataflow in self._dataflows[request]:
-            storage = cast(
-                "BaseStorage",
-                (
-                    Storage.from_storage_config(storage_config)
-                    .with_io(io_config)
-                    .with_data_model(dataflow.data_model)
-                ),
-            )
-            if streaming_write:
-                _ = storage.with_sink(sink_config=sink_config)
-            dataflow.set_storage(storage)
+            dataflow.setup_handler(io, data_layer, str(self.data_domain))
         return self
 
     def _get_default_transformations(
@@ -342,15 +289,7 @@ class BaseFeed(ABC):
         self,
         _request: BaseRequest,
     ) -> list[Callable[..., Any]]:
-        from pfeed._etl.base import convert_dataframe
-        from pfeed.utils import lambda_with_name
-
-        return [
-            lambda_with_name(
-                "convert_to_user_df",
-                lambda df: convert_dataframe(df),
-            ),
-        ]
+        return []
 
     def _get_default_transformations_for_retrieve(
         self,
@@ -372,15 +311,13 @@ class BaseFeed(ABC):
         for request in self._requests:
             dataflows = self._dataflows[request]
             has_no_destination = any(
-                not dataflow.has_storage() for dataflow in dataflows
+                not dataflow.has_handler() for dataflow in dataflows
             )
-            # NOTE: _load_for_request() will finalize the storage/io configs in request
+            # NOTE: _load_for_request() will finalize the io and data layer in request
             if has_no_destination:
                 _ = self._load_for_request(
                     request=request,
-                    storage_config=request.storage_config,
-                    io_config=request.io_config,
-                    sink_config=request.sink_config,
+                    io=request.io,
                 )
             default_transformations = self._get_default_transformations(request)
             for dataflow in dataflows:

@@ -5,9 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pfeed.enums import DataLayer, DataSource, ExtractType
-from pfeed.io.io_config import IOConfig
-from pfeed.sinks.sink_config import SinkConfig
-from pfeed.storages.storage_config import StorageConfig
+from pfeed.io.base_io import BaseIO
 
 
 class BaseRequest(BaseModel):
@@ -16,17 +14,12 @@ class BaseRequest(BaseModel):
     data_source: DataSource | str
     data_origin: str = ""
     extract_type: ExtractType
-    storage_config: StorageConfig | None = None
-    io_config: IOConfig | None = None
-    sink_config: SinkConfig | None = None
-    clean_data: bool = Field(
-        default=True,
+    io: BaseIO | None = None
+    data_layer: DataLayer = Field(
+        default=DataLayer.CLEANED,
         description="""
-            Whether to clean raw data using the default transformations (normalize, standardize columns, resample, etc.).
-            For download/stream: when storage_config is provided, this parameter is ignored — cleaning is determined by storage_config.data_layer instead (resolved at load() time via finalize_load_config).
-            For retrieve: when storage_config_for_retrieval.data_layer is not RAW, this parameter is forced to False — already-cleaned source data is never re-cleaned (resolved at request construction via model_post_init).
-            If True, raw data will be cleaned.
-            If False, raw data will be returned as is.
+            Data layer of the data: what is produced for download/stream (RAW or CLEANED),
+            where it is read from for retrieve.
         """,
     )
 
@@ -39,6 +32,11 @@ class BaseRequest(BaseModel):
     @property
     def name(self) -> str:
         return self.__class__.__name__
+
+    @property
+    def should_clean_data(self) -> bool:
+        """Whether to clean raw data using the default transformations (normalize, standardize columns, resample, etc.)."""
+        return self.data_layer != DataLayer.RAW
 
     def is_streaming(self) -> bool:
         return False
@@ -53,28 +51,39 @@ class BaseRequest(BaseModel):
             return DataSource[value]
         return value
 
+    @field_validator("data_layer", mode="before")
+    @classmethod
+    def _validate_data_layer(cls, value: DataLayer | str) -> DataLayer:
+        if isinstance(value, str):
+            return DataLayer[value.upper()]
+        return value
+
     def model_post_init(self, __context: Any) -> None:
         if not self.data_origin:
             self.data_origin = str(self.data_source)
+        if self.extract_type != ExtractType.retrieve and self.data_layer > DataLayer.CLEANED:
+            raise ValueError(
+                f"{self.extract_type} only produces RAW or CLEANED data, got {self.data_layer}; "
+                + "use load(io, data_layer='curated') to store data in the CURATED layer"
+            )
 
     def finalize_load_config(
         self,
-        storage_config: StorageConfig | None,
-        io_config: IOConfig | None,
-        sink_config: SinkConfig | None,
+        io: BaseIO | None,
+        data_layer: DataLayer,
     ) -> None:
-        """Finalize the storage/io config actually used by this request.
+        """Finalize the io and the data layer the data is stored in.
 
-        because in pipeline mode storage_config and io_config are unknown
-        at request construction time and only become final when .load() is invoked.
+        because in pipeline mode io is unknown at request construction time
+        and only becomes final when .load() is invoked.
+        data_layer is the layer to store in; it never changes self.data_layer (the data's own layer).
         """
-        self.storage_config = storage_config
-        self.io_config = io_config
-        self.sink_config = sink_config
-        if storage_config:
-            is_raw_data = storage_config.data_layer == DataLayer.RAW
-            # clean_data is already determined during request creation, no need to finalize for ExtractType.retrieve
-            if self.extract_type != ExtractType.retrieve:
-                self.clean_data = not is_raw_data
-            if self.is_streaming() and is_raw_data:
-                raise RuntimeError("Writing raw data in streaming is not supported")
+        self.io = io
+        if not io:
+            return
+        if data_layer < self.data_layer:
+            raise ValueError(f"cannot store {self.data_layer} data in a lower layer {data_layer}")
+        if self.data_layer == DataLayer.RAW and data_layer != DataLayer.RAW:
+            raise ValueError(f"RAW data is not cleaned, it cannot be stored in the {data_layer} layer")
+        if self.is_streaming() and data_layer == DataLayer.RAW:
+            raise RuntimeError("Writing raw data in streaming is not supported")

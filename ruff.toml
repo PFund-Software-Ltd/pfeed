@@ -34,6 +34,13 @@ extend-select = [
 
 [lint.isort]
 combine-as-imports = true
+section-order = ["future", "typing", "standard-library", "third-party", "first-party", "local-folder"]
+
+[lint.isort.sections]
+typing = ["typing", "typing_extensions"]
+
+[lint.pyflakes]
+extend-generics = ["pfeed.data_handlers.time_based_data_handler.TimeBasedDataHandler"]
 
 [format]
 quote-style = "double"  # double quotes for strings

@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING, ClassVar, cast
 if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
 
+    from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.io.base_io import Metadata, Partition, PartitionValue
 
 import polars as pl
 
 from pfeed.data_handlers.base_data_handler import BaseDataMetadata
 from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
-from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.enums import DataLayer
 
 
@@ -19,7 +19,7 @@ class MarketDataMetadata(BaseDataMetadata):
     pass
 
 
-class MarketDataHandler(TimeBasedDataHandler[MarketDataModel, MarketDataMetadata]):
+class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetadata]):
     """Stores one product's market data over a date range, one partition per (product, day).
 
     Partition levels:

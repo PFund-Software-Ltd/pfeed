@@ -6,10 +6,7 @@ from pfund.enums.env import Environment
 from pydantic import Field, field_validator, model_validator
 
 from pfeed.enums import DataLayer
-from pfeed.io.io_config import IOConfig
 from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
-from pfeed.sinks.sink_config import SinkConfig
-from pfeed.storages.storage_config import StorageConfig
 
 MIN_TARGET_RESOLUTION = Resolution("1d")
 
@@ -62,6 +59,15 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
                 f"data_resolution ({self.data_resolution}) must be >= "
                 + f"target_resolution ({self.target_resolution}) for resampling"
             )
+        # raw data is not resampled, e.g. 1minute raw data cannot be produced from a 1tick source/storage
+        if (
+            self.data_layer == DataLayer.RAW
+            and self.data_resolution
+            and self.target_resolution < self.data_resolution
+        ):
+            raise ValueError(
+                f"Cannot {self.extract_type} {self.target_resolution} raw data from {self.data_resolution} data"
+            )
         return self
 
     def __str__(self) -> str:
@@ -74,31 +80,10 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
             "product": self.product.name,
             "target_resolution": str(self.target_resolution),
             "data_resolution": str(self.data_resolution),
+            "data_layer": str(self.data_layer),
         }
         if self.data_origin:
             data["data_origin"] = self.data_origin
-        if self.storage_config:
-            data["storage_config"] = self.storage_config.model_dump()
+        if self.io:
+            data["io"] = repr(self.io)
         return pformat(data, sort_dicts=False)
-
-    def finalize_load_config(
-        self,
-        storage_config: StorageConfig | None,
-        io_config: IOConfig | None,
-        sink_config: SinkConfig | None,
-    ) -> None:
-        super().finalize_load_config(storage_config, io_config, sink_config)
-        if storage_config:
-            is_raw_data = storage_config.data_layer == DataLayer.RAW
-            # raw data but clean_data is False = no auto-resampling when target_resolution < data_resolution
-            # e.g. download 1minute (target_resolution) raw data from 1tick (data_resolution) source -> FAIL
-            # e.g. retrieve 1minute (target_resolution) raw data from 1tick (data_resolution) storage -> FAIL
-            if (
-                is_raw_data
-                and not self.clean_data
-                and self.data_resolution
-                and self.target_resolution < self.data_resolution
-            ):
-                raise ValueError(
-                    f"Cannot {self.extract_type} {self.target_resolution} raw data"
-                )

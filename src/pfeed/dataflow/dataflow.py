@@ -1,18 +1,20 @@
-# pyright: reportMissingTypeArgument=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false, reportAssignmentType=false, reportArgumentType=false
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from narwhals.typing import IntoFrame
     from prefect import Flow as PrefectDataFlow
 
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.base_data_model import BaseDataModel
     from pfeed.dataflow.faucet import Faucet
+    from pfeed.enums import DataLayer
     from pfeed.feeds.streaming_feed_mixin import RawMessage, StreamingData
+    from pfeed.io.base_io import BaseIO
     from pfeed.sources.base_source import BaseSource
-    from pfeed.storages.base_storage import BaseStorage
     from pfeed.streaming.zeromq import ZeroMQ
 
 import logging
@@ -30,7 +32,7 @@ class DataFlow:
         self._logger = logging.getLogger(f"pfeed.{self.data_source.name.lower()}")
         self._faucet: Faucet = faucet
         self._transformations: list[Callable[..., IntoFrame | StreamingData]] = []
-        self._storage: BaseStorage | None = None
+        self._handler: BaseDataHandler | None = None
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
         self._zmq_channel: str = ""
@@ -82,8 +84,8 @@ class DataFlow:
         return self.faucet._msg_queue
 
     @property
-    def storage(self) -> BaseStorage | None:
-        return self._storage
+    def handler(self) -> BaseDataHandler | None:
+        return self._handler
 
     @property
     def extract_type(self) -> ExtractType:
@@ -107,15 +109,21 @@ class DataFlow:
             )
         self._transformations.extend(funcs)
 
-    def has_storage(self) -> bool:
-        return self._storage is not None
+    def has_handler(self) -> bool:
+        return self._handler is not None
 
-    def set_storage(self, storage: BaseStorage):
-        if self._storage is not None:
-            raise ValueError(f"storage is already set for dataflow {self.name}")
+    def setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str):
+        """Creates the data handler that loads the data to io, from the dataflow's own data model."""
+        if self._handler is not None:
+            raise ValueError(f"handler is already set for dataflow {self.name}")
         if self.is_sealed():
-            raise ValueError(f"cannot set storage for sealed dataflow {self.name}")
-        self._storage = storage
+            raise ValueError(f"cannot set handler for sealed dataflow {self.name}")
+        self._handler = self._data_model.DataHandler(
+            data_model=self._data_model,
+            io=io,
+            data_layer=data_layer,
+            data_domain=data_domain,
+        )
 
     def __str__(self):
         if not self.is_streaming():
@@ -163,7 +171,7 @@ class DataFlow:
         if not self.is_sealed():
             raise ValueError(f"cannot run batch on unsealed dataflow {self.name}")
         self._logger.debug(
-            f"{self} to storage={self.storage.data_path if self.storage else None}"
+            f"{self} to {self.handler!r}"
         )
 
         self._flow_type = FlowType[flow_type.lower()]
@@ -177,9 +185,10 @@ class DataFlow:
             self._result = DataFlowResult.failed(
                 error=ValueError(f"{self.name} produced no data")
             )
-        elif self.storage is not None:
+        elif (handler := self.handler) is not None:
             # Lazy-load from storage on access so Ray workers don't copy large frames back to main.
-            self._result = DataFlowResult.lazy(loader=self.storage.read)
+            # read() also returns the metadata, the result only needs the data
+            self._result = DataFlowResult.lazy(loader=lambda: handler.read()[0])
         else:
             self._result = DataFlowResult.materialized(data=data)
         return self._result
@@ -223,11 +232,11 @@ class DataFlow:
         if not self.is_sealed():
             raise ValueError(f"cannot run stream on unsealed dataflow {self.name}")
         self._logger.info(
-            f"{self} to storage={self.storage.data_path if self.storage else None}"
+            f"{self} to {self.handler!r}"
         )
         self._flow_type = FlowType[flow_type.lower()]
         await self.faucet.open_stream(
-            data_model=self.data_model, storage=self.storage
+            data_model=self.data_model, storage=self.handler
         )  # this will trigger _run_stream_etl()
 
     async def end_stream(self):
@@ -256,25 +265,29 @@ class DataFlow:
         return data
 
     def _load(self, data: IntoFrame | StreamingData):
-        if not self.has_storage():
+        if not self.has_handler():
             return
         try:
             if self.is_streaming():
-                self._storage.write(data, streaming=True)
+                self._handler.write(data, streaming=True)
             else:
+                from pfeed._etl.base import convert_dataframe
+
+                # user transformations may return any dataframe, the data handler only takes polars
+                df = cast(pl.LazyFrame, convert_dataframe(data)).collect()
                 if self._flow_type == FlowType.prefect:
                     from prefect import task
 
-                    write = task(self._storage.write)
+                    write = task(self._handler.write_batch)
                 else:
-                    write = self._storage.write
-                write(data)
-            self._logger.debug(f"loaded {self.data_model} data to {self._storage}")
+                    write = self._handler.write_batch
+                write(df)
+            self._logger.debug(f"loaded {self.data_model} data to {self._handler}")
         except Exception:
             # Re-raise so the batch runner marks the dataflow failed; a write
             # error must surface in RunResult, not only in the log.
             self._logger.exception(
-                f"failed to load {self.data_model} data to {self._storage}:"
+                f"failed to load {self.data_model} data to {self._handler}:"
             )
             raise
 

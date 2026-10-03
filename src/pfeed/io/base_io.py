@@ -24,7 +24,7 @@ class DatasetKey:
 
     Each IO maps it to its own physical layout, e.g.
     - ParquetIO: hive dirs `k=v/.../k=v/` for namespace + name, then one dir per partition
-    - DuckLakeIO: schema = joined namespace values, table = joined name values
+    - DuckLakeIO: schema = namespace values joined by '__', table = name values joined by '__'
 
     Attributes:
         namespace: ordered (key -> value), e.g. {'env': 'BACKTEST', 'data_layer': 'CLEANED', ...}
@@ -79,6 +79,23 @@ class BaseIO(ABC):
         if json.loads(dumped) != metadata:
             raise TypeError(f'metadata is not JSON-safe, it would not round-trip exactly: {metadata!r}')
         return dumped
+
+    @staticmethod
+    def _data_partitions(key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata]) -> set[Partition]:
+        """Returns the partitions that have rows in data, checking write()'s `data` and `partitions` requirements.
+
+        Raises ValueError if data is missing a partition column or has a partition not in `partitions`.
+        """
+        if missing_cols := set(key.partition_by) - set(data.column_names):
+            raise ValueError(f'data is missing partition columns {missing_cols}')
+        if key.partition_by:
+            unique_rows = data.group_by(list(key.partition_by)).aggregate([]).to_pylist()
+            data_partitions = {tuple(row[col] for col in key.partition_by) for row in unique_rows}
+        else:
+            data_partitions = {()} if data.num_rows else set()
+        if not_in_partitions := data_partitions - partitions.keys():
+            raise ValueError(f'partitions {not_in_partitions} in data are not in `partitions`')
+        return data_partitions
 
     @abstractmethod
     def write(

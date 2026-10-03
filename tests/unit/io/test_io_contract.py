@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from pfeed.io.base_io import BaseIO, Metadata, Partition
 
 import datetime
+from functools import partial
 
 import polars as pl
 import pyarrow as pa
@@ -15,13 +16,18 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from pfeed.io.base_io import DatasetKey
+from pfeed.io.ducklake_io import DuckLakeIO
 from pfeed.io.parquet_io import ParquetIO
 
 
-@pytest.fixture(params=[ParquetIO], ids=lambda cls: cls.__name__)
+@pytest.fixture(params=[
+    partial(ParquetIO),
+    partial(DuckLakeIO),
+    # the test data is small enough to be inlined into the catalog, so also test with every write as parquet files
+    partial(DuckLakeIO, data_inlining_row_limit=0),
+], ids=['ParquetIO', 'DuckLakeIO', 'DuckLakeIO-no_inlining'])
 def io(request, tmp_path) -> BaseIO:
-    IOClass = request.param
-    return IOClass(base_path=str(tmp_path))
+    return request.param(base_path=str(tmp_path))
 
 
 KEY = DatasetKey(
@@ -152,6 +158,7 @@ def test_read_subset_partitions(io: BaseIO, data: pa.Table):
     Writes `data` (BTC/D1 and BTC/D2), then reads BTC/D1 and BTC/D3 (never written).
     - data: only BTC/D1's rows, nothing from BTC/D2
     - metadata: only BTC/D1; BTC/D3 is missing, so the caller knows it still needs downloading
+    Reading only missing partitions, or no partitions at all, returns (None, {}).
     """
     partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
     io.write(KEY, data, partitions=partitions)
@@ -162,7 +169,8 @@ def test_read_subset_partitions(io: BaseIO, data: pa.Table):
     assert read_metadata == {('BTC', D1): {'version': 1}}
     d1_only = data.filter(pc.field('date') == D1)
     assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(d1_only))
-
+    assert io.read(KEY, partitions=[('BTC', D3)]) == (None, {})
+    assert io.read(KEY, partitions=[]) == (None, {})
 
 
 def test_unpartitioned(io: BaseIO, data: pa.Table):
@@ -186,6 +194,21 @@ def test_unpartitioned(io: BaseIO, data: pa.Table):
     assert lf is not None
     assert read_metadata == {(): {'version': 2}}
     assert_frame_equal(lf.collect(), pl.DataFrame(new_data))
+
+
+@pytest.mark.parametrize('partition_by', [KEY.partition_by, ()], ids=['partitioned', 'unpartitioned'])
+def test_write_no_partitions_is_noop(io: BaseIO, data: pa.Table, partition_by: tuple[str, ...]):
+    """Writing with empty `partitions` (and so no rows) writes nothing and leaves the dataset as it was."""
+    key = DatasetKey(namespace=KEY.namespace, name=KEY.name, partition_by=partition_by)
+    partitions: dict[Partition, Metadata] = {('BTC', D1): {}, ('BTC', D2): {}} if partition_by else {(): {}}
+    io.write(key, data, partitions=partitions)
+
+    io.write(key, data.schema.empty_table(), partitions={})
+    lf, read_metadata = io.read(key)
+
+    assert lf is not None
+    assert read_metadata == partitions
+    assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(data))
 
 
 def test_data_partition_not_in_partitions_raises(io: BaseIO, data: pa.Table):

@@ -38,6 +38,7 @@ class ParquetIO(BaseIO):
     """
 
     CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities(append=False, concurrent_partition_writes=True)
+    DEFAULT_DIR_NAME: ClassVar[str] = 'parquet'
     FILE_NAME: ClassVar[str] = 'part-0.parquet'
     METADATA_KEY: ClassVar[bytes] = b'pfeed_metadata'
     # args set by ParquetIO itself, not overridable via write_options/read_options
@@ -46,7 +47,7 @@ class ParquetIO(BaseIO):
 
     def __init__(
         self,
-        base_path: str,
+        base_path: str | None = None,
         compression: str = 'zstd',
         write_options: dict[str, Any] | None = None,
         read_options: dict[str, Any] | None = None,
@@ -54,10 +55,15 @@ class ParquetIO(BaseIO):
         """
         Args:
             base_path: root directory of all datasets. Local paths only for now.
+                Defaults to <config.data_path>/<DEFAULT_DIR_NAME>.
             compression: parquet compression codec.
             write_options: extra kwargs passed to `pyarrow.parquet.write_table`.
             read_options: extra kwargs passed to `polars.scan_parquet`.
         """
+        if base_path is None:
+            from pfeed.config import get_config
+
+            base_path = str(get_config().data_path / self.DEFAULT_DIR_NAME)
         if urlparse(base_path).scheme not in ('', 'file'):
             raise NotImplementedError(f'only local paths are supported for now, got {base_path!r}')
         self._filesystem, self._base_path = pafs.FileSystem.from_uri(os.path.abspath(base_path.removeprefix('file://')))
@@ -146,15 +152,7 @@ class ParquetIO(BaseIO):
     ) -> None:
         if mode == 'append':
             raise NotImplementedError(f'{type(self).__name__} does not support append, use DeltaLakeIO or DuckLakeIO')
-        if missing_cols := set(key.partition_by) - set(data.column_names):
-            raise ValueError(f'data is missing partition columns {missing_cols}')
-        if key.partition_by:
-            unique_rows = data.group_by(list(key.partition_by)).aggregate([]).to_pylist()
-            data_partitions = {tuple(row[col] for col in key.partition_by) for row in unique_rows}
-        else:
-            data_partitions = {()} if data.num_rows else set()
-        if not_in_partitions := data_partitions - partitions.keys():
-            raise ValueError(f'partitions {not_in_partitions} in data are not in `partitions`')
+        data_partitions = self._data_partitions(key, data, partitions)
         # build all paths and serialize all metadata before writing any file,
         # so an invalid partition value or metadata writes nothing
         file_paths = {partition: self._file_path(key, partition) for partition in partitions}

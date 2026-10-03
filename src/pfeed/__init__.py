@@ -7,10 +7,14 @@ if TYPE_CHECKING:
     import pfund_plot as plot
 
     from pfeed.engine import DataEngine
-    from pfeed.io.io_config import IOConfig
+    from pfeed.io.ducklake_io import DuckLakeIO
+    from pfeed.io.parquet_io import ParquetIO
     from pfeed.sinks.sink_config import SinkConfig
     from pfeed.sources.alphafund import AlphaFund
     from pfeed.sources.bybit import Bybit
+    from pfeed.sources.crypto_hft_data import CryptoHftData
+    from pfeed.sources.crypto_hft_data import CryptoHftData as CHD  # noqa: N817
+    from pfeed.sources.crypto_hft_data import CryptoHftData as CryptoHFTData
     from pfeed.sources.fxmacrodata import FXMacroData
     from pfeed.sources.ibkr import (
         InteractiveBrokers,
@@ -30,11 +34,6 @@ if TYPE_CHECKING:
     )
     from pfeed.sources.yahoo_finance import (
         YahooFinance as YFinance,
-    )
-    from pfeed.sources.crypto_hft_data import (
-        CryptoHftData,
-        CryptoHftData as CHD,  # noqa: N817
-        CryptoHftData as CryptoHFTData
     )
     from pfeed.storages.storage_config import StorageConfig
     from pfeed.utils.aliases import ALIASES as alias  # noqa: N811
@@ -69,10 +68,14 @@ def __getattr__(name: str):
         from pfeed.storages.storage_config import StorageConfig
 
         return StorageConfig
-    elif name == "IOConfig":
-        from pfeed.io.io_config import IOConfig
+    elif name == "ParquetIO":
+        from pfeed.io.parquet_io import ParquetIO
 
-        return IOConfig
+        return ParquetIO
+    elif name == "DuckLakeIO":
+        from pfeed.io.ducklake_io import DuckLakeIO
+
+        return DuckLakeIO
     elif name == "SinkConfig":
         from pfeed.sinks.sink_config import SinkConfig
 
@@ -125,10 +128,11 @@ __all__ = (
     "CryptoHFTData",
     "CryptoHftData",
     "DataEngine",
+    "DuckLakeIO",
     "FXMacroData",
-    "IOConfig",
     "InteractiveBrokers",
     "PFund",
+    "ParquetIO",
     "SinkConfig",
     "StorageConfig",
     "YFinance",

@@ -46,6 +46,9 @@ class DuckLakeIO(TableIO):
     METADATA_TABLE_SUFFIX: ClassVar[str] = '__metadata'
     _RETRY_ON: ClassVar[tuple[type[Exception], ...]] = (duckdb.TransactionException,)
     _CATALOG_ALIAS: ClassVar[str] = 'lake'
+    # DuckLake defaults to snappy; zstd made Bybit tick data ~40% smaller at about the same read speed,
+    # and matches ParquetIO's default
+    PARQUET_COMPRESSION: ClassVar[str] = 'zstd'
 
     def __init__(self, base_path: str | None = None, data_inlining_row_limit: int | None = None):
         """
@@ -70,6 +73,23 @@ class DuckLakeIO(TableIO):
         # which made concurrent writes ~5x slower and sometimes fail with "database is locked"
         with contextlib.closing(sqlite3.connect(os.path.join(self._base_path, self.CATALOG_FILE_NAME))) as conn:
             conn.execute('PRAGMA journal_mode=WAL')
+        self._set_parquet_compression()
+
+    def _set_parquet_compression(self) -> None:
+        """Sets the codec of the parquet files DuckLake writes, stored in the catalog so it applies to every table.
+
+        Only written when it differs, so creating an IO doesn't write to the catalog every time.
+        Files written with another codec stay as they are until optimize() rewrites them.
+        """
+        cursor = self._connect()
+        try:
+            rows = cursor.execute(
+                f"SELECT value FROM {self._CATALOG_ALIAS}.options() WHERE option_name = 'parquet_compression'"
+            ).fetchall()
+            if rows != [(self.PARQUET_COMPRESSION,)]:
+                cursor.execute(f"CALL {self._CATALOG_ALIAS}.set_option('parquet_compression', ?)", [self.PARQUET_COMPRESSION])
+        finally:
+            cursor.close()
 
     def __getstate__(self) -> dict:
         # a connection can't be pickled (e.g. sent to a Ray worker), each process opens its own

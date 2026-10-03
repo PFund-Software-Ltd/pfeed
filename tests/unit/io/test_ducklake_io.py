@@ -11,6 +11,7 @@ import datetime
 import polars as pl
 import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.parquet as pq
 import pytest
 from polars.testing import assert_frame_equal
 
@@ -216,3 +217,14 @@ def test_date_partition_tz_aware_ns_raises(io: DuckLakeIO):
     with pytest.raises(TypeError, match='nanosecond timestamps with a time zone'):
         io.write(DATE_KEY, data, partitions={('BTC', D1): {}})
     assert io.read(DATE_KEY) == (None, {})
+
+
+def test_parquet_compression(tmp_path: Path, date_data: pa.Table):
+    """DuckLake writes zstd parquet files (its default is snappy), set once in the catalog."""
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
+    io.write(DATE_KEY, date_data, partitions={('BTC', D1): {}, ('BTC', D3): {}})
+
+    files = list((tmp_path / DuckLakeIO.DATA_DIR_NAME).rglob('*.parquet'))
+    assert files
+    for file in files:
+        assert pq.read_metadata(file).row_group(0).column(0).compression == 'ZSTD'

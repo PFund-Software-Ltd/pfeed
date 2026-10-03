@@ -2,7 +2,7 @@ from pfund_kit.cli import create_cli_group
 from pfund_kit.cli.commands import config, docker_compose, remove
 
 from pfeed.cli.commands.data import data
-from pfeed.cli.commands.ducklake import ducklake
+from pfeed.cli.commands.table_io import ducklake
 
 # TODO: verify and finish download/stream, not worth the time for now
 # from pfeed.cli.commands.download import download

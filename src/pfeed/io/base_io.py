@@ -24,7 +24,8 @@ class DatasetKey:
 
     Each IO maps it to its own physical layout, e.g.
     - ParquetIO: hive dirs `k=v/.../k=v/` for namespace + name, then one dir per partition
-    - DuckLakeIO: schema = namespace values joined by '__', table = name values joined by '__'
+    - TableIOs (DuckLakeIO, DeltaLakeIO, IcebergIO): schema = namespace values joined by '__',
+        table = name values joined by '__'
 
     Attributes:
         namespace: ordered (key -> value), e.g. {'env': 'BACKTEST', 'data_layer': 'CLEANED', ...}

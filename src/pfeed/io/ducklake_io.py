@@ -3,8 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     import polars as pl
 
     from pfeed.io.base_io import DatasetKey, Metadata, Partition, PartitionValue
@@ -13,54 +11,37 @@ import contextlib
 import datetime
 import json
 import os
-import random
 import sqlite3
-import time
-from urllib.parse import urlparse
 
 import duckdb
 import pyarrow as pa
 
-from pfeed.io.base_io import BaseIO, IOCapabilities
+from pfeed.io.table_io import TableIO, VacuumResult
 
 
 def _quote(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
-class DuckLakeIO(BaseIO):
+class DuckLakeIO(TableIO):
     """Stores datasets as DuckLake tables, with a SQLite catalog; metadata in a per-dataset metadata table.
 
+    See TableIO for what all table-format IOs share.
     Layout: <base_path>/pfeed.db (catalog) + <base_path>/data/ (parquet files written by DuckLake)
-    - DatasetKey -> table: schema = namespace values joined by NAME_SEPARATOR, table = name values joined by it,
-        e.g. "BACKTEST__BYBIT"."PERPETUAL__1t".
-        DuckDB names are case-insensitive, so a key differing from an existing dataset only by case raises.
+    - DatasetKey -> table "<schema>"."<table>", see TableIO.
     - metadata: table "<table>__metadata" in the same schema, one row per partition:
         the partition_by columns + METADATA_COLUMN (JSON string).
         Written in the same transaction as the data, so the commit marker comes for free.
     - replace/append are one transaction each: DELETE (replace only) + INSERT data, DELETE + INSERT metadata.
         Concurrent writes to the same dataset conflict even on disjoint partitions (DuckLake detects
         conflicts per table), so a conflicting transaction is retried as a whole.
-    - read pins the data to the snapshot the metadata was read at, so they always match.
-    - nothing is maintained automatically: run optimize() to compact the lake (e.g. after many small writes),
-        then vacuum() to delete what old snapshots no longer need.
     """
 
-    CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities(append=True, concurrent_partition_writes=True)
     DEFAULT_DIR_NAME: ClassVar[str] = 'ducklake'
     CATALOG_FILE_NAME: ClassVar[str] = 'pfeed.db'
     DATA_DIR_NAME: ClassVar[str] = 'data'
-    # '__' instead of '_', since key values like 'market_data' contain '_'
-    NAME_SEPARATOR: ClassVar[str] = '__'
     METADATA_TABLE_SUFFIX: ClassVar[str] = '__metadata'
-    METADATA_COLUMN: ClassVar[str] = 'pfeed_metadata'
-    # same as Delta Lake's default
-    DEFAULT_VACUUM_RETENTION: ClassVar[datetime.timedelta] = datetime.timedelta(days=7)
-    # retries of a write/maintenance transaction that conflicted with a concurrent one,
-    # waiting RETRY_WAIT * RETRY_BACKOFF**attempt (with jitter) in between
-    MAX_RETRIES: ClassVar[int] = 10
-    RETRY_WAIT: ClassVar[float] = 0.1
-    RETRY_BACKOFF: ClassVar[float] = 1.5
+    _RETRY_ON: ClassVar[tuple[type[Exception], ...]] = (duckdb.TransactionException,)
     _CATALOG_ALIAS: ClassVar[str] = 'lake'
 
     def __init__(self, base_path: str | None = None, data_inlining_row_limit: int | None = None):
@@ -76,14 +57,8 @@ class DuckLakeIO(BaseIO):
             not isinstance(data_inlining_row_limit, int) or data_inlining_row_limit < 0
         ):
             raise ValueError(f'data_inlining_row_limit must be an int >= 0, got {data_inlining_row_limit!r}')
+        super().__init__(base_path)
         self._data_inlining_row_limit = data_inlining_row_limit
-        if base_path is None:
-            from pfeed.config import get_config
-
-            base_path = str(get_config().data_path / self.DEFAULT_DIR_NAME)
-        if urlparse(base_path).scheme not in ('', 'file'):
-            raise NotImplementedError(f'only local paths are supported for now, got {base_path!r}')
-        self._base_path = os.path.abspath(base_path.removeprefix('file://'))
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._conn_pid: int | None = None
         # creates the catalog now, since processes creating it at the same time fail with "database is locked"
@@ -111,23 +86,16 @@ class DuckLakeIO(BaseIO):
             if self._data_inlining_row_limit is not None:
                 options += f', DATA_INLINING_ROW_LIMIT {self._data_inlining_row_limit}'
             conn = duckdb.connect()
+            # otherwise timestamps with a time zone are returned in the machine's local time zone;
+            # GLOBAL, so the cursors (new connections) have it too
+            conn.execute("SET GLOBAL TimeZone = 'UTC'")
             conn.execute(f"ATTACH 'ducklake:sqlite:{catalog_path}' AS {self._CATALOG_ALIAS} ({options})")
             self._conn, self._conn_pid = conn, os.getpid()
         return self._conn.cursor()
 
-    def _table_names(self, key: DatasetKey) -> tuple[str, str, str]:
-        """Returns (schema, table, metadata table) of the dataset.
-
-        Raises ValueError if a key value could make two different keys join to the same name,
-        e.g. ('A_', 'B') and ('A', '_B') would both join to 'A___B'.
-        """
-        sep = self.NAME_SEPARATOR
-        for value in [*key.namespace.values(), *key.name.values()]:
-            if not value or sep in value or value.startswith('_') or value.endswith('_'):
-                raise ValueError(
-                    f'key value {value!r} must be non-empty, not contain {sep!r} and not start or end with "_"'
-                )
-        schema, table = sep.join(key.namespace.values()), sep.join(key.name.values())
+    def _dataset_tables(self, key: DatasetKey) -> tuple[str, str, str]:
+        """Returns (schema, table, metadata table) of the dataset, see TableIO._table_names()."""
+        schema, table = self._table_names(key)
         if table.endswith(self.METADATA_TABLE_SUFFIX):
             raise ValueError(f'dataset name {table!r} cannot end with {self.METADATA_TABLE_SUFFIX!r}, it is reserved')
         return schema, table, table + self.METADATA_TABLE_SUFFIX
@@ -154,14 +122,6 @@ class DuckLakeIO(BaseIO):
         return any(found_table is not None for _, found_table in found)
 
     @staticmethod
-    def _check_partition_values(partitions: list[Partition]) -> None:
-        for partition in partitions:
-            for value in partition:
-                # a datetime is a date, but would be silently truncated to one
-                if isinstance(value, datetime.datetime) or not isinstance(value, (str, int, datetime.date)):
-                    raise TypeError(f'unsupported partition value {value!r}')
-
-    @staticmethod
     def _in_partitions(key: DatasetKey, partitions: list[Partition]) -> tuple[str, list[PartitionValue]]:
         """Returns a WHERE clause matching rows in `partitions`, with its query params."""
         if not key.partition_by:
@@ -170,54 +130,23 @@ class DuckLakeIO(BaseIO):
         placeholders = ', '.join('(' + ', '.join(['?'] * len(key.partition_by)) + ')' for _ in partitions)
         return f'WHERE ({cols}) IN (VALUES {placeholders})', [value for partition in partitions for value in partition]
 
-    def write(
-        self,
-        key: DatasetKey,
-        data: pa.Table,
-        *,
-        partitions: dict[Partition, Metadata],
-        mode: Literal['replace', 'append'] = 'replace',
+    def _write(
+        self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],
     ) -> None:
-        """See BaseIO.write(). Append also requires metadata, which replaces the given partitions' metadata."""
-        self._data_partitions(key, data, partitions)
-        if not partitions:
-            return  # nothing to write; also, an empty predicate would match every row of an unpartitioned dataset
-        self._check_partition_values(list(partitions))
         # one row per partition: its values (typed like data's partition columns, so the IN filters match both tables) + metadata
-        try:
-            partition_metadata_table = pa.table({
-                **{
-                    col: pa.array([partition[i] for partition in partitions], type=data.schema.field(col).type)
-                    for i, col in enumerate(key.partition_by)
-                },
-                self.METADATA_COLUMN: [self._dump_metadata(md) for md in partitions.values()],
-            })
-        except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
-            raise TypeError(f'partition values do not match the types of data\'s partition columns: {e}') from e
+        partition_metadata_table = pa.table({
+            **self._partition_arrays(key, data, list(partitions)),
+            self.METADATA_COLUMN: [self._dump_metadata(md) for md in partitions.values()],
+        })
 
         self._with_retries(
             lambda: self._write_transaction(key, data, list(partitions), partition_metadata_table, mode), f'write to {key}'
         )
 
-    def _with_retries[T](self, transaction: Callable[[], T], description: str) -> T:
-        """Runs the transaction, retrying it as a whole while it conflicts with a concurrent one."""
-        attempt = 0
-        while True:
-            try:
-                return transaction()
-            except duckdb.TransactionException as e:
-                if attempt == self.MAX_RETRIES:
-                    raise duckdb.TransactionException(
-                        f'{description} kept conflicting with concurrent writes, gave up after {self.MAX_RETRIES} retries'
-                    ) from e
-                # jitter so the conflicting writers don't retry in lockstep
-                time.sleep(self.RETRY_WAIT * self.RETRY_BACKOFF**attempt * random.uniform(0.5, 1.5))
-                attempt += 1
-
     def _write_transaction(
         self, key: DatasetKey, data: pa.Table, partitions: list[Partition], partition_metadata_table: pa.Table, mode: str,
     ) -> None:
-        schema, table, metadata_table = self._table_names(key)
+        schema, table, metadata_table = self._dataset_tables(key)
         data_ref = f'{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(table)}'
         metadata_ref = f'{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(metadata_table)}'
         cursor = self._connect()
@@ -255,20 +184,12 @@ class DuckLakeIO(BaseIO):
         finally:
             cursor.close()
 
-    def read(
-        self,
-        key: DatasetKey,
-        *,
-        partitions: list[Partition] | None = None,
+    def _read(
+        self, key: DatasetKey, partitions: list[Partition] | None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
-        schema, table, metadata_table = self._table_names(key)
+        schema, table, metadata_table = self._dataset_tables(key)
         data_ref = f'{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(table)}'
         metadata_ref = f'{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(metadata_table)}'
-        if partitions is not None:
-            if not partitions:
-                return None, {}
-            self._check_partition_values(partitions)
-
         cursor = self._connect()
         # metadata and snapshot id from the same transaction, so the data can be pinned to that snapshot
         cursor.execute('BEGIN')
@@ -293,12 +214,11 @@ class DuckLakeIO(BaseIO):
         return relation.pl(lazy=True), metadata
 
     def optimize(self) -> None:
-        """Compacts every table, so reads scan fewer and larger parquet files.
+        """See TableIO.optimize().
 
         - moves inlined rows (see data_inlining_row_limit) out of the catalog into parquet files
         - rewrites files where most rows were deleted (e.g. by 'replace' writes)
         - merges small files into larger ones
-        Only adds files: the replaced ones stay on disk, still used by old snapshots, until vacuum().
         """
         cursor = self._connect()
         try:
@@ -311,26 +231,16 @@ class DuckLakeIO(BaseIO):
             cursor.close()
 
     def vacuum(
-        self, *, retention: datetime.timedelta = DEFAULT_VACUUM_RETENTION, dry_run: bool = True,
-    ) -> tuple[list[int], list[str]]:
-        """Deletes what is older than `retention`, run after optimize() so the files it replaced are deleted too.
+        self, *, retention: datetime.timedelta = TableIO.DEFAULT_VACUUM_RETENTION, dry_run: bool = True,
+    ) -> VacuumResult:
+        """See TableIO.vacuum().
 
         - expires snapshots older than `retention` (the latest snapshot is never expired)
-        - deletes files that expired snapshots no longer use, `retention` after they were expired
+        - deletes files that expired snapshots no longer use, `retention` after they were expired,
+            so a file is only deleted by a later vacuum than the one expiring its snapshot
         - deletes files no snapshot ever used (e.g. left by a crashed write), once older than `retention`
-
-        Files are deleted no earlier than `retention` after the vacuum that expired their snapshot,
-        so a LazyFrame from read() must be collected within that window, or collecting it fails.
-
-        Args:
-            retention: how long to keep history; time travel to a snapshot older than it is no longer possible.
-            dry_run: only returns what would be expired/deleted.
-
-        Returns:
-            (expired snapshot ids, deleted file paths), or what would be expired/deleted if dry_run.
         """
-        if retention < datetime.timedelta(0):
-            raise ValueError(f'retention must not be negative, got {retention!r}')
+        self._check_retention(retention)
         older_than = datetime.datetime.now(datetime.UTC) - retention
         params = [self._CATALOG_ALIAS, older_than, dry_run]
         cursor = self._connect()
@@ -351,4 +261,7 @@ class DuckLakeIO(BaseIO):
                 )
         finally:
             cursor.close()
-        return [snapshot_id for (snapshot_id,) in snapshot_ids], [path for (path,) in paths]
+        return VacuumResult(
+            expired_snapshots=[str(snapshot_id) for (snapshot_id,) in snapshot_ids],
+            deleted_paths=[path for (path,) in paths],
+        )

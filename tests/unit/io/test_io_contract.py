@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from pfeed.io.base_io import BaseIO, Metadata, Partition
 
 import datetime
+import multiprocessing
 from functools import partial
 
 import polars as pl
@@ -16,7 +17,9 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from pfeed.io.base_io import DatasetKey
+from pfeed.io.deltalake_io import DeltaLakeIO
 from pfeed.io.ducklake_io import DuckLakeIO
+from pfeed.io.iceberg_io import IcebergIO
 from pfeed.io.parquet_io import ParquetIO
 
 
@@ -25,7 +28,9 @@ from pfeed.io.parquet_io import ParquetIO
     partial(DuckLakeIO),
     # the test data is small enough to be inlined into the catalog, so also test with every write as parquet files
     partial(DuckLakeIO, data_inlining_row_limit=0),
-], ids=['ParquetIO', 'DuckLakeIO', 'DuckLakeIO-no_inlining'])
+    partial(DeltaLakeIO),
+    partial(IcebergIO),
+], ids=['ParquetIO', 'DuckLakeIO', 'DuckLakeIO-no_inlining', 'DeltaLakeIO', 'IcebergIO'])
 def io(request, tmp_path) -> BaseIO:
     return request.param(base_path=str(tmp_path))
 
@@ -231,6 +236,75 @@ def test_data_partition_not_in_partitions_raises(io: BaseIO, data: pa.Table):
     assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(data))
 
 
+def test_append(io: BaseIO, data: pa.Table):
+    """Append adds rows to the given partitions and replaces their metadata; other partitions are untouched.
+
+    Writes `data` (BTC/D1 and BTC/D2), then appends a row to BTC/D1 with new metadata.
+    """
+    if not io.CAPABILITIES.append:
+        pytest.skip(f'{type(io).__name__} does not support append')
+    partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
+    io.write(KEY, data, partitions=partitions)
+
+    new_data = pa.table({'ts': [4], 'price': [103.0], 'product': ['BTC'], 'date': [D1]})
+    io.write(KEY, new_data, partitions={('BTC', D1): {'version': 2}}, mode='append')
+    lf, read_metadata = io.read(KEY)
+
+    assert lf is not None
+    assert read_metadata == {('BTC', D1): {'version': 2}, ('BTC', D2): {'version': 1}}
+    assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(pa.concat_tables([data, new_data])))
+
+
+def test_append_to_new_partition(io: BaseIO, data: pa.Table):
+    """Appending to a partition that doesn't exist yet creates it, also when the dataset doesn't exist yet.
+
+    Appends `data` (BTC/D1 and BTC/D2) to a new dataset, then a row to BTC/D3.
+    """
+    if not io.CAPABILITIES.append:
+        pytest.skip(f'{type(io).__name__} does not support append')
+    partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
+    io.write(KEY, data, partitions=partitions, mode='append')
+
+    new_data = pa.table({'ts': [4], 'price': [103.0], 'product': ['BTC'], 'date': [D3]})
+    io.write(KEY, new_data, partitions={('BTC', D3): {'version': 1}}, mode='append')
+    lf, read_metadata = io.read(KEY)
+
+    assert lf is not None
+    assert read_metadata == partitions | {('BTC', D3): {'version': 1}}
+    assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(pa.concat_tables([data, new_data])))
+
+
+def test_concurrent_partition_writes(io: BaseIO):
+    """Processes writing disjoint partitions of the same dataset at the same time all land.
+
+    A pool of 4 processes writes 20 partitions, one write each, with partition i having i + 1 rows.
+    Some IOs detect conflicts per table, so these writes may conflict and must be retried.
+    The io is pickled into each process (spawn), like a Ray worker.
+    """
+    if not io.CAPABILITIES.concurrent_partition_writes:
+        pytest.skip(f'{type(io).__name__} does not support concurrent partition writes')
+    products = [f'P{i}' for i in range(20)]
+    partitions: list[dict[Partition, Metadata]] = [{(product, D1): {'rows': i + 1}} for i, product in enumerate(products)]
+    writes = [
+        partial(
+            io.write,
+            KEY,
+            pa.table({'ts': list(range(i + 1)), 'product': [product] * (i + 1), 'date': [D1] * (i + 1)}),
+            partitions=partitions[i],
+        )
+        for i, product in enumerate(products)
+    ]
+    with multiprocessing.get_context('spawn').Pool(4) as pool:
+        for result in [pool.apply_async(write) for write in writes]:
+            result.get()
+
+    lf, read_metadata = io.read(KEY)
+    assert lf is not None
+    assert read_metadata == {(product, D1): {'rows': i + 1} for i, product in enumerate(products)}
+    counts = lf.group_by('product').len().collect()
+    assert dict(counts.iter_rows()) == {product: i + 1 for i, product in enumerate(products)}
+
+
 def test_append_unsupported_raises(io: BaseIO, data: pa.Table):
     """IOs without CAPABILITIES.append must raise NotImplementedError on mode='append' and write nothing."""
     if io.CAPABILITIES.append:
@@ -321,6 +395,65 @@ def test_schema_drift(io: BaseIO, data: pa.Table):
     lf, _ = io.read(KEY, partitions=[('BTC', D2)])
     assert lf is not None
     assert_frame_equal(lf.collect(), expected.filter(pl.col('date') == D2), check_column_order=False)
+
+
+def test_schema_drift_append(io: BaseIO, data: pa.Table):
+    """Schema drift works the same when appending: a new column is added, a missing one is null.
+
+    Writes BTC/D1 with an extra 'RPI' column, then appends a row to BTC/D1 without 'RPI' but with a new 'tick' column.
+    A column whose type differs from the dataset's still raises TypeError and appends nothing.
+    """
+    if not io.CAPABILITIES.append:
+        pytest.skip(f'{type(io).__name__} does not support append')
+    d1 = data.filter(pc.field('date') == D1).append_column('RPI', pa.array([True, False]))
+    io.write(KEY, d1, partitions={('BTC', D1): {'version': 1}})
+    new_row = pa.table({'ts': [4], 'price': [103.0], 'product': ['BTC'], 'date': [D1], 'tick': ['PlusTick']})
+    io.write(KEY, new_row, partitions={('BTC', D1): {'version': 2}}, mode='append')
+
+    with pytest.raises(TypeError):
+        io.write(KEY, new_row.set_column(1, 'price', pa.array(['103.0'])), partitions={('BTC', D1): {'version': 3}}, mode='append')
+    lf, read_metadata = io.read(KEY)
+
+    assert lf is not None
+    assert read_metadata == {('BTC', D1): {'version': 2}}
+    expected = pl.DataFrame({
+        'ts': [1, 2, 4],
+        'price': [100.0, 101.0, 103.0],
+        'product': ['BTC'] * 3,
+        'date': [D1] * 3,
+        'RPI': [True, False, None],
+        'tick': [None, None, 'PlusTick'],
+    })
+    assert_frame_equal(lf.collect().sort('ts'), expected, check_column_order=False)
+
+
+def test_timestamps(io: BaseIO, data: pa.Table):
+    """Timestamps come back unchanged, with or without a time zone (UTC; IOs may store others in UTC).
+
+    Nanosecond timestamps either come back unchanged too, or, where the format only supports
+    microseconds (Delta Lake, Iceberg), raise TypeError and write nothing, instead of being truncated.
+    """
+    d1 = data.filter(pc.field('date') == D1)
+    us = datetime.datetime(2025, 1, 1, 1, 2, 3, 456789)
+    d1 = d1.append_column('us', pa.array([us, us], pa.timestamp('us')))
+    d1 = d1.append_column('utc', pa.array([us, us], pa.timestamp('us', tz='UTC')))
+    io.write(KEY, d1, partitions={('BTC', D1): {}})
+    lf, _ = io.read(KEY)
+
+    assert lf is not None
+    assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(d1))
+
+    d2 = data.filter(pc.field('date') == D2)
+    ns = pa.array([1_735_693_323_456_789_123], pa.timestamp('ns'))
+    d2 = d2.append_column('ns', ns)
+    try:
+        io.write(KEY, d2, partitions={('BTC', D2): {}})
+    except TypeError:
+        assert io.read(KEY, partitions=[('BTC', D2)]) == (None, {})
+    else:
+        lf, _ = io.read(KEY, partitions=[('BTC', D2)])
+        assert lf is not None
+        assert lf.collect()['ns'].to_list() == pl.Series(ns).to_list()
 
 
 def test_column_type_change_raises(io: BaseIO, data: pa.Table):

@@ -63,8 +63,6 @@ libpq = ">=18.4"  # for postgresql
 huggingface-hub = ">=1.33.0"
 prefect = ">=3.8.7"
 pandas = ">=3.0.6"
-deltalake = ">=1.6.6"
-pyiceberg = {version = ">=0.12.0", extras = ['sql-sqlite', 'pyiceberg-core']}
 lancedb = ">=0.39.0"
 yfinance = ">=1.7.0"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
@@ -81,6 +79,9 @@ pfund = { path = "../pfund", editable = true }
 afterpython = ">=0.4.0"
 financetoolkit = ">=2.2.0"
 pyrefly = ">=1.3.2"
+# used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
+deltalake = ">=1.6.6"
+pyiceberg = {version = ">=0.12.0", extras = ['sql-sqlite', 'pyiceberg-core']}
 
 [feature.test.pypi-dependencies]
 pfeed = { path = ".", editable = true }

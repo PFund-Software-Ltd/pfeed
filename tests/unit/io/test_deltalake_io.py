@@ -63,12 +63,13 @@ def test_marker_rows(io: DeltaLakeIO, table_path: Path, data: pa.Table):
     assert data_rows.select('ts', 'product', 'date', io.METADATA_COLUMN).rows() == [(1, 'BTC', D1, None)]
 
 
-def test_append_only_rewrites_marker_file(io: DeltaLakeIO, table_path: Path, data: pa.Table):
-    """Append is a merge, which only scans and rewrites the marker file of the partitions it writes to,
-    not their data files or the rest of the table, so appending doesn't get slower as a partition grows.
+def test_append_rewrites_no_file(io: DeltaLakeIO, table_path: Path, data: pa.Table):
+    """Append is a merge, which only scans the marker file of the partitions it writes to,
+    not their data files or the rest of the table, and keeps existing marker rows instead of rewriting them,
+    so appending doesn't get slower as a partition grows.
 
     Writes `data` (3 partitions, each with a data file and a marker file), then appends to BTC/D1:
-    1 file (BTC/D1's marker file) scanned and replaced, the other 5 skipped, and 1 data file added.
+    1 file (BTC/D1's marker file) scanned, the other 5 skipped, nothing removed, and 1 data file added.
     """
     io.write(KEY, data, partitions={('BTC', D1): {}, ('BTC', D2): {}, ('BTC', D3): {}})
 
@@ -78,8 +79,8 @@ def test_append_only_rewrites_marker_file(io: DeltaLakeIO, table_path: Path, dat
     assert merge['operation'] == 'MERGE'
     assert merge['operationMetrics']['num_target_files_scanned'] == 1
     assert merge['operationMetrics']['num_target_files_skipped_during_scan'] == 5
-    assert merge['operationMetrics']['num_target_files_removed'] == 1
-    assert merge['operationMetrics']['num_target_files_added'] == 2
+    assert merge['operationMetrics']['num_target_files_removed'] == 0
+    assert merge['operationMetrics']['num_target_files_added'] == 1
     assert merge['operationMetrics']['num_target_rows_copied'] == 0
 
 

@@ -237,21 +237,22 @@ def test_data_partition_not_in_partitions_raises(io: BaseIO, data: pa.Table):
 
 
 def test_append(io: BaseIO, data: pa.Table):
-    """Append adds rows to the given partitions and replaces their metadata; other partitions are untouched.
+    """Append adds rows to the given partitions; an existing partition keeps its metadata,
+    a new one is created with its metadata; other partitions are untouched.
 
-    Writes `data` (BTC/D1 and BTC/D2), then appends a row to BTC/D1 with new metadata.
+    Writes `data` (BTC/D1 and BTC/D2), then appends a row to BTC/D1 (existing) and one to BTC/D3 (new), with new metadata.
     """
     if not io.CAPABILITIES.append:
         pytest.skip(f'{type(io).__name__} does not support append')
     partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
     io.write(KEY, data, partitions=partitions)
 
-    new_data = pa.table({'ts': [4], 'price': [103.0], 'product': ['BTC'], 'date': [D1]})
-    io.write(KEY, new_data, partitions={('BTC', D1): {'version': 2}}, mode='append')
+    new_data = pa.table({'ts': [4, 5], 'price': [103.0, 104.0], 'product': ['BTC', 'BTC'], 'date': [D1, D3]})
+    io.write(KEY, new_data, partitions={('BTC', D1): {'version': 2}, ('BTC', D3): {'version': 2}}, mode='append')
     lf, read_metadata = io.read(KEY)
 
     assert lf is not None
-    assert read_metadata == {('BTC', D1): {'version': 2}, ('BTC', D2): {'version': 1}}
+    assert read_metadata == {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}, ('BTC', D3): {'version': 2}}
     assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(pa.concat_tables([data, new_data])))
 
 
@@ -415,7 +416,7 @@ def test_schema_drift_append(io: BaseIO, data: pa.Table):
     lf, read_metadata = io.read(KEY)
 
     assert lf is not None
-    assert read_metadata == {('BTC', D1): {'version': 2}}
+    assert read_metadata == {('BTC', D1): {'version': 1}}  # append keeps an existing partition's metadata
     expected = pl.DataFrame({
         'ts': [1, 2, 4],
         'price': [100.0, 101.0, 103.0],

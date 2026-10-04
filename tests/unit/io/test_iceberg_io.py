@@ -84,9 +84,9 @@ def test_optimize_compacts_partition_files(io: IcebergIO, data: pa.Table):
     assert d2_files <= set(files.column('file_path').to_pylist())
 
 
-def test_append_drops_marker_file(io: IcebergIO, data: pa.Table):
-    """Append replaces a partition's marker row by dropping its marker file, so no data file is rewritten
-    and appending doesn't get slower as a partition grows.
+def test_append_only_adds_data_file(io: IcebergIO, data: pa.Table):
+    """Append to an existing partition keeps its marker file and rewrites no file, it only adds a data file,
+    so appending doesn't get slower as a partition grows.
     """
     io.write(KEY, data, partitions={('BTC', D1): {}, ('BTC', D2): {}})
     files_before = set(_load_table(io).inspect.files().column('file_path').to_pylist())
@@ -94,9 +94,9 @@ def test_append_drops_marker_file(io: IcebergIO, data: pa.Table):
     io.write(KEY, pa.table({'ts': [4], 'product': ['BTC'], 'date': [D1]}), partitions={('BTC', D1): {}}, mode='append')
 
     files_after = set(_load_table(io).inspect.files().column('file_path').to_pylist())
-    (dropped,) = files_before - files_after
-    assert f'{io.IS_METADATA_COLUMN}=true' in dropped
-    assert len(files_after - files_before) == 2  # BTC/D1's new data file and marker file
+    assert files_before <= files_after
+    (added,) = files_after - files_before
+    assert f'{io.IS_METADATA_COLUMN}=false' in added
 
 
 def test_vacuum_keeps_recent_snapshots(io: IcebergIO, data: pa.Table):

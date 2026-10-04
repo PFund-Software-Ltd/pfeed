@@ -40,7 +40,8 @@ class DuckLakeIO(TableIO):
         merge e.g. daily bars. Reads still skip other days' files by their min/max stats of the column.
     - data files are flat under <base_path>/data/<schema>/<table>/, without hive dirs per partition value,
         since DuckLake finds a file's partition values in the catalog, not in its path.
-    - replace/append are one transaction each: DELETE (replace only) + INSERT data, DELETE + INSERT metadata.
+    - replace/append are one transaction each:
+        replace: DELETE + INSERT data, DELETE + INSERT metadata; append: INSERT data, INSERT metadata of new partitions only.
         Concurrent writes to the same dataset conflict even on disjoint partitions (DuckLake detects
         conflicts per table), so a conflicting transaction is retried as a whole.
     """
@@ -220,9 +221,20 @@ class DuckLakeIO(TableIO):
             predicate, params = self._in_partitions(key, partitions)
             if mode == 'replace':
                 cursor.execute(f'DELETE FROM {data_ref} {predicate}', params)
-            cursor.execute(f'INSERT INTO {data_ref} BY NAME SELECT * FROM _data')
-            cursor.execute(f'DELETE FROM {metadata_ref} {predicate}', params)
-            cursor.execute(f'INSERT INTO {metadata_ref} BY NAME SELECT * FROM _partition_metadata')
+                cursor.execute(f'INSERT INTO {data_ref} BY NAME SELECT * FROM _data')
+                cursor.execute(f'DELETE FROM {metadata_ref} {predicate}', params)
+                cursor.execute(f'INSERT INTO {metadata_ref} BY NAME SELECT * FROM _partition_metadata')
+            else:
+                cursor.execute(f'INSERT INTO {data_ref} BY NAME SELECT * FROM _data')
+                # only the partitions without metadata, existing ones keep theirs
+                # (both tables have a DatePartition's values as dates, so they compare by equality)
+                same_partition = ' AND '.join(
+                    [f'm.{_quote(col)} IS NOT DISTINCT FROM p.{_quote(col)}' for col in key.partition_columns]
+                ) or 'TRUE'
+                cursor.execute(
+                    f'INSERT INTO {metadata_ref} BY NAME SELECT * FROM _partition_metadata p '
+                    + f'WHERE NOT EXISTS (SELECT 1 FROM {metadata_ref} m WHERE {same_partition})'
+                )
             cursor.execute('COMMIT')
         except BaseException:
             # a failed COMMIT has already rolled back, then ROLLBACK raises and would hide the original error

@@ -171,11 +171,13 @@ class BaseIO(ABC):
             partitions: the partitions this write covers, each with its metadata.
                 Every partition in `data` must be in it. A partition in it but with no rows
                 in `data` is a valid empty partition (e.g. a date that was fetched but had no trades).
-                Existing metadata of these partitions is replaced, not merged.
             mode:
                 - 'replace': overwrite `partitions` (dynamic partition overwrite);
-                    an empty partition's existing rows are deleted. Other partitions are untouched.
-                - 'append': add rows to `partitions`.
+                    an empty partition's existing rows are deleted, its existing metadata is replaced, not merged.
+                    Other partitions are untouched.
+                - 'append': add rows to `partitions`. A partition that doesn't exist yet is created with its metadata,
+                    an existing one keeps its metadata, so e.g. a live stream appending every few seconds
+                    doesn't rewrite the same metadata on every write.
                     Only if CAPABILITIES.append, otherwise raises NotImplementedError.
         """
 

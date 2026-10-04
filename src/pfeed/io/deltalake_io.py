@@ -36,8 +36,8 @@ class DeltaLakeIO(TableIO):
     - metadata: one marker row per partition in the data table itself, see TableIO._add_marker_rows(),
         since a Delta transaction can't span two tables.
     - replace: one overwrite of the partitions (data + marker rows), dropping their old files.
-    - append: one merge, inserting the data rows and replacing the partitions' marker rows;
-        only the marker files of these partitions are scanned and rewritten.
+    - append: one merge, inserting the data rows and the marker rows of new partitions;
+        only the marker files of these partitions are scanned, none is rewritten.
     - delta-rs rebases a commit onto concurrent ones if they don't conflict, so writes to disjoint
         partitions mostly just land; a commit that still conflicts is retried as a whole.
     """
@@ -136,7 +136,7 @@ class DeltaLakeIO(TableIO):
                 partition_by=partition_by, schema_mode='merge',
             )
             return
-        # match a source marker row with its partition's existing marker row, so it replaces it;
+        # match a source marker row with its partition's existing marker row, so the existing one is kept;
         # everything else (data rows, markers of new partitions) is inserted
         is_meta = self.IS_METADATA_COLUMN
         # the literal conditions on the target's partition columns let the merge skip all other files;
@@ -149,7 +149,6 @@ class DeltaLakeIO(TableIO):
         ])
         (
             dt.merge(table, predicate=predicate, source_alias='s', target_alias='t', merge_schema=True)
-            .when_matched_update_all()
             .when_not_matched_insert_all()
             .execute()
         )

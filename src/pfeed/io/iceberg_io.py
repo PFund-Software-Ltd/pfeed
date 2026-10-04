@@ -64,7 +64,7 @@ class IcebergIO(TableIO):
     - metadata: one marker row per partition in the data table itself, see TableIO._add_marker_rows(),
         since an Iceberg transaction (in pyiceberg) can't span two tables.
     - replace: one transaction overwriting the partitions (data + marker rows), dropping their old files.
-    - append: one transaction dropping the partitions' marker files and appending data + new marker rows.
+    - append: one transaction appending data + marker rows of the partitions that don't have one yet.
     - every concurrent commit conflicts in Iceberg, pyiceberg retries it by re-applying the transaction's files
         onto the latest version, after validating that the concurrent commits didn't touch the same partitions
         (e.g. a compaction's rewrite of a partition that was just written to); if they did, or pyiceberg ran out
@@ -180,18 +180,23 @@ class IcebergIO(TableIO):
     ) -> None:
         # Iceberg stores timestamps in microseconds (ns needs v3, which pyiceberg can't write yet)
         data = self._cast_ns_timestamps_to_us(data)
-        table = self._add_marker_rows(key, data, partitions)
         try:
-            self._with_retries(lambda: self._write_transaction(key, table, list(partitions), mode), f'write to {key}')
+            self._with_retries(lambda: self._write_transaction(key, data, partitions, mode), f'write to {key}')
         except UnsupportedPyArrowTypeException as e:
             raise TypeError(str(e)) from e
 
-    def _write_transaction(self, key: DatasetKey, table: pa.Table, partitions: list[Partition], mode: str) -> None:
+    def _write_transaction(self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: str) -> None:
         catalog = self._load_catalog()
         identifier = self._identifier(catalog, key)
-        tbl = self._load_table(catalog, identifier) or self._create_table(catalog, identifier, key, table.schema)
+        tbl = self._load_table(catalog, identifier)
+        partition_filter = self._filter(key, list(partitions))
+        if mode == 'append' and tbl is not None and (snapshot := tbl.current_snapshot()) is not None:
+            # only the partitions without metadata get a marker row, existing ones keep theirs
+            _, existing = self._read_marker_rows(key, pl.scan_iceberg(tbl, snapshot_id=snapshot.snapshot_id), list(partitions))
+            partitions = {partition: md for partition, md in partitions.items() if partition not in existing}
+        table = self._add_marker_rows(key, data, partitions)
+        tbl = tbl or self._create_table(catalog, identifier, key, table.schema)
         existing_types = {field.name: field.field_type for field in tbl.schema().fields}
-        partition_filter = self._filter(key, partitions)
         # an exception inside the transaction leaves it uncommitted
         with tbl.transaction() as tx, warnings.catch_warnings():
             # e.g. "Delete operation did not match any records" when a partition is new
@@ -209,7 +214,6 @@ class IcebergIO(TableIO):
             if mode == 'replace':
                 tx.overwrite(table, overwrite_filter=partition_filter)
             else:
-                tx.delete(And(partition_filter, EqualTo(self.IS_METADATA_COLUMN, True)))  # ty: ignore[missing-argument, too-many-positional-arguments]
                 tx.append(table)
 
     def _read(

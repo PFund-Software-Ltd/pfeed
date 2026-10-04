@@ -198,7 +198,7 @@ def test_optimize_keeps_data(file_io: TableIO, data: pa.Table):
     lf, read_metadata = file_io.read(KEY)
 
     assert lf is not None
-    assert read_metadata == {('BTC', D1): {'version': 2}, ('BTC', D2): {'version': 1}}
+    assert read_metadata == partitions  # append kept BTC/D1's metadata
     assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(pa.concat_tables([data, new_data])))
 
 

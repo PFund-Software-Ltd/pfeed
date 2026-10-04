@@ -3147,11 +3147,10 @@ packages:
   - beautifulsoup4>=4.15.0
   - ray[default]>=2.58.0 ; sys_platform != 'emscripten'
   - pyzmq>=27.2.0 ; sys_platform != 'emscripten'
+  - yfinance>=1.7.0
   - huggingface-hub>=1.33.0 ; extra == 'huggingface'
   - prefect>=3.8.7 ; extra == 'prefect'
-  - pandas>=3.0.6 ; extra == 'pandas'
   - lancedb>=0.39.0 ; extra == 'lancedb'
-  - yfinance>=1.7.0 ; extra == 'yfinance'
   - cryptohftdata>=0.8.0 ; extra == 'cryptohftdata'
   requires_python: '>=3.12'
 - pypi: https://files.pythonhosted.org/packages/00/b7/e3bf5133d697a08128598c8d0abc5e16377b51465a33756de24fa7dee953/aiosqlite-0.22.1-py3-none-any.whl

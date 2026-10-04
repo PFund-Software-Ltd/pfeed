@@ -2469,6 +2469,7 @@ dependencies = [
     { name = "pydantic", marker = "sys_platform != 'emscripten'" },
     { name = "pyzmq", marker = "sys_platform != 'emscripten'" },
     { name = "ray", extra = ["default"], marker = "sys_platform != 'emscripten'" },
+    { name = "yfinance" },
 ]
 
 [package.optional-dependencies]
@@ -2481,14 +2482,8 @@ huggingface = [
 lancedb = [
     { name = "lancedb" },
 ]
-pandas = [
-    { name = "pandas" },
-]
 prefect = [
     { name = "prefect" },
-]
-yfinance = [
-    { name = "yfinance" },
 ]
 
 [package.metadata]
@@ -2501,7 +2496,6 @@ requires-dist = [
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.39.0" },
     { name = "msgspec", marker = "sys_platform != 'emscripten'", specifier = ">=0.22.0" },
     { name = "narwhals", marker = "sys_platform != 'emscripten'", specifier = ">=2.26.0" },
-    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=3.0.6" },
     { name = "pandera", specifier = ">=0.33.1" },
     { name = "pfund", specifier = "==0.0.25" },
     { name = "polars", marker = "sys_platform != 'emscripten'", specifier = ">=2.0.0rc2" },
@@ -2510,9 +2504,9 @@ requires-dist = [
     { name = "pydantic", marker = "sys_platform != 'emscripten'", specifier = ">=2.13.5" },
     { name = "pyzmq", marker = "sys_platform != 'emscripten'", specifier = ">=27.2.0" },
     { name = "ray", extras = ["default"], marker = "sys_platform != 'emscripten'", specifier = ">=2.58.0" },
-    { name = "yfinance", marker = "extra == 'yfinance'", specifier = ">=1.7.0" },
+    { name = "yfinance", specifier = ">=1.7.0" },
 ]
-provides-extras = ["huggingface", "prefect", "pandas", "lancedb", "yfinance", "cryptohftdata"]
+provides-extras = ["huggingface", "prefect", "lancedb", "cryptohftdata"]
 
 [[package]]
 name = "pfund"

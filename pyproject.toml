@@ -40,15 +40,15 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "ray[default]>=2.58.0 ; sys_platform != 'emscripten'",
     "pyzmq>=27.2.0 ; sys_platform != 'emscripten'",
+    "yfinance>=1.7.0",
+    # "edgartools>=5.60.0",
 ]
 
 [project.optional-dependencies]
 huggingface = ["huggingface-hub>=1.33.0"]
 prefect = ["prefect>=3.8.7"]
-pandas = ["pandas>=3.0.6"]
 lancedb = ["lancedb>=0.39.0"]
 # Data Sources:
-yfinance = ["yfinance>=1.7.0"]
 cryptohftdata = ["cryptohftdata>=0.8.0"]
 # deltalake = ["deltalake>=1.6.6"]
 # iceberg = ["pyiceberg[sql-sqlite,pyiceberg-core]>=0.12.0"]

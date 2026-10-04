@@ -32,9 +32,14 @@ class DuckLakeIO(TableIO):
     - DatasetKey -> table "<schema>"."<table>", see TableIO.
     - metadata: table "<table>__metadata" in the same schema, one row per partition:
         the partition_by columns (a DatePartition's as a date) + METADATA_COLUMN (JSON string).
-    - a DatePartition level partitions the data files by its column's year/month/day (UTC);
-        its column can't be a nanosecond timestamp with a time zone, DuckLake can't partition it.
         Written in the same transaction as the data, so the commit marker comes for free.
+    - physical layout: the table is partitioned by the column levels of partition_by only (e.g. product),
+        so a file never mixes their values, whatever the write pattern or compaction.
+        A DatePartition level is logical only (the unit of replace, metadata and existence), matched by a
+        date range; partitioning by it would keep every day in files of its own, so optimize() could never
+        merge e.g. daily bars. Reads still skip other days' files by their min/max stats of the column.
+    - data files are flat under <base_path>/data/<schema>/<table>/, without hive dirs per partition value,
+        since DuckLake finds a file's partition values in the catalog, not in its path.
     - replace/append are one transaction each: DELETE (replace only) + INSERT data, DELETE + INSERT metadata.
         Concurrent writes to the same dataset conflict even on disjoint partitions (DuckLake detects
         conflicts per table), so a conflicting transaction is retried as a whole.
@@ -46,9 +51,11 @@ class DuckLakeIO(TableIO):
     METADATA_TABLE_SUFFIX: ClassVar[str] = '__metadata'
     _RETRY_ON: ClassVar[tuple[type[Exception], ...]] = (duckdb.TransactionException,)
     _CATALOG_ALIAS: ClassVar[str] = 'lake'
-    # DuckLake defaults to snappy; zstd made Bybit tick data ~40% smaller at about the same read speed,
-    # and matches ParquetIO's default
-    PARQUET_COMPRESSION: ClassVar[str] = 'zstd'
+    # stored in the catalog, so they apply to every table:
+    # - parquet_compression: DuckLake defaults to snappy; zstd made Bybit tick data ~40% smaller
+    #     at about the same read speed, and matches ParquetIO's default
+    # - hive_file_pattern: no partition dirs (e.g. product=BTC/), see the class docstring
+    CATALOG_OPTIONS: ClassVar[dict[str, str | bool]] = {'parquet_compression': 'zstd', 'hive_file_pattern': False}
 
     def __init__(self, base_path: str | None = None, data_inlining_row_limit: int | None = None):
         """
@@ -73,21 +80,20 @@ class DuckLakeIO(TableIO):
         # which made concurrent writes ~5x slower and sometimes fail with "database is locked"
         with contextlib.closing(sqlite3.connect(os.path.join(self._base_path, self.CATALOG_FILE_NAME))) as conn:
             conn.execute('PRAGMA journal_mode=WAL')
-        self._set_parquet_compression()
+        self._set_catalog_options()
 
-    def _set_parquet_compression(self) -> None:
-        """Sets the codec of the parquet files DuckLake writes, stored in the catalog so it applies to every table.
+    def _set_catalog_options(self) -> None:
+        """Sets CATALOG_OPTIONS in the catalog, only the ones that differ, so creating an IO doesn't write to it every time.
 
-        Only written when it differs, so creating an IO doesn't write to the catalog every time.
-        Files written with another codec stay as they are until optimize() rewrites them.
+        Files written before an option changed stay as they are, e.g. snappy files until optimize() rewrites them.
         """
         cursor = self._connect()
         try:
-            rows = cursor.execute(
-                f"SELECT value FROM {self._CATALOG_ALIAS}.options() WHERE option_name = 'parquet_compression'"
-            ).fetchall()
-            if rows != [(self.PARQUET_COMPRESSION,)]:
-                cursor.execute(f"CALL {self._CATALOG_ALIAS}.set_option('parquet_compression', ?)", [self.PARQUET_COMPRESSION])
+            current = dict(cursor.execute(f'SELECT option_name, value FROM {self._CATALOG_ALIAS}.options()').fetchall())
+            for name, value in self.CATALOG_OPTIONS.items():
+                # options() returns every value as a string, e.g. 'false', but set_option() needs its real type
+                if current.get(name) != (str(value).lower() if isinstance(value, bool) else value):
+                    cursor.execute(f'CALL {self._CATALOG_ALIAS}.set_option(?, ?)', [name, value])
         finally:
             cursor.close()
 
@@ -150,7 +156,8 @@ class DuckLakeIO(TableIO):
 
         Works on both the data and the metadata table: a DatePartition level matches its column
         by the date's range [date, date + 1 day), which is the date itself in the metadata table,
-        and lets DuckLake skip the data files of other days (a CAST(column AS DATE) filter wouldn't).
+        and lets DuckLake skip the data files of other days by their min/max stats (a CAST(column AS DATE)
+        filter wouldn't).
         """
         if not key.partition_by:
             return '', []  # one partition, every row is in it
@@ -170,38 +177,9 @@ class DuckLakeIO(TableIO):
             conditions.append('(' + ' AND '.join(level_conditions) + ')')
         return 'WHERE ' + ' OR '.join(conditions), params
 
-    @staticmethod
-    def _partitioned_by(key: DatasetKey) -> str:
-        """Returns the SET PARTITIONED BY expressions of the data table, a DatePartition level being its column's
-        year/month/day, so each day's rows are in files of their own, e.g. product=BTC/year=2025/month=1/day=1/.
-        """
-        exprs: list[str] = []
-        for level in key.partition_by:
-            if isinstance(level, DatePartition):
-                col = _quote(level.column)
-                exprs += [f'year({col})', f'month({col})', f'day({col})']
-            else:
-                exprs.append(_quote(level))
-        return ', '.join(exprs)
-
-    @staticmethod
-    def _check_date_partition_types(key: DatasetKey, data: pa.Table) -> None:
-        """Raises TypeError if a DatePartition column is a nanosecond timestamp with a time zone,
-        since DuckLake can't compute its year/month/day (no year(TIMESTAMPTZ_NS)).
-        """
-        for level in key.partition_by:
-            if isinstance(level, DatePartition):
-                dtype = data.schema.field(level.column).type
-                if pa.types.is_timestamp(dtype) and dtype.tz is not None and dtype.unit == 'ns':
-                    raise TypeError(
-                        f'{level} column {level.column!r} is {dtype}, DuckLake can\'t partition nanosecond timestamps '
-                        'with a time zone; drop the time zone (UTC) or use microseconds'
-                    )
-
     def _write(
         self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],
     ) -> None:
-        self._check_date_partition_types(key, data)
         # one row per partition: its values (typed like data's partition columns, a DatePartition's as dates,
         # so the filters match both tables) + metadata
         partition_metadata_table = pa.table({
@@ -227,8 +205,9 @@ class DuckLakeIO(TableIO):
             cursor.execute(f'CREATE SCHEMA IF NOT EXISTS {self._CATALOG_ALIAS}.{_quote(schema)}')
             if not self._table_exists(cursor, schema, table):
                 cursor.execute(f'CREATE TABLE {data_ref} AS SELECT * FROM _data LIMIT 0')
-                if key.partition_by:
-                    cursor.execute(f'ALTER TABLE {data_ref} SET PARTITIONED BY ({self._partitioned_by(key)})')
+                # only the column levels, a DatePartition level is logical only (see the class docstring)
+                if cols := [_quote(level) for level in key.partition_by if not isinstance(level, DatePartition)]:
+                    cursor.execute(f'ALTER TABLE {data_ref} SET PARTITIONED BY ({", ".join(cols)})')
                 cursor.execute(f'CREATE TABLE {metadata_ref} AS SELECT * FROM _partition_metadata LIMIT 0')
             else:
                 # schema drift: add new columns, missing ones are null-filled by INSERT BY NAME

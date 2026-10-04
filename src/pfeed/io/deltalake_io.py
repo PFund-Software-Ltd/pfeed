@@ -16,6 +16,7 @@ import pyarrow as pa
 from deltalake import DeltaTable, Schema, write_deltalake
 from deltalake.exceptions import CommitFailedError
 
+from pfeed.io.base_io import DatePartition
 from pfeed.io.table_io import TableIO, VacuumResult
 
 
@@ -75,15 +76,28 @@ class DeltaLakeIO(TableIO):
             if os.path.isdir(os.path.join(entry.path, self._LOG_DIR_NAME))
         )
 
-    def _sql_predicate(self, key: DatasetKey, partitions: list[Partition], alias: str = '') -> str | None:
-        """Returns a delta-rs SQL predicate matching rows in `partitions`, None for an unpartitioned dataset."""
+    @staticmethod
+    def _sql_predicate(key: DatasetKey, partitions: list[Partition], alias: str = '') -> str | None:
+        """Returns a delta-rs SQL predicate matching rows in `partitions`, None for an unpartitioned dataset.
+
+        A DatePartition level matches its column in the range [day, day + 1), see TableIO.
+        """
         if not key.partition_by:
             return None  # one partition, every row is in it
         prefix = f'{alias}.' if alias else ''
+
+        def level_predicate(level: str | DatePartition, value: PartitionValue) -> str:
+            if isinstance(level, DatePartition):
+                assert isinstance(value, datetime.date)
+                # a date string, since a DATE/TIMESTAMP literal can't be compared to every timestamp/date type;
+                # delta-rs reads it as midnight UTC
+                start, end = value.isoformat(), (value + datetime.timedelta(days=1)).isoformat()
+                return f"{prefix}\"{level.column}\" >= '{start}' AND {prefix}\"{level.column}\" < '{end}'"
+            return f'{prefix}"{level}" = {_sql_literal(value)}'
+
         return ' OR '.join(
             '(' + ' AND '.join(
-                f'{prefix}"{col}" = {_sql_literal(value)}'
-                for col, value in zip(self._marker_columns(key), partition, strict=True)
+                level_predicate(level, value) for level, value in zip(key.partition_by, partition, strict=True)
             ) + ')'
             for partition in partitions
         )
@@ -125,12 +139,13 @@ class DeltaLakeIO(TableIO):
         # match a source marker row with its partition's existing marker row, so it replaces it;
         # everything else (data rows, markers of new partitions) is inserted
         is_meta = self.IS_METADATA_COLUMN
-        # the literal conditions on the target's partition columns let the merge skip all other files
+        # the literal conditions on the target's partition columns let the merge skip all other files;
+        # a DatePartition's marker rows both have the day's midnight, see TableIO._add_marker_rows()
         predicate = ' AND '.join([
             *(f'({target})' for target in [self._sql_predicate(key, partitions, alias='t')] if target),
             f't."{is_meta}" = true',
             f's."{is_meta}" = true',
-            *(f't."{col}" = s."{col}"' for col in self._marker_columns(key)),
+            *(f't."{col}" = s."{col}"' for col in key.partition_columns),
         ])
         (
             dt.merge(table, predicate=predicate, source_alias='s', target_alias='t', merge_schema=True)

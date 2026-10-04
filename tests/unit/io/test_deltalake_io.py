@@ -14,7 +14,7 @@ import pyarrow as pa
 import pytest
 from deltalake import DeltaTable
 
-from pfeed.io.base_io import DatasetKey
+from pfeed.io.base_io import DatasetKey, DatePartition
 from pfeed.io.deltalake_io import DeltaLakeIO
 from pfeed.io.table_io import VacuumResult
 
@@ -122,3 +122,27 @@ def test_vacuum_retention_rounds_up_to_hours(io: DeltaLakeIO, table_path: Path, 
     os.utime(orphan, (half_an_hour_ago, half_an_hour_ago))
 
     assert io.vacuum(retention=datetime.timedelta(minutes=1)) == VacuumResult()
+
+
+def test_date_partition_is_logical(io: DeltaLakeIO, table_path: Path):
+    """A DatePartition level isn't a physical partition: the table is partitioned by the column levels
+    + IS_METADATA_COLUMN only, so one data file holds both days written together, and replacing D1
+    (matched by a date range) leaves D3 in that file untouched.
+    """
+    key = DatasetKey(namespace=KEY.namespace, name=KEY.name, partition_by=('product', DatePartition('date')))
+    data = pa.table({
+        'date': pa.array([datetime.datetime(2025, 1, 1, 1), datetime.datetime(2025, 1, 3, 23)], pa.timestamp('us')),
+        'product': ['BTC', 'BTC'],
+        'price': [1.0, 3.0],
+    })
+    io.write(key, data, partitions={('BTC', D1): {}, ('BTC', D3): {}})
+
+    assert DeltaTable(str(table_path)).metadata().partition_columns == ['product', io.IS_METADATA_COLUMN]
+    assert len([file for file in table_path.rglob('*.parquet') if f'{io.IS_METADATA_COLUMN}=false' in str(file)]) == 1
+
+    io.write(key, data.slice(0, 1).set_column(2, 'price', pa.array([9.0])), partitions={('BTC', D1): {'version': 2}})
+
+    lf, metadata = io.read(key)
+    assert lf is not None
+    assert lf.sort('date').collect()['price'].to_list() == [9.0, 3.0]
+    assert metadata == {('BTC', D1): {'version': 2}, ('BTC', D3): {}}

@@ -15,7 +15,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 
-from pfeed.io.base_io import DatasetKey
+from pfeed.io.base_io import DatasetKey, DatePartition
 from pfeed.io.iceberg_io import IcebergIO
 from pfeed.io.table_io import VacuumResult
 
@@ -24,7 +24,7 @@ KEY = DatasetKey(
     name={'asset_type': 'PERPETUAL', 'resolution': '1t'},
     partition_by=('product', 'date'),
 )
-D1, D2 = datetime.date(2025, 1, 1), datetime.date(2025, 1, 2)
+D1, D2, D3 = datetime.date(2025, 1, 1), datetime.date(2025, 1, 2), datetime.date(2025, 1, 3)
 
 
 @pytest.fixture
@@ -133,3 +133,27 @@ def test_vacuum_deletes_orphans(io: IcebergIO, tmp_path: Path, data: pa.Table):
     os.utime(orphan, (two_hours_ago, two_hours_ago))
     assert io.vacuum(retention=datetime.timedelta(hours=1), dry_run=False) == VacuumResult(deleted_paths=[str(orphan)])
     assert not orphan.exists()
+
+
+def test_date_partition_is_logical(io: IcebergIO, tmp_path: Path):
+    """A DatePartition level isn't a physical partition: the table is partitioned by the column levels
+    + IS_METADATA_COLUMN only, so one data file holds both days written together, and replacing D1
+    (matched by a date range) leaves D3 in that file untouched.
+    """
+    key = DatasetKey(namespace=KEY.namespace, name=KEY.name, partition_by=('product', DatePartition('date')))
+    data = pa.table({
+        'date': pa.array([datetime.datetime(2025, 1, 1, 1), datetime.datetime(2025, 1, 3, 23)], pa.timestamp('us')),
+        'product': ['BTC', 'BTC'],
+        'price': [1.0, 3.0],
+    })
+    io.write(key, data, partitions={('BTC', D1): {}, ('BTC', D3): {}})
+
+    assert [field.name for field in _load_table(io).spec().fields] == ['product', io.IS_METADATA_COLUMN]
+    assert len([file for file in (tmp_path / 'warehouse').rglob('*.parquet') if f'{io.IS_METADATA_COLUMN}=false' in str(file)]) == 1
+
+    io.write(key, data.slice(0, 1).set_column(2, 'price', pa.array([9.0])), partitions={('BTC', D1): {'version': 2}})
+
+    lf, metadata = io.read(key)
+    assert lf is not None
+    assert lf.sort('date').collect()['price'].to_list() == [9.0, 3.0]
+    assert metadata == {('BTC', D1): {'version': 2}, ('BTC', D3): {}}

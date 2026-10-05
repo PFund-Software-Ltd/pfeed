@@ -42,8 +42,6 @@ cloudpathlib = ">=0.25.0"
 beautifulsoup4 = ">=4.15.0"
 ray = { version = ">=2.58.0", extras = ["default"] }
 pyzmq = ">=27.2.0"
-yfinance = ">=1.7.0"
-# edgartools = ">=5.60.0"
 
 [environments]
 default = ["py312", "dev", "test", "optional"]
@@ -65,6 +63,8 @@ libpq = ">=18.4"  # for postgresql
 huggingface-hub = ">=1.33.0"
 prefect = ">=3.8.7"
 lancedb = ">=0.39.0"
+# yfinance = ">=1.7.0"
+# edgartools = ">=5.60.0"
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 # dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
 # pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }

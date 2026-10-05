@@ -5,7 +5,6 @@ import polars as pl
 from pfund.datas.resolution import Resolution
 
 import pfeed as pe
-from pfeed.enums import DataSource
 from pfeed.sources.crypto_hft_data.market_feed import CryptoHftDataMarketFeed
 from pfeed.sources.crypto_hft_data.market_data_model import (
     CryptoHftDataMarketDataModel,
@@ -52,7 +51,7 @@ def test_public_client_aliases_and_discovery() -> None:
     client.data_source._batch_api = fake_api
 
     assert pe.CHD is pe.CryptoHFTData
-    assert client.name == DataSource.CRYPTO_HFT_DATA
+    assert client.name == "CRYPTO_HFT_DATA"
     assert client.list_exchanges() == ["BINANCE", "BYBIT"]
     assert client.list_symbols("BINANCE", "trades") == ["BINANCE:BTCUSDT:trades"]
 

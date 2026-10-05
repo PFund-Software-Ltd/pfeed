@@ -732,7 +732,7 @@ class MarketFeed(TimeBasedFeed, ABC):
 
         common = {
             "msg_ts": msg.get("ts", None),
-            "data_source": data_source.value,
+            "data_source": data_source,
             "data_origin": data_origin,
             "product": product.name,
             "basis": str(product.basis),

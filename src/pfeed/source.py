@@ -96,17 +96,8 @@ class DataProviderSource(BaseSource):
         raise NotImplementedError(f"{self.name} does not support creating products")
 
     def _get_api_key(self) -> str | None:
-        from pfeed.utils.aliases import ALIASES
-
-        alias = ALIASES.resolve(self.name)
-        api_key_name, api_key_alias = f"{self.name}_API_KEY", f"{alias}_API_KEY"
-        api_key: str | None = os.getenv(api_key_name) or os.getenv(api_key_alias)
-        is_api_key_required = self.METADATA.api_key_required
-        if is_api_key_required and not api_key:
-            api_key_name_choices = (
-                [api_key_name]
-                if api_key_name == api_key_alias
-                else [api_key_name, api_key_alias]
-            )
-            raise ValueError(f"{' or '.join(api_key_name_choices)} is not set")
+        api_key_name = f"{self.name}_API_KEY"
+        api_key: str | None = os.getenv(api_key_name)
+        if self.METADATA.api_key_required and not api_key:
+            raise ValueError(f"{api_key_name} is not set")
         return api_key

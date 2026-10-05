@@ -7,11 +7,7 @@ import pfeed as pe
 from pfeed import registry
 from pfeed.enums import DataCategory, DataLayer, DataStorage
 
-# add aliases to supported download data sources
 SUPPORTED_DATA_SOURCES = registry.list_sources()
-SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [
-    pe.alias(ds) for ds in SUPPORTED_DATA_SOURCES if pe.alias(ds)
-]
 
 # a data source exposes one feed per data category; "download" picks the feed of
 # the requested category via pfeed.get_feed. Not every category has a
@@ -31,7 +27,7 @@ SUPPORTED_CATEGORIES = [category.value for category in DataCategory]
     "--source",
     "-d",
     required=True,
-    type=click.Choice(SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED, case_sensitive=False),
+    type=click.Choice(SUPPORTED_DATA_SOURCES, case_sensitive=False),
     help="Data source",
 )
 @click.option(
@@ -118,7 +114,6 @@ def download(
     pe.configure(data_path=data_path)
     if debug:
         pe.configure_logging(debug=debug)
-    data_source = pe.alias.resolve(data_source)
     data_category = DataCategory[category.upper()]
     is_market = data_category == DataCategory.MARKET_DATA
 

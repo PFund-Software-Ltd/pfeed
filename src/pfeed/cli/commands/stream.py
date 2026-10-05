@@ -7,11 +7,7 @@ import pfeed as pe
 from pfeed import registry
 from pfeed.enums import DataCategory, DataLayer, DataStorage
 
-# add aliases to supported streaming data sources
 SUPPORTED_DATA_SOURCES = registry.list_sources()
-SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [
-    pe.alias(ds) for ds in SUPPORTED_DATA_SOURCES if pe.alias(ds)
-]
 
 # streaming is only supported by market feeds, so unlike `download` there is no
 # --category flag — the command always targets the source's market feed.
@@ -30,7 +26,7 @@ SUPPORTED_ENVS = ["BACKTEST", "PAPER", "LIVE"]
     "--source",
     "-d",
     required=True,
-    type=click.Choice(SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED, case_sensitive=False),
+    type=click.Choice(SUPPORTED_DATA_SOURCES, case_sensitive=False),
     help="Data source",
 )
 @click.option(
@@ -140,7 +136,6 @@ def stream(
     pe.configure(data_path=data_path)
     if debug:
         pe.configure_logging(debug=debug)
-    data_source = pe.alias.resolve(data_source)
     env = env.upper()
     is_replaying = env == "BACKTEST"
 

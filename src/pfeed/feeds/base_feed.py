@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pfund_kit.logging.loggers import ColoredLogger
     from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue

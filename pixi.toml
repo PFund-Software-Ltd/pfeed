@@ -75,6 +75,7 @@ pfeed-bybit = { path = "../pfeed-bybit", editable = true }
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TEMP
 pfund = { path = "../pfund", editable = true }
+pfund-kit = { path = "../pfund-kit", editable = true }
 afterpython = ">=0.4.0"
 financetoolkit = ">=2.2.0"
 pyrefly = ">=1.3.2"

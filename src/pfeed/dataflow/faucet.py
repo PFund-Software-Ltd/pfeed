@@ -15,8 +15,8 @@ if TYPE_CHECKING:
         ReplayData,
         WebSocketName,
     )
-    from pfeed.sources.base_source import BaseSource
-    from pfeed.storages.base_storage import BaseStorage
+    from pfeed.source import BaseSource
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.streaming.zeromq import ZeroMQ
 
     ExtractFuncParams = ParamSpec("ExtractFuncParams")
@@ -108,13 +108,13 @@ class Faucet:
         return cast(pl.LazyFrame | None, self._extract_func(data_model=data_model))
 
     async def open_stream(
-        self, data_model: BaseDataModel, storage: BaseStorage | None = None
+        self, data_model: BaseDataModel, handler: BaseDataHandler | None = None
     ):
         # NOTE: streaming dataflows share the same faucet, so we only need to start the extraction once
         if not self._is_stream_opened:
             self._is_stream_opened = True
             await self._extract_func(
-                data_model=data_model, faucet_callback=self._callback, storage=storage
+                data_model=data_model, faucet_callback=self._callback, handler=handler
             )
 
     async def close_stream(self):

@@ -16,7 +16,7 @@ from databento.common.dbnstore import DBNStore
 # from databento_dbn import SType
 from databento.common.publishers import Dataset, Publisher
 
-from pfeed.sources.data_provider_source import DataProviderSource
+from pfeed.source import DataProviderSource
 from pfeed.sources.databento.const import DATASETS
 
 tDATASET = Literal[

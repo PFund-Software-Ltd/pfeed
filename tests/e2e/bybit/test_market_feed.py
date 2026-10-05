@@ -3,13 +3,12 @@ from typing import Any
 import datetime
 from pathlib import Path
 
-import pytest
 import polars as pl
+import pytest
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
 
 import pfeed as pe
-from pfeed.enums import DataStorage, IOFormat
 from pfeed.dataflow.result import RunResult
 
 
@@ -22,8 +21,14 @@ from pfeed.dataflow.result import RunResult
     ('BTC_USD_INVERSE-FUTURE', '1t', {'expiration': '2026-09-25'}),  # inverse future
     ('BTC_USDC_SPOT', '1t', {}),  # spot
 ])
+@pytest.mark.parametrize('io_class', [pe.ParquetIO, pe.DuckLakeIO], ids=['ParquetIO', 'DuckLakeIO'])
 def test_download_and_retrieve(
-    tmp_path: Path, bybit: pe.Bybit, product: str, resolution: str, product_specs: dict[str, Any]
+    tmp_path: Path,
+    bybit: pe.Bybit,
+    product: str,
+    resolution: str,
+    product_specs: dict[str, Any],
+    io_class: type[pe.ParquetIO | pe.DuckLakeIO],
 ):
     def _assert_df(df: pl.DataFrame, _product: BaseProduct, start_date: str, end_date: str) -> None:
         assert df is not None
@@ -58,16 +63,14 @@ def test_download_and_retrieve(
     start_date, end_date = '2026-09-01', '2026-09-02'
     feed = bybit.market_feed
     _product = feed.data_source.create_product(product, **product_specs)
-    storage_config = pe.StorageConfig(storage=DataStorage.LOCAL, data_path=tmp_path)
-    io_config = pe.IOConfig(io_format=IOFormat.PARQUET)
+    io = io_class(base_path=str(tmp_path))
     for func in (feed.download, feed.retrieve):
         result = func(
             product=product,
             resolution=resolution,
             start_date=start_date,
             end_date=end_date,
-            storage_config=storage_config,
-            io_config=io_config,
+            io=io,
             **product_specs,
         )
         assert isinstance(result, RunResult)

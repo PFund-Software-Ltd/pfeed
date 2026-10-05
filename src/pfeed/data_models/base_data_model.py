@@ -7,12 +7,11 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, ConfigDict
 
-from pfeed.sources.base_source import BaseSource
+from pfeed.source import BaseSource
 
 
 class BaseDataModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
-
     DataHandler: ClassVar[type[BaseDataHandler]]
 
     data_source: BaseSource

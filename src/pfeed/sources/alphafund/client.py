@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pfeed.data_client import DataClient
+from pfeed.client import DataClient
 from pfeed.enums import DataCategory
 from pfeed.sources.alphafund.agent_feed import AlphaFundAgentFeed
 from pfeed.sources.alphafund.chat_feed import AlphaFundChatFeed

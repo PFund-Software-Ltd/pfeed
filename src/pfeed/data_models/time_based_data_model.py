@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
-
-if TYPE_CHECKING:
-    from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
-
 import datetime
+from typing import ClassVar
 
 from pydantic import Field, ValidationInfo, field_validator
 
@@ -13,7 +9,9 @@ from pfeed.data_models.base_data_model import BaseDataModel
 
 
 class TimeBasedDataModel(BaseDataModel):
-    DataHandler: ClassVar[type[TimeBasedDataHandler]]
+    # the date column the feed standardizes the data to, and the data handler partitions by
+    DATE_COL_IN_CLEANED_DATA: ClassVar[str] = "date"
+    DATE_COL_IN_RAW_DATA: ClassVar[str] = "_pfeed_date"
 
     start_date: datetime.date = Field(description="Start of the date range.")
     end_date: datetime.date = Field(

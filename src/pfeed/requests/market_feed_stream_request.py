@@ -20,6 +20,15 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
           ticks, sleep the timestamp difference. Opt-in only (can take hours).
         """,
     )
+    store_incremental_bars: bool = Field(
+        default=False,
+        description="Whether to also store the updates of a bar before it closes. Only used when storing streamed bars.",
+    )
+    flush_interval: float = Field(
+        default=100,
+        gt=0,
+        description="Seconds between writes of the buffered streamed data to the io. Only used when storing streamed data.",
+    )
 
     def is_streaming(self) -> bool:
         return True
@@ -35,9 +44,7 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
         super().model_post_init(context)
         is_replaying = self.env == Environment.BACKTEST
         if is_replaying:
-            if not self.storage_config:
-                raise ValueError(
-                    "storage config is missing, cannot retrieve data for replaying"
-                )
-            if self.storage_config.data_layer != DataLayer.CLEANED:
+            if not self.io:
+                raise ValueError("io is missing, cannot retrieve data for replaying")
+            if self.data_layer != DataLayer.CLEANED:
                 raise ValueError("Replaying only supports CLEANED data layer")

@@ -1,16 +1,15 @@
-# pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false, reportArgumentType=false, reportUnusedParameter=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Coroutine, Iterator
+    from collections.abc import Awaitable, Callable, Coroutine, Iterator
 
     from pfund.datas.data_bar import BarData
     from pfund.entities.products.product_base import BaseProduct
     from pfund.venues._apis.typing import ResponseData
 
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.dataflow.result import RunResult
     from pfeed.feeds.streaming_feed_mixin import (
         ChannelKey,
@@ -24,7 +23,7 @@ if TYPE_CHECKING:
         MarketFeedStreamRequest,
     )
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
-    from pfeed.sources.data_provider_source import DataProviderSource
+    from pfeed.source import DataProviderSource
     from pfeed.streaming.market_data_message import MarketDataMessage
 
 import datetime
@@ -37,12 +36,9 @@ from pfund.enums.env import Environment
 
 from pfeed.config import setup_logging
 from pfeed.data_models.market_data_model import MarketDataModel
-from pfeed.enums import DataCategory, DataLayer, DataSource, DataStorage, MarketDataType
+from pfeed.enums import DataCategory, DataLayer, DataSource, MarketDataType
 from pfeed.feeds.time_based_feed import TimeBasedFeed
-from pfeed.io.io_config import IOConfig
-from pfeed.sinks.sink_config import SinkConfig
-from pfeed.storages.base_storage import BaseStorage
-from pfeed.storages.storage_config import StorageConfig
+from pfeed.io.base_io import BaseIO
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
@@ -160,9 +156,8 @@ class MarketFeed(TimeBasedFeed, ABC):
         start_date: datetime.date | str | None = None,
         end_date: datetime.date | str | None = None,
         data_origin: str = "",
-        clean_data: bool = True,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        io: BaseIO | None = None,
         **product_specs: Any,
     ) -> Self | RunResult:
         """Download historical data from the data source.
@@ -180,26 +175,11 @@ class MarketFeed(TimeBasedFeed, ABC):
                 Requires `start_date`.
             data_origin: Sub-label for data from the same source but different origins.
                 Defaults to the source name.
-            clean_data: Whether to clean raw data after download.
-                If True, runs default transformations (normalize, standardize columns,
-                downsample). If False, raw data is returned as-is.
-                Ignored when `storage_config` is provided: cleaning is then determined
-                by its `data_layer`.
-            storage_config: Where to store the data. If None, data is not stored.
-
-                - `storage`: backend, e.g. `'local'` (default), `'duckdb'`
-                - `data_path`: root directory, defaults to pfeed's configured `data_path`
-                - `data_layer`: `'raw'`, `'cleaned'` (default) or `'curated'`
-
-                e.g. `StorageConfig(storage='local', data_path='./data')`
-            io_config: IO format and options for writing the data. If None, uses `IOConfig()`.
-
-                - `io_format`: `'parquet'` (default), `'deltalake'`, `'duckdb'`, etc.
-                - `compression`: `'snappy'` (default), `'zstd'`, etc.
-                - `connect_options` / `write_options` / `read_options`: passed through
-                  to the IO class's `connect()` / `write()` / `read()`
-
-                e.g. `IOConfig(io_format='deltalake')`
+            data_layer: Data layer of the downloaded data, `'raw'` or `'cleaned'` (default).
+                `'cleaned'` runs the default transformations (normalize, standardize columns,
+                downsample); `'raw'` returns the data as-is. The data is stored in this layer if `io` is given.
+            io: Where and how to store the data. If None, data is not stored.
+                e.g. `ParquetIO(base_path='./data')`, `DuckLakeIO()`
             product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
                 futures. Leave them out to get an error listing the required ones.
 
@@ -223,8 +203,8 @@ class MarketFeed(TimeBasedFeed, ABC):
         request = MarketFeedDownloadRequest(
             data_source=self.name,
             data_origin=data_origin,
-            storage_config=storage_config,
-            io_config=io_config,
+            io=io,
+            data_layer=data_layer,
             env=env,
             product=product,
             target_resolution=resolution,
@@ -232,7 +212,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             dataflow_per_date=self.DOWNLOAD_DATAFLOW_PER_DATE,
-            clean_data=clean_data,
         )
         self._append_request(request)
         _ = self._create_batch_dataflows(
@@ -247,18 +226,17 @@ class MarketFeed(TimeBasedFeed, ABC):
         self, request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest
     ) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
-        from pfeed._etl.base import convert_dataframe
         from pfeed.utils import lambda_with_name
 
         default_transformations = [
             lambda_with_name(
                 "standardize_date_column",
                 lambda df: self._standardize_date_column(
-                    df, is_raw_data=not request.clean_data
+                    df, is_raw_data=not request.should_clean_data
                 ),
             ),
         ]
-        if request.clean_data:
+        if request.should_clean_data:
             default_transformations.extend(
                 [
                     self._normalize_raw_data,
@@ -277,12 +255,6 @@ class MarketFeed(TimeBasedFeed, ABC):
                     etl.organize_columns,
                 ]
             )
-        default_transformations.append(
-            lambda_with_name(
-                "convert_to_user_df",
-                lambda df: convert_dataframe(df),
-            )
-        )
         return default_transformations
 
     def retrieve(
@@ -295,11 +267,10 @@ class MarketFeed(TimeBasedFeed, ABC):
         start_date: datetime.date | str | None = None,
         end_date: datetime.date | str | None = None,
         data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
         env: Environment | str = Environment.BACKTEST,
         dataflow_per_date: bool = False,
-        clean_data: bool = False,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
+        io: BaseIO | None = None,
         **product_specs: Any,
     ) -> Self | RunResult:
         """Retrieve data from storage.
@@ -318,6 +289,8 @@ class MarketFeed(TimeBasedFeed, ABC):
                 Requires `start_date`.
             data_origin: Sub-label for data from the same source but different origins.
                 Defaults to the source name.
+            data_layer: Data layer to retrieve the data from:
+                `'raw'`, `'cleaned'` (default) or `'curated'`. Data is returned as stored, raw data is not cleaned.
             env: Trading environment the data was stored in: `'BACKTEST'` (default) for
                 downloaded data, `'PAPER'` or `'LIVE'` for streamed data.
             dataflow_per_date: Whether to create one dataflow per date.
@@ -327,25 +300,8 @@ class MarketFeed(TimeBasedFeed, ABC):
 
                 - all dates don't fit in memory at once, e.g. when downsampling
                 - using Ray, to parallelize per-date tasks across workers
-            clean_data: Whether to clean the retrieved data.
-                If True, runs default transformations (normalize, standardize columns,
-                downsample). If False, data is returned as stored.
-                Only applies when `storage_config.data_layer` is `'raw'`; ignored otherwise.
-            storage_config: Where to retrieve the data from. If None, uses `StorageConfig()`.
-
-                - `storage`: backend, e.g. `'local'` (default), `'duckdb'`
-                - `data_path`: root directory, defaults to pfeed's configured `data_path`
-                - `data_layer`: `'raw'`, `'cleaned'` (default) or `'curated'`
-
-                e.g. `StorageConfig(storage='local', data_path='./data')`
-            io_config: IO format and options for reading the data. If None, uses `IOConfig()`.
-
-                - `io_format`: `'parquet'` (default), `'deltalake'`, `'duckdb'`, etc.
-                - `compression`: `'snappy'` (default), `'zstd'`, etc.
-                - `connect_options` / `write_options` / `read_options`: passed through
-                  to the IO class's `connect()` / `write()` / `read()`
-
-                e.g. `IOConfig(io_format='deltalake')`
+            io: Where and how to retrieve the data from. If None, uses `ParquetIO()`.
+                e.g. `ParquetIO(base_path='./data')`, `DuckLakeIO()`
             product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
                 futures. Leave them out to get an error listing the required ones.
 
@@ -378,15 +334,14 @@ class MarketFeed(TimeBasedFeed, ABC):
             ),
         ]
 
-        storage_config = self._normalize_storage_config(
-            storage_config or StorageConfig()
-        )
-        io_config = self._normalize_io_config(io_config or IOConfig())
+        if io is None:
+            from pfeed.io.parquet_io import ParquetIO
 
-        # read metadata from storage to try to find data resolution
-        Storage = DataStorage[storage_config.storage].storage_class
-        storage = Storage.from_storage_config(storage_config).with_io(io_config)
-        data_model = data_resolution = None
+            io = ParquetIO()
+        self._validate_io(io)
+
+        # find the data resolution: the first search resolution stored for every date
+        data_resolution = None
         for search_resolution in search_resolutions:
             data_model = self.create_data_model(
                 env=env,
@@ -396,22 +351,25 @@ class MarketFeed(TimeBasedFeed, ABC):
                 end_date=end_date,
                 data_origin=data_origin,
             )
-            _ = storage.with_data_model(data_model)
-            metadata = storage.read_metadata()
-            # if this date's source path exists, data is stored at this resolution
-            if not metadata.missing_source_paths:
+            handler = data_model.DataHandler(
+                data_model=data_model,
+                io=io,
+                data_layer=data_layer,
+                data_domain=str(self.data_domain),
+            )
+            if not handler.find_missing_dates_in_storage():
                 data_resolution = search_resolution
                 break
         else:
             self.logger.debug(
-                f"failed to find stored {product} data from {start_date} to {end_date} with search resolutions {search_resolutions} in {storage}"
+                f"failed to find stored {product} data from {start_date} to {end_date} with search resolutions {search_resolutions} in {io!r}"
             )
 
         request = MarketFeedRetrieveRequest(
             data_source=self.name,
             data_origin=data_origin,
-            storage_config_for_retrieval=storage_config,
-            io_config_for_retrieval=io_config,
+            io_for_retrieval=io,
+            data_layer=data_layer,
             env=env,
             product=product,
             target_resolution=resolution,
@@ -420,77 +378,70 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             dataflow_per_date=dataflow_per_date,
-            clean_data=clean_data,
         )
         self._append_request(request)
         _ = self._create_batch_dataflows(
-            extract_func=lambda data_model: self._retrieve_impl(data_model, storage),
+            extract_func=lambda data_model: self._retrieve_impl(data_model, request),
         )
         return self.run() if not self.is_pipeline() else self
 
     def _retrieve_impl(
-        self, data_model: MarketDataModel, storage: BaseStorage
+        self, data_model: MarketDataModel, request: MarketFeedRetrieveRequest
     ) -> pl.LazyFrame | None:
-        data_resolution = cast(MarketDataModel, storage.data_model).resolution
-        # data_model is of target resolution, it is important for storage to copy it
-        # since it has the correct start_date and end_date when dataflow_per_date = True
-        # storage should read data model with data_resolution
-        _ = storage.with_data_model(
-            data_model.model_copy(update={"resolution": data_resolution})
+        if request.data_resolution is None:
+            self.logger.debug(f"no data found for {data_model} in {request.io_for_retrieval!r}")
+            return None
+        # data_model is of target resolution, copy it since it has the correct start_date and end_date
+        # when dataflow_per_date = True, the handler should read the data model with data_resolution
+        data_model = data_model.model_copy(update={"resolution": request.data_resolution})
+        handler = data_model.DataHandler(
+            data_model=data_model,
+            io=request.io_for_retrieval,
+            data_layer=request.data_layer,
+            data_domain=str(self.data_domain),
         )
-        lf: pl.LazyFrame | None = cast(pl.LazyFrame | None, storage.read())
+        lf, _ = handler.read()
         if lf is not None:
-            self.logger.debug(f"retrived data {data_model} from {storage}")
+            self.logger.debug(f"retrived data {data_model} from {handler!r}")
         else:
-            self.logger.debug(f"no data found for {data_model} in {storage}")
+            self.logger.debug(f"no data found for {data_model} in {handler!r}")
         return lf
 
     def _get_default_transformations_for_retrieve(
         self, request: MarketFeedRetrieveRequest
     ) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
-        from pfeed._etl.base import convert_dataframe
         from pfeed.utils import lambda_with_name
 
-        storage_config = request.storage_config_for_retrieval
         is_retrieving_streaming_data = request.env in (
             Environment.PAPER,
             Environment.LIVE,
         )
 
-        if not request.clean_data:
-            default_transformations = []
-            if is_retrieving_streaming_data:
-                default_transformations.append(
-                    lambda_with_name(
-                        "streaming_to_batch_schema",
-                        lambda df: df.with_columns(
-                            pl.from_epoch(pl.col("ts"), time_unit="ns").alias("date")
-                        ),
-                    ),
-                )
-            if storage_config.data_layer != DataLayer.RAW:
-                default_transformations.extend(
-                    [
-                        lambda_with_name(
-                            "resample_data_if_necessary",
-                            lambda df: etl.resample_data(
-                                df, request.target_resolution, request.product
-                            ),
-                        ),
-                        etl.organize_columns,
-                    ]
-                )
+        default_transformations = []
+        if is_retrieving_streaming_data:
+            # a bar's date is its start, like in batch data, see MarketDataHandler._get_date_col()
+            date_col = "start_ts" if cast(Resolution, request.data_resolution).is_bar() else "ts"
             default_transformations.append(
                 lambda_with_name(
-                    "convert_to_user_df",
-                    lambda df: convert_dataframe(df),
+                    "streaming_to_batch_schema",
+                    # stored as UTC, batch data's date is tz-naive UTC
+                    lambda df: df.with_columns(
+                        pl.col(date_col).dt.replace_time_zone(None).alias("date")
+                    ),
                 ),
             )
-        else:
-            # borrow download's default transformations to go through the cleaning process
-            default_transformations = self._get_default_transformations_for_download(
-                request
+        if request.data_layer != DataLayer.RAW:
+            default_transformations.extend(
+                [
+                    lambda_with_name(
+                        "resample_data_if_necessary",
+                        lambda df: etl.resample_data(
+                            df, request.target_resolution, request.product
+                        ),
+                    ),
+                    etl.organize_columns,
+                ]
             )
         return default_transformations
 
@@ -505,12 +456,12 @@ class MarketFeed(TimeBasedFeed, ABC):
         callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None]
         | None = None,
         data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
         env: Environment | str = Environment.LIVE,
         replay_pace: float | None = 0,
-        clean_data: bool = True,
-        storage_config: StorageConfig | None = None,
-        io_config: IOConfig | None = None,
-        sink_config: SinkConfig | None = None,
+        io: BaseIO | None = None,
+        store_incremental_bars: bool = False,
+        flush_interval: float = 100,
         **product_specs: Any,
     ) -> Self | None:
         """Stream market data, either live from the data source or by replaying historical data from storage at CLEANED data layer.
@@ -535,6 +486,10 @@ class MarketFeed(TimeBasedFeed, ABC):
                 Receives the raw message dict.
             data_origin: Origin label used to distinguish data from different providers
                 of the same source.
+            data_layer: Data layer of the streamed data, `'raw'` or `'cleaned'` (default).
+                `'cleaned'` runs the default transformations (normalize, standardize columns, resample);
+                `'raw'` passes the messages through as-is.
+                When replaying (env=BACKTEST), the layer to read from; only `'cleaned'` is supported.
             env: Trading environment. LIVE (default) connects to the live data source
                 via websocket. BACKTEST replays historical data from storage.
                 only supports BACKTEST, PAPER (paper trading) and LIVE
@@ -547,19 +502,17 @@ class MarketFeed(TimeBasedFeed, ABC):
                   for ticks, sleep the timestamp difference between consecutive rows.
                   Opt-in only: for fine resolutions or tick data a per-row sleep
                   multiplied by row count can take hours, so it is not the default.
-            clean_data: Whether to clean raw streaming data.
-                If storage_config is provided, this parameter is ignored — cleaning is determined by data_layer instead.
-                If True, raw data will be cleaned using the default transformations (normalize, standardize columns, resample, etc.).
-                If False, raw data will be passed through as is.
-            storage_config: Storage configuration. Direction depends on env:
+            io: Where and how to store the data. Direction depends on env:
                 - LIVE: WHERE to persist streamed data (write destination).
                   If None, streamed data will NOT be persisted.
                 - BACKTEST: WHERE to read historical data FROM (read source).
-                  If None, defaults to local storage.
-            io_config: IO format/compression and read/write/connect options.
-                Applies to writes when env=LIVE, reads when env=BACKTEST.
-                Defaults to parquet + snappy.
-            sink_config: Sink configuration for buffering streamed writes.
+                  If None, defaults to `ParquetIO()`.
+            store_incremental_bars: Whether to also store the updates of a bar before it closes,
+                e.g. for a venue that only streams such updates. If False (default), only closed bars are stored.
+                Only meaningful for bar resolutions when `io` is given and env is not BACKTEST.
+            flush_interval: Seconds between writes of the buffered streamed data to `io`.
+                Frequent writes create many small files, which slow down reads until the table is compacted.
+                Only meaningful when `io` is given and env is not BACKTEST.
             product_specs: Extra product attributes for products that need them, e.g.
                 `stream(product='BTC_USDT_OPT', strike_price=10000,
                 expiration='2024-01-01', option_type='CALL')`. Leave empty first and
@@ -610,19 +563,19 @@ class MarketFeed(TimeBasedFeed, ABC):
                             f"{product.desc_str()} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
                         )
         else:
-            # NOTE: in replay mode, storage_config means loading data FROM storage, not TO storage, so it must exist
-            storage_config = self._normalize_storage_config(
-                storage_config or StorageConfig()
-            )
-            io_config = self._normalize_io_config(io_config or IOConfig())
+            # NOTE: in replay mode, io means loading data FROM storage, not TO storage, so it must exist
+            if io is None:
+                from pfeed.io.parquet_io import ParquetIO
+
+                io = ParquetIO()
+            self._validate_io(io)
 
         request = MarketFeedStreamRequest(
             data_source=self.name,
             data_origin=data_origin,
             data_config=data_config,
-            storage_config=storage_config,
-            io_config=io_config,
-            sink_config=sink_config,
+            io=io,
+            data_layer=data_layer,
             env=env,
             product=product,
             target_resolution=resolution,
@@ -630,7 +583,8 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             replay_pace=replay_pace,
-            clean_data=clean_data,
+            store_incremental_bars=store_incremental_bars,
+            flush_interval=flush_interval,
         )
         self._append_request(request)
         self._create_stream_dataflow(user_callback=callback)
@@ -643,7 +597,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             [WebSocketName | DataSource, RawMessage | ReplayData, ChannelKey | None],
             Coroutine[Any, Any, None],
         ],
-        storage: BaseStorage | None = None,
+        handler: BaseDataHandler | None = None,
         replay_pace: float | None = None,
     ) -> None:
         from pfund.enums.env import Environment
@@ -657,7 +611,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         else:
             import asyncio
 
-            assert storage is not None, "storage must be provided for replaying"
+            assert handler is not None, "handler must be provided for replaying"
             data_source = data_model.data_source.name
             channel_key: ChannelKey = cast(
                 "ChannelKey", stream_api.add_channel(data_model)
@@ -665,18 +619,19 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date, end_date = data_model.start_date, data_model.end_date
             resolution = data_model.resolution
             prev_ts: float | None = None
+            # the handler's data model covers start_date to end_date; collected one day at a time to bound memory
+            lf, _ = handler.read()
+            if lf is None:
+                self.logger.warning(f"No data to replay from {start_date} to {end_date}")
+                return
             for date in pl.date_range(
                 start=start_date, end=end_date, interval="1d", eager=True
             ):
-                data_model_per_date = data_model.model_copy(
-                    update={"start_date": date, "end_date": date}
-                )
-                _ = storage.with_data_model(data_model_per_date)
-                lf = storage.read()
-                if lf is None:
+                df = lf.filter(pl.col("date").dt.date() == date).sort("date").collect()
+                if df.is_empty():
                     self.logger.debug(f"No data to replay on {date}")
                     continue
-                for row in lf.collect().iter_rows(named=True):
+                for row in df.iter_rows(named=True):
                     current_ts: float = row["date"].timestamp()
                     if replay_pace == 0:  # ASAP
                         delay = 0.0
@@ -714,7 +669,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         if is_replaying:
             return default_transformations
 
-        if request.clean_data:
+        if request.should_clean_data:
             # Bind concrete subclass's staticmethod into a local — no `self` captured.
             parse_message = type(self)._parse_message
             default_transformations.extend(

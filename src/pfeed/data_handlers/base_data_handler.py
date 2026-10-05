@@ -1,180 +1,156 @@
-# pyright: reportUnknownMemberType=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportUnknownArgumentType=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, assert_never
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
-    import polars as pl
-    from narwhals.typing import IntoFrame
+    import pyarrow as pa
 
     from pfeed.data_models.base_data_model import BaseDataModel
-    from pfeed.io.base_io import BaseIO, MetadataDict
-    from pfeed.sinks.base_sink import BaseSink
-    from pfeed.storages.database_storage import DatabaseURI
-
-    IOClassName: TypeAlias = str
+    from pfeed.io.base_io import BaseIO, DatasetKey, Metadata as IOMetadata, Partition
+    from pfeed.streaming.sink import Sink
 
 from abc import ABC, abstractmethod
 
+import polars as pl
 from pydantic import BaseModel, ConfigDict
 
-from pfeed.enums import DataLayer, DataSource, IOType
-from pfeed.io.database_io import DBPath
-from pfeed.io.table_io import TablePath
-from pfeed.utils.file_path import FilePath
-
-SourcePath: TypeAlias = FilePath | TablePath | DBPath
+from pfeed.enums import DataLayer
 
 
 class BaseDataMetadata(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="ignore")
+    """Per-partition metadata, stored by the IO as JSON (see BaseIO commit marker).
 
-    data_source: DataSource
-    data_origin: str = ""
+    Only holds what the DatasetKey and the partition values can't express,
+    e.g. data_source is in the key's namespace, so it isn't repeated here.
+    """
+
+    model_config = ConfigDict(extra='ignore')
 
 
-class BaseDataHandler(ABC):
-    Metadata: ClassVar[type[BaseDataMetadata]]
-    PARTITION_COLUMNS: ClassVar[list[str]] = []
-    IO_USING_PARTITION_COLUMNS: ClassVar[set[IOClassName]] = set()
+class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](ABC):
+    """Domain logic between a data model and an IO.
+
+    Owns the dataset's identity (DatasetKey), schema validation and metadata schema;
+    the IO owns where and how it is stored.
+    """
+
+    # set by each subclass; not a ClassVar only because a ClassVar can't use the type parameter
+    Metadata: type[MetadataT]
 
     def __init__(
         self,
-        data_path: FilePath | DatabaseURI,
-        data_layer: DataLayer,
-        data_domain: str,
-        data_model: BaseDataModel,
+        data_model: DataModelT,
         io: BaseIO,
-        sink: BaseSink | None = None,
+        data_domain: str,
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        sink: Sink | None = None,
     ):
-        self._data_path = data_path
-        self._data_layer = data_layer
-        self._data_domain = data_domain
+        """
+        Args:
+            data_domain: the kind of data, e.g. DataCategory.MARKET_DATA, see BaseFeed.data_domain.
+            sink: buffers streamed data until a flush is due; None if the handler doesn't write streamed data.
+                Streamed data is appended, so `io` must support append.
+        """
+        if sink is not None and not io.CAPABILITIES.append:
+            raise ValueError(f'{io!r} does not support append, it cannot store streamed data')
         self._data_model = data_model
-        self._io: BaseIO = io
-        self._sink: BaseSink | None = sink
-        self._io_type: IOType = self._get_io_type()
-        self._file_paths: list[FilePath] = []
-        self._table_path: TablePath | None = (
-            self._create_table_path() if self._io_type == IOType.TABLE else None
-        )
-        self._db_path: DBPath | None = (
-            self._create_db_path() if self._io_type == IOType.DATABASE else None
-        )
-        self._sink_path: SourcePath | None = (
-            self._create_sink_path() if self._sink else None
-        )
-        if self._sink:
-            self.sink.with_schema(schema=self._build_streaming_schema())
-
-    @abstractmethod
-    def write_batch(self, data: IntoFrame | bytes, *args: Any, **kwargs: Any):
-        pass
-
-    @abstractmethod
-    def read(self, **kwargs: Any) -> Any | None:
-        pass
-
-    def search(self, **kwargs: Any) -> pl.LazyFrame | None:
-        """Rank stored rows when this handler supports search."""
-        raise NotImplementedError(f"{self.__class__.__name__} does not support search")
-
-    def create_search_index(self, **kwargs: Any) -> None:
-        """Build search indexes when this handler supports them."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support search indexes"
-        )
-
-    @abstractmethod
-    def _validate_schema(self, data: Any) -> Any:
-        pass
-
-    @abstractmethod
-    def _create_file_path(self, *args: Any, **kwargs: Any) -> FilePath:
-        pass
-
-    @abstractmethod
-    def _create_table_path(self, *args: Any, **kwargs: Any) -> TablePath:
-        pass
-
-    @abstractmethod
-    def _create_db_path(self, *args: Any, **kwargs: Any) -> DBPath:
-        pass
-
-    @abstractmethod
-    def _create_metadata(self, *args: Any, **kwargs: Any) -> BaseDataMetadata:
-        pass
+        self._io = io
+        self._sink = sink
+        self._data_layer = DataLayer[str(data_layer).upper()]
+        self._data_domain = data_domain.upper()
+        self._dataset_key: DatasetKey = self._create_dataset_key()
+        # built up front, so a handler that doesn't support streaming raises here, not at the first flush
+        self._streaming_schema: pa.Schema | None = self._build_streaming_schema() if sink is not None else None
 
     @property
     def io(self) -> BaseIO:
         return self._io
 
     @property
-    def sink(self) -> BaseSink:
-        if self._sink is None:
-            raise ValueError("sink is not initialized")
+    def sink(self) -> Sink | None:
         return self._sink
 
-    def _get_file_extension(self) -> str:
-        if self.io.FILE_EXTENSION is None:
-            raise ValueError(
-                f"{self._io.__class__.__name__} does not have a file extension"
-            )
-        return self.io.FILE_EXTENSION
+    @property
+    def data_model(self) -> DataModelT:
+        return self._data_model
 
-    def _get_io_type(self) -> IOType:
-        if self._io.is_file_io():
-            return IOType.FILE
-        elif self._io.is_table_io():
-            return IOType.TABLE
-        elif self._io.is_database_io():
-            return IOType.DATABASE
-        else:
-            raise ValueError(f"Unsupported IO type: {self._io}")
+    @property
+    def dataset_key(self) -> DatasetKey:
+        return self._dataset_key
 
-    def read_metadata(self) -> dict[SourcePath, BaseDataMetadata]:
-        match self._io_type:
-            case IOType.FILE:
-                source_paths = self._file_paths
-            case IOType.TABLE:
-                source_paths = self._table_path
-            case IOType.DATABASE:
-                source_paths = self._db_path
-            case _:
-                assert_never(self._io_type)
-        metadata_dict: dict[SourcePath, MetadataDict] = self.io.read_metadata(
-            source_paths
+    @abstractmethod
+    def _create_dataset_key(self) -> DatasetKey:
+        """Maps the data model to the dataset it is stored in."""
+
+    @abstractmethod
+    def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
+        pass
+
+    def _create_metadata(self) -> MetadataT:
+        """The metadata of a written partition."""
+        return self.Metadata()
+
+    def _parse_metadata(self, metadata: IOMetadata) -> MetadataT:
+        """Parses one partition's metadata, as read from the IO, into Metadata."""
+        return self.Metadata.model_validate(metadata)
+
+    @abstractmethod
+    def write_batch(self, df: pl.DataFrame) -> None:
+        pass
+
+    @abstractmethod
+    def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, MetadataT]]:
+        """Reads the data model's data and its per-partition metadata in one IO read."""
+
+    def _build_streaming_schema(self) -> pa.Schema:
+        """The schema of the sink's buffered rows; override to support streaming."""
+        raise NotImplementedError(f'{type(self).__name__} does not support streaming')
+
+    def _stream_partitions(self, df: pl.DataFrame) -> dict[Partition, MetadataT]:
+        """The partitions of the streamed rows in `df`, each with its metadata; override to support streaming."""
+        raise NotImplementedError(f'{type(self).__name__} does not support streaming')
+
+    def write_stream(self, msg: Any, **kwargs: Any) -> None:
+        """Buffers one streamed message in the sink, flushing it if due; override to support streaming.
+
+        Args:
+            kwargs: handler-specific options, see e.g. MarketDataHandler.write_stream().
+        """
+        raise NotImplementedError(f'{type(self).__name__} does not support streaming')
+
+    def flush(self) -> None:
+        """Appends the sink's buffered rows to the IO.
+
+        The rows are only cleared after a successful write, so a failed write is retried at the next flush.
+        """
+        if self._sink is None or not self._sink.rows:
+            return
+        import pyarrow as pa
+
+        df = cast('pl.DataFrame', pl.from_arrow(pa.Table.from_pylist(self._sink.rows, schema=self._streaming_schema)))
+        self._write(df, self._stream_partitions(df), mode='append')
+        self._sink.clear()
+
+    def _write(
+        self,
+        df: pl.DataFrame,
+        partitions: dict[Partition, MetadataT],
+        mode: Literal['replace', 'append'] = 'replace',
+    ) -> None:
+        """Writes df to this handler's dataset, metadata serialized to JSON-safe dicts."""
+        self._io.write(
+            self._dataset_key,
+            df.to_arrow(),
+            partitions={partition: md.model_dump(mode='json') for partition, md in partitions.items()},
+            mode=mode,
         )
-        Metadata = self.Metadata
-        metadata = {
-            source_path: Metadata(**metadata_value)
-            for source_path, metadata_value in metadata_dict.items()
-        }
-        return metadata
 
-    def find_missing_source_paths(self):
-        match self._io_type:
-            case IOType.FILE:
-                missing_source_paths = [
-                    fp for fp in self._file_paths if not self.io.exists(fp)
-                ]
-            case (IOType.TABLE | IOType.DATABASE) as io_type:
-                source_path = (
-                    self._table_path if io_type == IOType.TABLE else self._db_path
-                )
-                assert source_path is not None, (
-                    f"source_path is not set for {self.io.name}"
-                )
-                missing_source_paths = (
-                    [source_path] if not self.io.exists(source_path) else []
-                )
-            case _:
-                assert_never(self._io_type)
-        return missing_source_paths
+    def _read(
+        self, partitions: list[Partition] | None = None,
+    ) -> tuple[pl.LazyFrame | None, dict[Partition, MetadataT]]:
+        """Reads this handler's dataset, metadata parsed by _parse_metadata()."""
+        lf, metadata = self._io.read(self._dataset_key, partitions=partitions)
+        return lf, {partition: self._parse_metadata(md) for partition, md in metadata.items()}
 
-    def _requires_partitioning(self) -> bool:
-        # REVIEW: only deltalake requires partitioning
-        return (
-            self.io.SUPPORTS_PARTITIONING
-            and self.io.name in self.IO_USING_PARTITION_COLUMNS
-        )
+    def __repr__(self) -> str:
+        return f'{type(self).__name__}(data_model={self._data_model}, io={self._io!r}, key={self._dataset_key})'

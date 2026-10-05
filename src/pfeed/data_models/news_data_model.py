@@ -6,7 +6,6 @@ from pfund.entities.products.product_base import BaseProduct
 from pfund.enums.env import Environment
 from pydantic import field_validator
 
-from pfeed.data_handlers.news_data_handler import NewsDataHandler
 from pfeed.data_models.time_based_data_model import (
     TimeBasedDataModel,
     TimeBasedMetadataModel,
@@ -21,7 +20,6 @@ class NewsMetadataModel(TimeBasedMetadataModel):
 
 
 class NewsDataModel(TimeBasedDataModel):
-    DataHandler: ClassVar[type[NewsDataHandler]] = NewsDataHandler
     Metadata: ClassVar[type[NewsMetadataModel]] = NewsMetadataModel
 
     env: Environment

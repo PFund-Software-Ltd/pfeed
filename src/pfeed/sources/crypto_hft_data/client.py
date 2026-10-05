@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.sources.crypto_hft_data.market_feed import CryptoHftDataMarketFeed
 
-from pfeed.data_client import DataClient
+from pfeed.client import DataClient
 from pfeed.sources.crypto_hft_data.mixin import CryptoHftDataMixin
 
 __all__ = ["CryptoHftData"]

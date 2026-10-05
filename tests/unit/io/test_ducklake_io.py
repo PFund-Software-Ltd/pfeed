@@ -1,0 +1,248 @@
+"""DuckLakeIO-specific tests, beyond test_io_contract.py and test_table_io.py."""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+import datetime
+import re
+
+import polars as pl
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
+import pytest
+from polars.testing import assert_frame_equal
+
+from pfeed.io.base_io import DatasetKey, DatePartition
+from pfeed.io.ducklake_io import DuckLakeIO
+
+KEY = DatasetKey(
+    namespace={'env': 'BACKTEST', 'data_source': 'BYBIT'},
+    name={'asset_type': 'PERPETUAL', 'resolution': '1t'},
+    partition_by=('product', 'date'),
+)
+D1, D2 = datetime.date(2025, 1, 1), datetime.date(2025, 1, 2)
+
+
+@pytest.fixture
+def io(tmp_path: Path) -> DuckLakeIO:
+    return DuckLakeIO(base_path=str(tmp_path))
+
+
+@pytest.fixture
+def data() -> pa.Table:
+    """3 rows across 2 partitions of KEY: BTC/D1 (ts 1, 2) and BTC/D2 (ts 3)."""
+    return pa.table({
+        'ts': [1, 2, 3],
+        'price': [100.0, 101.0, 102.0],
+        'product': ['BTC', 'BTC', 'BTC'],
+        'date': [D1, D1, D2],
+    })
+
+
+@pytest.mark.parametrize('limit', [-1, 1.5], ids=['negative', 'float'])
+def test_invalid_data_inlining_row_limit_raises(tmp_path: Path, limit):
+    """data_inlining_row_limit goes into the ATTACH statement, so anything but an int >= 0 raises ValueError."""
+    with pytest.raises(ValueError):
+        DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=limit)
+
+
+@pytest.mark.parametrize('limit, inlined', [(None, True), (0, False)], ids=['default', 'disabled'])
+def test_data_inlining(tmp_path: Path, data: pa.Table, limit: int | None, inlined: bool):
+    """A small write is stored inside the catalog by default, but as a parquet file when inlining is disabled.
+
+    Counts the parquet files of the data table, not the metadata table, after writing `data` (3 rows).
+    """
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=limit)
+    io.write(KEY, data, partitions={('BTC', D1): {}, ('BTC', D2): {}})
+
+    data_dir = tmp_path / DuckLakeIO.DATA_DIR_NAME / 'BACKTEST__BYBIT' / 'PERPETUAL__1t'
+    assert (not any(data_dir.rglob('*.parquet'))) == inlined
+
+
+def test_reserved_metadata_suffix_raises(io: DuckLakeIO, data: pa.Table):
+    """A dataset name ending with the metadata table suffix would clash with another dataset's metadata table."""
+    key = DatasetKey(namespace=KEY.namespace, name=KEY.name | {'kind': 'metadata'}, partition_by=KEY.partition_by)
+
+    with pytest.raises(ValueError):
+        io.write(key, data, partitions={('BTC', D1): {}, ('BTC', D2): {}})
+    with pytest.raises(ValueError):
+        io.read(key)
+
+
+def test_optimize_moves_inlined_data_to_files(io: DuckLakeIO, tmp_path: Path, data: pa.Table):
+    """optimize() moves the inlined rows of a small write out of the catalog into parquet files; reads are unchanged."""
+    io.write(KEY, data, partitions={('BTC', D1): {}, ('BTC', D2): {}})
+    data_dir = tmp_path / DuckLakeIO.DATA_DIR_NAME / 'BACKTEST__BYBIT' / 'PERPETUAL__1t'
+    assert not any(data_dir.rglob('*.parquet'))
+
+    io.optimize()
+    lf, _ = io.read(KEY)
+
+    assert any(data_dir.rglob('*.parquet'))
+    assert lf is not None
+    assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(data))
+
+
+def test_vacuum_is_two_step(tmp_path: Path, data: pa.Table):
+    """vacuum() deletes files that old snapshots used, but only a retention period after expiring them,
+    so with retention=0 the first vacuum expires the snapshots and the second deletes their files.
+    A dry run reports the snapshots the first vacuum would expire, though it deletes no snapshot files yet.
+
+    Writes `data`, then replaces BTC/D1, so its first file is only used by the expired snapshot.
+    A stray parquet file (like one left by a crashed write) is deleted as an orphan.
+    retention=0, so the second vacuum deletes the files the first one expired the snapshots of.
+    """
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
+    io.write(KEY, data, partitions={('BTC', D1): {}, ('BTC', D2): {}})
+    new_data = pa.table({'ts': [4], 'price': [103.0], 'product': ['BTC'], 'date': [D1]})
+    io.write(KEY, new_data, partitions={('BTC', D1): {}})
+    orphan = tmp_path / DuckLakeIO.DATA_DIR_NAME / 'orphan.parquet'
+    orphan.write_bytes(b'')
+    files_before = {str(path) for path in tmp_path.rglob('*.parquet')}
+
+    dry_run = io.vacuum(retention=datetime.timedelta(0))
+    assert dry_run.expired_snapshots
+    assert dry_run.deleted_paths == [str(orphan)]
+    assert {str(path) for path in tmp_path.rglob('*.parquet')} == files_before
+
+    first = io.vacuum(retention=datetime.timedelta(0), dry_run=False)
+    second = io.vacuum(retention=datetime.timedelta(0), dry_run=False)
+    lf, _ = io.read(KEY)
+
+    assert first.expired_snapshots == dry_run.expired_snapshots
+    assert first.deleted_paths == [str(orphan)]
+    assert second.expired_snapshots == []
+    first_paths, second_paths = first.deleted_paths, second.deleted_paths
+    assert second_paths  # the replaced BTC/D1 file
+    assert {str(path) for path in tmp_path.rglob('*.parquet')} == files_before - {*first_paths, *second_paths}
+    assert lf is not None
+    expected = pa.concat_tables([new_data, data.filter(pc.field('date') == D2)])
+    assert_frame_equal(lf.collect().sort('ts'), pl.DataFrame(expected).sort('ts'))
+
+
+DATE_KEY = DatasetKey(namespace=KEY.namespace, name=KEY.name, partition_by=('product', DatePartition('date')))
+D3 = datetime.date(2025, 1, 3)
+
+
+@pytest.fixture
+def date_data() -> pa.Table:
+    """BTC rows on D1 (2 rows, the 2nd one second before midnight) and D3 (1 row), date is a ns timestamp."""
+    return pa.table({
+        'date': pa.array([
+            datetime.datetime(2025, 1, 1, 1), datetime.datetime(2025, 1, 1, 23, 59, 59), datetime.datetime(2025, 1, 3, 5),
+        ], pa.timestamp('ns')),
+        'product': ['BTC', 'BTC', 'BTC'],
+        'price': [1.0, 2.0, 3.0],
+    })
+
+
+def test_layout(tmp_path: Path):
+    """Data files are flat under data/<schema>/<table>/ (no partition dirs), and each holds one product only,
+    since the table is partitioned by the column levels of partition_by (not by the DatePartition level).
+
+    Writes BTC and ETH rows on D1 and D3 in one write: one file per product, both days in it.
+    """
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
+    data = pa.table({
+        'date': pa.array([datetime.datetime(2025, 1, 1, 1), datetime.datetime(2025, 1, 3, 1)] * 2, pa.timestamp('ns')),
+        'product': ['BTC', 'BTC', 'ETH', 'ETH'],
+        'price': [1.0, 2.0, 3.0, 4.0],
+    })
+
+    io.write(DATE_KEY, data, partitions={(product, date): {} for product in ('BTC', 'ETH') for date in (D1, D3)})
+
+    data_dir = tmp_path / DuckLakeIO.DATA_DIR_NAME / 'BACKTEST__BYBIT' / 'PERPETUAL__1t'
+    files = list(data_dir.rglob('*.parquet'))
+    assert all(file.parent == data_dir for file in files)
+    products = sorted(pq.read_table(file)['product'].unique().to_pylist() for file in files)
+    assert products == [['BTC'], ['ETH']]
+
+
+def test_date_partition(tmp_path: Path, date_data: pa.Table):
+    """A DatePartition level is the unit of replace, metadata and existence, matched by a date range.
+
+    Writes BTC rows on D1 and D3, plus D2 as an empty partition, then checks:
+    - read: the data comes back unchanged and partitions are keyed by date, D2 included
+    - read of a subset: only that date's rows
+    - replace: rewriting D1 leaves D3 untouched, though both days are in the same file
+    """
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
+    partitions = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}, ('BTC', D3): {'version': 1}}
+
+    io.write(DATE_KEY, date_data, partitions=partitions)
+
+    df, metadata = io.read(DATE_KEY)
+    assert df is not None
+    assert_frame_equal(df.collect(), pl.from_arrow(date_data), check_row_order=False)
+    assert metadata == partitions
+
+    df, metadata = io.read(DATE_KEY, partitions=[('BTC', D1)])
+    assert df is not None
+    assert df.collect()['price'].sort().to_list() == [1.0, 2.0]
+    assert metadata == {('BTC', D1): {'version': 1}}
+
+    new_d1 = date_data.filter(pc.equal(date_data['price'], 1.0)).set_column(2, 'price', pa.array([10.0]))
+    io.write(DATE_KEY, new_d1, partitions={('BTC', D1): {'version': 2}})
+    df, metadata = io.read(DATE_KEY)
+    assert df is not None
+    assert df.collect()['price'].sort().to_list() == [3.0, 10.0]
+    assert metadata == partitions | {('BTC', D1): {'version': 2}}
+
+
+def test_date_partition_read_skips_other_days(tmp_path: Path, date_data: pa.Table):
+    """Reading one date's partition only scans the files whose date range overlaps it, by their min/max stats;
+    the filter is a range on the column (a CAST(column AS DATE) filter would scan every file).
+
+    Writes D1 and D3 in separate writes, so each day is in a file of its own.
+    """
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
+    for date in (D1, D3):
+        day_data = date_data.filter(pc.equal(pc.cast(date_data['date'], pa.date32()), pa.scalar(date, pa.date32())))
+        io.write(DATE_KEY, day_data, partitions={('BTC', date): {}})
+
+    schema, table, _ = io._dataset_tables(DATE_KEY)
+    predicate, params = io._in_partitions(DATE_KEY, [('BTC', D3)])
+    cursor = io._connect()
+    ((_, plan),) = cursor.execute(
+        f'EXPLAIN ANALYZE SELECT * FROM {io._CATALOG_ALIAS}."{schema}"."{table}" {predicate}', params
+    ).fetchall()
+    assert len(set(re.findall(r'ducklake-[0-9a-f-]+\.parquet', plan))) == 1
+
+
+@pytest.mark.parametrize('dtype', [
+    pa.timestamp('us', tz='UTC'), pa.timestamp('ns', tz='UTC'), pa.timestamp('us', tz='Asia/Hong_Kong'), pa.date32(),
+])
+def test_date_partition_column_types(io: DuckLakeIO, dtype: pa.DataType):
+    """A DatePartition column can be a date, or a timestamp with a time zone (us or ns), matched by its UTC date:
+    23:30 UTC on D1 is D2 in Hong Kong, but still partition D1."""
+    values = [datetime.date(2025, 1, 1)] if pa.types.is_date(dtype) else [
+        datetime.datetime(2025, 1, 1, 23, 30, tzinfo=datetime.UTC)
+    ]
+    data = pa.table({'date': pa.array(values, dtype), 'product': ['BTC'], 'price': [1.0]})
+
+    io.write(DATE_KEY, data, partitions={('BTC', D1): {}})
+
+    df, metadata = io.read(DATE_KEY, partitions=[('BTC', D1)])
+    assert df is not None
+    assert df.collect()['price'].to_list() == [1.0]
+    assert metadata == {('BTC', D1): {}}
+    assert io.read(DATE_KEY, partitions=[('BTC', D2)]) == (None, {})
+
+
+def test_catalog_options(tmp_path: Path, date_data: pa.Table):
+    """CATALOG_OPTIONS are set in the catalog, e.g. DuckLake writes zstd parquet files (its default is snappy)."""
+    io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
+    io.write(DATE_KEY, date_data, partitions={('BTC', D1): {}, ('BTC', D3): {}})
+
+    cursor = io._connect()
+    options = dict(cursor.execute(f'SELECT option_name, value FROM {io._CATALOG_ALIAS}.options()').fetchall())
+    assert options['parquet_compression'] == 'zstd'
+    assert options['hive_file_pattern'] == 'false'
+    files = list((tmp_path / DuckLakeIO.DATA_DIR_NAME).rglob('*.parquet'))
+    assert files
+    for file in files:
+        assert pq.read_metadata(file).row_group(0).column(0).compression == 'ZSTD'

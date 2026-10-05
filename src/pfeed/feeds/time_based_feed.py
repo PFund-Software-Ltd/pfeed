@@ -26,8 +26,6 @@ from pfeed.feeds.base_feed import BaseFeed
 class TimeBasedFeed(BaseFeed, ABC):
     DataModel: ClassVar[type[TimeBasedDataModel]]
     date_columns_in_raw_data: ClassVar[list[str]]
-    DATE_COL_IN_CLEANED_DATA: ClassVar[str] = "date"
-    DATE_COL_IN_RAW_DATA: ClassVar[str] = "_pfeed_date"
     # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),
     # False = one dataflow spanning the whole range (e.g. a range query API).
     DOWNLOAD_DATAFLOW_PER_DATE: ClassVar[bool] = True
@@ -73,10 +71,10 @@ class TimeBasedFeed(BaseFeed, ABC):
             )
 
         if not is_raw_data:
-            date_col = cls.DATE_COL_IN_CLEANED_DATA
+            date_col = cls.DataModel.DATE_COL_IN_CLEANED_DATA
             df = df.rename({raw_date_col: date_col})
         else:
-            date_col = cls.DATE_COL_IN_RAW_DATA
+            date_col = cls.DataModel.DATE_COL_IN_RAW_DATA
             df = df.with_columns(pl.col(raw_date_col).alias(date_col))
         return standardize_date_column(df, date_col)
 
@@ -192,9 +190,7 @@ class TimeBasedFeed(BaseFeed, ABC):
             columns = schema.names()
             if "date" in columns and schema["date"].is_temporal():
                 df: Frame = df.sort(by="date", descending=False)
-            # Storage-backed flows return raw pl.LazyFrame from storage.read,
-            # bypassing the per-flow `convert_to_user_df` transformation. Convert
-            # once here so the aggregated frame is a polars LazyFrame.
+            # Convert once here so the aggregated frame is a polars LazyFrame.
             combined: IntoFrame | None = convert_dataframe(nw.to_native(df))
         else:
             combined = None

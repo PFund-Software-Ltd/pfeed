@@ -5,16 +5,18 @@ from pfund_kit.utils.text import to_pascal_case
 
 
 class DataSource(StrEnum):
-    PFUND = "PFUND"
     ALPHAFUND = "ALPHAFUND"
+    PFUND = "PFUND"
+    HYPERLIQUID = TradingVenue.HYPERLIQUID
+    BYBIT = TradingVenue.BYBIT
+    # SEC_EDGAR = SEC = "SEC_EDGAR"
     YAHOO_FINANCE = YF = "YAHOO_FINANCE"
-    FINANCIAL_MODELING_PREP = FMP = "FINANCIAL_MODELING_PREP"
     FXMACRODATA = "FXMACRODATA"
     CRYPTO_HFT_DATA = CHD = "CRYPTO_HFT_DATA"
-    BYBIT = TradingVenue.BYBIT
-    IBKR = TradingVenue.IBKR
-    # BINANCE = TradingVenue.BINANCE
     # DATABENTO = 'DATABENTO'
+    # FINANCIAL_MODELING_PREP = FMP = "FINANCIAL_MODELING_PREP"
+    # IBKR = TradingVenue.IBKR
+    # BINANCE = TradingVenue.BINANCE
 
     @property
     def data_client_class(self):

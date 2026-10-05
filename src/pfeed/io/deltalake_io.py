@@ -1,140 +1,190 @@
-# pyright: reportUnknownMemberType=false, reportUnknownParameterType=false, reportUnknownArgumentType=false
+# NOTE: NOT supported yet (not exported, no CLI command, no pip extra).
+# Only implemented and tested alongside DuckLakeIO to derive a good TableIO foundation for it.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 if TYPE_CHECKING:
-    import pyarrow as pa
-    from deltalake.table import FilterConjunctionType
+    from pfeed.io.base_io import DatasetKey, Metadata, Partition, PartitionValue
 
-import random
-import time
+import datetime
+import math
+import os
 
 import polars as pl
-from deltalake import DeltaTable, write_deltalake
+import pyarrow as pa
+from deltalake import DeltaTable, Schema, write_deltalake
+from deltalake.exceptions import CommitFailedError
 
-from pfeed.io.table_io import TableIO, TablePath
+from pfeed.io.base_io import DatePartition
+from pfeed.io.table_io import TableIO, VacuumResult
+
+
+def _sql_literal(value: PartitionValue) -> str:
+    if isinstance(value, datetime.date):
+        return f"DATE '{value.isoformat()}'"
+    if isinstance(value, int):
+        return str(value)
+    return "'" + value.replace("'", "''") + "'"
 
 
 class DeltaLakeIO(TableIO):
-    SUPPORTS_PARALLEL_WRITES: bool = True
-    SUPPORTS_PARTITIONING: bool = True
-    METADATA_FILENAME: str = "deltalake_metadata.parquet"  # used by table format (e.g. Delta Lake) for metadata storage
-    DATE_FILTER_PREDICATE: str = (
-        "{date_col} >= '{start_date}' AND {date_col} <= '{end_date}'"
-    )
+    """Stores datasets as Delta Lake tables; metadata as marker rows in the same table.
 
-    def exists(self, table_path: TablePath) -> bool:
-        """Check if a Delta Lake table exists at this path."""
-        if not super().exists(table_path):
-            return False
-        # NOTE: this DeltaTable.is_deltatable will somehow automatically create the directory if it doesn't exist
-        # so we need to check if the directory exists to avoid creating a new dir as much as possible
-        return DeltaTable.is_deltatable(
-            str(table_path), storage_options=self._storage_options
-        )
+    See TableIO for what all table-format IOs share.
+    Layout: <base_path>/<schema>/<table>/ is one Delta table (with its _delta_log/), see TableIO for the names.
+    - metadata: one marker row per partition in the data table itself, see TableIO._add_marker_rows(),
+        since a Delta transaction can't span two tables.
+    - replace: one overwrite of the partitions (data + marker rows), dropping their old files.
+    - append: one merge, inserting the data rows and the marker rows of new partitions;
+        only the marker files of these partitions are scanned, none is rewritten.
+    - delta-rs rebases a commit onto concurrent ones if they don't conflict, so writes to disjoint
+        partitions mostly just land; a commit that still conflicts is retried as a whole.
+    """
 
-    def is_empty(
-        self,
-        table_path: TablePath,
-        partition_filters: FilterConjunctionType | None = None,
-    ) -> bool:
-        """Check if a Delta Lake table or partition is empty.
+    DEFAULT_DIR_NAME: ClassVar[str] = 'deltalake'
+    _RETRY_ON: ClassVar[tuple[type[Exception], ...]] = (CommitFailedError,)
+    _LOG_DIR_NAME: ClassVar[str] = '_delta_log'
 
-        Args:
-            table_path: Path to the Delta Lake table.
-            partition_filters: Optional partition filters to check a specific partition.
-                Example: [("year", "=", 2024), ("month", "=", 1), ("day", "=", 15)]
+    def _table_path(self, key: DatasetKey) -> str:
+        """Returns the table's directory, raising ValueError if its schema/table dir exists under a different case.
 
-        Returns:
-            True if the table/partition has no data files, False otherwise.
-
-        Use cases:
-            1. Check if entire table is empty: is_empty(table_path)
-            2. Check if specific partition is empty: is_empty(table_path, partition_filters=[...])
-            This is useful for checking if data exists for a specific date.
+        Checked even on case-sensitive filesystems, so the same keys work everywhere.
         """
-        dt = self.get_table(table_path)
-        return len(dt.file_uris(partition_filters=partition_filters)) == 0
+        schema, table = self._table_names(key)
+        schema_dir = os.path.join(self._base_path, schema)
+        if os.path.isdir(self._base_path):
+            self._check_case(schema, os.listdir(self._base_path))
+        if os.path.isdir(schema_dir):
+            self._check_case(table, os.listdir(schema_dir))
+        return os.path.join(schema_dir, table)
 
-    def get_table(self, table_path: TablePath, **io_kwargs: Any) -> DeltaTable:
-        return DeltaTable(
-            str(table_path), storage_options=self._storage_options, **io_kwargs
+    def _load_table(self, path: str) -> DeltaTable | None:
+        # not DeltaTable.is_deltatable(), which creates the directory if it doesn't exist
+        if not os.path.isdir(os.path.join(path, self._LOG_DIR_NAME)):
+            return None
+        return DeltaTable(path)
+
+    def _table_paths(self) -> list[str]:
+        """Returns the directories of all tables under base_path."""
+        if not os.path.isdir(self._base_path):
+            return []
+        return sorted(
+            entry.path
+            for schema_entry in os.scandir(self._base_path) if schema_entry.is_dir()
+            for entry in os.scandir(schema_entry.path)
+            if os.path.isdir(os.path.join(entry.path, self._LOG_DIR_NAME))
         )
 
-    def write(
-        self,
-        data: pa.Table,
-        table_path: TablePath,
-        delete_where: str | None = None,
-        partition_by: list[str] | None = None,
-        max_retries: int = 5,
-        base_delay: float = 0.1,
-        **io_kwargs: Any,
+    @staticmethod
+    def _sql_predicate(key: DatasetKey, partitions: list[Partition], alias: str = '') -> str | None:
+        """Returns a delta-rs SQL predicate matching rows in `partitions`, None for an unpartitioned dataset.
+
+        A DatePartition level matches its column in the range [day, day + 1), see TableIO.
+        """
+        if not key.partition_by:
+            return None  # one partition, every row is in it
+        prefix = f'{alias}.' if alias else ''
+
+        def level_predicate(level: str | DatePartition, value: PartitionValue) -> str:
+            if isinstance(level, DatePartition):
+                assert isinstance(value, datetime.date)
+                # a date string, since a DATE/TIMESTAMP literal can't be compared to every timestamp/date type;
+                # delta-rs reads it as midnight UTC
+                start, end = value.isoformat(), (value + datetime.timedelta(days=1)).isoformat()
+                return f"{prefix}\"{level.column}\" >= '{start}' AND {prefix}\"{level.column}\" < '{end}'"
+            return f'{prefix}"{level}" = {_sql_literal(value)}'
+
+        return ' OR '.join(
+            '(' + ' AND '.join(
+                level_predicate(level, value) for level, value in zip(key.partition_by, partition, strict=True)
+            ) + ')'
+            for partition in partitions
+        )
+
+    @staticmethod
+    def _check_types(dt: DeltaTable, table: pa.Table) -> None:
+        """Raises TypeError if a column of `table` has a different type than in the Delta table.
+
+        Compared as Delta types, so e.g. string and large_string are the same.
+        """
+        existing_types = {field.name: field.type for field in dt.schema().fields}
+        for field in Schema.from_arrow(table.schema).fields:
+            if field.name in existing_types and field.type != existing_types[field.name]:
+                raise TypeError(f'column {field.name!r} is {field.type}, but {existing_types[field.name]} in the dataset')
+
+    def _write(
+        self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],
     ) -> None:
-        """Write data to Delta Lake with retry on concurrent transaction conflicts.
+        # Delta Lake stores timestamps in microseconds, delta-rs would silently truncate ns ones
+        data = self._cast_ns_timestamps_to_us(data)
+        table = self._add_marker_rows(key, data, partitions)
+        path = self._table_path(key)
+        self._with_retries(lambda: self._write_transaction(key, path, table, list(partitions), mode), f'write to {key}')
 
-        Delta Lake's transaction log can fail with "version X already exists" when
-        multiple writers race to commit the same version (especially version 0).
+    def _write_transaction(
+        self, key: DatasetKey, path: str, table: pa.Table, partitions: list[Partition], mode: str,
+    ) -> None:
+        dt = self._load_table(path)
+        if dt is not None:
+            self._check_types(dt, table)
+        partition_by = self._marker_partition_by(key)
+        if dt is None or mode == 'replace':
+            # on a new table, 'overwrite' just creates it; schema drift: 'merge' adds new columns, missing ones are null
+            write_deltalake(
+                path, table, mode='overwrite', predicate=self._sql_predicate(key, partitions),
+                partition_by=partition_by, schema_mode='merge',
+            )
+            return
+        # match a source marker row with its partition's existing marker row, so the existing one is kept;
+        # everything else (data rows, markers of new partitions) is inserted
+        is_meta = self.IS_METADATA_COLUMN
+        # the literal conditions on the target's partition columns let the merge skip all other files;
+        # a DatePartition's marker rows both have the day's midnight, see TableIO._add_marker_rows()
+        predicate = ' AND '.join([
+            *(f'({target})' for target in [self._sql_predicate(key, partitions, alias='t')] if target),
+            f't."{is_meta}" = true',
+            f's."{is_meta}" = true',
+            *(f't."{col}" = s."{col}"' for col in key.partition_columns),
+        ])
+        (
+            dt.merge(table, predicate=predicate, source_alias='s', target_alias='t', merge_schema=True)
+            .when_not_matched_insert_all()
+            .execute()
+        )
 
-        Args:
-            data: PyArrow table to write.
-            table_path: Path to the Delta Lake table.
-            delete_where: Optional filter to replace only matching rows (triggers overwrite mode).
-                If None, data is appended (creates table if needed). If provided, only rows
-                matching the clause are replaced (e.g., "date = '2024-01-15'").
-            partition_by: Columns to partition the table by. Only required when creating
-                a new table.
-            max_retries: Maximum number of retry attempts for transaction conflicts.
-            base_delay: Initial delay in seconds; doubles each retry (exponential backoff).
+    def _read(
+        self, key: DatasetKey, partitions: list[Partition] | None,
+    ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
+        dt = self._load_table(self._table_path(key))
+        if dt is None:
+            return None, {}
+        # scans the version dt was loaded at, so data and metadata match
+        return self._read_marker_rows(key, pl.scan_delta(dt), partitions)
 
-        Raises:
-            Exception: The most recent error from `write_deltalake` if the write fails
-                with a non-retriable error, or if all retries are exhausted.
+    def optimize(self) -> None:
+        """See TableIO.optimize(). Merges small files into larger ones, per partition."""
+        for path in self._table_paths():
+            self._with_retries(lambda path=path: DeltaTable(path).optimize.compact(), f'optimize {path}')
+
+    def vacuum(
+        self, *, retention: datetime.timedelta = TableIO.DEFAULT_VACUUM_RETENTION, dry_run: bool = True,
+    ) -> VacuumResult:
+        """See TableIO.vacuum().
+
+        Delta Lake only takes whole hours, so `retention` is rounded up to them.
+        Expires no versions: Delta Lake cleans up old log entries (time travel) itself, see delta.logRetentionDuration.
         """
-        io_kwargs = io_kwargs or self._write_options
-        for attempt in range(max_retries):
-            try:
-                write_deltalake(
-                    str(table_path),
-                    data,
-                    mode="overwrite" if delete_where else "append",  # pyright: ignore[reportArgumentType]
-                    storage_options=self._storage_options,
-                    partition_by=partition_by,
-                    predicate=delete_where,
-                    **io_kwargs,
-                )
-                return
-            except Exception as e:
-                error_msg = str(e).lower()
-                retriable = (
-                    "already exists" in error_msg or "transaction failed" in error_msg
-                )
-                if not retriable or attempt == max_retries - 1:
-                    raise
-                delay = base_delay * (2**attempt) + random.uniform(0, base_delay)
-                time.sleep(delay)
-
-    def read(self, table_path: TablePath, **io_kwargs: Any) -> pl.LazyFrame | None:
-        """Read data from a Delta Lake table.
-
-        Args:
-            table_path: Path to the Delta Lake table.
-            **io_kwargs: Delta table options passed to DeltaTable constructor.
-                Common options:
-                    version (int | str | datetime | None): Read a specific table version.
-                        If None, reads the latest version.
-
-                See delta-rs DeltaTable documentation for all available options:
-                https://delta-io.github.io/delta-rs/python/api_reference.html
-
-        Returns:
-            LazyFrame with table data, or None if table doesn't exist.
-        """
-        io_kwargs = io_kwargs or self._read_options
-        lf: pl.LazyFrame | None = None
-        if self.exists(table_path):
-            dt = self.get_table(table_path, **io_kwargs)
-            # NOTE: use_pyarrow=False doesn't work well with narwhals, e.g. narwhals.exceptions.NarwhalsError: path contains column not present in the given Hive schema: "env"
-            lf = pl.scan_delta(dt, use_pyarrow=True)
-        return lf
+        self._check_retention(retention)
+        retention_hours = math.ceil(retention / datetime.timedelta(hours=1))
+        paths = []
+        for path in self._table_paths():
+            # full: also deletes files the log never referenced, e.g. left by a crashed write
+            deleted = self._with_retries(
+                lambda path=path: DeltaTable(path).vacuum(
+                    retention_hours=retention_hours, dry_run=dry_run, enforce_retention_duration=False, full=True,
+                ),
+                f'vacuum {path}',
+            )
+            paths += [os.path.join(path, file) for file in deleted]
+        return VacuumResult(deleted_paths=paths)

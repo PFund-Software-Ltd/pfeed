@@ -1,4 +1,4 @@
-from pfeed.data_client import DataClient
+from pfeed.client import DataClient
 from pfeed.enums import DataCategory
 from pfeed.sources.fxmacrodata.announcement_feed import FXMacroDataAnnouncementFeed
 from pfeed.sources.fxmacrodata.mixin import FXMacroDataMixin

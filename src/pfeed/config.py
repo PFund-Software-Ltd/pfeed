@@ -44,6 +44,7 @@ def configure(
     cache_path: str | None = None,
     show_progress_bar: bool | None = None,
     use_prefect: bool | None = None,
+    allow_timestamp_precision_loss: bool | None = None,
     persist: bool = False,
 ) -> PFeedConfig:
     """
@@ -55,6 +56,9 @@ def configure(
         show_progress_bar: Whether pfeed progress bars are displayed.
         use_prefect: Whether to run batch dataflows as Prefect flows/tasks.
             Requires the `prefect` extra. Defaults to False.
+        allow_timestamp_precision_loss: Whether IOs that store timestamps in a coarser unit
+            (e.g. DeltaLakeIO, microseconds) may truncate finer ones (e.g. nanoseconds), with a warning.
+            If False, such writes raise. Defaults to False.
         persist: If True, the config will be saved to the config file.
     """
     config = get_config()
@@ -95,12 +99,14 @@ class PFeedConfig(Configuration):
         """Initialize PFeedConfig-specific attributes from config data."""
         self.show_progress_bar = self._data.get("show_progress_bar", True)
         self.use_prefect = self._data.get("use_prefect", False)
+        self.allow_timestamp_precision_loss = self._data.get("allow_timestamp_precision_loss", False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             "show_progress_bar": self.show_progress_bar,
             "use_prefect": self.use_prefect,
+            "allow_timestamp_precision_loss": self.allow_timestamp_precision_loss,
         }
 
     def prepare_docker_context(self):

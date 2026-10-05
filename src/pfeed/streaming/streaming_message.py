@@ -3,7 +3,7 @@ from typing import Annotated, Any
 
 from msgspec import Meta, Struct, field, structs
 
-from pfeed.enums import DataCategory, DataSource
+from pfeed.enums import DataCategory
 
 
 class StreamingMessage(
@@ -16,7 +16,7 @@ class StreamingMessage(
     gc=True,  # OPTIMIZE: consider setting gc=False for performance boost (but then you can't use lists, dicts etc.)
     tag=True,
 ):
-    data_source: DataSource
+    data_source: str
     data_category: DataCategory
     data_origin: str = ""
     specs: dict[

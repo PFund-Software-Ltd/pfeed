@@ -16,7 +16,6 @@ from pfeed.enums import (
     DataAccessType,
     DataCategory,
     DataProviderType,
-    DataSource,
     DataType,
 )
 from pfeed.source import DataProviderSource, SourceMetadata
@@ -27,7 +26,7 @@ __all__ = ["CryptoHftDataSource"]
 class CryptoHftDataSource(DataProviderSource):
     """Historical crypto data distributed by CryptoHFTData."""
 
-    NAME: ClassVar[DataSource] = DataSource.CRYPTO_HFT_DATA
+    NAME: ClassVar[str] = "CRYPTO_HFT_DATA"
     METADATA: ClassVar[SourceMetadata] = SourceMetadata(
         data_origin="https://cryptohftdata.com",
         data_categories={

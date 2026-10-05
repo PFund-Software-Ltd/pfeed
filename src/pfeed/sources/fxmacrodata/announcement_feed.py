@@ -121,5 +121,5 @@ class FXMacroDataAnnouncementFeed(FXMacroDataMixin):
         return pl.from_dicts(rows, infer_schema_length=None).lazy()
 
 
-# the class name create_feed() derives from DataSource.FXMACRODATA
+# the class name create_feed() derives from "FXMACRODATA"
 FxmacrodataAnnouncementFeed = FXMacroDataAnnouncementFeed

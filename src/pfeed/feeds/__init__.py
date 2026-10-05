@@ -6,11 +6,11 @@ if TYPE_CHECKING:
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.feeds.market_feed import MarketFeed
 
-from pfeed.enums import DataCategory, DataSource
+from pfeed.enums import DataCategory
 
 
 def create_market_feed(
-    data_source: DataSource | str,
+    data_source: str,
     pipeline_mode: bool = False,
     num_workers: int | None = None,
 ) -> MarketFeed:
@@ -25,7 +25,7 @@ def create_market_feed(
 # EXTEND: add more @overload for different data sources and categories
 @overload
 def create_feed(
-    data_source: DataSource | str,
+    data_source: str,
     data_category: Literal[DataCategory.MARKET_DATA, "MARKET_DATA"],
     pipeline_mode: bool = False,
     num_workers: int | None = None,
@@ -34,7 +34,7 @@ def create_feed(
 
 @overload
 def create_feed(
-    data_source: DataSource | str,
+    data_source: str,
     data_category: DataCategory | str,
     pipeline_mode: bool = False,
     num_workers: int | None = None,
@@ -42,7 +42,7 @@ def create_feed(
 
 
 def create_feed(
-    data_source: DataSource | str,
+    data_source: str,
     data_category: DataCategory | str,
     pipeline_mode: bool = False,
     num_workers: int | None = None,
@@ -51,7 +51,7 @@ def create_feed(
 
     from pfund_kit.utils.text import to_pascal_case
 
-    data_source = DataSource[data_source.upper()]
+    data_source = data_source.upper()
     data_category = DataCategory[data_category.upper()]
     try:
         Feed: type[BaseFeed] = getattr(

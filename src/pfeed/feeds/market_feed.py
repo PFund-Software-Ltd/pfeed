@@ -36,7 +36,7 @@ from pfund.enums.env import Environment
 
 from pfeed.config import setup_logging
 from pfeed.data_models.market_data_model import MarketDataModel
-from pfeed.enums import DataCategory, DataLayer, DataSource, MarketDataType
+from pfeed.enums import DataCategory, DataLayer, MarketDataType
 from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.io.base_io import BaseIO
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
@@ -594,7 +594,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         self,
         data_model: MarketDataModel,
         faucet_callback: Callable[
-            [WebSocketName | DataSource, RawMessage | ReplayData, ChannelKey | None],
+            [WebSocketName | str, RawMessage | ReplayData, ChannelKey | None],
             Coroutine[Any, Any, None],
         ],
         handler: BaseDataHandler | None = None,
@@ -684,7 +684,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                 ]
             )
             # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
-            data_source: DataSource = self.data_source.name
+            data_source: str = self.data_source.name
             tick_counter = (
                 count() if cast(Resolution, request.data_resolution).is_tick() else None
             )
@@ -717,7 +717,7 @@ class MarketFeed(TimeBasedFeed, ABC):
 
     @staticmethod
     def _standardize_message(
-        data_source: DataSource,
+        data_source: str,
         data_origin: str,
         product: BaseProduct,
         target_resolution: Resolution,

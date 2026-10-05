@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
 
-    from pfeed.enums import DataSource
-
 import os
 from abc import ABC, abstractmethod
 from datetime import date
@@ -67,7 +65,7 @@ class SourceMetadata(BaseModel):
 
 
 class BaseSource(ABC):
-    name: ClassVar[DataSource]
+    name: ClassVar[str]
 
     def __init__(self):
         self._batch_api: Any | None = None

@@ -16,7 +16,7 @@ import asyncio
 import logging
 from threading import Thread
 
-from pfeed.enums import DataCategory, DataSource
+from pfeed.enums import DataCategory
 
 
 # TODO: backfilling
@@ -86,7 +86,7 @@ class DataEngine:
 
     def add_feed(
         self,
-        data_source: DataSource | str,
+        data_source: str,
         data_category: DataCategory | str = DataCategory.MARKET_DATA,
         num_workers: int | None = None,
     ) -> BaseFeed:

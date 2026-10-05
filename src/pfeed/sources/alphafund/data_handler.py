@@ -38,7 +38,7 @@ import polars as pl
 
 from pfeed._etl.base import convert_dataframe
 from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
-from pfeed.enums import DataLayer, DataSource, DataTool, IOFormat
+from pfeed.enums import DataLayer, DataTool, IOFormat
 from pfeed.io.database_io import DBPath
 from pfeed.io.table_io import TablePath
 from pfeed.utils.file_path import FilePath
@@ -533,6 +533,6 @@ class AlphaFundDataHandler(BaseDataHandler):
 
     def _create_metadata(self, *args: Any, **kwargs: Any) -> BaseDataMetadata:
         return BaseDataMetadata(
-            data_source=DataSource[self._data_model.data_source.name],
+            data_source=self._data_model.data_source.name,
             data_origin=self._data_model.data_origin,
         )

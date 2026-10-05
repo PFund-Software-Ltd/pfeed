@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import RunResult
     from pfeed.engine import DataEngine
-    from pfeed.enums import DataSource
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
 
@@ -47,7 +46,7 @@ class StreamingFeedMixin:
     def __aiter__(
         self,
     ) -> AsyncGenerator[
-        tuple[WebSocketName | DataSource, RawMessage | ReplayData], None
+        tuple[WebSocketName | str, RawMessage | ReplayData], None
     ]:
         if not self.streaming_dataflows:
             raise RuntimeError("No streaming dataflow to iterate over")
@@ -55,7 +54,7 @@ class StreamingFeedMixin:
         dataflow = self.streaming_dataflows[0]
         faucet = dataflow.faucet
         queue: asyncio.Queue[
-            tuple[WebSocketName | DataSource, RawMessage | ReplayData] | None
+            tuple[WebSocketName | str, RawMessage | ReplayData] | None
         ] = faucet.streaming_queue
 
         async def _iter():
@@ -76,7 +75,7 @@ class StreamingFeedMixin:
     def _create_stream_dataflow(
         self,
         user_callback: Callable[
-            [WebSocketName | DataSource, RawMessage | ReplayData],
+            [WebSocketName | str, RawMessage | ReplayData],
             Awaitable[None] | None,
         ]
         | None = None,

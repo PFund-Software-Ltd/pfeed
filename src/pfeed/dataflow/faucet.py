@@ -28,7 +28,7 @@ import logging
 
 import polars as pl
 
-from pfeed.enums import DataSource, ExtractType
+from pfeed.enums import ExtractType
 
 
 class Faucet:
@@ -57,13 +57,13 @@ class Faucet:
         self._is_stream_opened = False
         self._streaming_queue: (
             asyncio.Queue[
-                tuple[WebSocketName | DataSource, RawMessage | ReplayData] | None
+                tuple[WebSocketName | str, RawMessage | ReplayData] | None
             ]
             | None
         ) = None
         self._user_callback: (
             Callable[
-                [WebSocketName | DataSource, RawMessage | ReplayData],
+                [WebSocketName | str, RawMessage | ReplayData],
                 Awaitable[None] | None,
             ]
             | None
@@ -76,7 +76,7 @@ class Faucet:
     def streaming_queue(
         self,
     ) -> asyncio.Queue[
-        tuple[WebSocketName | DataSource, RawMessage | ReplayData] | None
+        tuple[WebSocketName | str, RawMessage | ReplayData] | None
     ]:
         if self._streaming_queue is None:
             self._streaming_queue = asyncio.Queue(maxsize=self.STREAMING_QUEUE_MAXSIZE)
@@ -136,7 +136,7 @@ class Faucet:
 
     async def _callback(
         self,
-        source: WebSocketName | DataSource,
+        source: WebSocketName | str,
         data: RawMessage | ReplayData,
         channel_key: ChannelKey | None,
     ) -> None:
@@ -177,7 +177,7 @@ class Faucet:
     def set_user_callback(
         self,
         callback: Callable[
-            [WebSocketName | DataSource, RawMessage | ReplayData],
+            [WebSocketName | str, RawMessage | ReplayData],
             Awaitable[None] | None,
         ],
     ):

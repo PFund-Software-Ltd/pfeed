@@ -4,10 +4,11 @@ import click
 from pfund_kit.cli.utils import cli_args_to_kwargs
 
 import pfeed as pe
-from pfeed.enums import DataCategory, DataLayer, DataSource, DataStorage
+from pfeed import registry
+from pfeed.enums import DataCategory, DataLayer, DataStorage
 
 # add aliases to supported download data sources
-SUPPORTED_DATA_SOURCES = [data_source.value for data_source in DataSource]
+SUPPORTED_DATA_SOURCES = registry.list_sources()
 SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [
     pe.alias(ds) for ds in SUPPORTED_DATA_SOURCES if pe.alias(ds)
 ]

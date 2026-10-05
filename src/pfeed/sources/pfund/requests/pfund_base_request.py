@@ -1,12 +1,11 @@
 from pydantic import field_validator
 
-from pfeed.enums import DataSource
 from pfeed.requests.base_request import BaseRequest
 from pfund.enums import Environment
 
 
 class PFundBaseRequest(BaseRequest):
-    data_source: DataSource | str = DataSource.PFUND
+    data_source: str = "PFUND"
 
     env: Environment | str
     project_name: str

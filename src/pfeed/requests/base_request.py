@@ -4,14 +4,14 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pfeed.enums import DataLayer, DataSource, ExtractType
+from pfeed.enums import DataLayer, ExtractType
 from pfeed.io.base_io import BaseIO
 
 
 class BaseRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    data_source: DataSource | str
+    data_source: str
     data_origin: str = ""
     extract_type: ExtractType
     io: BaseIO | None = None
@@ -46,10 +46,11 @@ class BaseRequest(BaseModel):
 
     @field_validator("data_source", mode="before")
     @classmethod
-    def _validate_data_source(cls, value: DataSource | str) -> DataSource:
-        if isinstance(value, str):
-            return DataSource[value]
-        return value
+    def _validate_data_source(cls, value: str) -> str:
+        from pfeed import registry
+
+        # raises if no installed plugin registers this data source
+        return registry.get_entry_point(value).name.upper()
 
     @field_validator("data_layer", mode="before")
     @classmethod

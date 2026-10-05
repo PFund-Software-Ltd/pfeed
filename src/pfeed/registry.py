@@ -14,10 +14,13 @@ if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
 
     from pfeed.client import DataClient
+    from pfeed.feeds.base_feed import BaseFeed
     from pfeed.source import BaseSource
 
 from functools import cache
 from importlib.metadata import entry_points
+
+from pfeed.enums import DataCategory
 
 ENTRY_POINT_GROUP = "pfeed.sources"
 
@@ -58,3 +61,14 @@ def get_client(name: str) -> type[DataClient]:
 
 def get_source(name: str) -> type[BaseSource]:
     return get_client(name).DataSource
+
+
+def get_feed(name: str, data_category: DataCategory | str) -> type[BaseFeed]:
+    Client = get_client(name)
+    data_category = DataCategory[data_category.upper()]
+    try:
+        return Client.Feeds[data_category]
+    except KeyError:
+        raise ValueError(
+            f"data source {name.upper()} has no feed for {data_category}, available: {list(Client.Feeds)}"
+        ) from None

@@ -5,7 +5,7 @@ from pfund_kit.cli.utils import cli_args_to_kwargs
 
 import pfeed as pe
 from pfeed import registry
-from pfeed.enums import DataLayer, DataStorage
+from pfeed.enums import DataCategory, DataLayer, DataStorage
 
 # add aliases to supported streaming data sources
 SUPPORTED_DATA_SOURCES = registry.list_sources()
@@ -135,7 +135,6 @@ def stream(
     debug: bool,
 ):
     """Stream market data live from a data source, or replay it from storage (BACKTEST)"""
-    from pfeed.feeds import create_market_feed
     from pfeed.storages.storage_config import StorageConfig
 
     pe.configure(data_path=data_path)
@@ -185,5 +184,6 @@ def stream(
 
     # feed.stream() handles both live websocket (LIVE) and historical replay
     # (BACKTEST, incl. replay_pace) natively — no manual replay loop needed here.
-    feed = create_market_feed(data_source=data_source)
+    Feed = registry.get_feed(data_source, DataCategory.MARKET_DATA)
+    feed = Feed()
     feed.stream(**kwargs)

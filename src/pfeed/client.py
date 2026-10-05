@@ -9,11 +9,11 @@ if TYPE_CHECKING:
 from abc import ABC
 
 from pfeed.enums import DataCategory
-from pfeed.feeds import create_feed
 
 
 class DataClient(ABC):
     DataSource: ClassVar[type[BaseSource]]
+    Feeds: ClassVar[dict[DataCategory, type[BaseFeed]]]
 
     def __init__(
         self,
@@ -40,18 +40,13 @@ class DataClient(ABC):
         return self._pipeline_mode
 
     def _create_feeds(self):
-        for data_category in self.data_source.get_data_categories():
+        for data_category, Feed in self.Feeds.items():
             num_workers: int | None = (
                 self._num_workers.get(data_category, None)
                 if isinstance(self._num_workers, dict)
                 else self._num_workers
             )
-            feed: BaseFeed = create_feed(
-                data_source=self.name,
-                data_category=data_category,
-                pipeline_mode=self._pipeline_mode,
-                num_workers=num_workers,
-            )
+            feed: BaseFeed = Feed(pipeline_mode=self._pipeline_mode, num_workers=num_workers)
             if feed not in self._feeds:
                 self._feeds.append(feed)
             # dynamically set attributes e.g. self.market_feed

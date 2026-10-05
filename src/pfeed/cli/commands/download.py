@@ -14,8 +14,8 @@ SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [
 ]
 
 # a data source exposes one feed per data category; "download" picks the feed of
-# the requested category via pfeed.feeds.create_feed. Not every category has a
-# downloadable feed — create_feed raises a clear error if it doesn't.
+# the requested category via pfeed.registry.get_feed. Not every category has a
+# downloadable feed — get_feed raises a clear error if it doesn't.
 SUPPORTED_CATEGORIES = [category.value for category in DataCategory]
 
 
@@ -113,7 +113,6 @@ def download(
     debug: bool,
 ):
     """Download historical data from a data source"""
-    from pfeed.feeds import create_feed
     from pfeed.storages.storage_config import StorageConfig
 
     pe.configure(data_path=data_path)
@@ -160,5 +159,6 @@ def download(
     for k, v in product_specs.items():
         kwargs[k] = v
 
-    feed = create_feed(data_source=data_source, data_category=data_category)
+    Feed = registry.get_feed(data_source, data_category)
+    feed = Feed()
     feed.download(**kwargs)

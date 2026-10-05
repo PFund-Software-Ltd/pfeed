@@ -45,20 +45,26 @@ dependencies = [
 [project.optional-dependencies]
 huggingface = ["huggingface-hub>=1.33.0"]
 prefect = ["prefect>=3.8.7"]
-lancedb = ["lancedb>=0.39.0"]
+# kafka = ["confluent-kafka>=2.8.2"]
 # Data Sources:
+# NOTE: data sources are plugins, each one is a separate package named `pfeed-xxx`.
+# An extra exists here only for an OFFICIALLY SUPPORTED data source, and it pins a verified version:
+#   pip install "pfeed[bybit]"  # official, installs `pfeed-bybit`
+#   pip install pfeed-xxx       # 3rd party, not maintained or verified by pfeed
+# bybit = ["pfeed-bybit>=0.0.1"]
 # yfinance = ["yfinance>=1.7.0"]
 # edgartools = ["edgartools>=5.60.0"]
-cryptohftdata = ["cryptohftdata>=0.8.0"]
+# fmp = ["fmp-api-client>=0.0.1"]
+# databento = ["databento>=0.63.0"]
+# massive = ["massive>=2.2.0"]  # previously "polygon"
+# ---
+# IOs:
+lancedb = ["lancedb>=0.39.0"]
 # deltalake = ["deltalake>=1.6.6"]
 # iceberg = ["pyiceberg[sql-sqlite,pyiceberg-core]>=0.12.0"]
 # s3 = ["minio>=7.2.20", "cloudpathlib[s3]>=0.24.0"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
-# fmp = ["fmp-api-client>=0.0.1"]
-# databento = ["databento>=0.63.0"]
 # vortex = ["vortex-data>=0.55.0"]
-# kafka = ["confluent-kafka>=2.8.2"]
-# massive = ["massive>=2.2.0"]  # previously "polygon"
 
 [project.scripts]
 pfeed = "pfeed.__main__:run_cli"

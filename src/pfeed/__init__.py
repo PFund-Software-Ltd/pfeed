@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfeed.engine import DataEngine
     from pfeed.io.ducklake_io import DuckLakeIO
     from pfeed.io.parquet_io import ParquetIO
+    from pfeed.sources import bybit
     from pfeed.sources.alphafund import AlphaFund
     from pfeed.sources.bybit import Bybit
     from pfeed.sources.crypto_hft_data import (
@@ -48,10 +49,14 @@ def __getattr__(name: str):
         from pfeed.engine import DataEngine
 
         return DataEngine
-    elif name.lower() == "bybit":
+    elif name == "Bybit":
         from pfeed.sources.bybit import Bybit
 
         return Bybit
+    elif name == "bybit":
+        import pfeed.sources.bybit as bybit
+
+        return bybit
     elif name.lower() in ("cryptohftdata", "chd"):
         from pfeed.sources.crypto_hft_data import CryptoHftData
 
@@ -82,7 +87,7 @@ __all__ = (  # noqa: RUF022
     # Data Sources
     "AlphaFund",
     "PFund",
-    "Bybit",
+    "Bybit", "bybit",
     "CHD", "CryptoHFTData", "CryptoHftData",
     "FXMacroData",
 )

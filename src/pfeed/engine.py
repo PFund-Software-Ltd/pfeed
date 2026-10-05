@@ -90,10 +90,9 @@ class DataEngine:
         data_category: DataCategory | str = DataCategory.MARKET_DATA,
         num_workers: int | None = None,
     ) -> BaseFeed:
-        from pfeed import registry
+        from pfeed.feeds import get_feed
 
-        Feed = registry.get_feed(data_source, data_category)
-        feed: BaseFeed = Feed(pipeline_mode=True, num_workers=num_workers)
+        feed: BaseFeed = get_feed(data_source, data_category, pipeline_mode=True, num_workers=num_workers)
         if feed.supports_streaming():
             feed._set_engine(self)
             # HACK: add a add_feed() dynamically to the feed for chaining purpose:

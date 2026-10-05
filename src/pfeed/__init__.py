@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     import pfund_plot as plot
 
     from pfeed.engine import DataEngine
+    from pfeed.feeds import get_feed
     from pfeed.io.ducklake_io import DuckLakeIO
     from pfeed.io.parquet_io import ParquetIO
     from pfeed.sources import bybit
@@ -45,6 +46,10 @@ def __getattr__(name: str):
         from pfeed.io.ducklake_io import DuckLakeIO
 
         return DuckLakeIO
+    elif name == "get_feed":
+        from pfeed.feeds import get_feed
+
+        return get_feed
     elif name == "DataEngine":
         from pfeed.engine import DataEngine
 
@@ -81,6 +86,7 @@ __all__ = (  # noqa: RUF022
     "get_config", "configure", "configure_logging",
     "plot",
     "DataEngine",
+    "get_feed",
     # IOs
     "DuckLakeIO",
     "ParquetIO",

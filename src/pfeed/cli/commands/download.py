@@ -14,7 +14,7 @@ SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [
 ]
 
 # a data source exposes one feed per data category; "download" picks the feed of
-# the requested category via pfeed.registry.get_feed. Not every category has a
+# the requested category via pfeed.get_feed. Not every category has a
 # downloadable feed — get_feed raises a clear error if it doesn't.
 SUPPORTED_CATEGORIES = [category.value for category in DataCategory]
 
@@ -159,6 +159,5 @@ def download(
     for k, v in product_specs.items():
         kwargs[k] = v
 
-    Feed = registry.get_feed(data_source, data_category)
-    feed = Feed()
+    feed = pe.get_feed(data_source, data_category)
     feed.download(**kwargs)

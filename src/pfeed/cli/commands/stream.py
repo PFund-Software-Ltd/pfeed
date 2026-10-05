@@ -184,6 +184,5 @@ def stream(
 
     # feed.stream() handles both live websocket (LIVE) and historical replay
     # (BACKTEST, incl. replay_pace) natively — no manual replay loop needed here.
-    Feed = registry.get_feed(data_source, DataCategory.MARKET_DATA)
-    feed = Feed()
+    feed = pe.get_feed(data_source, DataCategory.MARKET_DATA)
     feed.stream(**kwargs)

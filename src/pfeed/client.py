@@ -1,35 +1,32 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.source import BaseSource
 
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from pfeed.enums import DataCategory
 from pfeed.feeds import create_feed
 
 
 class DataClient(ABC):
+    DataSource: ClassVar[type[BaseSource]]
+
     def __init__(
         self,
         pipeline_mode: bool = False,
         num_workers: int | dict[DataCategory | str, int] | None = None,
     ):
         self._pipeline_mode: bool = pipeline_mode
-        self.data_source: BaseSource = self._create_data_source()
+        self.data_source: BaseSource = self.DataSource()
         self._feeds: list[BaseFeed] = []
         if isinstance(num_workers, dict):
             num_workers = {DataCategory[k.upper()]: v for k, v in num_workers.items()}
         self._num_workers: int | dict[DataCategory | str, int] | None = num_workers
         self._create_feeds()
-
-    @staticmethod
-    @abstractmethod
-    def _create_data_source() -> BaseSource:
-        pass
 
     @property
     def name(self) -> str:

@@ -24,6 +24,7 @@ from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
 
 
 class BaseFeed(ABC):
+    DataSource: ClassVar[type[BaseSource]]
     DataModel: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
 
@@ -38,7 +39,7 @@ class BaseFeed(ABC):
         from pfeed.config import setup_logging
 
         setup_logging()
-        self.data_source: BaseSource = self._create_data_source()
+        self.data_source: BaseSource = self.DataSource()
         self.logger: ColoredLogger = cast(
             "ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}")
         )
@@ -54,11 +55,6 @@ class BaseFeed(ABC):
         self._is_running = False
         if self._num_workers:
             self.set_num_workers(self._num_workers)
-
-    @staticmethod
-    @abstractmethod
-    def _create_data_source() -> BaseSource:
-        pass
 
     @abstractmethod
     def _create_data_model_from_request(self, request: BaseRequest) -> BaseDataModel:

@@ -24,12 +24,16 @@ from pfeed.feeds.market_feed import MarketFeed
 from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
 from pfeed.io.io_config import IOConfig
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
-from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
+from pfeed.sources.yahoo_finance.source import YahooFinanceSource
 
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
-class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
+class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
+    DataSource: ClassVar[type[YahooFinanceSource]] = YahooFinanceSource
+    data_source: YahooFinanceSource
+    _yfinance_kwargs: dict[str, Any] | None = None
+
     DataModel: ClassVar[type[YahooFinanceMarketDataModel]] = YahooFinanceMarketDataModel
     # "Date" is used for daily data and "Datetime" is used for other resolutions in yfinance
     date_columns_in_raw_data: ClassVar[list[str]] = ["Datetime", "Date"]

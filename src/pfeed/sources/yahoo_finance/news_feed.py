@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -10,10 +10,14 @@ if TYPE_CHECKING:
     from pfeed.enums import DataLayer, DataStorage
 
 from pfeed.feeds.news_feed import NewsFeed
-from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
+from pfeed.sources.yahoo_finance.source import YahooFinanceSource
 
 
-class YahooFinanceNewsFeed(YahooFinanceMixin, NewsFeed):
+class YahooFinanceNewsFeed(NewsFeed):
+    DataSource: ClassVar[type[YahooFinanceSource]] = YahooFinanceSource
+    data_source: YahooFinanceSource
+    _yfinance_kwargs: dict[str, Any] | None = None
+
     # REVIEW: better handle some potentially useful attributes: "storyline" and "editorsPick"
     @staticmethod
     def _normalize_raw_data(data: list[dict]) -> pd.DataFrame:

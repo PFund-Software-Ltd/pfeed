@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from uuid import UUID
 
 from pfeed.client import DataClient
@@ -5,10 +7,13 @@ from pfeed.enums import DataCategory
 from pfeed.sources.alphafund.agent_feed import AlphaFundAgentFeed
 from pfeed.sources.alphafund.chat_feed import AlphaFundChatFeed
 from pfeed.sources.alphafund.fund_feed import AlphaFundFeed
-from pfeed.sources.alphafund.mixin import AlphaFundMixin
+from pfeed.sources.alphafund.source import AlphaFundSource
 
 
-class AlphaFund(AlphaFundMixin, DataClient):
+class AlphaFund(DataClient):
+    DataSource: ClassVar[type[AlphaFundSource]] = AlphaFundSource
+    data_source: AlphaFundSource
+
     fund_feed: AlphaFundFeed
     agent_feed: AlphaFundAgentFeed
     chat_feed: AlphaFundChatFeed

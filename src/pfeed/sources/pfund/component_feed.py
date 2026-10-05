@@ -33,12 +33,12 @@ from pfeed.sources.pfund.component_metadata import (
     PFundComponentDataMetadata,
     RunMetadata,
 )
-from pfeed.sources.pfund.mixin import PFundMixin
+from pfeed.sources.pfund.source import PFundSource
 from pfeed.storages.storage_config import StorageConfig
 from pfund.enums import ArtifactType, Environment
 
 
-class PFundComponentFeed(PFundMixin, BaseFeed):
+class PFundComponentFeed(BaseFeed):
     """Feed over a pfund component's artifacts (data, model, source).
 
     Architecture (see the design discussion):
@@ -52,6 +52,9 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         but the extract source is pfeed's STORAGE instead of the live component. No
         serialization happens — FileIO/DeltaLakeIO hand the persisted bytes/frame back.
     """
+
+    DataSource: ClassVar[type[PFundSource]] = PFundSource
+    data_source: PFundSource
 
     DataModel: ClassVar[type[PFundComponentDataModel]] = PFundComponentDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.COMPONENT_DATA

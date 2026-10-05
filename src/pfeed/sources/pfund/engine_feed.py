@@ -11,7 +11,7 @@ import datetime
 from pfeed.enums import DataCategory
 from pfeed.feeds.base_feed import BaseFeed
 from pfeed.sources.pfund.engine_data_model import PFundEngineDataModel
-from pfeed.sources.pfund.mixin import PFundMixin
+from pfeed.sources.pfund.source import PFundSource
 from pfeed.storages.storage_config import StorageConfig
 from pfund.engines.contexts.base_engine_context import BaseEngineContext
 from pfund.enums.env import Environment
@@ -21,7 +21,10 @@ from pfund.enums.env import Environment
 # this feed should be able to get backtesting data from pfund's BacktestEngine for monitoring and analysis puporse
 # some functions require api calls (e.g. get dynamic backtest results) and some do not (e.g. load backtest hisory)
 # TODO: need to specify which engine if there are multiple engines running
-class PFundEngineFeed(PFundMixin, BaseFeed):
+class PFundEngineFeed(BaseFeed):
+    DataSource: ClassVar[type[PFundSource]] = PFundSource
+    data_source: PFundSource
+
     DataModel: ClassVar[type[PFundEngineDataModel]] = PFundEngineDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.ENGINE_DATA
 

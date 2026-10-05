@@ -14,10 +14,13 @@ from pfund.venues.bybit.product import BybitProduct
 from pfeed.feeds.market_feed import MarketFeed
 from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
 from pfeed.sources.bybit.market_data_model import BybitMarketDataModel
-from pfeed.sources.bybit.mixin import BybitMixin
+from pfeed.sources.bybit.source import BybitSource
 
 
-class BybitMarketFeed(StreamingFeedMixin, BybitMixin, MarketFeed):
+class BybitMarketFeed(StreamingFeedMixin, MarketFeed):
+    DataSource: ClassVar[type[BybitSource]] = BybitSource
+    data_source: BybitSource
+
     DataModel: ClassVar[type[BybitMarketDataModel]] = BybitMarketDataModel
     date_columns_in_raw_data: ClassVar[list[str]] = ["timestamp"]
 

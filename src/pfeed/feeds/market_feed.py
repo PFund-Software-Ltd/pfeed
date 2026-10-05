@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 import datetime
 import time
 from abc import ABC, abstractmethod
+from enum import StrEnum
 
 import polars as pl
 from pfund.datas.resolution import Resolution
@@ -43,6 +44,12 @@ from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
 class MarketFeed(TimeBasedFeed, ABC):
+    class Capability(StrEnum):
+        """Core verbs MarketFeed gates on. Plugins may declare extra verbs as plain strings."""
+
+        download = "download"
+        stream = "stream"
+
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     data_source: DataProviderSource
@@ -60,16 +67,14 @@ class MarketFeed(TimeBasedFeed, ABC):
         pass
 
     @staticmethod
-    @abstractmethod
     def _parse_message(product: BaseProduct, msg: Any) -> ResponseData:
-        pass
+        raise NotImplementedError
 
     @staticmethod
-    @abstractmethod
     def _normalize_timestamps(msg: ResponseData) -> ResponseData:
         """Convert source's native time unit to int ns since epoch.
         Touches top-level `ts` and any timestamp fields inside `data`."""
-        pass
+        raise NotImplementedError
 
     def get_supported_resolutions(
         self, include_resampled: bool = False

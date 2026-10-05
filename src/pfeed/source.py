@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from datetime import date
 
 from pfund.entities.products.asset_type import AssetType
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 from pfeed.enums import DataAccessType, DataCategory, DataProviderType, DataType
 
@@ -20,6 +20,8 @@ class SourceMetadata(BaseModel):
 
     data_origin: HttpUrl
     data_categories: dict[DataCategory, dict[DataType, list[AssetType]]]
+    # verbs each feed supports, e.g. {MARKET_DATA: {"download", "stream"}}; each feed defines and gates on its own verbs
+    feed_capabilities: dict[DataCategory, frozenset[str]]
     provider_type: DataProviderType
     access_type: DataAccessType
     api_key_required: bool = False
@@ -62,6 +64,12 @@ class SourceMetadata(BaseModel):
                     for item in items
                 ]
         return v
+
+    @model_validator(mode="after")
+    def _check_feed_capabilities(self) -> Self:
+        if unknown := self.feed_capabilities.keys() - self.data_categories.keys():
+            raise ValueError(f"feed_capabilities has categories not in data_categories: {sorted(unknown)}")
+        return self
 
 
 class BaseSource(ABC):

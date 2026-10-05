@@ -39,6 +39,9 @@ class DataFlow:
         self._zmq_topic: PublicDataChannel | None = None
         self._assigned_stream_worker: str | None = None
         self._is_sealed = False
+        # set by set_stream_options(), only for streaming dataflows
+        self._flush_interval: float | None = None
+        self._write_stream_kwargs: dict[str, Any] = {}
 
     def _setup_messaging(self):
         from pfeed.data_models.market_data_model import MarketDataModel
@@ -112,17 +115,44 @@ class DataFlow:
     def has_handler(self) -> bool:
         return self._handler is not None
 
+    def set_stream_options(self, flush_interval: float, **write_stream_kwargs: Any):
+        """Sets how streamed data is stored, before setup_handler().
+
+        Args:
+            flush_interval: seconds between writes of the buffered streamed data, see Sink.
+            write_stream_kwargs: passed to the handler's write_stream() with every message,
+                e.g. store_incremental_bars for MarketDataHandler.
+        """
+        if not self.is_streaming():
+            raise ValueError(f"cannot set stream options for non-streaming dataflow {self.name}")
+        if self._handler is not None:
+            raise ValueError(f"cannot set stream options after the handler is set for dataflow {self.name}")
+        self._flush_interval = flush_interval
+        self._write_stream_kwargs = write_stream_kwargs
+
     def setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str):
-        """Creates the data handler that loads the data to io, from the dataflow's own data model."""
+        """Creates the data handler that loads the data to io, from the dataflow's own data model.
+
+        A streaming dataflow's handler buffers the messages in a Sink, except when replaying,
+        where the handler only reads the data to replay.
+        """
+        from pfeed.streaming.sink import Sink
+
         if self._handler is not None:
             raise ValueError(f"handler is already set for dataflow {self.name}")
         if self.is_sealed():
             raise ValueError(f"cannot set handler for sealed dataflow {self.name}")
+        sink = None
+        if self.is_streaming() and not self.is_replaying():
+            if self._flush_interval is None:
+                raise ValueError(f"stream options are not set for dataflow {self.name}, see set_stream_options()")
+            sink = Sink(flush_interval=self._flush_interval)
         self._handler = self._data_model.DataHandler(
             data_model=self._data_model,
             io=io,
             data_layer=data_layer,
             data_domain=data_domain,
+            sink=sink,
         )
 
     def __str__(self):
@@ -236,11 +266,14 @@ class DataFlow:
         )
         self._flow_type = FlowType[flow_type.lower()]
         await self.faucet.open_stream(
-            data_model=self.data_model, storage=self.handler
+            data_model=self.data_model, handler=self.handler
         )  # this will trigger _run_stream_etl()
 
     async def end_stream(self):
         await self.faucet.close_stream()
+        # with Ray, each worker flushes its own copy of the handler, this one's sink stays empty
+        if self._handler is not None and self._handler.sink is not None:
+            self._handler.flush()
 
     def _transform(self, data: IntoFrame | StreamingData) -> IntoFrame | StreamingData:
         for transform in self._transformations:
@@ -265,11 +298,11 @@ class DataFlow:
         return data
 
     def _load(self, data: IntoFrame | StreamingData):
-        if not self.has_handler():
+        if self._handler is None:
             return
         try:
             if self.is_streaming():
-                self._handler.write(data, streaming=True)
+                self._handler.write_stream(data, **self._write_stream_kwargs)
             else:
                 from pfeed._etl.base import convert_dataframe
 

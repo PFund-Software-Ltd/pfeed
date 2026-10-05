@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
 
+    import polars as pl
+
     from pfeed.data_handlers.base_data_handler import BaseDataMetadata
     from pfeed.data_models.time_based_data_model import TimeBasedDataModel
     from pfeed.io.base_io import Partition, PartitionValue
@@ -48,6 +50,12 @@ class TimeBasedDataHandler[DataModelT: TimeBasedDataModel, MetadataT: BaseDataMe
             name=self._create_name(),
             partition_by=(*self._partition_prefix(), DatePartition(self._get_date_col())),
         )
+
+    def _stream_partitions(self, df: pl.DataFrame) -> dict[Partition, MetadataT]:
+        """One partition per day of the date column in `df`, e.g. two if the rows cross midnight."""
+        prefix = tuple(self._partition_prefix().values())
+        dates = df.get_column(self._get_date_col()).dt.date().unique().sort()
+        return {(*prefix, date): self._create_metadata() for date in dates}
 
     def _partitions(self) -> list[Partition]:
         """The data model's partitions: one per day in its date range."""

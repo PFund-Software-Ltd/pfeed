@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.venues._apis.typing import ResponseData
 
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.dataflow.result import RunResult
     from pfeed.feeds.streaming_feed_mixin import (
         ChannelKey,
@@ -419,11 +420,14 @@ class MarketFeed(TimeBasedFeed, ABC):
 
         default_transformations = []
         if is_retrieving_streaming_data:
+            # a bar's date is its start, like in batch data, see MarketDataHandler._get_date_col()
+            date_col = "start_ts" if cast(Resolution, request.data_resolution).is_bar() else "ts"
             default_transformations.append(
                 lambda_with_name(
                     "streaming_to_batch_schema",
+                    # stored as UTC, batch data's date is tz-naive UTC
                     lambda df: df.with_columns(
-                        pl.from_epoch(pl.col("ts"), time_unit="ns").alias("date")
+                        pl.col(date_col).dt.replace_time_zone(None).alias("date")
                     ),
                 ),
             )
@@ -456,6 +460,8 @@ class MarketFeed(TimeBasedFeed, ABC):
         env: Environment | str = Environment.LIVE,
         replay_pace: float | None = 0,
         io: BaseIO | None = None,
+        store_incremental_bars: bool = False,
+        flush_interval: float = 100,
         **product_specs: Any,
     ) -> Self | None:
         """Stream market data, either live from the data source or by replaying historical data from storage at CLEANED data layer.
@@ -501,6 +507,12 @@ class MarketFeed(TimeBasedFeed, ABC):
                   If None, streamed data will NOT be persisted.
                 - BACKTEST: WHERE to read historical data FROM (read source).
                   If None, defaults to `ParquetIO()`.
+            store_incremental_bars: Whether to also store the updates of a bar before it closes,
+                e.g. for a venue that only streams such updates. If False (default), only closed bars are stored.
+                Only meaningful for bar resolutions when `io` is given and env is not BACKTEST.
+            flush_interval: Seconds between writes of the buffered streamed data to `io`.
+                Frequent writes create many small files, which slow down reads until the table is compacted.
+                Only meaningful when `io` is given and env is not BACKTEST.
             product_specs: Extra product attributes for products that need them, e.g.
                 `stream(product='BTC_USDT_OPT', strike_price=10000,
                 expiration='2024-01-01', option_type='CALL')`. Leave empty first and
@@ -571,6 +583,8 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date=start_date,
             end_date=end_date,
             replay_pace=replay_pace,
+            store_incremental_bars=store_incremental_bars,
+            flush_interval=flush_interval,
         )
         self._append_request(request)
         self._create_stream_dataflow(user_callback=callback)
@@ -583,7 +597,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             [WebSocketName | DataSource, RawMessage | ReplayData, ChannelKey | None],
             Coroutine[Any, Any, None],
         ],
-        storage: BaseStorage | None = None,
+        handler: BaseDataHandler | None = None,
         replay_pace: float | None = None,
     ) -> None:
         from pfund.enums.env import Environment
@@ -597,7 +611,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         else:
             import asyncio
 
-            assert storage is not None, "storage must be provided for replaying"
+            assert handler is not None, "handler must be provided for replaying"
             data_source = data_model.data_source.name
             channel_key: ChannelKey = cast(
                 "ChannelKey", stream_api.add_channel(data_model)
@@ -605,18 +619,19 @@ class MarketFeed(TimeBasedFeed, ABC):
             start_date, end_date = data_model.start_date, data_model.end_date
             resolution = data_model.resolution
             prev_ts: float | None = None
+            # the handler's data model covers start_date to end_date; collected one day at a time to bound memory
+            lf, _ = handler.read()
+            if lf is None:
+                self.logger.warning(f"No data to replay from {start_date} to {end_date}")
+                return
             for date in pl.date_range(
                 start=start_date, end=end_date, interval="1d", eager=True
             ):
-                data_model_per_date = data_model.model_copy(
-                    update={"start_date": date, "end_date": date}
-                )
-                _ = storage.with_data_model(data_model_per_date)
-                lf = storage.read()
-                if lf is None:
+                df = lf.filter(pl.col("date").dt.date() == date).sort("date").collect()
+                if df.is_empty():
                     self.logger.debug(f"No data to replay on {date}")
                     continue
-                for row in lf.collect().iter_rows(named=True):
+                for row in df.iter_rows(named=True):
                     current_ts: float = row["date"].timestamp()
                     if replay_pace == 0:  # ASAP
                         delay = 0.0

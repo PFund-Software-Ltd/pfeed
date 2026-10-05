@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable
 
+    from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import RunResult
     from pfeed.engine import DataEngine
     from pfeed.enums import DataSource
-    from pfeed.storages.base_storage import BaseStorage
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
 
@@ -101,10 +101,10 @@ class StreamingFeedMixin:
                 self._create_faucet(
                     data_source=data_model.data_source,
                     extract_func=(
-                        lambda data_model, faucet_callback, storage: self._stream_impl(
+                        lambda data_model, faucet_callback, handler: self._stream_impl(
                             data_model,
                             faucet_callback,
-                            storage=storage,
+                            handler=handler,
                             replay_pace=request.replay_pace,
                         )
                     ),
@@ -113,6 +113,10 @@ class StreamingFeedMixin:
             )
         dataflow = cast(
             "DataFlow", self._create_dataflow(faucet=faucet, data_model=data_model)
+        )
+        dataflow.set_stream_options(
+            flush_interval=request.flush_interval,
+            store_incremental_bars=request.store_incremental_bars,
         )
 
         if user_callback:
@@ -125,6 +129,28 @@ class StreamingFeedMixin:
         faucet.bind_channel_key_to_dataflow(channel_key, dataflow)
         self._dataflows[request] = [dataflow]
         return dataflow
+
+    def _optimize_stream_ios(self, dataflows: list[DataFlow]) -> None:
+        """Compacts the small files the streamed writes left, once per io.
+
+        Without the engine nothing else compacts them, see DataEngine.
+        """
+        from pfeed.io.table_io import TableIO
+
+        # TODO: skip when run by the engine, once the engine compacts at each UTC day change
+        ios = {
+            id(handler.io): handler.io
+            for dataflow in dataflows
+            if (handler := dataflow.handler) is not None and handler.sink is not None
+        }
+        for io in ios.values():
+            # only table IOs can append, so only they can store streamed data
+            if not isinstance(io, TableIO):
+                continue
+            try:
+                io.optimize()
+            except Exception:
+                self.logger.exception(f"Error optimizing {io!r}:")
 
     async def _run_stream_dataflows(self) -> list[DataFlow]:
         self._prepare_before_run()
@@ -168,6 +194,7 @@ class StreamingFeedMixin:
                     if isinstance(result, BaseException):
                         self.logger.error(f"Error ending stream for {df}: {result!r}")
                         df.mark_failed(result)
+                self._optimize_stream_ios(last_run_dataflows)
 
         try:
             if self._is_using_ray():
@@ -197,7 +224,8 @@ class StreamingFeedMixin:
                     transformations_per_dataflow: dict[
                         DataFlowName, list[Callable[[StreamingData], StreamingData]]
                     ],
-                    storages_per_dataflow: dict[DataFlowName, BaseStorage | None],
+                    handlers_per_dataflow: dict[DataFlowName, BaseDataHandler | None],
+                    write_stream_kwargs_per_dataflow: dict[DataFlowName, dict[str, Any]],
                     ports_to_connect: dict[Literal["sender", "receiver"], set[int]],
                     ready_queue: Queue,
                 ):
@@ -232,6 +260,10 @@ class StreamingFeedMixin:
                                 signal: ZeroMQSignal = _data
                                 if signal == ZeroMQSignal.STOP:
                                     # sender_name = topic
+                                    # this worker's copies of the handlers hold their own buffered rows
+                                    for handler in handlers_per_dataflow.values():
+                                        if handler is not None and handler.sink is not None:
+                                            handler.flush()
                                     logger.debug(
                                         f"Ray {worker_name} received STOP signal, terminating..."
                                     )
@@ -254,8 +286,11 @@ class StreamingFeedMixin:
                                         channel=channel, topic=topic, data=data
                                     )
 
-                                if storage := storages_per_dataflow[dataflow_name]:
-                                    storage.write(data, streaming=True)
+                                if handler := handlers_per_dataflow[dataflow_name]:
+                                    handler.write_stream(
+                                        data,
+                                        **write_stream_kwargs_per_dataflow[dataflow_name],
+                                    )
                         msg_queue.terminate()
                     except Exception:
                         logger.exception(f"Error in streaming Ray {worker_name}:")
@@ -273,8 +308,11 @@ class StreamingFeedMixin:
                                     list[Callable[[StreamingData], StreamingData]],
                                 ],
                             ] = defaultdict(dict)
-                            storages_per_worker: dict[
-                                WorkerName, dict[DataFlowName, BaseStorage | None]
+                            handlers_per_worker: dict[
+                                WorkerName, dict[DataFlowName, BaseDataHandler | None]
+                            ] = defaultdict(dict)
+                            write_stream_kwargs_per_worker: dict[
+                                WorkerName, dict[DataFlowName, dict[str, Any]]
                             ] = defaultdict(dict)
                             ports_to_connect: dict[
                                 WorkerName,
@@ -293,9 +331,12 @@ class StreamingFeedMixin:
                                     "list[Callable[[StreamingData], StreamingData]]",
                                     dataflow._transformations,
                                 )
-                                storages_per_worker[worker_name][dataflow.name] = (
-                                    dataflow._handler
+                                handlers_per_worker[worker_name][dataflow.name] = (
+                                    dataflow.handler
                                 )
+                                write_stream_kwargs_per_worker[worker_name][
+                                    dataflow.name
+                                ] = dataflow._write_stream_kwargs
                                 # get ports in use for dataflow's ZMQ.ROUTER
                                 assert dataflow._msg_queue is not None, (
                                     f"{dataflow.name} _msg_queue is not set"
@@ -337,7 +378,10 @@ class StreamingFeedMixin:
                                         transformations_per_dataflow=transformations_per_worker[
                                             worker_name
                                         ],
-                                        storages_per_dataflow=storages_per_worker[
+                                        handlers_per_dataflow=handlers_per_worker[
+                                            worker_name
+                                        ],
+                                        write_stream_kwargs_per_dataflow=write_stream_kwargs_per_worker[
                                             worker_name
                                         ],
                                         ports_to_connect=ports_to_connect[worker_name],

@@ -22,7 +22,8 @@ class StreamingMessageSchema:
     appears.
     """
 
-    # ts / msg_ts / _created_at are int64 ns on the wire (StreamingMessage); Arrow
+    # ts / msg_ts / _created_at are int64 ns on the wire (StreamingMessage);
+    # ts is stored as a UTC timestamp so it can be a DatePartition column, the others stay int64
     _COMMON_FIELDS: ClassVar[list[pa.Field]] = [
         pa.field("data_source", pa.string(), nullable=False),
         pa.field("data_category", pa.string(), nullable=False),
@@ -31,7 +32,7 @@ class StreamingMessageSchema:
         pa.field("basis", pa.string(), nullable=False),
         pa.field("symbol", pa.string(), nullable=False),
         pa.field("resolution", pa.string(), nullable=False),
-        pa.field("ts", pa.int64(), nullable=False),
+        pa.field("ts", pa.timestamp("ns", tz="UTC"), nullable=False),
         pa.field("msg_ts", pa.int64(), nullable=True),
         pa.field("_created_at", pa.int64(), nullable=False),
     ]

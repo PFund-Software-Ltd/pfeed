@@ -9,8 +9,8 @@ class BarMessageSchema(StreamingMessageSchema):
     @classmethod
     def _message_fields(cls) -> list[pa.Field]:
         return [
-            pa.field("start_ts", pa.timestamp("ns"), nullable=False),
-            pa.field("end_ts", pa.timestamp("ns"), nullable=False),
+            pa.field("start_ts", pa.timestamp("ns", tz="UTC"), nullable=False),
+            pa.field("end_ts", pa.timestamp("ns", tz="UTC"), nullable=False),
             pa.field("open", pa.float64(), nullable=False),
             pa.field("high", pa.float64(), nullable=False),
             pa.field("low", pa.float64(), nullable=False),

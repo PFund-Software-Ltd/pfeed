@@ -20,6 +20,15 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
           ticks, sleep the timestamp difference. Opt-in only (can take hours).
         """,
     )
+    store_incremental_bars: bool = Field(
+        default=False,
+        description="Whether to also store the updates of a bar before it closes. Only used when storing streamed bars.",
+    )
+    flush_interval: float = Field(
+        default=100,
+        gt=0,
+        description="Seconds between writes of the buffered streamed data to the io. Only used when storing streamed data.",
+    )
 
     def is_streaming(self) -> bool:
         return True

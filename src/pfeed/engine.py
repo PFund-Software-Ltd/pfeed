@@ -21,7 +21,7 @@ from pfeed.enums import DataCategory, DataSource
 
 # TODO: backfilling
 # TODO: compact streamed tables: call io.optimize() at each UTC day change (yesterday is closed by then,
-#   so each product's day becomes ~1 file) and once at stop; without the engine, dataflow.end_stream() calls it once.
+#   so each product's day becomes ~1 file) and once at stop; without the engine, the feed calls it once when its streams end.
 class DataEngine:
     def __init__(self):
         self._logger = logging.getLogger("pfeed")

@@ -6,7 +6,10 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
 
-    # official data sources (plugins)
+    # NOTE: data sources (plugins), for IDE hints of pe.<Client> only, never executed at runtime.
+    # official: pfeed_bybit
+    # third-party (merged via PR, NOT installed in pfeed's env, do not install them;
+    #   listed in ty.toml allowed-unresolved-imports instead): (none yet)
     from pfeed_bybit import Bybit as Bybit
 
     from pfeed.engine import DataEngine

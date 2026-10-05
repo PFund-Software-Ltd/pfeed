@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+import threading
+from collections.abc import Iterator, Mapping
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
 import pytest
 
 import pfeed as pe
+from pfeed.sources.fxmacrodata.announcement_feed import FXMacroDataAnnouncementFeed
 
 
 def _page(rows: list[dict[str, Any]], has_more: bool, **pagination: Any):
@@ -134,3 +137,101 @@ def test_client_exposes_the_announcement_feed():
     assert isinstance(client, pe.FXMacroData)
     assert client.feeds == [client.announcement_feed]
     assert client.name == "FXMACRODATA"
+
+
+@pytest.fixture
+def local_server() -> Iterator[tuple[str, list[str], dict[str, tuple[int, dict, bytes]]]]:
+    """Serve canned responses on 127.0.0.1 and record every requested path."""
+    requested: list[str] = []
+    routes: dict[str, tuple[int, dict, bytes]] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requested.append(self.path)
+            status, headers, body = routes.get(self.path, (404, {}, b"{}"))
+            self.send_response(status)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", requested, routes
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_redirect_is_not_followed_and_key_is_not_forwarded(local_server):
+    base, requested, routes = local_server
+    routes["/v1/data"] = (302, {"Location": f"{base}/elsewhere"}, b"")
+
+    with pytest.raises(RuntimeError, match="redirected") as excinfo:
+        FXMacroDataAnnouncementFeed._get_json(
+            f"{base}/v1/data", {"X-API-Key": "test-key"}
+        )
+
+    assert requested == ["/v1/data"]
+    assert "test-key" not in str(excinfo.value)
+
+
+def test_non_json_body_raises_clear_error(local_server):
+    base, _, routes = local_server
+    routes["/v1/data"] = (200, {"Content-Type": "text/html"}, b"<html>oops</html>")
+
+    with pytest.raises(RuntimeError, match="not JSON"):
+        FXMacroDataAnnouncementFeed._get_json(f"{base}/v1/data", {})
+
+
+@pytest.mark.parametrize(
+    "api_key", ["test-key\r\nX-Injected: 1", "test\tkey", "test key", "test-key\x00"]
+)
+def test_download_rejects_malformed_api_key_without_echoing_it(api_key: str):
+    feed = pe.FXMacroData().announcement_feed
+    feed._api_key = api_key
+    feed._request_json = lambda url, headers: pytest.fail("no request expected")
+
+    with pytest.raises(ValueError, match="whitespace or control") as excinfo:
+        feed.download("USD", "inflation")
+
+    assert "test" not in str(excinfo.value)
+
+
+def test_download_strips_surrounding_whitespace_from_api_key():
+    requested: list[Mapping[str, str]] = []
+
+    def request_json(url: str, headers: Mapping[str, str]) -> Mapping[str, Any]:
+        requested.append(headers)
+        return {"pagination": {"has_more": False}, "data": []}
+
+    feed = pe.FXMacroData().announcement_feed
+    feed._api_key = "  test-key\n"
+    feed._request_json = request_json
+
+    feed.download("AUD", "inflation")
+
+    assert requested[0]["X-API-Key"] == "test-key"
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "not a JSON object"),
+        ({"detail": "Invalid API key"}, "non-list data: Invalid API key"),
+        ({"data": {"val": 1.0}}, "non-list data"),
+        ({"data": [{"val": 1.0}, "oops"]}, "non-object rows"),
+    ],
+)
+def test_download_rejects_malformed_payloads(payload: Any, message: str):
+    feed = pe.FXMacroData().announcement_feed
+    feed._request_json = lambda url, headers: payload
+
+    with pytest.raises(ValueError, match=message):
+        feed.download("USD", "inflation")

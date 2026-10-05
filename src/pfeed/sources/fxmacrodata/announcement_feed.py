@@ -6,13 +6,23 @@ from json import loads
 from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import polars as pl
 
 from pfeed.sources.fxmacrodata.mixin import FXMacroDataMixin
 
 JsonRequest = Callable[[str, Mapping[str, str]], Mapping[str, Any]]
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    # urllib copies request headers onto the redirected request, which would
+    # send X-API-Key to whatever host the redirect points at
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_opener = build_opener(_NoRedirectHandler)
 
 
 class FXMacroDataAnnouncementFeed(FXMacroDataMixin):
@@ -49,13 +59,24 @@ class FXMacroDataAnnouncementFeed(FXMacroDataMixin):
     def _get_json(url: str, headers: Mapping[str, str]) -> Mapping[str, Any]:
         request = Request(url, headers=dict(headers))
         try:
-            with urlopen(request, timeout=30) as response:
-                return loads(response.read().decode("utf-8"))
+            with _opener.open(request, timeout=30) as response:
+                body = response.read()
         except HTTPError as err:
+            if 300 <= err.code < 400:
+                raise RuntimeError(
+                    f"FXMacroData request was redirected (HTTP {err.code}); "
+                    "redirects are not followed"
+                ) from None
             body = err.read().decode("utf-8", errors="replace")
             raise RuntimeError(
                 f"FXMacroData request failed with HTTP {err.code}: {body[:500]}"
             ) from err
+        try:
+            return loads(body.decode("utf-8"))
+        except ValueError:
+            raise RuntimeError(
+                "FXMacroData returned a response that is not JSON"
+            ) from None
 
     def download(
         self,
@@ -89,8 +110,14 @@ class FXMacroDataAnnouncementFeed(FXMacroDataMixin):
             "Accept": "application/json",
             "User-Agent": "pfeed-fxmacrodata",
         }
-        if self._api_key:
-            headers["X-API-Key"] = self._api_key
+        api_key = (self._api_key or "").strip()
+        if api_key:
+            if any(char.isspace() or not char.isprintable() for char in api_key):
+                # the message must not echo the key
+                raise ValueError(
+                    "FXMacroData API key contains whitespace or control characters"
+                )
+            headers["X-API-Key"] = api_key
 
         path = f"{quote(currency.upper())}/{quote(indicator)}"
         rows: list[dict[str, Any]] = []
@@ -98,10 +125,20 @@ class FXMacroDataAnnouncementFeed(FXMacroDataMixin):
         while True:
             url = f"{self.API_ROOT}/announcements/{path}?{urlencode(parameters)}"
             payload = self._request_json(url, headers)
-            data = payload.get("data", [])
+            if not isinstance(payload, Mapping):
+                raise ValueError(
+                    "FXMacroData announcements response is not a JSON object"
+                )
+            data = payload.get("data")
             if not isinstance(data, list):
+                detail = payload.get("detail")
                 raise ValueError(
                     "FXMacroData announcements response contains non-list data"
+                    + (f": {detail}" if isinstance(detail, str) else "")
+                )
+            if not all(isinstance(row, Mapping) for row in data):
+                raise ValueError(
+                    "FXMacroData announcements response contains non-object rows"
                 )
             rows.extend(data)
             metadata = {key: value for key, value in payload.items() if key != "data"}

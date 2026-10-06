@@ -2,7 +2,7 @@
 authors = ["softwareentrepreneer <softwareentrepreneer+pfeed@gmail.com>"]
 channels = ["conda-forge"]
 name = "pfeed"
-platforms = ["osx-arm64", "linux-64"]
+platforms = ["osx-arm64", "linux-aarch64", "linux-64", "win-64"]
 # NOTE: should match with setup-pixi in ci.yml
 requires-pixi = ">=0.81.0,<0.82.0"
 # FIXME: set it back to "14 days" when the package is stable
@@ -32,15 +32,14 @@ prerelease-mode = "allow"
 [pypi-dependencies]
 pfund = "==0.0.25"  # use >= only when pfund is stable
 pyarrow = ">=25.0.1"
-polars = ">=2.0.0rc2"
+polars = ">=2.0.0"
 duckdb = ">=2.0.0.dev2609250715"
-pandera = ">=0.33.1"
+pandera = ">=0.34.0"
 msgspec = ">=0.22.0"
 pydantic = ">=2.13.5"
 narwhals = ">=2.26.0"
-cloudpathlib = ">=0.25.0"
+cloudpathlib = ">=0.26.0"
 beautifulsoup4 = ">=4.15.0"
-ray = { version = ">=2.58.0", extras = ["default"] }
 pyzmq = ">=27.2.0"
 
 [environments]
@@ -60,6 +59,7 @@ py314 = ["py314", "test", "optional"]
 libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
+ray = { version = ">=2.59.0", extras = ["default"] }
 huggingface-hub = ">=1.33.0"
 prefect = ">=3.8.7"
 lancedb = ">=0.39.0"

@@ -30,19 +30,19 @@ dependencies = [
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
     "pyarrow>=25.0.1 ; sys_platform != 'emscripten'",
-    "polars>=2.0.0rc2 ; sys_platform != 'emscripten'",
+    "polars>=2.0.0 ; sys_platform != 'emscripten'",
     "duckdb>=2.0.0.dev2609250715 ; sys_platform != 'emscripten'",
-    "pandera>=0.33.1",
+    "pandera>=0.34.0",
     "msgspec>=0.22.0 ; sys_platform != 'emscripten'",
     "pydantic>=2.13.5 ; sys_platform != 'emscripten'",
     "narwhals>=2.26.0 ; sys_platform != 'emscripten'",
-    "cloudpathlib>=0.25.0",
+    "cloudpathlib>=0.26.0",
     "beautifulsoup4>=4.15.0",
-    "ray[default]>=2.58.0 ; sys_platform != 'emscripten'",
     "pyzmq>=27.2.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]
+ray = ["ray[default]>=2.59.0"]
 huggingface = ["huggingface-hub>=1.33.0"]
 prefect = ["prefect>=3.8.7"]
 # kafka = ["confluent-kafka>=2.8.2"]
@@ -78,7 +78,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.12.21,<0.13.0"]
+requires = ["uv_build>=0.12.23,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv]

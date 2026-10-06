@@ -20,11 +20,16 @@ if TYPE_CHECKING:
 import logging
 import os
 from abc import ABC, abstractmethod
+from enum import StrEnum
 
 from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
 
 
 class BaseFeed(ABC):
+    class Capability(StrEnum):
+        """Verbs a feed gates on. Each feed subclasses this with its own members;
+        sources declare the verbs they support in `SourceMetadata.feed_capabilities`."""
+
     DataSource: ClassVar[type[BaseSource]]
     DataModel: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
@@ -98,6 +103,9 @@ class BaseFeed(ABC):
 
     def _is_using_ray(self) -> bool:
         return bool(self._num_workers)
+
+    def _supports(self, verb: Capability | str) -> bool:
+        return verb in self.data_source.METADATA.feed_capabilities.get(self.data_domain, frozenset())
 
     @property
     def name(self):

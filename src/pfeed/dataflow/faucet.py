@@ -122,7 +122,8 @@ class Faucet:
             # Signal that streaming is ending
             if self._streaming_queue:
                 await self._streaming_queue.put(None)
-            stream_api = self.data_source.get_stream_api()
+            # TODO(0.2.0): faucet shouldn't reach into the source; have the feed pass in its stream API
+            stream_api = self.data_source.get_stream_api()  # pyright: ignore[reportAttributeAccessIssue]
             await stream_api.disconnect()
             # reset the states for streaming
             self._is_stream_opened = False

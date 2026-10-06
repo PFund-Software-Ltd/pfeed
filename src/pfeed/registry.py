@@ -52,9 +52,9 @@ def get_entry_point(name: str) -> EntryPoint:
 def get_client(name: str) -> type[DataClient]:
     ep = get_entry_point(name)
     Client: type[DataClient] = ep.load()
-    if Client.DataSource.name != ep.name.upper():
+    if Client.DataSource.METADATA.name != ep.name.upper():
         raise ValueError(
-            f"entry point '{ep.name}' ({ep.value}) loads a client whose source name is {Client.DataSource.name}"
+            f"entry point '{ep.name}' ({ep.value}) loads a client whose source name is {Client.DataSource.METADATA.name}"
         )
     return Client
 

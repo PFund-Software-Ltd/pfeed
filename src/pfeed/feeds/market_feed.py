@@ -23,13 +23,12 @@ if TYPE_CHECKING:
         MarketFeedStreamRequest,
     )
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
-    from pfeed.source import DataProviderSource
+    from pfeed.source import BaseSource
     from pfeed.streaming.market_data_message import MarketDataMessage
 
 import datetime
 import time
 from abc import ABC, abstractmethod
-from enum import StrEnum
 
 import polars as pl
 from pfund.datas.resolution import Resolution
@@ -44,7 +43,7 @@ from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
 class MarketFeed(TimeBasedFeed, ABC):
-    class Capability(StrEnum):
+    class Capability(TimeBasedFeed.Capability):
         """Core verbs MarketFeed gates on. Plugins may declare extra verbs as plain strings."""
 
         download = "download"
@@ -52,7 +51,7 @@ class MarketFeed(TimeBasedFeed, ABC):
 
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
-    data_source: DataProviderSource
+    data_source: BaseSource
     SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = False
 
     @staticmethod

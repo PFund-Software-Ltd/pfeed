@@ -129,7 +129,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         DataModel = self.DataModel
         return DataModel(
             env=env,
-            data_source=self.data_source,
+            data_source=self.data_source.name,
             data_origin=data_origin,
             product=self.data_source.create_product(product, **product_specs)
             if isinstance(product, str)
@@ -616,7 +616,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             import asyncio
 
             assert handler is not None, "handler must be provided for replaying"
-            data_source = data_model.data_source.name
+            data_source = data_model.data_source
             channel_key: ChannelKey = cast(
                 "ChannelKey", stream_api.add_channel(data_model)
             )

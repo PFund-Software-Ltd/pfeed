@@ -83,7 +83,7 @@ class BaseFeed(ABC):
         )
         data_model = self._create_data_model_from_request(request)
         faucet = self._create_faucet(
-            data_source=data_model.data_source,
+            data_source=self.data_source,
             extract_func=extract_func,
             extract_type=request.extract_type,
         )
@@ -173,7 +173,7 @@ class BaseFeed(ABC):
     def _create_dataflow(faucet: Faucet, data_model: BaseDataModel) -> DataFlow:
         from pfeed.dataflow.dataflow import DataFlow
 
-        assert faucet.data_source == data_model.data_source, (
+        assert faucet.data_source.name == data_model.data_source, (
             "faucet and data_model must have the same data source"
         )
         dataflow = DataFlow(faucet=faucet, data_model=data_model)

@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from pfeed.enums import DataLayer
     from pfeed.feeds.streaming_feed_mixin import RawMessage, StreamingData
     from pfeed.io.base_io import BaseIO
-    from pfeed.source import BaseSource
     from pfeed.streaming.zeromq import ZeroMQ
 
 import logging
@@ -29,7 +28,7 @@ from pfeed.enums import ExtractType, FlowType
 class DataFlow:
     def __init__(self, faucet: Faucet, data_model: BaseDataModel):
         self._data_model: BaseDataModel = data_model
-        self._logger = logging.getLogger(f"pfeed.{self.data_source.name.lower()}")
+        self._logger = logging.getLogger(f"pfeed.{self.data_source.lower()}")
         self._faucet: Faucet = faucet
         self._transformations: list[Callable[..., IntoFrame | StreamingData]] = []
         self._handler: BaseDataHandler | None = None
@@ -68,10 +67,10 @@ class DataFlow:
 
     @property
     def name(self):
-        return f"{self.data_source.name}_DataFlow"
+        return f"{self.data_source}_DataFlow"
 
     @property
-    def data_source(self) -> BaseSource:
+    def data_source(self) -> str:
         return self._data_model.data_source
 
     @property

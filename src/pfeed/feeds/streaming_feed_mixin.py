@@ -98,7 +98,7 @@ class StreamingFeedMixin:
             faucet: Faucet = cast(
                 "Faucet",
                 self._create_faucet(
-                    data_source=data_model.data_source,
+                    data_source=self.data_source,
                     extract_func=(
                         lambda data_model, faucet_callback, handler: self._stream_impl(
                             data_model,

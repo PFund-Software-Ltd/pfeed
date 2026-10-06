@@ -142,7 +142,7 @@ class TimeBasedFeed(BaseFeed, ABC):
             "TimeBasedDataModel", self._create_data_model_from_request(request)
         )
         faucet: Faucet = self._create_faucet(
-            data_source=data_model.data_source,
+            data_source=self.data_source,
             extract_func=extract_func,
             extract_type=request.extract_type,
         )

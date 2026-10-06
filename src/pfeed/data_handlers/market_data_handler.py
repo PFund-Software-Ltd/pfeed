@@ -66,7 +66,7 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
             'env': str(data_model.env),
             'data_layer': str(self._data_layer),
             'data_domain': self._data_domain,
-            'data_source': str(data_model.data_source.name),
+            'data_source': data_model.data_source,
             'data_origin': str(data_model.data_origin),
         }
 

@@ -1,7 +1,7 @@
 """Registry of data sources, discovered via the "pfeed.sources" entry points.
 
 Every data source is a plugin package `pfeed-xxx` (e.g. pfeed-bybit), registering
-an entry point named after the source, pointing at its client class:
+an entry point named after the source, pointing at its source class:
     [project.entry-points."pfeed.sources"]
     bybit = "pfeed_bybit:Bybit"
 """
@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
 
-    from pfeed.client import DataClient
     from pfeed.feeds.base_feed import BaseFeed
     from pfeed.source import BaseSource
 
@@ -49,26 +48,22 @@ def get_entry_point(name: str) -> EntryPoint:
         raise ValueError(f"unknown data source '{name}', installed data sources: {list_sources()}") from None
 
 
-def get_client(name: str) -> type[DataClient]:
-    ep = get_entry_point(name)
-    Client: type[DataClient] = ep.load()
-    if Client.DataSource.METADATA.name != ep.name.upper():
-        raise ValueError(
-            f"entry point '{ep.name}' ({ep.value}) loads a client whose source name is {Client.DataSource.METADATA.name}"
-        )
-    return Client
-
-
 def get_source(name: str) -> type[BaseSource]:
-    return get_client(name).DataSource
+    ep = get_entry_point(name)
+    Source: type[BaseSource] = ep.load()
+    if Source.METADATA.name != ep.name.upper():
+        raise ValueError(
+            f"entry point '{ep.name}' ({ep.value}) loads a source whose name is {Source.METADATA.name}"
+        )
+    return Source
 
 
 def get_feed(name: str, data_category: DataCategory | str) -> type[BaseFeed]:
-    Client = get_client(name)
+    Source = get_source(name)
     data_category = DataCategory[data_category.upper()]
     try:
-        return Client.Feeds[data_category]
+        return Source.Feeds[data_category]
     except KeyError:
         raise ValueError(
-            f"data source {name.upper()} has no feed for {data_category}, available: {list(Client.Feeds)}"
+            f"data source {name.upper()} has no feed for {data_category}, available: {list(Source.Feeds)}"
         ) from None

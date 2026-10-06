@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
 
+    from pfeed.feeds.base_feed import BaseFeed
+
 import os
 from abc import ABC
 from datetime import date
@@ -76,9 +78,20 @@ class SourceMetadata(BaseModel):
 
 class BaseSource(ABC):
     METADATA: ClassVar[SourceMetadata]
+    Feeds: ClassVar[dict[DataCategory, type[BaseFeed]]]
 
-    def __init__(self):
+    def __init__(
+        self,
+        pipeline_mode: bool = False,
+        num_workers: int | dict[DataCategory | str, int] | None = None,
+    ):
         self._api_key: str | None = self.api_access.get_key() if self.api_access else None
+        self._pipeline_mode: bool = pipeline_mode
+        self._feeds: list[BaseFeed] = []
+        if isinstance(num_workers, dict):
+            num_workers = {DataCategory[k.upper()]: v for k, v in num_workers.items()}
+        self._num_workers: int | dict[DataCategory | str, int] | None = num_workers
+        self._create_feeds()
 
     @property
     def name(self) -> str:
@@ -87,6 +100,26 @@ class BaseSource(ABC):
     @property
     def api_access(self) -> APIAccess | None:
         return self.METADATA.api_access
+
+    @property
+    def feeds(self) -> list[BaseFeed]:
+        return self._feeds
+
+    def is_pipeline(self) -> bool:
+        return self._pipeline_mode
+
+    def _create_feeds(self):
+        for data_category, Feed in self.Feeds.items():
+            num_workers: int | None = (
+                self._num_workers.get(data_category, None)
+                if isinstance(self._num_workers, dict)
+                else self._num_workers
+            )
+            feed: BaseFeed = Feed(data_source=self, pipeline_mode=self._pipeline_mode, num_workers=num_workers)
+            if feed not in self._feeds:
+                self._feeds.append(feed)
+            # dynamically set attributes e.g. self.market_feed
+            setattr(self, data_category.feed_name, feed)
 
     def get_data_categories(self) -> list[DataCategory]:
         return list(self.METADATA.data_categories.keys())

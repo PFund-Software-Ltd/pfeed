@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
 
-    # NOTE: data sources (plugins), for IDE hints of pe.<Client> only, never executed at runtime.
+    # NOTE: data sources (plugins), for IDE hints of pe.<Source> only, never executed at runtime.
     # official: pfeed_bybit
     # third-party (merged via PR, NOT installed in pfeed's env, do not install them;
     #   listed in ty.toml allowed-unresolved-imports instead): (none yet)
@@ -45,9 +45,9 @@ def __getattr__(name: str):
         from pfeed.engine import DataEngine
 
         return DataEngine
-    elif name in _get_clients():
-        # data source client class (e.g. pe.Bybit), exposed by a plugin's entry point
-        return _get_clients()[name].load()
+    elif name in _get_sources():
+        # data source class (e.g. pe.Bybit), exposed by a plugin's entry point
+        return _get_sources()[name].load()
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
@@ -62,12 +62,12 @@ __all__ = (  # noqa: RUF022
 )
 
 
-def _get_clients():
-    """Returns {client class name: entry point} of installed data sources, e.g. {"Bybit": ep}."""
+def _get_sources():
+    """Returns {source class name: entry point} of installed data sources, e.g. {"Bybit": ep}."""
     from pfeed.registry import get_entry_points
 
     return {ep.attr: ep for ep in get_entry_points().values()}
 
 
 def __dir__():
-    return sorted([*__all__, *_get_clients()])
+    return sorted([*__all__, *_get_sources()])

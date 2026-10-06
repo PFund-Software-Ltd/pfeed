@@ -30,13 +30,13 @@ class BaseFeed(ABC):
         """Verbs a feed gates on. Each feed subclasses this with its own members;
         sources declare the verbs they support in `SourceMetadata.feed_capabilities`."""
 
-    DataSource: ClassVar[type[BaseSource]]
     DataModel: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
 
-    def __init__(self, pipeline_mode: bool = False, num_workers: int | None = None):
+    def __init__(self, data_source: BaseSource, pipeline_mode: bool = False, num_workers: int | None = None):
         """
         Args:
+            data_source: the source that owns this feed, shared by all of its feeds
             pipeline_mode: whether to run in pipeline mode
             num_workers: number of Ray tasks to run the batch/streaming dataflows in parallel.
                 When provided, Ray will be automatically initialized if ray.init() hasn't been called yet.
@@ -45,7 +45,7 @@ class BaseFeed(ABC):
         from pfeed.config import setup_logging
 
         setup_logging()
-        self.data_source: BaseSource = self.DataSource()
+        self.data_source: BaseSource = data_source
         self.logger: ColoredLogger = cast(
             "ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}")
         )

@@ -121,10 +121,6 @@ class TimeBasedFeed(BaseFeed, ABC):
         from pfeed.utils.temporal import parse_date_range
 
         if rollback_period.lower() == "max" and not start_date:
-            if not self.SUPPORTS_ROLLBACK_MAX_PERIOD:
-                raise ValueError(
-                    f"rollback_period='max' is not supported by {self.name}"
-                )
             start_date, end_date, rollback_period = self._rollback_max_period(
                 resolution
             )

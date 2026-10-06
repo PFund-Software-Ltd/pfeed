@@ -93,7 +93,7 @@ class DataEngine:
         from pfeed.feeds import get_feed
 
         feed: BaseFeed = get_feed(data_source, data_category, pipeline_mode=True, num_workers=num_workers)
-        if feed.supports_streaming():
+        if feed._supports("stream"):
             feed._set_engine(self)
             # HACK: add a add_feed() dynamically to the feed for chaining purpose:
             # e.g. engine.add_feed(...).stream(...).add_feed(...).stream(...)

@@ -27,11 +27,40 @@ from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
 
 class BaseFeed(ABC):
     class Capability(StrEnum):
-        """Verbs a feed gates on. Each feed subclasses this with its own members;
-        sources declare the verbs they support in `SourceMetadata.feed_capabilities`."""
+        """Verbs a feed gates on. Each feed subclasses this with its own members."""
 
+    # verbs this feed supports, defaults to every verb in its Capability
+    capabilities: ClassVar[frozenset[str]]
+    # methods a feed must override for each verb it supports
+    REQUIRED_METHODS: ClassVar[dict[str, tuple[str, ...]]] = {}
     DataModel: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
+
+    def __init_subclass__(cls, **kwargs: Any):
+        from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
+
+        super().__init_subclass__(**kwargs)
+        cls.capabilities = frozenset(cls.__dict__.get("capabilities", cls.Capability))
+        # framework base classes (listing ABC directly) hold the defaults, so only concrete feeds are checked
+        if ABC not in cls.__bases__:
+            errors: list[str] = []
+            for verb in sorted(cls.capabilities):
+                missing: list[str] = []
+                for method in cls.REQUIRED_METHODS.get(verb, ()):
+                    owner = next((c for c in cls.__mro__ if method in c.__dict__), None)
+                    # not defined at all, or still the default from a framework base class
+                    if owner is None or ABC in owner.__bases__:
+                        missing.append(method)
+                if verb == "stream" and not issubclass(cls, StreamingFeedMixin):
+                    missing.insert(0, "StreamingFeedMixin as a base class")
+                if missing:
+                    errors.append(f"'{verb}' needs {', '.join(missing)}")
+            if errors:
+                raise TypeError(
+                    f"{cls.__name__} supports {sorted(map(str, cls.capabilities))} but is missing what they need:\n  "
+                    + "\n  ".join(errors)
+                    + f"\nImplement them, or remove the verbs from {cls.__name__}.capabilities"
+                )
 
     def __init__(self, data_source: BaseSource, pipeline_mode: bool = False, num_workers: int | None = None):
         """
@@ -105,7 +134,7 @@ class BaseFeed(ABC):
         return bool(self._num_workers)
 
     def _supports(self, verb: Capability | str) -> bool:
-        return verb in self.data_source.METADATA.feed_capabilities.get(self.data_domain, frozenset())
+        return verb in self.capabilities
 
     @property
     def name(self):
@@ -146,11 +175,6 @@ class BaseFeed(ABC):
         """
         self._finalize_run()
         return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
-
-    def supports_streaming(self) -> bool:
-        from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
-
-        return isinstance(self, StreamingFeedMixin)
 
     def set_num_workers(self, num_workers: int):
         """

@@ -23,12 +23,11 @@ if TYPE_CHECKING:
         MarketFeedStreamRequest,
     )
     from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
-    from pfeed.source import BaseSource
     from pfeed.streaming.market_data_message import MarketDataMessage
 
 import datetime
 import time
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import polars as pl
 from pfund.datas.resolution import Resolution
@@ -44,26 +43,26 @@ from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 class MarketFeed(TimeBasedFeed, ABC):
     class Capability(TimeBasedFeed.Capability):
-        """Core verbs MarketFeed gates on. Plugins may declare extra verbs as plain strings."""
+        """Core verbs MarketFeed gates on. Plugins may subclass this to add their own verbs."""
 
         download = "download"
         stream = "stream"
 
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
-    data_source: BaseSource
-    SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = False
+    REQUIRED_METHODS: ClassVar[dict[str, tuple[str, ...]]] = {
+        Capability.download: ("_download_impl", "_normalize_downloaded_data"),
+        Capability.stream: ("_get_stream_api", "_parse_message"),
+    }
 
     @staticmethod
-    @abstractmethod
-    def _normalize_raw_data(df: pl.LazyFrame) -> pl.LazyFrame:
-        pass
+    def _normalize_downloaded_data(df: pl.LazyFrame) -> pl.LazyFrame:
+        raise NotImplementedError
 
-    @abstractmethod
     def _download_impl(
         self, data_model: MarketDataModel, data_resolution: Resolution
     ) -> pl.LazyFrame | None:
-        pass
+        raise NotImplementedError
 
     @staticmethod
     def _parse_message(product: BaseProduct, msg: Any) -> ResponseData:
@@ -192,6 +191,8 @@ class MarketFeed(TimeBasedFeed, ABC):
         """
         from pfeed.requests import MarketFeedDownloadRequest
 
+        if not self._supports(self.Capability.download):
+            raise NotImplementedError(f"{self.name} does not support download for {self.data_domain}")
         env = Environment.BACKTEST
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
@@ -243,7 +244,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         if request.should_clean_data:
             default_transformations.extend(
                 [
-                    self._normalize_raw_data,
+                    self._normalize_downloaded_data,
                     lambda_with_name(
                         "standardize_columns",
                         lambda df: etl.standardize_columns(
@@ -524,8 +525,11 @@ class MarketFeed(TimeBasedFeed, ABC):
         """
         from pfund_kit.utils.temporal import get_utc_now
 
+        from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
         from pfeed.requests import MarketFeedStreamRequest
 
+        if not (isinstance(self, StreamingFeedMixin) and self._supports(self.Capability.stream)):
+            raise NotImplementedError(f"{self.name} does not support stream for {self.data_domain}")
         SUPPORTED_ENVS = [Environment.BACKTEST, Environment.PAPER, Environment.LIVE]
         env = Environment[env.upper()]
         if env not in SUPPORTED_ENVS:
@@ -606,7 +610,7 @@ class MarketFeed(TimeBasedFeed, ABC):
     ) -> None:
         from pfund.enums.env import Environment
 
-        stream_api = self.data_source.get_stream_api(env=data_model.env)
+        stream_api = self._get_stream_api(data_model.env)
         is_replaying = data_model.env == Environment.BACKTEST
         if not is_replaying:
             stream_api.set_callback(faucet_callback)

@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable
 
+    from pfund.enums.env import Environment
+
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
     from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.dataflow.dataflow import DataFlow
@@ -25,6 +27,7 @@ if TYPE_CHECKING:
     StreamingData = RawMessage | StreamingMessage
 
 import asyncio
+from abc import ABC
 from collections import defaultdict
 
 from pfund_kit.style import RichColor, TextStyle
@@ -37,8 +40,13 @@ def _create_worker_name(worker_num: int) -> str:
 
 
 # EXTEND: only support market feed for now, if need to support other feeds, fix MarketFeedStreamRequest and MarketDataModel
-class StreamingFeedMixin:
+# ABC marks it as a framework base, so BaseFeed treats its default methods as not implemented
+class StreamingFeedMixin(ABC):  # noqa: B024
     _engine: DataEngine | None = None
+
+    def _get_stream_api(self, env: Environment) -> Any:
+        """Returns the stream API this feed streams from, e.g. one of its data source's APIs."""
+        raise NotImplementedError
 
     def _set_engine(self, engine: DataEngine) -> None:
         self._engine = engine
@@ -120,7 +128,7 @@ class StreamingFeedMixin:
 
         if user_callback:
             faucet.set_user_callback(user_callback)
-        stream_api = self.data_source.get_stream_api(env=request.env)  # pyright: ignore[reportUnknownVariableType]
+        stream_api = self._get_stream_api(request.env)
         channel_key = cast(
             "ChannelKey",
             stream_api.add_channel(data_model, data_resolution=request.data_resolution),

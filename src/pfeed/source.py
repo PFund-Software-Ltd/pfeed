@@ -52,8 +52,6 @@ class SourceMetadata(BaseModel):
     name: str
     data_origin: HttpUrl
     data_categories: dict[DataCategory, dict[DataType, list[AssetType]]]
-    # verbs each feed supports, e.g. {MARKET_DATA: {"download", "stream"}}; each feed defines and gates on its own verbs
-    feed_capabilities: dict[DataCategory, frozenset[str]]
     provider_type: DataProviderType
     access_type: DataAccessType
     api_access: APIAccess | None = None
@@ -68,12 +66,6 @@ class SourceMetadata(BaseModel):
     docs_url: HttpUrl | None = None
     github_repo: HttpUrl | None = None
     is_repo_official: bool | None = None
-
-    @model_validator(mode="after")
-    def _check_feed_capabilities(self) -> Self:
-        if unknown := self.feed_capabilities.keys() - self.data_categories.keys():
-            raise ValueError(f"feed_capabilities has categories not in data_categories: {sorted(unknown)}")
-        return self
 
 
 class BaseSource(ABC):

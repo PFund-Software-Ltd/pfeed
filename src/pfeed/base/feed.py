@@ -17,12 +17,28 @@ if TYPE_CHECKING:
     from pfeed.io.base_io import BaseIO
     from pfeed.source import BaseSource
 
+import functools
 import logging
 import os
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
 from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
+
+
+def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
+    """Gates a public verb method (e.g. download) on the feed's capabilities, before any of its body runs."""
+
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(self: BaseFeed[Any], *args: Any, **kwargs: Any) -> Any:
+            if not self._supports(verb):
+                raise NotImplementedError(f"{self.name} does not support {verb} for {self.data_domain}")
+            return func(self, *args, **kwargs)
+
+        return cast("F", wrapper)
+
+    return decorator
 
 
 class BaseFeed[SourceT: BaseSource](ABC):

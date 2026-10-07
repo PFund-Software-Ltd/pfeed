@@ -34,6 +34,7 @@ import polars as pl
 from pfund.datas.resolution import Resolution
 from pfund.enums.env import Environment
 
+from pfeed.base.feed import requires
 from pfeed.base.time_based_feed import TimeBasedFeed
 from pfeed.config import setup_logging
 from pfeed.enums import DataCategory, DataLayer, MarketDataType
@@ -121,6 +122,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
             end_date=end_date or start_date,
         )
 
+    @requires(Capability.download)
     def download(
         self,
         product: str,
@@ -162,8 +164,6 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         """
         from pfeed.market.requests import MarketFeedDownloadRequest
 
-        if not self._supports(self.Capability.download):
-            raise NotImplementedError(f"{self.name} does not support download for {self.data_domain}")
         env = Environment.BACKTEST
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
@@ -171,8 +171,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         start_date, end_date = self._standardize_dates(
             resolution, start_date, end_date, rollback_period
         )
-        candidates = [r for r in self.get_supported_resolutions() if r >= resolution]
-        if not candidates:
+        if not (candidates := [r for r in self.get_supported_resolutions() if r >= resolution]):
             raise ValueError(f"{resolution} is not supported by {self.name}")
         # find the first resolution that is >= the target resolution
         data_resolution = min(candidates)
@@ -242,12 +241,12 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
             )
         return default_transformations
 
+    @requires(Capability.retrieve)
     def retrieve(
         self,
         product: str,
         resolution: Resolution | MarketDataType | str,
         *,
-        symbol: str = "",
         rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
         start_date: datetime.date | str | None = None,
         end_date: datetime.date | str | None = None,
@@ -264,8 +263,6 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
             product: Product basis, e.g. `'BTC_USDT_PERP'`, `'AAPL_USD_STK'`.
             resolution: Target resolution, e.g. `'1t'` (tick), `'1m'`, `'1d'`.
                 If not stored, finer stored data is retrieved and downsampled.
-            symbol: Source-specific symbol, e.g. `'BTCUSDT'` for Bybit's `BTC_USDT_PERP`.
-                If empty, derived from `product`. Pass it explicitly if the derived one is wrong.
             rollback_period: How far to roll back from today (UTC) when `start_date`
                 is None, e.g. `'7d'` = the last 7 days up to yesterday.
                 Also accepts `'ytd'` (year to date) and `'max'` (all available data).
@@ -297,9 +294,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
 
         env = Environment[env.upper()]
         setup_logging(env=env)
-        product: BaseProduct = self.data_source.create_product(
-            product, symbol=symbol, **product_specs
-        )
+        product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
         start_date, end_date = self._standardize_dates(
             resolution, start_date, end_date, rollback_period
@@ -442,6 +437,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         Touches top-level `ts` and any timestamp fields inside `data`."""
         raise NotImplementedError
 
+    @requires(Capability.stream)
     def stream(
         self,
         product: str,
@@ -520,8 +516,6 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         from pfeed.market.requests import MarketFeedStreamRequest
         from pfeed.streaming.feed_mixin import StreamingFeedMixin
 
-        if not (isinstance(self, StreamingFeedMixin) and self._supports(self.Capability.stream)):
-            raise NotImplementedError(f"{self.name} does not support stream for {self.data_domain}")
         SUPPORTED_ENVS = [Environment.BACKTEST, Environment.PAPER, Environment.LIVE]
         env = Environment[env.upper()]
         if env not in SUPPORTED_ENVS:
@@ -587,7 +581,8 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
             flush_interval=flush_interval,
         )
         self._append_request(request)
-        self._create_stream_dataflow(user_callback=callback)
+        # supporting stream guarantees StreamingFeedMixin, see BaseFeed.__init_subclass__
+        cast("StreamingFeedMixin", self)._create_stream_dataflow(user_callback=callback)
         return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
 
     async def _stream_impl(

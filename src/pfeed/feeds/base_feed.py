@@ -30,9 +30,9 @@ class BaseFeed(ABC):
         """Verbs a feed gates on. Each feed subclasses this with its own members."""
 
     # verbs this feed supports, defaults to every verb in its Capability
-    capabilities: ClassVar[frozenset[str]]
+    capabilities: ClassVar[frozenset[Capability]]
     # methods a feed must override for each verb it supports
-    REQUIRED_METHODS: ClassVar[dict[str, tuple[str, ...]]] = {}
+    required_methods: ClassVar[dict[str, tuple[str, ...]]] = {}
     DataModel: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
 
@@ -46,7 +46,7 @@ class BaseFeed(ABC):
             errors: list[str] = []
             for verb in sorted(cls.capabilities):
                 missing: list[str] = []
-                for method in cls.REQUIRED_METHODS.get(verb, ()):
+                for method in cls.required_methods.get(verb, ()):
                     owner = next((c for c in cls.__mro__ if method in c.__dict__), None)
                     # not defined at all, or still the default from a framework base class
                     if owner is None or ABC in owner.__bases__:

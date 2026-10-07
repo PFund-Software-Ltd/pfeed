@@ -32,7 +32,7 @@ class CryptoHftDataMarketFeed(CryptoHftDataMixin, MarketFeed):
     data_model_class: ClassVar[type[CryptoHftDataMarketDataModel]] = (
         CryptoHftDataMarketDataModel
     )
-    DOWNLOADED_DATA_DATE_COLS: ClassVar[list[str]] = [
+    downloaded_data_date_cols: ClassVar[list[str]] = [
         "trade_time",
         "event_time",
         "received_time",

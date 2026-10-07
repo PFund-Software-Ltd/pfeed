@@ -36,9 +36,9 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
 
     DataModel: ClassVar[type[YahooFinanceMarketDataModel]] = YahooFinanceMarketDataModel
     # "Date" is used for daily data and "Datetime" is used for other resolutions in yfinance
-    DOWNLOADED_DATA_DATE_COLS: ClassVar[list[str]] = ["Datetime", "Date"]
+    downloaded_data_date_cols: ClassVar[list[str]] = ["Datetime", "Date"]
     SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = True
-    DOWNLOAD_DATAFLOW_PER_DATE: ClassVar[bool] = False
+    download_dataflow_per_date: ClassVar[bool] = False
     # HACK: use '1900-01-01' as the start date for daily data since we don't know the exact start date when rollback_period == 'max'
     DAILY_DATA_ROLLBACK_MAX_START_DATE: ClassVar[str] = "1900-01-01"
 

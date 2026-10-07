@@ -24,10 +24,10 @@ from pfeed.feeds.base_feed import BaseFeed
 
 class TimeBasedFeed(BaseFeed, ABC):
     DataModel: ClassVar[type[TimeBasedDataModel]]
-    DOWNLOADED_DATA_DATE_COLS: ClassVar[list[str]]
+    downloaded_data_date_cols: ClassVar[list[str]]
     # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),
     # False = one dataflow spanning the whole range (e.g. a range query API).
-    DOWNLOAD_DATAFLOW_PER_DATE: ClassVar[bool] = True
+    download_dataflow_per_date: ClassVar[bool] = True
 
     @classmethod
     def _standardize_date_column(
@@ -36,7 +36,7 @@ class TimeBasedFeed(BaseFeed, ABC):
         """Materialize a uniform date column for downstream filtering and dedup.
 
         Sources expose their date under different column names (e.g. Bybit: 'timestamp',
-        Yahoo Finance: 'Datetime'/'Date'). `DOWNLOADED_DATA_DATE_COLS` lists the candidates
+        Yahoo Finance: 'Datetime'/'Date'). `downloaded_data_date_cols` lists the candidates
         to look for in the input. Handling differs by data layer so raw data stays a
         faithful mirror of the source:
             - Cleaned: the source's date column is renamed to 'date'.
@@ -46,7 +46,7 @@ class TimeBasedFeed(BaseFeed, ABC):
 
         Args:
             df: Input LazyFrame containing one of the source's date columns listed in
-                `DOWNLOADED_DATA_DATE_COLS`.
+                `downloaded_data_date_cols`.
             is_raw_data: If True, preserve the source schema and add '_pfeed_date'.
                 If False, rename the source's date column to 'date'.
 
@@ -61,12 +61,12 @@ class TimeBasedFeed(BaseFeed, ABC):
 
         cols = df.collect_schema().names()
         raw_date_col = next(
-            (c for c in cls.DOWNLOADED_DATA_DATE_COLS if c in cols),
+            (c for c in cls.downloaded_data_date_cols if c in cols),
             None,
         )
         if raw_date_col is None:
             raise ValueError(
-                f"no date column ({cls.DOWNLOADED_DATA_DATE_COLS}) found in {cols}"
+                f"no date column ({cls.downloaded_data_date_cols}) found in {cols}"
             )
 
         if not is_raw_data:

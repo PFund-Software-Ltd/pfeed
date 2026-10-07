@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 import datetime
 import time
 from abc import ABC
+from enum import StrEnum
 
 import polars as pl
 from pfund.datas.resolution import Resolution
@@ -41,15 +42,15 @@ from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
 class MarketFeed(TimeBasedFeed, ABC):
-    class Capability(TimeBasedFeed.Capability):
-        """Core verbs MarketFeed gates on. Plugins may subclass this to add their own verbs."""
+    DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
+    class Capability(StrEnum):
+        """Verbs a market feed can support."""
 
         download = "download"
         stream = "stream"
-
-    DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
+    capabilities: ClassVar[frozenset[Capability]] = frozenset(Capability)
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
-    REQUIRED_METHODS: ClassVar[dict[str, tuple[str, ...]]] = {
+    required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
         Capability.download: ("_download_impl", "_normalize_downloaded_data"),
         Capability.stream: ("_get_stream_api", "_parse_streaming_message"),
     }
@@ -184,7 +185,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
-            dataflow_per_date=self.DOWNLOAD_DATAFLOW_PER_DATE,
+            dataflow_per_date=self.download_dataflow_per_date,
         )
         self._append_request(request)
         _ = self._create_batch_dataflows(

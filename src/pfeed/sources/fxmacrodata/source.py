@@ -11,7 +11,7 @@ class FXMacroDataSource(DataProviderSource):
 
     name: ClassVar[str] = "FXMACRODATA"
     METADATA: ClassVar[SourceMetadata] = SourceMetadata(
-        data_origin="https://api.fxmacrodata.com",
+        url="https://api.fxmacrodata.com",
         data_categories={DataCategory.ANNOUNCEMENT_DATA: {}},
         provider_type=DataProviderType.VENDOR,
         access_type=DataAccessType.FREE_TIER,

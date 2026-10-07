@@ -24,7 +24,7 @@ from pfeed.sources.yahoo_finance.stream_api import StreamAPI
 class YahooFinanceSource(DataProviderSource):
     name: ClassVar[DataSource] = DataSource.YAHOO_FINANCE
     METADATA: ClassVar[SourceMetadata] = SourceMetadata(
-        data_origin="https://www.csidata.com",
+        url="https://www.csidata.com",
         data_categories={
             DataCategory.MARKET_DATA: {
                 DataType.MINUTE: [

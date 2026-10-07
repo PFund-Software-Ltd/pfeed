@@ -28,7 +28,7 @@ class CryptoHftDataSource(DataProviderSource):
 
     NAME: ClassVar[str] = "CRYPTO_HFT_DATA"
     METADATA: ClassVar[SourceMetadata] = SourceMetadata(
-        data_origin="https://cryptohftdata.com",
+        url="https://cryptohftdata.com",
         data_categories={
             DataCategory.MARKET_DATA: {
                 DataType.TICK: [

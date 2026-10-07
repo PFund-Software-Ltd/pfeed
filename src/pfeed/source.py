@@ -50,7 +50,7 @@ class SourceMetadata(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
-    data_origin: HttpUrl
+    url: HttpUrl
     data_categories: dict[DataCategory, dict[DataType, list[AssetType]]]
     provider_type: DataProviderType
     access_type: DataAccessType

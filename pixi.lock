@@ -5945,10 +5945,8 @@ packages:
   - httpx2[http2]>=2.13.1
   - websockets>=16.1.0 ; sys_platform != 'emscripten'
   - numba>=0.68.0
-  - pfeed[yfinance]>=0.0.20 ; extra == 'core'
-  - pfolio>=0.0.4 ; extra == 'core'
   - pfund-plot[marimo]>=0.0.5 ; extra == 'core'
-  - hyperliquid-python-sdk>=0.24.0 ; extra == 'core'
+  - ray[default]>=2.59.0 ; extra == 'ray'
   - ta-lib>=0.8.1 ; extra == 'ta-lib'
   - joblib>=1.6.0 ; extra == 'sklearn'
   - scikit-learn>=1.9.1 ; extra == 'sklearn'

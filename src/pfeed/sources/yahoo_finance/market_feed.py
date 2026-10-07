@@ -93,23 +93,23 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
         df = df.with_columns(pl.col("volume").cast(pl.Float64))
         return df
 
-    def _rollback_max_period(
-        self, resolution: Resolution
-    ) -> tuple[datetime.date | str | None, datetime.date | str | None, str]:
+    @classmethod
+    def _max_date_range(
+        cls, resolution: Resolution
+    ) -> tuple[datetime.date, datetime.date]:
+        from pfund.datas.resolution import Resolution
+
+        from pfeed.utils.temporal import parse_date_range
+
         resolution = Resolution(resolution)
         if resolution.is_day():
-            start_date = self.DAILY_DATA_ROLLBACK_MAX_START_DATE
-            end_date = None
-            rollback_period = "max"
+            return parse_date_range(cls.DAILY_DATA_ROLLBACK_MAX_START_DATE)
         elif resolution.is_hour():
-            start_date = end_date = None
-            rollback_period = "2y"  # max is 2 years for hourly data
+            return parse_date_range(rollback_period="2y")  # max is 2 years for hourly data
         elif resolution.is_minute():
-            start_date = end_date = None
-            rollback_period = "8d"  # max is 8 days for minute data
+            return parse_date_range(rollback_period="8d")  # max is 8 days for minute data
         else:
             raise ValueError(f"{resolution} is not supported")
-        return start_date, end_date, rollback_period
 
     def _check_yfinance_kwargs(
         self, yfinance_kwargs: dict[str, Any] | None
@@ -160,7 +160,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
             rollback_period: Lookback from today, only used when `start_date` is empty.
                 Accepts a resolution string (e.g. '7d'), 'ytd', or 'max'. With 'max',
                 yfinance-specific lookback caps apply per resolution (see
-                `_rollback_max_period`).
+                `_max_date_range`).
             start_date: Start date. If empty, derived from `rollback_period`.
             end_date: End date. If empty, defaults to today.
             clean_data: Whether to clean raw data after download.

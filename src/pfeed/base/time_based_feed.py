@@ -22,6 +22,7 @@ import polars as pl
 from pfund_kit.style import RichColor, TextStyle
 
 from pfeed.base.feed import BaseFeed
+from pfeed.utils.temporal import parse_date_range
 
 
 class TimeBasedFeed[SourceT: BaseSource](BaseFeed[SourceT], ABC):
@@ -79,22 +80,34 @@ class TimeBasedFeed[SourceT: BaseSource](BaseFeed[SourceT], ABC):
             df = df.with_columns(pl.col(raw_date_col).alias(date_col))
         return standardize_date_column(df, date_col)
 
-    def _rollback_max_period(
-        self, _: Resolution
-    ) -> tuple[datetime.date | str | None, datetime.date | str | None, str]:
-        data_source_start_date = self.data_source.METADATA.start_date
-        if data_source_start_date:
-            start_date = data_source_start_date
-            end_date = None
-            rollback_period = "max"
-        else:
-            raise ValueError(
-                f'{self.name} has no data source start_date, cannot use rollback_period="max"'
-            )
-        return start_date, end_date, rollback_period
+    @classmethod
+    def _max_date_range(cls, resolution: Resolution) -> tuple[datetime.date, datetime.date]:
+        """Resolve rollback_period='max' into the source's full available history.
 
+        By default, the range runs from the data source's `METADATA.start_date` to yesterday,
+        regardless of resolution. Override it if the source's history depends on the resolution,
+        e.g. Yahoo Finance keeps only the last 8 days of minute data.
+
+        Args:
+            resolution: The requested resolution. Unused by default, available to overrides.
+
+        Returns:
+            (start_date, end_date), both inclusive.
+
+        Raises:
+            ValueError: If the data source has no `METADATA.start_date`.
+        """
+        
+        data_source_start_date = cls.DataSource.METADATA.start_date
+        if not data_source_start_date:
+            raise ValueError(
+                f'{cls.DataSource.METADATA.name} has no data source start_date, cannot use rollback_period="max"'
+            )
+        return parse_date_range(data_source_start_date)
+
+    @classmethod
     def _standardize_dates(
-        self,
+        cls,
         resolution: Resolution,
         start_date: str | datetime.date | None,
         end_date: str | datetime.date | None,
@@ -104,30 +117,29 @@ class TimeBasedFeed[SourceT: BaseSource](BaseFeed[SourceT], ABC):
 
         Args:
             resolution: The resolution of the data, only used when rollback_period is 'max'.
-            start_date: Start date string in YYYY-MM-DD format.
+            start_date: Start date, a YYYY-MM-DD string or datetime.date.
                 If not provided, will be determined by rollback_period.
-            end_date: End date string in YYYY-MM-DD format.
+            end_date: End date, a YYYY-MM-DD string or datetime.date.
                 If not provided and start_date is provided, defaults to yesterday.
                 If not provided and start_date is not provided, will be determined by rollback_period.
-            rollback_period: Period to rollback from today if start_date is not provided.
+            rollback_period: Period to roll back, ending yesterday, if start_date is not provided.
                 Can be a period string like '1d', '1w', '1m', '1y' etc.
                 Or 'ytd' to use the start date of the current year.
-                Or 'max' to use data source's start_date if available.
+                Or 'max' to use the source's full history, see `_max_date_range`.
 
         Returns:
             tuple[datetime.date, datetime.date]: Standardized (start_date, end_date)
 
         Raises:
-            ValueError: If rollback_period='max' but data source has no start_date attribute
+            ValueError: If end_date is given without start_date, start_date is after end_date,
+                rollback_period is invalid, or rollback_period='max' but the date range can't be derived (see `_max_date_range`)
         """
-        from pfeed.utils.temporal import parse_date_range
-
+        
         if rollback_period.lower() == "max" and not start_date:
-            start_date, end_date, rollback_period = self._rollback_max_period(
-                resolution
-            )
-        start_date, end_date = parse_date_range(start_date, end_date, rollback_period)
-        return start_date, end_date
+            if end_date:
+                raise ValueError(f"{end_date=} is set but start_date is not")
+            return cls._max_date_range(resolution)
+        return parse_date_range(start_date, end_date, rollback_period)
 
     def _create_batch_dataflows(
         self, extract_func: Callable[[TimeBasedDataModel], Any]

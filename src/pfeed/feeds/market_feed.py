@@ -43,11 +43,13 @@ from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 class MarketFeed(TimeBasedFeed, ABC):
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
+
     class Capability(StrEnum):
         """Verbs a market feed can support."""
 
         download = "download"
         stream = "stream"
+
     capabilities: ClassVar[frozenset[Capability]] = frozenset(Capability)
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
@@ -84,7 +86,7 @@ class MarketFeed(TimeBasedFeed, ABC):
     def create_data_model(
         self,
         product: BaseProduct | str,
-        resolution: Resolution | str,
+        resolution: Resolution | MarketDataType | str,
         start_date: datetime.date | str,
         end_date: datetime.date | str | None = None,
         env: Environment | str = Environment.BACKTEST,
@@ -94,23 +96,23 @@ class MarketFeed(TimeBasedFeed, ABC):
         """Create a MarketDataModel instance.
 
         Args:
-            product: product basis (e.g. 'BTC_USDT_PERP') or a Product instance.
-            resolution: Data resolution string (e.g. '1m', '1h') or a Resolution instance.
-            start_date: Start date as a string ('YYYY-MM-DD') or datetime.date.
-            end_date: End date as a string ('YYYY-MM-DD') or datetime.date.
-                If None, defaults to start_date, creating a single-day model.
+            product: Product basis, e.g. `'BTC_USDT_PERP'`, or a product instance.
+            resolution: Resolution, e.g. `'1t'`, `'1m'`, a `MarketDataType` e.g. "minute", or a `Resolution` instance.
+            start_date: First date (inclusive), e.g. `'2025-01-01'`, or a `datetime.date`.
+            end_date: Last date (inclusive). If None, defaults to `start_date` (a single-day model).
             env: Trading environment.
-            data_origin: Origin label for the data.
-            product_specs: Additional product specifications (e.g. strike_price, expiration for options).
+            data_origin: Sub-label for data from the same source but different origins.
+                Defaults to the source name.
+            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
+                futures. Leave them out to get an error listing the required ones.
         """
-        DataModel = self.DataModel
-        return DataModel(
+        if isinstance(product, str):
+            product = self.data_source.create_product(product, **product_specs)
+        return self.DataModel(
             env=env,
             data_source=self.data_source.name,
             data_origin=data_origin,
-            product=self.data_source.create_product(product, **product_specs)
-            if isinstance(product, str)
-            else product,
+            product=product,
             resolution=resolution,
             start_date=start_date,
             end_date=end_date or start_date,

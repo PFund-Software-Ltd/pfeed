@@ -1,10 +1,19 @@
-from typing import cast
+from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from pfund.entities.products.product_base import BaseProduct
+    from pytest_mock import MockerFixture, MockType
+
+import datetime
 from types import SimpleNamespace
 
 import pytest
 from pfund.datas.resolution import Resolution
+from pfund.enums.env import Environment
 
+from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.enums import DataCategory, MarketDataType as DataType
 from pfeed.feeds.market_feed import MarketFeed
 
@@ -65,3 +74,64 @@ def test_get_supported_resolutions(
         feed, include_resampled=include_resampled
     )
     assert resolutions == expected
+
+
+def _fake_feed_with_product(
+    mocker: MockerFixture, product: BaseProduct
+) -> tuple[MarketFeed, MockType]:
+    """Stand-in for a feed: create_data_model() only reads DataModel and data_source.name/create_product().
+
+    Returns the feed and its create_product mock.
+    """
+    create_product = mocker.Mock(return_value=product)
+    data_source = SimpleNamespace(name="TEST", create_product=create_product)
+    feed = cast(
+        "MarketFeed",
+        SimpleNamespace(DataModel=MarketDataModel, data_source=data_source),
+    )
+    return feed, create_product
+
+
+def test_create_data_model_from_basis(
+    mocker: MockerFixture, bybit_product: BaseProduct
+):
+    feed, create_product = _fake_feed_with_product(mocker, bybit_product)
+    data_model = MarketFeed.create_data_model(
+        feed,
+        str(bybit_product.basis),
+        "1m",
+        "2025-01-01",
+        "2025-01-03",
+        symbol=bybit_product.symbol,
+    )
+    create_product.assert_called_once_with(
+        str(bybit_product.basis), symbol=bybit_product.symbol
+    )
+    assert data_model.product is bybit_product
+    assert data_model.data_source == "TEST"
+    assert data_model.data_origin == "TEST"
+    assert data_model.env == Environment.BACKTEST
+    assert data_model.resolution == Resolution("1m")
+    assert data_model.start_date == datetime.date(2025, 1, 1)
+    assert data_model.end_date == datetime.date(2025, 1, 3)
+
+
+def test_create_data_model_from_product_instance(
+    mocker: MockerFixture, bybit_product: BaseProduct
+):
+    feed, create_product = _fake_feed_with_product(mocker, bybit_product)
+    data_model = MarketFeed.create_data_model(
+        feed,
+        bybit_product,
+        DataType.TICK,
+        datetime.date(2025, 1, 1),
+        env="live",
+        data_origin="ORIGIN",
+    )
+    create_product.assert_not_called()
+    assert data_model.product is bybit_product
+    assert data_model.data_origin == "ORIGIN"
+    assert data_model.env == Environment.LIVE
+    assert data_model.resolution == Resolution("1t")
+    # end_date defaults to start_date: a single-day model
+    assert data_model.end_date == data_model.start_date == datetime.date(2025, 1, 1)

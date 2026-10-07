@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from narwhals.typing import Frame, IntoFrame
     from pfund.datas.resolution import Resolution
 

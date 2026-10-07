@@ -1,3 +1,10 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pfund.venues.bybit.product import BybitProduct
+
 import os
 from pathlib import Path
 
@@ -39,6 +46,12 @@ def vcr_config():
         # Redact secrets
         # "filter_headers": [("authorization", "DUMMY")],
     }
+
+
+@pytest.fixture
+def bybit_product() -> BybitProduct:
+    from pfund.venues.bybit.venue import Bybit
+    return Bybit.create_product("BTC_USDT_PERP")
 
 
 @pytest.fixture(scope="session", autouse=True)

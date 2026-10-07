@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
     from pfeed.base.data_model import BaseDataModel
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from pfeed.enums import DataLayer, ExtractType
 from pfeed.io.base_io import BaseIO
@@ -53,10 +53,6 @@ class BaseRequest(BaseModel):
     @classmethod
     def _validate_data_source(cls, value: str) -> str:
         from pfeed import registry
-
-        if not isinstance(value, str):
-            raise ValueError(f"data_source must be a string, got {type(value).__name__}")
-        # raises if no installed plugin registers this data source
         return registry.get_entry_point(value).name.upper()
 
     @field_validator("data_layer", mode="before")
@@ -69,14 +65,11 @@ class BaseRequest(BaseModel):
                 raise ValueError(f"invalid data layer '{value}', must be one of {[dl.name for dl in DataLayer]}") from None
         return value
 
-    def model_post_init(self, __context: Any) -> None:
+    @model_validator(mode="after")
+    def _default_data_origin(self) -> Self:
         if not self.data_origin:
-            self.data_origin = str(self.data_source)
-        if self.extract_type != ExtractType.retrieve and self.data_layer > DataLayer.CLEANED:
-            raise ValueError(
-                f"{self.extract_type} only produces RAW or CLEANED data, got {self.data_layer}; "
-                + "use load(io, data_layer='curated') to store data in the CURATED layer"
-            )
+            self.data_origin = self.data_source
+        return self
 
     def finalize_load_config(
         self,

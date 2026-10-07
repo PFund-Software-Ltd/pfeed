@@ -92,10 +92,6 @@ class BaseFeed(ABC):
             self.set_num_workers(self._num_workers)
 
     @abstractmethod
-    def _create_data_model_from_request(self, request: BaseRequest) -> BaseDataModel:
-        pass
-
-    @abstractmethod
     def create_data_model(self, *args: Any, **kwargs: Any) -> BaseDataModel:
         pass
 
@@ -110,7 +106,7 @@ class BaseFeed(ABC):
         self.logger.debug(
             f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
         )
-        data_model = self._create_data_model_from_request(request)
+        data_model = request.to_data_model()
         faucet = self._create_faucet(
             data_source=self.data_source,
             extract_func=extract_func,

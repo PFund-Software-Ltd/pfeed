@@ -22,7 +22,6 @@ if TYPE_CHECKING:
         MarketFeedRetrieveRequest,
         MarketFeedStreamRequest,
     )
-    from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
     from pfeed.streaming.market_data_message import MarketDataMessage
 
 import datetime
@@ -54,15 +53,6 @@ class MarketFeed(TimeBasedFeed, ABC):
         Capability.download: ("_download_impl", "_normalize_downloaded_data"),
         Capability.stream: ("_get_stream_api", "_parse_streaming_message"),
     }
-
-    @staticmethod
-    def _normalize_downloaded_data(df: pl.LazyFrame) -> pl.LazyFrame:
-        raise NotImplementedError
-
-    def _download_impl(
-        self, data_model: MarketDataModel, data_resolution: Resolution
-    ) -> pl.LazyFrame | None:
-        raise NotImplementedError
 
     def get_supported_resolutions(
         self, include_resampled: bool = False
@@ -126,18 +116,6 @@ class MarketFeed(TimeBasedFeed, ABC):
             resolution=resolution,
             start_date=start_date,
             end_date=end_date or start_date,
-        )
-
-    def _create_data_model_from_request(
-        self, request: MarketFeedBaseRequest
-    ) -> MarketDataModel:
-        return self.create_data_model(
-            product=request.product,
-            resolution=request.target_resolution,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            env=request.env,
-            data_origin=request.data_origin,
         )
 
     def download(
@@ -216,6 +194,15 @@ class MarketFeed(TimeBasedFeed, ABC):
             )
         )
         return self.run() if not self.is_pipeline() else self
+
+    @staticmethod
+    def _normalize_downloaded_data(df: pl.LazyFrame) -> pl.LazyFrame:
+        raise NotImplementedError
+
+    def _download_impl(
+        self, data_model: MarketDataModel, data_resolution: Resolution
+    ) -> pl.LazyFrame | None:
+        raise NotImplementedError
 
     def _get_default_transformations_for_download(
         self, request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest

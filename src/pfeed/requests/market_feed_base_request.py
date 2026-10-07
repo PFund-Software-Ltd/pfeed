@@ -1,4 +1,9 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pfeed.data_models.market_data_model import MarketDataModel
 
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
@@ -69,6 +74,28 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
                 f"Cannot {self.extract_type} {self.target_resolution} raw data from {self.data_resolution} data"
             )
         return self
+
+    def to_data_model(self) -> MarketDataModel:
+        from pfeed import registry
+        from pfeed.data_models.market_data_model import MarketDataModel
+        from pfeed.enums import DataCategory
+
+        # the source's own feed declares the DataModel (plugins may narrow it, e.g. BybitMarketDataModel)
+        Feed = registry.get_feed(self.data_source, DataCategory.MARKET_DATA)
+        DataModel = Feed.DataModel
+        if not issubclass(DataModel, MarketDataModel):
+            raise TypeError(
+                f"{Feed.__name__}.DataModel must subclass MarketDataModel, got {DataModel}"
+            )
+        return DataModel(
+            env=self.env,
+            data_source=self.data_source,
+            data_origin=self.data_origin,
+            product=self.product,
+            resolution=self.target_resolution,
+            start_date=self.start_date,
+            end_date=self.end_date,
+        )
 
     def __str__(self) -> str:
         from pprint import pformat

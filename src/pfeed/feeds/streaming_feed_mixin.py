@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from pfund.enums.env import Environment
 
     from pfeed.data_handlers.base_data_handler import BaseDataHandler
-    from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import RunResult
@@ -94,9 +93,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
         self.logger.debug(
             f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
         )
-        data_model = cast(
-            "MarketDataModel", self._create_data_model_from_request(request)
-        )
+        data_model = request.to_data_model()
 
         # NOTE: reuse existing faucet for streaming dataflows since they share the same extract_func
         if self.streaming_dataflows:

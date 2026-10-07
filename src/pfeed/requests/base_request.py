@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pfeed.data_models.base_data_model import BaseDataModel
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -22,6 +25,9 @@ class BaseRequest(BaseModel):
             where it is read from for retrieve.
         """,
     )
+
+    def to_data_model(self) -> BaseDataModel:
+        raise NotImplementedError
 
     def __hash__(self) -> int:
         return hash(id(self))

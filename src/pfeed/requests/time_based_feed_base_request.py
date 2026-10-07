@@ -1,4 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import datetime
+
+if TYPE_CHECKING:
+    from pfeed.data_models.time_based_data_model import TimeBasedDataModel
 
 from pydantic import field_validator
 
@@ -22,3 +29,6 @@ class TimeBasedFeedBaseRequest(BaseRequest):
         if isinstance(v, str):
             return datetime.date.fromisoformat(v)
         return v
+
+    def to_data_model(self) -> TimeBasedDataModel:
+        raise NotImplementedError

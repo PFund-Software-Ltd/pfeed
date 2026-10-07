@@ -6,16 +6,16 @@ if TYPE_CHECKING:
     import pyarrow as pa
     from pfund.datas.resolution import Resolution
 
-    from pfeed.data_models.market_data_model import MarketDataModel
     from pfeed.io.base_io import BaseIO, Partition, PartitionValue
+    from pfeed.market.data_model import MarketDataModel
     from pfeed.streaming.market_data_message import MarketDataMessage
     from pfeed.streaming.sink import Sink
 
 import polars as pl
 from pfund.enums.env import Environment
 
-from pfeed.data_handlers.base_data_handler import BaseDataMetadata
-from pfeed.data_handlers.time_based_data_handler import TimeBasedDataHandler
+from pfeed.base.data_handler import BaseDataMetadata
+from pfeed.base.time_based_data_handler import TimeBasedDataHandler
 from pfeed.enums import DataCategory, DataLayer
 
 

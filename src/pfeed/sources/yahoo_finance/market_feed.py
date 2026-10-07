@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from yfinance import Ticker
 
     from pfeed.dataflow.result import RunResult
-    from pfeed.feeds.streaming_feed_mixin import RawMessage
+    from pfeed.streaming.feed_mixin import RawMessage
     from pfeed.storages.storage_config import StorageConfig
 
 import datetime
@@ -20,8 +20,8 @@ import time
 
 import polars as pl
 
-from pfeed.feeds.market_feed import MarketFeed
-from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
+from pfeed.market.feed import MarketFeed
+from pfeed.streaming.feed_mixin import StreamingFeedMixin
 from pfeed.io.io_config import IOConfig
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 from pfeed.sources.yahoo_finance.source import YahooFinanceSource

@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from pydantic import Field, ValidationInfo, field_validator
 
-from pfeed.data_models.base_data_model import BaseDataModel
+from pfeed.base.data_model import BaseDataModel
 
 
 class TimeBasedDataModel(BaseDataModel):

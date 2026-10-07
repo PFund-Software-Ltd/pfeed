@@ -6,8 +6,8 @@ if TYPE_CHECKING:
     import pandas as pd
     from pfeed.typing import GenericFrame
 
-    from pfeed.data_models.news_data_model import NewsDataModel
     from pfeed.enums import DataLayer, DataStorage
+    from pfeed.news.data_model import NewsDataModel
 
 from pfeed.feeds.news_feed import NewsFeed
 from pfeed.sources.yahoo_finance.source import YahooFinanceSource

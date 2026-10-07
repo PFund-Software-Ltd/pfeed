@@ -8,12 +8,12 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
     from prefect import Flow as PrefectDataFlow
 
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.base.data_handler import BaseDataHandler
+    from pfeed.base.data_model import BaseDataModel
     from pfeed.dataflow.faucet import Faucet
     from pfeed.enums import DataLayer
-    from pfeed.feeds.streaming_feed_mixin import RawMessage, StreamingData
     from pfeed.io.base_io import BaseIO
+    from pfeed.streaming.feed_mixin import RawMessage, StreamingData
     from pfeed.streaming.zeromq import ZeroMQ
 
 import logging
@@ -43,7 +43,7 @@ class DataFlow:
         self._write_stream_kwargs: dict[str, Any] = {}
 
     def _setup_messaging(self):
-        from pfeed.data_models.market_data_model import MarketDataModel
+        from pfeed.market.data_model import MarketDataModel
         from pfeed.streaming.zeromq import ZeroMQDataChannel
 
         data_model: MarketDataModel = cast(MarketDataModel, self._data_model)

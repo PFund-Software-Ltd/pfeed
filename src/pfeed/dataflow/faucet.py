@@ -7,16 +7,16 @@ from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, ParamSpec, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.base.data_model import BaseDataModel
     from pfeed.dataflow.dataflow import DataFlow
-    from pfeed.feeds.streaming_feed_mixin import (
+    from pfeed.streaming.feed_mixin import (
         ChannelKey,
         RawMessage,
         ReplayData,
         WebSocketName,
     )
     from pfeed.source import BaseSource
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler
+    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.streaming.zeromq import ZeroMQ
 
     ExtractFuncParams = ParamSpec("ExtractFuncParams")

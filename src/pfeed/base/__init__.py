@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pfeed.base.feed import BaseFeed
     from pfeed.enums import DataCategory
-    from pfeed.feeds.base_feed import BaseFeed
 
 
 def get_feed(

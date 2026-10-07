@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 from abc import ABC
 from uuid import UUID
 
-from pfeed.feeds.base_feed import BaseFeed
+from pfeed.base.feed import BaseFeed
 from pfeed.enums import DataStorage, IOFormat
 from pfeed.enums.data_category import AlphaFundDataCategory
 from pfeed.storages.database_storage import DatabaseStorage

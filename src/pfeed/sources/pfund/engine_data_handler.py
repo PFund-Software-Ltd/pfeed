@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pfeed.sources.pfund.engine_data_model import PFundEngineDataModel
 
-from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
+from pfeed.base.data_handler import BaseDataHandler, BaseDataMetadata
 
 
 class PFundEngineDataMetadata(BaseDataMetadata):

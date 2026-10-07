@@ -40,7 +40,7 @@ section-order = ["future", "typing", "standard-library", "third-party", "first-p
 typing = ["typing", "typing_extensions"]
 
 [lint.pyflakes]
-extend-generics = ["pfeed.data_handlers.time_based_data_handler.TimeBasedDataHandler"]
+extend-generics = ["pfeed.base.time_based_data_handler.TimeBasedDataHandler"]
 
 [format]
 quote-style = "double"  # double quotes for strings

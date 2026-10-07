@@ -4,7 +4,7 @@ from pfund.datas.data_config import DataConfig
 from pydantic import Field
 
 from pfeed.enums import DataLayer, ExtractType
-from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
+from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
 class MarketFeedStreamRequest(MarketFeedBaseRequest):

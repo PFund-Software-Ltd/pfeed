@@ -8,11 +8,11 @@ if TYPE_CHECKING:
     from narwhals.typing import Frame, IntoFrame
     from pfund.datas.resolution import Resolution
 
-    from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+    from pfeed.base.time_based_data_model import TimeBasedDataModel
+    from pfeed.base.time_based_request import TimeBasedFeedBaseRequest
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult, RunResult
-    from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
     from pfeed.source import BaseSource
 
 import datetime
@@ -21,7 +21,7 @@ from abc import ABC
 import polars as pl
 from pfund_kit.style import RichColor, TextStyle
 
-from pfeed.feeds.base_feed import BaseFeed
+from pfeed.base.feed import BaseFeed
 
 
 class TimeBasedFeed[SourceT: BaseSource](BaseFeed[SourceT], ABC):

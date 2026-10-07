@@ -9,12 +9,12 @@ if TYPE_CHECKING:
     from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue
 
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.base.data_model import BaseDataModel
+    from pfeed.base.request import BaseRequest
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult
     from pfeed.io.base_io import BaseIO
-    from pfeed.requests.base_request import BaseRequest
     from pfeed.source import BaseSource
 
 import logging
@@ -40,7 +40,7 @@ class BaseFeed[SourceT: BaseSource](ABC):
     data_domain: ClassVar[DataCategory]
 
     def __init_subclass__(cls, **kwargs: Any):
-        from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
+        from pfeed.streaming.feed_mixin import StreamingFeedMixin
 
         super().__init_subclass__(**kwargs)
         cls.capabilities = frozenset(cls.__dict__.get("capabilities", cls.Capability))

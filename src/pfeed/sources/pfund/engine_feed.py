@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 import datetime
 
 from pfeed.enums import DataCategory
-from pfeed.feeds.base_feed import BaseFeed
+from pfeed.base.feed import BaseFeed
 from pfeed.sources.pfund.engine_data_model import PFundEngineDataModel
 from pfeed.sources.pfund.source import PFundSource
 from pfeed.storages.storage_config import StorageConfig

@@ -6,7 +6,7 @@ from uuid import UUID
 import polars as pl
 from pydantic import model_validator
 
-from pfeed.data_models.base_data_model import BaseDataModel
+from pfeed.base.data_model import BaseDataModel
 from pfeed.enums import IOFormat
 
 _POLARS_DTYPES: dict[Any, pl.DataType] = {

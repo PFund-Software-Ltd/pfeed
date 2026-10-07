@@ -5,7 +5,7 @@ from pydantic import Field
 
 from pfeed.enums import ExtractType
 from pfeed.io.base_io import BaseIO
-from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
+from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
 class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
@@ -21,7 +21,6 @@ class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
         description="IO used for data retrieval, not for loading data to storage"
     )
 
-    @property
     def should_clean_data(self) -> bool:
         # retrieved data is returned as stored, raw data is never cleaned on read
         return False

@@ -8,10 +8,10 @@ if TYPE_CHECKING:
     from pfund.datas.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
 
-    from pfeed.feeds.streaming_feed_mixin import RawMessage, WebSocketName
     from pfeed.sources.yahoo_finance.market_data_model import (
         YahooFinanceMarketDataModel,
     )
+    from pfeed.streaming.feed_mixin import RawMessage, WebSocketName
 
     ChannelKey: TypeAlias = str
 

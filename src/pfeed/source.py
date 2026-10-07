@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
 
-    from pfeed.feeds.base_feed import BaseFeed
+    from pfeed.base.feed import BaseFeed
 
 import os
 from abc import ABC

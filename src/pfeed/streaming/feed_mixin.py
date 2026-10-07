@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
     from pfund.enums.env import Environment
 
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler
+    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import RunResult
@@ -31,7 +31,7 @@ from collections import defaultdict
 
 from pfund_kit.style import RichColor, TextStyle
 
-from pfeed.requests.market_feed_stream_request import MarketFeedStreamRequest
+from pfeed.market.requests.stream_request import MarketFeedStreamRequest
 
 
 def _create_worker_name(worker_num: int) -> str:

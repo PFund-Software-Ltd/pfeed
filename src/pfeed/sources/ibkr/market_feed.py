@@ -1,8 +1,8 @@
 from typing import ClassVar
 
-from pfeed.feeds.market_feed import MarketFeed
-from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
+from pfeed.market.feed import MarketFeed
 from pfeed.sources.ibkr.source import InteractiveBrokersSource
+from pfeed.streaming.feed_mixin import StreamingFeedMixin
 
 
 class InteractiveBrokersMarketFeed(StreamingFeedMixin, MarketFeed):

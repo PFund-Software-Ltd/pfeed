@@ -3,15 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pfeed.data_models.market_data_model import MarketDataModel
+    from pfeed.market.data_model import MarketDataModel
 
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
 from pfund.enums.env import Environment
 from pydantic import Field, field_validator, model_validator
 
+from pfeed.base.time_based_request import TimeBasedFeedBaseRequest
 from pfeed.enums import DataLayer
-from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
 
 MIN_TARGET_RESOLUTION = Resolution("1d")
 
@@ -77,8 +77,8 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
 
     def to_data_model(self) -> MarketDataModel:
         from pfeed import registry
-        from pfeed.data_models.market_data_model import MarketDataModel
         from pfeed.enums import DataCategory
+        from pfeed.market.data_model import MarketDataModel
 
         # the source's own feed declares the DataModel (plugins may narrow it, e.g. BybitMarketDataModel)
         Feed = registry.get_feed(self.data_source, DataCategory.MARKET_DATA)

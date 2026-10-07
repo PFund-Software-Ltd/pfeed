@@ -9,7 +9,7 @@ from uuid import uuid4
 import polars as pl
 from pydantic import UUID4, Field, PrivateAttr
 
-from pfeed.data_models.base_table_data_model import BaseTableDataModel
+from pfeed.base.table_data_model import BaseTableDataModel
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 
 

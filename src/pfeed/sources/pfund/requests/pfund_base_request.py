@@ -1,6 +1,6 @@
 from pydantic import field_validator
 
-from pfeed.requests.base_request import BaseRequest
+from pfeed.base.request import BaseRequest
 from pfund.enums import Environment
 
 

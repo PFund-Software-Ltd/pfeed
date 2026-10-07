@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING
 import datetime
 
 if TYPE_CHECKING:
-    from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+    from pfeed.base.time_based_data_model import TimeBasedDataModel
 
 from pydantic import field_validator
 
-from pfeed.requests.base_request import BaseRequest
+from pfeed.base.request import BaseRequest
 
 
 class TimeBasedFeedBaseRequest(BaseRequest):

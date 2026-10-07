@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 if TYPE_CHECKING:
     import pyarrow as pa
 
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.base.data_model import BaseDataModel
     from pfeed.io.base_io import BaseIO, DatasetKey, Metadata as IOMetadata, Partition
     from pfeed.streaming.sink import Sink
 

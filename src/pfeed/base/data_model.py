@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler
+    from pfeed.base.data_handler import BaseDataHandler
 
 from pydantic import BaseModel, ConfigDict
 

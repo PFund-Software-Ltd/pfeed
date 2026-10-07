@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     #   listed in ty.toml allowed-unresolved-imports instead): (none yet)
     from pfeed_bybit import Bybit as Bybit
 
+    from pfeed.base import get_feed
     from pfeed.engine import DataEngine
-    from pfeed.feeds import get_feed
     from pfeed.io.ducklake_io import DuckLakeIO
     from pfeed.io.parquet_io import ParquetIO
 
@@ -38,7 +38,7 @@ def __getattr__(name: str):
 
         return DuckLakeIO
     elif name == "get_feed":
-        from pfeed.feeds import get_feed
+        from pfeed.base import get_feed
 
         return get_feed
     elif name == "DataEngine":

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.base.data_model import BaseDataModel
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -39,7 +39,6 @@ class BaseRequest(BaseModel):
     def name(self) -> str:
         return self.__class__.__name__
 
-    @property
     def should_clean_data(self) -> bool:
         """Whether to clean raw data using the default transformations (normalize, standardize columns, resample, etc.)."""
         return self.data_layer != DataLayer.RAW
@@ -55,6 +54,8 @@ class BaseRequest(BaseModel):
     def _validate_data_source(cls, value: str) -> str:
         from pfeed import registry
 
+        if not isinstance(value, str):
+            raise ValueError(f"data_source must be a string, got {type(value).__name__}")
         # raises if no installed plugin registers this data source
         return registry.get_entry_point(value).name.upper()
 
@@ -62,7 +63,10 @@ class BaseRequest(BaseModel):
     @classmethod
     def _validate_data_layer(cls, value: DataLayer | str) -> DataLayer:
         if isinstance(value, str):
-            return DataLayer[value.upper()]
+            try:
+                return DataLayer[value.upper()]
+            except KeyError:
+                raise ValueError(f"invalid data layer '{value}', must be one of {[dl.name for dl in DataLayer]}") from None
         return value
 
     def model_post_init(self, __context: Any) -> None:
@@ -85,12 +89,11 @@ class BaseRequest(BaseModel):
         and only becomes final when .load() is invoked.
         data_layer is the layer to store in; it never changes self.data_layer (the data's own layer).
         """
+        if io:
+            if data_layer < self.data_layer:
+                raise ValueError(f"cannot store {self.data_layer} data in a lower layer {data_layer}")
+            if self.data_layer == DataLayer.RAW and data_layer != DataLayer.RAW:
+                raise ValueError(f"RAW data is not cleaned, it cannot be stored in the {data_layer} layer")
+            if self.is_streaming() and data_layer == DataLayer.RAW:
+                raise RuntimeError("Writing raw data in streaming is not supported")
         self.io = io
-        if not io:
-            return
-        if data_layer < self.data_layer:
-            raise ValueError(f"cannot store {self.data_layer} data in a lower layer {data_layer}")
-        if self.data_layer == DataLayer.RAW and data_layer != DataLayer.RAW:
-            raise ValueError(f"RAW data is not cleaned, it cannot be stored in the {data_layer} layer")
-        if self.is_streaming() and data_layer == DataLayer.RAW:
-            raise RuntimeError("Writing raw data in streaming is not supported")

@@ -7,13 +7,13 @@ if TYPE_CHECKING:
 
     import polars as pl
 
-    from pfeed.data_handlers.base_data_handler import BaseDataMetadata
-    from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+    from pfeed.base.data_handler import BaseDataMetadata
+    from pfeed.base.time_based_data_model import TimeBasedDataModel
     from pfeed.io.base_io import Partition, PartitionValue
 
 from abc import abstractmethod
 
-from pfeed.data_handlers.base_data_handler import BaseDataHandler
+from pfeed.base.data_handler import BaseDataHandler
 from pfeed.enums import DataLayer
 from pfeed.io.base_io import DatasetKey, DatePartition
 

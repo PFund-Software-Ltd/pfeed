@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 import polars as pl
 
 from pfeed.enums import MarketDataType
-from pfeed.feeds.market_feed import MarketFeed
+from pfeed.market.feed import MarketFeed
 from pfeed.sources.crypto_hft_data.market_data_model import (
     CryptoHftDataMarketDataModel,
 )

@@ -8,8 +8,8 @@ if TYPE_CHECKING:
 
     from narwhals.typing import IntoFrame
 
-    from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.feeds.streaming_feed_mixin import RawMessage, WebSocketName
+    from pfeed.base.feed import BaseFeed
+    from pfeed.streaming.feed_mixin import RawMessage, WebSocketName
     from pfeed.streaming.zeromq import ZeroMQ
 
 import asyncio
@@ -90,7 +90,7 @@ class DataEngine:
         data_category: DataCategory | str = DataCategory.MARKET_DATA,
         num_workers: int | None = None,
     ) -> BaseFeed:
-        from pfeed.feeds import get_feed
+        from pfeed.base import get_feed
 
         feed: BaseFeed = get_feed(data_source, data_category, pipeline_mode=True, num_workers=num_workers)
         if feed._supports("stream"):

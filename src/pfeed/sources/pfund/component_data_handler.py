@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 import polars as pl
 
-from pfeed.data_handlers.base_data_handler import BaseDataHandler
+from pfeed.base.data_handler import BaseDataHandler
 from pfeed.enums import DataLayer, DataTool, IOType
 from pfeed.io.table_io import TablePath
 from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata

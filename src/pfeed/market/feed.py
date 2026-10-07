@@ -9,20 +9,20 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pfund.venues._apis.typing import ResponseData
 
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler
+    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.dataflow.result import RunResult
-    from pfeed.feeds.streaming_feed_mixin import (
-        ChannelKey,
-        RawMessage,
-        ReplayData,
-        WebSocketName,
-    )
-    from pfeed.requests import (
+    from pfeed.market.requests import (
         MarketFeedDownloadRequest,
         MarketFeedRetrieveRequest,
         MarketFeedStreamRequest,
     )
     from pfeed.source import BaseSource
+    from pfeed.streaming.feed_mixin import (
+        ChannelKey,
+        RawMessage,
+        ReplayData,
+        WebSocketName,
+    )
     from pfeed.streaming.market_data_message import MarketDataMessage
 
 import datetime
@@ -34,11 +34,11 @@ import polars as pl
 from pfund.datas.resolution import Resolution
 from pfund.enums.env import Environment
 
+from pfeed.base.time_based_feed import TimeBasedFeed
 from pfeed.config import setup_logging
-from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.enums import DataCategory, DataLayer, MarketDataType
-from pfeed.feeds.time_based_feed import TimeBasedFeed
 from pfeed.io.base_io import BaseIO
+from pfeed.market.data_model import MarketDataModel
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
@@ -159,7 +159,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         Returns:
             `RunResult` with the downloaded data, or `self` in pipeline mode.
         """
-        from pfeed.requests import MarketFeedDownloadRequest
+        from pfeed.market.requests import MarketFeedDownloadRequest
 
         if not self._supports(self.Capability.download):
             raise NotImplementedError(f"{self.name} does not support download for {self.data_domain}")
@@ -216,11 +216,11 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
             lambda_with_name(
                 "standardize_date_column",
                 lambda df: self._standardize_date_column(
-                    df, is_raw_data=not request.should_clean_data
+                    df, is_raw_data=not request.should_clean_data()
                 ),
             ),
         ]
-        if request.should_clean_data:
+        if request.should_clean_data():
             default_transformations.extend(
                 [
                     self._normalize_downloaded_data,
@@ -292,7 +292,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         Returns:
             `RunResult` with the retrieved data, or `self` in pipeline mode.
         """
-        from pfeed.requests import MarketFeedRetrieveRequest
+        from pfeed.market.requests import MarketFeedRetrieveRequest
 
         env = Environment[env.upper()]
         setup_logging(env=env)
@@ -516,8 +516,8 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         """
         from pfund_kit.utils.temporal import get_utc_now
 
-        from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
-        from pfeed.requests import MarketFeedStreamRequest
+        from pfeed.market.requests import MarketFeedStreamRequest
+        from pfeed.streaming.feed_mixin import StreamingFeedMixin
 
         if not (isinstance(self, StreamingFeedMixin) and self._supports(self.Capability.stream)):
             raise NotImplementedError(f"{self.name} does not support stream for {self.data_domain}")
@@ -668,7 +668,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         if is_replaying:
             return default_transformations
 
-        if request.should_clean_data:
+        if request.should_clean_data():
             # Bind concrete subclass's staticmethod into a local — no `self` captured.
             parse_message = type(self)._parse_streaming_message
             default_transformations.extend(

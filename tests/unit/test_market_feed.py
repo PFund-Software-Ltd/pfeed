@@ -16,7 +16,7 @@ from pfund.datas.resolution import Resolution
 from pfund.enums.env import Environment
 
 from pfeed.enums import DataCategory, MarketDataType as DataType
-from pfeed.feeds.market_feed import MarketFeed
+from pfeed.market.feed import MarketFeed
 
 
 def _fake_feed(*data_types: DataType) -> MarketFeed:

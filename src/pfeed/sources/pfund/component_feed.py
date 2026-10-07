@@ -25,7 +25,7 @@ import polars as pl
 
 from pfeed.config import setup_logging
 from pfeed.enums import DataCategory, DataStorage, DataTool, IOFormat
-from pfeed.feeds.base_feed import BaseFeed
+from pfeed.base.feed import BaseFeed
 from pfeed.io.io_config import IOConfig
 from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
 from pfeed.sources.pfund.component_metadata import (

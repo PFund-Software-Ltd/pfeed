@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
 
-    from pfeed.feeds.base_feed import BaseFeed
+    from pfeed.base.feed import BaseFeed
     from pfeed.source import BaseSource
 
 from functools import cache

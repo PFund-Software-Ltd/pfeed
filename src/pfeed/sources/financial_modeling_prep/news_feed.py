@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     import pandas as pd
     from fmp_api_client.news import News
 
-    from pfeed.data_models.news_data_model import NewsDataModel
+    from pfeed.news.data_model import NewsDataModel
 
 import asyncio
 

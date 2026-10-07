@@ -6,7 +6,7 @@ from pfund.entities.products.product_base import BaseProduct
 from pfund.enums.env import Environment
 from pydantic import field_validator
 
-from pfeed.data_models.time_based_data_model import (
+from pfeed.base.time_based_data_model import (
     TimeBasedDataModel,
     TimeBasedMetadataModel,
 )

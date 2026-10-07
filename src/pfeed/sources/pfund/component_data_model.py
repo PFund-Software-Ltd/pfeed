@@ -4,7 +4,7 @@ from typing import ClassVar, Literal
 
 from pydantic import Field, field_validator
 
-from pfeed.data_models.base_data_model import BaseDataModel
+from pfeed.base.data_model import BaseDataModel
 from pfeed.sources.pfund.component_data_handler import PFundComponentDataHandler
 from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
 from pfund.enums import ArtifactType, ComponentType, Environment

@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 import polars as pl
 
 from pfeed._etl.base import convert_dataframe
-from pfeed.data_handlers.base_data_handler import BaseDataHandler, BaseDataMetadata
+from pfeed.base.data_handler import BaseDataHandler, BaseDataMetadata
 from pfeed.enums import DataLayer, DataTool, IOFormat
 from pfeed.io.database_io import DBPath
 from pfeed.io.table_io import TablePath

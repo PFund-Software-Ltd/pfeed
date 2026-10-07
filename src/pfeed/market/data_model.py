@@ -7,8 +7,8 @@ from pfund.entities.products.product_base import BaseProduct
 from pfund.enums.env import Environment
 from pydantic import field_serializer, field_validator
 
-from pfeed.data_handlers.market_data_handler import MarketDataHandler
-from pfeed.data_models.time_based_data_model import TimeBasedDataModel
+from pfeed.base.time_based_data_model import TimeBasedDataModel
+from pfeed.market.data_handler import MarketDataHandler
 
 
 class MarketDataModel(TimeBasedDataModel):

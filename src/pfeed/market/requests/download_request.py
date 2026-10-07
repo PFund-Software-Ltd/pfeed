@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import Field
 
 from pfeed.enums import ExtractType
-from pfeed.requests.market_feed_base_request import MarketFeedBaseRequest
+from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
 class MarketFeedDownloadRequest(MarketFeedBaseRequest):

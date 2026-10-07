@@ -4,8 +4,8 @@ from typing import ClassVar
 
 import sys
 import types
-from types import SimpleNamespace
 from importlib.metadata import EntryPoint
+from types import SimpleNamespace
 
 import pytest
 

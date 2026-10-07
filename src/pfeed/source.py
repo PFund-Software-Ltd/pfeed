@@ -90,6 +90,10 @@ class BaseSource(ABC):
         return self.METADATA.name
 
     @property
+    def data_categories(self) -> dict[DataCategory, dict[DataType, list[AssetType]]]:
+        return self.METADATA.data_categories
+
+    @property
     def api_access(self) -> APIAccess | None:
         return self.METADATA.api_access
 

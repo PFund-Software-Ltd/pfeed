@@ -55,9 +55,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         Capability.stream: ("_get_stream_api", "_parse_streaming_message"),
     }
 
-    def get_supported_resolutions(
-        self, include_resampled: bool = False
-    ) -> list[Resolution]:
+    def get_supported_resolutions(self, include_resampled: bool = False) -> list[Resolution]:
         """Get all supported resolutions for batch processing for the data source.
 
         Args:
@@ -65,22 +63,21 @@ class MarketFeed(TimeBasedFeed, ABC):
                 data source literally provides. If True, also include all coarser
                 resolutions derivable by resampling from the finest native one —
                 e.g. a source providing '1t' also "supports" '1s', '1m', '1h', '1d', etc.
+                Quote resolutions pass through but are never a resampling base, so a
+                quote-only source returns only its native resolutions.
         """
         native = [
             Resolution(dtype_or_resol)
-            for dtype_or_resol in self.data_source.METADATA.data_categories[
-                DataCategory.MARKET_DATA
-            ]
+            for dtype_or_resol in self.data_source.data_categories[self.data_domain]
         ]
         if not include_resampled or not native:
             return native
-        non_quotes = [r for r in native if not r.is_quote()]
-        # TODO: quote data is not handled yet
-        if not non_quotes:
+        resample_bases = [r for r in native if not r.is_quote()]
+        if not resample_bases:
             return native
-        finest = max(non_quotes)
+        finest = max(resample_bases)
         return sorted(
-            set(native) | set(finest.get_lower_resolutions(exclude_quote=True)),
+            set(native) | set(finest.get_coarser_resolutions(exclude_quote=True)),
             reverse=True,
         )
 

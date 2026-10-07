@@ -3,8 +3,8 @@ from typing import Literal
 from pfund.datas.resolution import Resolution
 from pydantic import Field
 
-from pfeed.enums import ExtractType
 from pfeed.io.base_io import BaseIO
+from pfeed.market.feed import MarketFeed
 from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
@@ -12,7 +12,9 @@ class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
     dataflow_per_date: bool = Field(
         description="Whether to create a dataflow for each date"
     )
-    extract_type: Literal[ExtractType.retrieve] = ExtractType.retrieve
+    extract_type: Literal[MarketFeed.Capability.retrieve] = (
+        MarketFeed.Capability.retrieve
+    )
     data_resolution: Resolution | str | None = Field(
         default=None,
         description="Resolution of the data extracted from source before being resampled (if any) to target_resolution",

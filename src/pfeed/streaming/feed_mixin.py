@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import RunResult
     from pfeed.engine import DataEngine
+    from pfeed.market.requests.stream_request import MarketFeedStreamRequest
     from pfeed.streaming.streaming_message import StreamingMessage
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQSignal
 
@@ -30,8 +31,6 @@ from abc import ABC
 from collections import defaultdict
 
 from pfund_kit.style import RichColor, TextStyle
-
-from pfeed.market.requests.stream_request import MarketFeedStreamRequest
 
 
 def _create_worker_name(worker_num: int) -> str:

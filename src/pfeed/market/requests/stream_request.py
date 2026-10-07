@@ -3,12 +3,13 @@ from typing import Any, Literal
 from pfund.datas.data_config import DataConfig
 from pydantic import Field
 
-from pfeed.enums import DataLayer, ExtractType
+from pfeed.enums import DataLayer
+from pfeed.market.feed import MarketFeed
 from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
 class MarketFeedStreamRequest(MarketFeedBaseRequest):
-    extract_type: Literal[ExtractType.stream] = ExtractType.stream
+    extract_type: Literal[MarketFeed.Capability.stream] = MarketFeed.Capability.stream
     data_config: DataConfig | None = None
     replay_pace: float | None = Field(
         default=0,

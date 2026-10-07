@@ -50,6 +50,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
 
         download = "download"
         stream = "stream"
+        retrieve = "retrieve"
 
     capabilities: ClassVar[frozenset[Capability]] = frozenset(Capability)
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA

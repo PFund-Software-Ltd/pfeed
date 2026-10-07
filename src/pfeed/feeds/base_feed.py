@@ -25,7 +25,11 @@ from enum import StrEnum
 from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
 
 
-class BaseFeed(ABC):
+class BaseFeed[SourceT: BaseSource](ABC):
+    # set by the source that lists this feed in its Feeds, see BaseSource.__init_subclass__
+    DataSource: ClassVar[type[BaseSource]]
+    DataModel: ClassVar[type[BaseDataModel]]
+
     class Capability(StrEnum):
         """Verbs a feed gates on. Each feed subclasses this with its own members."""
 
@@ -33,7 +37,6 @@ class BaseFeed(ABC):
     capabilities: ClassVar[frozenset[Capability]]
     # methods a feed must override for each verb it supports
     required_methods: ClassVar[dict[str, tuple[str, ...]]] = {}
-    DataModel: ClassVar[type[BaseDataModel]]
     data_domain: ClassVar[DataCategory]
 
     def __init_subclass__(cls, **kwargs: Any):
@@ -62,7 +65,7 @@ class BaseFeed(ABC):
                     + f"\nImplement them, or remove the verbs from {cls.__name__}.capabilities"
                 )
 
-    def __init__(self, data_source: BaseSource, pipeline_mode: bool = False, num_workers: int | None = None):
+    def __init__(self, data_source: SourceT, pipeline_mode: bool = False, num_workers: int | None = None):
         """
         Args:
             data_source: the source that owns this feed, shared by all of its feeds
@@ -74,10 +77,13 @@ class BaseFeed(ABC):
         from pfeed.config import setup_logging
 
         setup_logging()
-        self.data_source: BaseSource = data_source
-        self.logger: ColoredLogger = cast(
-            "ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}")
-        )
+        if not isinstance(data_source, self.DataSource):
+            raise TypeError(
+                f"{type(self).__name__} belongs to {self.DataSource.__name__}, "
+                f"got {type(data_source).__name__}"
+            )
+        self._data_source: SourceT = data_source
+        self.logger: ColoredLogger = cast("ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}"))
         self._pipeline_mode = pipeline_mode
         self._dataflows: dict[BaseRequest, list[DataFlow]] = {}
         # Flat list of result-bearing dataflows from the most recent run.
@@ -91,8 +97,9 @@ class BaseFeed(ABC):
         if self._num_workers:
             self.set_num_workers(self._num_workers)
 
+    @classmethod
     @abstractmethod
-    def create_data_model(self, *args: Any, **kwargs: Any) -> BaseDataModel:
+    def create_data_model(cls, *args: Any, **kwargs: Any) -> BaseDataModel:
         pass
 
     def _create_batch_dataflows(
@@ -131,6 +138,10 @@ class BaseFeed(ABC):
 
     def _supports(self, verb: Capability | str) -> bool:
         return verb in self.capabilities
+
+    @property
+    def data_source(self) -> SourceT:
+        return self._data_source
 
     @property
     def name(self):

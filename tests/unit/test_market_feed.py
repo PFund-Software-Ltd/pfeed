@@ -6,6 +6,8 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pytest_mock import MockerFixture, MockType
 
+    from pfeed.source import BaseSource
+
 import datetime
 from types import SimpleNamespace
 
@@ -13,7 +15,6 @@ import pytest
 from pfund.datas.resolution import Resolution
 from pfund.enums.env import Environment
 
-from pfeed.data_models.market_data_model import MarketDataModel
 from pfeed.enums import DataCategory, MarketDataType as DataType
 from pfeed.feeds.market_feed import MarketFeed
 
@@ -78,26 +79,28 @@ def test_get_supported_resolutions(
 
 def _fake_feed_with_product(
     mocker: MockerFixture, product: BaseProduct
-) -> tuple[MarketFeed, MockType]:
-    """Stand-in for a feed: create_data_model() only reads DataModel and data_source.name/create_product().
+) -> tuple[type[MarketFeed], MockType]:
+    """Stand-in for a feed class: create_data_model() only reads DataSource.METADATA.name/create_product().
 
-    Returns the feed and its create_product mock.
+    Returns the feed class and its source's create_product mock.
     """
     create_product = mocker.Mock(return_value=product)
-    data_source = SimpleNamespace(name="TEST", create_product=create_product)
-    feed = cast(
-        "MarketFeed",
-        SimpleNamespace(DataModel=MarketDataModel, data_source=data_source),
+    data_source = SimpleNamespace(
+        METADATA=SimpleNamespace(name="TEST"), create_product=create_product
     )
-    return feed, create_product
+
+    class FakeMarketFeed(MarketFeed):
+        capabilities = frozenset()
+        DataSource = cast("type[BaseSource]", data_source)
+
+    return FakeMarketFeed, create_product
 
 
 def test_create_data_model_from_basis(
     mocker: MockerFixture, bybit_product: BaseProduct
 ):
-    feed, create_product = _fake_feed_with_product(mocker, bybit_product)
-    data_model = MarketFeed.create_data_model(
-        feed,
+    Feed, create_product = _fake_feed_with_product(mocker, bybit_product)
+    data_model = Feed.create_data_model(
         str(bybit_product.basis),
         "1m",
         "2025-01-01",
@@ -119,9 +122,8 @@ def test_create_data_model_from_basis(
 def test_create_data_model_from_product_instance(
     mocker: MockerFixture, bybit_product: BaseProduct
 ):
-    feed, create_product = _fake_feed_with_product(mocker, bybit_product)
-    data_model = MarketFeed.create_data_model(
-        feed,
+    Feed, create_product = _fake_feed_with_product(mocker, bybit_product)
+    data_model = Feed.create_data_model(
         bybit_product,
         DataType.TICK,
         datetime.date(2025, 1, 1),

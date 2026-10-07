@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         MarketFeedRetrieveRequest,
         MarketFeedStreamRequest,
     )
+    from pfeed.source import BaseSource
     from pfeed.streaming.market_data_message import MarketDataMessage
 
 import datetime
@@ -41,7 +42,7 @@ from pfeed.io.base_io import BaseIO
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
-class MarketFeed(TimeBasedFeed, ABC):
+class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
 
     class Capability(StrEnum):
@@ -83,8 +84,9 @@ class MarketFeed(TimeBasedFeed, ABC):
             reverse=True,
         )
 
+    @classmethod
     def create_data_model(
-        self,
+        cls,
         product: BaseProduct | str,
         resolution: Resolution | MarketDataType | str,
         start_date: datetime.date | str,
@@ -107,10 +109,10 @@ class MarketFeed(TimeBasedFeed, ABC):
                 futures. Leave them out to get an error listing the required ones.
         """
         if isinstance(product, str):
-            product = self.data_source.create_product(product, **product_specs)
-        return self.DataModel(
+            product = cls.DataSource.create_product(product, **product_specs)
+        return cls.DataModel(
             env=env,
-            data_source=self.data_source.name,
+            data_source=cls.DataSource.METADATA.name,
             data_origin=data_origin,
             product=product,
             resolution=resolution,

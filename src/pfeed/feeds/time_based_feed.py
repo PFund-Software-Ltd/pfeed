@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult, RunResult
     from pfeed.requests.time_based_feed_base_request import TimeBasedFeedBaseRequest
+    from pfeed.source import BaseSource
 
 import datetime
 from abc import ABC
@@ -23,7 +24,7 @@ from pfund_kit.style import RichColor, TextStyle
 from pfeed.feeds.base_feed import BaseFeed
 
 
-class TimeBasedFeed(BaseFeed, ABC):
+class TimeBasedFeed[SourceT: BaseSource](BaseFeed[SourceT], ABC):
     DataModel: ClassVar[type[TimeBasedDataModel]]
     downloaded_data_date_cols: ClassVar[list[str]]
     # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),

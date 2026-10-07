@@ -72,6 +72,25 @@ class BaseSource(ABC):
     METADATA: ClassVar[SourceMetadata]
     Feeds: ClassVar[dict[DataCategory, type[BaseFeed]]]
 
+    def __init_subclass__(cls, **kwargs: Any):
+        super().__init_subclass__(**kwargs)
+        # attach this source class to its feeds, e.g. BybitMarketFeed.DataSource = Bybit,
+        # so classmethods like create_data_model() can reach the source without an instance.
+        # done here instead of declaring DataSource = Bybit on the feed to avoid a circular import:
+        # the source module imports its feeds at runtime to build Feeds, so a feed can't import its source back
+        for data_category, Feed in cls.__dict__.get("Feeds", {}).items():
+            if data_category != Feed.data_domain:
+                raise TypeError(
+                    f"{cls.__name__}.Feeds lists {Feed.__name__} under {data_category}, "
+                    f"but it is a {Feed.data_domain} feed"
+                )
+            if "DataSource" in Feed.__dict__ and Feed.DataSource is not cls:
+                raise TypeError(
+                    f"{Feed.__name__} already belongs to {Feed.DataSource.__name__}, "
+                    f"{cls.__name__} can't list it in its Feeds"
+                )
+            Feed.DataSource = cls
+
     def __init__(
         self,
         pipeline_mode: bool = False,
@@ -120,5 +139,6 @@ class BaseSource(ABC):
     def get_data_categories(self) -> list[DataCategory]:
         return list(self.METADATA.data_categories.keys())
 
-    def create_product(self, basis: str, symbol: str = "", **specs: Any) -> BaseProduct:
-        raise NotImplementedError(f"{self.name} does not support creating products")
+    @classmethod
+    def create_product(cls, basis: str, symbol: str = "", **specs: Any) -> BaseProduct:
+        raise NotImplementedError(f"{cls.METADATA.name} does not support creating products")

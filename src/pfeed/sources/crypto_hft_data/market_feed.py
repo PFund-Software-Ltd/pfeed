@@ -101,9 +101,9 @@ class CryptoHftDataMarketFeed(CryptoHftDataMixin, MarketFeed):
         return pl.from_pandas(data).lazy()
 
     @staticmethod
-    def _parse_message(product: CryptoHftDataProduct, msg: Any) -> Any:
+    def _parse_streaming_message(product: CryptoHftDataProduct, msg: Any) -> Any:
         raise NotImplementedError("CryptoHFTData does not provide live streaming")
 
     @staticmethod
-    def _normalize_timestamps(msg: Any) -> Any:
+    def _normalize_streaming_timestamp(msg: Any) -> Any:
         raise NotImplementedError("CryptoHFTData does not provide live streaming")

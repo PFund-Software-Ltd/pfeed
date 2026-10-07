@@ -265,7 +265,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
         return pl.from_pandas(df).lazy() if df is not None else None
 
     @staticmethod
-    def _parse_message(product: BaseProduct, msg: RawMessage) -> ResponseData:
+    def _parse_streaming_message(product: BaseProduct, msg: RawMessage) -> ResponseData:
         """
         Args:
             msg: raw message from yahoo finance streaming data
@@ -332,7 +332,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
         return parsed_msg
 
     @staticmethod
-    def _normalize_timestamps(msg: ResponseData) -> ResponseData:
+    def _normalize_streaming_timestamp(msg: ResponseData) -> ResponseData:
         """Yahoo Finance timestamps are in milliseconds, convert to nanoseconds"""
         # Yahoo Finance sends 'time' as a string, cast before scaling ms -> ns
         msg["ts"] = int(msg["ts"]) * 10**6

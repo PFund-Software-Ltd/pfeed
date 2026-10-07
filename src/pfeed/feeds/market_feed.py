@@ -52,7 +52,7 @@ class MarketFeed(TimeBasedFeed, ABC):
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     REQUIRED_METHODS: ClassVar[dict[str, tuple[str, ...]]] = {
         Capability.download: ("_download_impl", "_normalize_downloaded_data"),
-        Capability.stream: ("_get_stream_api", "_parse_message"),
+        Capability.stream: ("_get_stream_api", "_parse_streaming_message"),
     }
 
     @staticmethod
@@ -62,16 +62,6 @@ class MarketFeed(TimeBasedFeed, ABC):
     def _download_impl(
         self, data_model: MarketDataModel, data_resolution: Resolution
     ) -> pl.LazyFrame | None:
-        raise NotImplementedError
-
-    @staticmethod
-    def _parse_message(product: BaseProduct, msg: Any) -> ResponseData:
-        raise NotImplementedError
-
-    @staticmethod
-    def _normalize_timestamps(msg: ResponseData) -> ResponseData:
-        """Convert source's native time unit to int ns since epoch.
-        Touches top-level `ts` and any timestamp fields inside `data`."""
         raise NotImplementedError
 
     def get_supported_resolutions(
@@ -450,6 +440,18 @@ class MarketFeed(TimeBasedFeed, ABC):
             )
         return default_transformations
 
+    # FIXME: cannot tie data source streaming to pfund trading venue's ResponseData
+    @staticmethod
+    def _parse_streaming_message(product: BaseProduct, msg: Any) -> ResponseData:
+        raise NotImplementedError
+
+    # FIXME: cannot tie data source streaming to pfund trading venue's ResponseData
+    @staticmethod
+    def _normalize_streaming_timestamp(msg: ResponseData) -> ResponseData:
+        """Convert source's native time unit to int ns since epoch.
+        Touches top-level `ts` and any timestamp fields inside `data`."""
+        raise NotImplementedError
+
     def stream(
         self,
         product: str,
@@ -679,7 +681,7 @@ class MarketFeed(TimeBasedFeed, ABC):
 
         if request.should_clean_data:
             # Bind concrete subclass's staticmethod into a local — no `self` captured.
-            parse_message = type(self)._parse_message
+            parse_message = type(self)._parse_streaming_message
             default_transformations.extend(
                 [
                     lambda_with_name(
@@ -687,7 +689,7 @@ class MarketFeed(TimeBasedFeed, ABC):
                     ),
                     lambda_with_name(
                         "normalize_timestamps",
-                        lambda msg: self._normalize_timestamps(msg),
+                        lambda msg: self._normalize_streaming_timestamp(msg),
                     ),
                 ]
             )
@@ -709,7 +711,7 @@ class MarketFeed(TimeBasedFeed, ABC):
             default_transformations.append(
                 lambda_with_name(
                     "standardize_message",
-                    lambda msg: MarketFeed._standardize_message(
+                    lambda msg: MarketFeed._standardize_streaming_message(
                         data_source=data_source,
                         data_origin=request.data_origin,
                         product=request.product,
@@ -724,7 +726,7 @@ class MarketFeed(TimeBasedFeed, ABC):
         return default_transformations
 
     @staticmethod
-    def _standardize_message(
+    def _standardize_streaming_message(
         data_source: str,
         data_origin: str,
         product: BaseProduct,

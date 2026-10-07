@@ -21,7 +21,7 @@ def get_specs_schema(product: BaseProduct) -> pa.Schema | None:
     choices aren't hand-tuned. Once pfund's product API stabilizes, revisit
     whether to switch to explicit per-asset schemas for tighter control.
     """
-    from pfeed.utils.arrow_schema_builder import SchemaBuilder
+    from pfeed.schemas.arrow_schema_builder import SchemaBuilder
 
     allowed_specs: set[str] = product.get_allowed_specs()
     if not allowed_specs:

@@ -10,8 +10,8 @@ from pfeed.base.data_model import BaseDataModel
 
 
 class TimeBasedDataModel(BaseDataModel):
-    # the date column the feed standardizes the data to, and the data handler partitions by
-    DATE_COL_IN_CLEANED_DATA: ClassVar[str] = "date"
+    # pfeed's date column added to raw data (which has no schema, as it mirrors the source),
+    # the data handler filters and dedups by it; cleaned data's date column is TimeBasedDataSchema.date
     DATE_COL_IN_RAW_DATA: ClassVar[str] = "_pfeed_date"
 
     start_date: datetime.date = Field(description="Start of the date range.")

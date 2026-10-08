@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -34,7 +34,6 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
     """
 
     Metadata = MarketDataMetadata
-    PRODUCT_PARTITION_COL: ClassVar[str] = 'product'
 
     def __init__(
         self,
@@ -77,20 +76,15 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         }
 
     def _partition_prefix(self) -> dict[str, PartitionValue]:
-        return {self.PRODUCT_PARTITION_COL: self._data_model.product.name}
+        from pfeed.schemas.market_data_schema import PRODUCT
+
+        return {PRODUCT: self._data_model.product.name}
 
     def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
-        from pfeed.schemas import BarDataSchema, MarketDataSchema, TickDataSchema
+        from pfeed.schemas.market_data_schema import get_market_data_schema
 
         resolution = cast('Resolution', self._data_model.resolution)
-        if resolution.is_quote():
-            raise NotImplementedError('quote data is not supported yet')
-        elif resolution.is_tick():
-            schema = TickDataSchema
-        elif resolution.is_bar():
-            schema = BarDataSchema
-        else:
-            schema = MarketDataSchema
+        schema = get_market_data_schema(self._data_model.product, resolution)
         return schema.validate(df)
 
     def write_batch(self, df: pl.DataFrame) -> None:
@@ -100,10 +94,12 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         (e.g. a holiday) is stored as an empty partition and isn't re-downloaded.
         `df` must not have rows outside the date range, otherwise the IO raises.
         """
+        from pfeed.schemas.market_data_schema import PRODUCT
+
         if self._data_layer == DataLayer.RAW:
-            if self.PRODUCT_PARTITION_COL in df.columns:
-                raise ValueError(f'raw data already has column {self.PRODUCT_PARTITION_COL!r}, it is reserved for partitioning')
-            df = df.with_columns(pl.lit(self._data_model.product.name).alias(self.PRODUCT_PARTITION_COL))
+            if PRODUCT in df.columns:
+                raise ValueError(f'raw data already has column {PRODUCT!r}, it is reserved for partitioning')
+            df = df.with_columns(pl.lit(self._data_model.product.name).alias(PRODUCT))
         else:
             df = self._validate_schema(df)
         self._write(df, {partition: self._create_metadata() for partition in self._partitions()}, mode='replace')
@@ -148,7 +144,9 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
             self.flush()
 
     def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, MarketDataMetadata]]:
+        from pfeed.schemas.market_data_schema import PRODUCT
+
         lf, metadata = self._read(self._partitions())
         if lf is not None and self._data_layer == DataLayer.RAW:
-            lf = lf.drop(self.PRODUCT_PARTITION_COL)
+            lf = lf.drop(PRODUCT)
         return lf, metadata

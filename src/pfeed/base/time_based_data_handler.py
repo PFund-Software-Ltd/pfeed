@@ -40,9 +40,11 @@ class TimeBasedDataHandler[DataModelT: TimeBasedDataModel, MetadataT: BaseDataMe
         """The partition levels before the date (column -> the data model's value), e.g. {'product': 'BYBIT_BTC_USDT_PERPETUAL'}."""
 
     def _get_date_col(self) -> str:
+        from pfeed.schemas.time_based_data_schema import DATE
+
         if self._data_layer == DataLayer.RAW:
             return self._data_model.DATE_COL_IN_RAW_DATA
-        return self._data_model.DATE_COL_IN_CLEANED_DATA
+        return DATE
 
     def _create_dataset_key(self) -> DatasetKey:
         return DatasetKey(

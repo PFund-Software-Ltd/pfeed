@@ -3,9 +3,10 @@ import time
 
 import pytest
 import pytz
+from pfund.datas.resolution import Resolution
 
 import pfeed as pe
-from pfeed._etl.base import convert_dataframe
+from pfeed.utils.dataframe import convert_dataframe
 from pfeed.enums import DataTool
 
 
@@ -37,7 +38,8 @@ def test_download_and_retrieve(tmp_path, yahoo_finance, product, resolution):
         assert df['resolution'].nunique() == 1
         assert df['symbol'].nunique() == 1
         assert df['product'].nunique() == 1
-        assert df['resolution'].iloc[0] == resolution
+        # the column holds str(Resolution), e.g. '1_DAY', not the '1d' input
+        assert df['resolution'].iloc[0] == str(Resolution(resolution))
         assert len(df) >= 1  # or > 0 to ensure we got data
     pe.configure(data_path=tmp_path / 'data')
     start_date, end_date = '2025-08-01', '2025-08-07'

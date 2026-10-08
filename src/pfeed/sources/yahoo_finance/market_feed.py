@@ -360,7 +360,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
             expiration: e.g. '2024-12-13', it must be one of the values returned by `get_option_expirations`.
             option_type: 'CALL' or 'PUT'
         """
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
 
         batch_api = self.data_source.get_batch_api()
         ticker: Ticker = batch_api.Ticker(symbol)

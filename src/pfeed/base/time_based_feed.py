@@ -37,19 +37,25 @@ class TimeBasedFeed[
     download_dataflow_per_date: ClassVar[bool] = True
 
     @classmethod
-    def _standardize_date_column(
-        cls, df: pl.LazyFrame, is_raw_data: bool
-    ) -> pl.LazyFrame:
-        """Materialize a uniform date column for downstream filtering and dedup.
+    def _standardize_date_column(cls, df: pl.LazyFrame, is_raw_data: bool) -> pl.LazyFrame:
+        """Materialize a uniform datetime column for downstream filtering and dedup.
 
         Sources expose their date under different column names (e.g. Bybit: 'timestamp',
         Yahoo Finance: 'Datetime'/'Date'). `downloaded_data_date_cols` lists the candidates
-        to look for in the input. Handling differs by data layer so raw data stays a
-        faithful mirror of the source:
+        to look for in the input; the first one present is used. Handling differs by data
+        layer so raw data stays a faithful mirror of the source:
             - Cleaned: the source's date column is renamed to 'date'.
             - Raw: the source schema is left untouched and a '_pfeed_date' column is
             added as a copy, used by the storage handler for date-based filtering
             and dedup.
+
+        The resulting column is then converted to a tz-naive UTC nanosecond Datetime:
+            - String: parsed as datetime, e.g. '2025-01-01', '2025-01-01 12:00:00' or
+            '2025-01-01T20:00:00+08:00'. Strings without an offset are taken as UTC.
+            - Numeric: treated as epoch time, its unit (s/ms/us/ns) inferred from its magnitude.
+            - Datetime: tz-aware values are converted to UTC, tz-naive ones are taken as UTC.
+            - Date: midnight of that date.
+        and the frame is sorted by it.
 
         Args:
             df: Input LazyFrame containing one of the source's date columns listed in
@@ -58,13 +64,16 @@ class TimeBasedFeed[
                 If False, rename the source's date column to 'date'.
 
         Returns:
-            A LazyFrame with a normalized date column ('date' for cleaned data,
+            A LazyFrame sorted by a tz-naive UTC nanosecond Datetime column ('date' for cleaned data,
             '_pfeed_date' for raw data).
 
         Raises:
-            ValueError: If none of the candidate source date columns are present in `df`.
+            ValueError: If none of the candidate source date columns are present in `df`,
+                the date column's dtype is not string, numeric, Datetime or Date,
+                or its epoch values mix time units.
         """
-        from pfeed._etl.base import standardize_date_column
+        from pfeed.schemas.time_based_data_schema import DATE
+        from pfeed.utils.temporal import infer_ts_unit
 
         cols = df.collect_schema().names()
         raw_date_col = next(
@@ -77,12 +86,44 @@ class TimeBasedFeed[
             )
 
         if not is_raw_data:
-            date_col = cls.DataModel.DATE_COL_IN_CLEANED_DATA
+            date_col = DATE
             df = df.rename({raw_date_col: date_col})
         else:
             date_col = cls.DataModel.DATE_COL_IN_RAW_DATA
             df = df.with_columns(pl.col(raw_date_col).alias(date_col))
-        return standardize_date_column(df, date_col)
+
+        date_dtype = df.collect_schema()[date_col]
+        if date_dtype == pl.String:
+            # time_zone="UTC" converts offset strings to UTC and takes offset-less ones as UTC
+            df = df.with_columns(
+                pl.col(date_col).str.to_datetime(time_zone="UTC").dt.replace_time_zone(None)
+            )
+        elif date_dtype.is_numeric():
+            min_ts, max_ts = df.select(
+                pl.col(date_col).min().alias("min"), pl.col(date_col).max().alias("max")
+            ).collect().row(0)
+            # empty or all-null column: nothing to infer from, any unit converts it
+            ts_unit = infer_ts_unit(min_ts) if min_ts is not None else "ns"
+            if max_ts is not None and infer_ts_unit(max_ts) != ts_unit:
+                raise ValueError(
+                    f"{date_col} mixes epoch time units: min={min_ts} ({ts_unit}), max={max_ts} ({infer_ts_unit(max_ts)})"
+                )
+            df = df.with_columns(
+                pl.from_epoch(pl.col(date_col), time_unit=ts_unit).alias(date_col)
+            )
+        elif isinstance(date_dtype, pl.Datetime):
+            if date_dtype.time_zone is not None:
+                df = df.with_columns(
+                    pl.col(date_col).dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+                )
+        elif date_dtype == pl.Date:
+            df = df.with_columns(pl.col(date_col).cast(pl.Datetime("ns")))
+        else:
+            raise ValueError(f"unsupported dtype {date_dtype} for date column {date_col}")
+
+        # Cleaned-data contract: nanosecond precision (lossless upcast from us/ms, and the
+        # native precision of pandas-sourced data via pl.from_pandas).
+        return df.with_columns(pl.col(date_col).dt.cast_time_unit("ns")).sort(date_col)
 
     @classmethod
     def _max_date_range(cls, resolution: Resolution) -> tuple[datetime.date, datetime.date]:
@@ -101,7 +142,7 @@ class TimeBasedFeed[
         Raises:
             ValueError: If the data source has no `METADATA.start_date`.
         """
-        
+
         data_source_start_date = cls.DataSource.METADATA.start_date
         if not data_source_start_date:
             raise ValueError(
@@ -138,7 +179,7 @@ class TimeBasedFeed[
             ValueError: If end_date is given without start_date, start_date is after end_date,
                 rollback_period is invalid, or rollback_period='max' but the date range can't be derived (see `_max_date_range`)
         """
-        
+
         if rollback_period.lower() == "max" and not start_date:
             if end_date:
                 raise ValueError(f"{end_date=} is set but start_date is not")
@@ -177,7 +218,7 @@ class TimeBasedFeed[
         import narwhals as nw
 
         from pfeed.dataflow.result import RunResult
-        from pfeed.utils.dataframe import is_empty_dataframe
+        from pfeed.utils.dataframe import convert_dataframe, is_empty_dataframe
 
         result_dfs: list[IntoFrame] = []
 
@@ -192,8 +233,6 @@ class TimeBasedFeed[
             nw.from_native(df) for df in result_dfs if not is_empty_dataframe(df)
         ]
         if dfs:
-            from pfeed._etl.base import convert_dataframe
-
             df: Frame = cast("Frame", nw.concat(dfs))  # pyright: ignore[reportArgumentType]
             schema = df.collect_schema()
             columns = schema.names()

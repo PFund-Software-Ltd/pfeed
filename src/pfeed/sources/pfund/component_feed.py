@@ -212,7 +212,7 @@ class PFundComponentFeed(BaseFeed):
         elif artifact_type == ArtifactType.model:
             return cast("BaseModel", self.component)._model_artifact
         elif artifact_type == ArtifactType.data:
-            from pfeed._etl.base import convert_dataframe
+            from pfeed.utils.dataframe import convert_dataframe
 
             return cast(
                 pl.DataFrame,
@@ -330,7 +330,7 @@ class PFundComponentFeed(BaseFeed):
     def _get_default_transformations_for_download(
         self, request: PFundComponentFeedDownloadRequest
     ) -> list[Callable[..., Any]]:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
         from pfeed.utils import lambda_with_name
 
         default_transformations = []
@@ -401,7 +401,7 @@ class PFundComponentFeed(BaseFeed):
     def _get_default_transformations_for_retrieve(
         self, request: PFundComponentFeedRetrieveRequest
     ) -> list[Callable[..., Any]]:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
         from pfeed.utils import lambda_with_name
 
         default_transformations = []
@@ -420,7 +420,7 @@ class PFundComponentFeed(BaseFeed):
         raise NotImplementedError(f"{self.name} stream() is not implemented yet")
 
     def run(self, **prefect_kwargs: Any) -> RunResult:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
         from pfeed.dataflow.result import RunResult
 
         dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)

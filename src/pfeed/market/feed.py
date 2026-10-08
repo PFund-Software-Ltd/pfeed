@@ -32,6 +32,7 @@ from enum import StrEnum
 
 import polars as pl
 from pfund.datas.resolution import Resolution
+from pfund.datas.timeframe import Timeframe
 from pfund.enums.env import Environment
 
 from pfeed.base.feed import requires
@@ -206,8 +207,149 @@ class MarketFeed[
     def _download_impl(self, data_model: DataModelT, data_resolution: Resolution) -> pl.LazyFrame | None:
         raise NotImplementedError
 
+    @staticmethod
+    def _standardize_columns(df: pl.LazyFrame, product: BaseProduct, resolution: Resolution) -> pl.LazyFrame:
+        """Standardizes the columns of a DataFrame.
+        Adds columns 'product', 'resolution'
+        """
+        from pfeed.schemas.market_data_schema import PRODUCT, RESOLUTION
+
+        return df.with_columns(
+            pl.lit(product.name).alias(PRODUCT),
+            # NOTE: str(resolution) is used, NOT repr(resolution)
+            pl.lit(str(resolution)).alias(RESOLUTION),
+        )
+
+    @staticmethod
+    def _filter_columns(df: pl.LazyFrame, product: BaseProduct) -> pl.LazyFrame:
+        """Keeps only the standard columns of cleaned data, plus the optional ones present."""
+        from pfeed.schemas.bar_data_schema import CLOSE, HIGH, LOW, OPEN
+        from pfeed.schemas.market_data_schema import KEY_COLS, VOLUME
+        from pfeed.schemas.tick_data_schema import PRICE, SIDE
+
+        cols = df.collect_schema().names()
+        is_tick_data = PRICE in cols
+        if is_tick_data:
+            value_cols = [PRICE, VOLUME]
+            extra_cols = [SIDE]
+        else:
+            value_cols = [OPEN, HIGH, LOW, CLOSE, VOLUME]
+            extra_cols = []
+        standard_cols = [*KEY_COLS, *value_cols]
+
+        if product.is_stock() or product.is_etf():
+            from pfeed.schemas.stock_data_schema import DIVIDENDS, SPLITS
+
+            extra_cols.extend([DIVIDENDS, SPLITS])
+
+        for col in extra_cols:
+            if col in cols:
+                standard_cols.append(col)
+        return df.select(standard_cols)
+
+    @staticmethod
+    def _organize_columns(df: pl.LazyFrame) -> pl.LazyFrame:
+        """Moves the key columns ('date', 'product', 'resolution') to the leftmost side."""
+        from pfeed.schemas.market_data_schema import KEY_COLS
+
+        left_cols = list(KEY_COLS)
+        current_cols = df.collect_schema().names()
+        target_cols = left_cols + [c for c in current_cols if c not in left_cols]
+        if current_cols == target_cols:
+            return df
+        return df.select(target_cols)
+
+    @staticmethod
+    def _resample_data(
+        df: pl.LazyFrame,
+        resolution: str | Resolution,
+        product: BaseProduct,
+        offset: str | None = None,
+    ) -> pl.LazyFrame:
+        """Resamples the input lazyframe based on the target resolution.
+        Args:
+            df: The input lazyframe to be resampled.
+            resolution: The target resolution to resample the data to.
+            offset: Optional polars duration string (e.g., '30m') to shift the resampling window.
+                   For example, with '1h' resolution and '30m' offset, timestamps will be XX:30:00.
+        Returns:
+            The resampled lazyframe.
+        """
+        if isinstance(resolution, str):
+            resolution = Resolution(resolution)
+
+        from pfeed.schemas.bar_data_schema import CLOSE, HIGH, LOW, OPEN
+        from pfeed.schemas.market_data_schema import PRODUCT, RESOLUTION, VOLUME
+        from pfeed.schemas.tick_data_schema import PRICE
+        from pfeed.schemas.time_based_data_schema import DATE
+
+        df_resolution_str = df.select(pl.col(RESOLUTION).first()).collect().item()
+        df_resolution = Resolution(df_resolution_str)
+        is_resample_required = resolution < df_resolution
+        if not is_resample_required:
+            return df
+
+        df = MarketFeed._filter_columns(df, product)
+
+        eresolution = {
+            Timeframe.MINUTE: "1m",
+            Timeframe.DAY: "1d",
+            Timeframe.WEEK: "1w",
+            Timeframe.MONTH: "1mo",
+            Timeframe.YEAR: "1y",
+        }.get(resolution.timeframe, f"1{resolution.timeframe.canonical}")
+
+        cols = df.collect_schema().names()
+        is_tick_data = PRICE in cols
+
+        aggs: list[pl.Expr] = []
+        if is_tick_data:
+            aggs.extend(
+                [
+                    pl.col(PRICE).first().alias(OPEN),
+                    pl.col(PRICE).max().alias(HIGH),
+                    pl.col(PRICE).min().alias(LOW),
+                    pl.col(PRICE).last().alias(CLOSE),
+                    pl.col(VOLUME).sum().alias(VOLUME),
+                ]
+            )
+        else:
+            aggs.extend(
+                [
+                    pl.col(OPEN).first().alias(OPEN),
+                    pl.col(HIGH).max().alias(HIGH),
+                    pl.col(LOW).min().alias(LOW),
+                    pl.col(CLOSE).last().alias(CLOSE),
+                    pl.col(VOLUME).sum().alias(VOLUME),
+                ]
+            )
+        aggs.append(pl.col(PRODUCT).first().alias(PRODUCT))
+
+        if product.is_stock() or product.is_etf():
+            from pfeed.schemas.stock_data_schema import DIVIDENDS, SPLITS
+
+            if DIVIDENDS in cols:
+                aggs.append(pl.col(DIVIDENDS).sum().alias(DIVIDENDS))
+            if SPLITS in cols:
+                aggs.append(pl.col(SPLITS).product().alias(SPLITS))
+
+        aggs.append(pl.len().alias("n_data_points"))
+
+        resampled = (
+            df.sort(DATE)
+            .group_by_dynamic(
+                DATE,
+                every=eresolution,
+                offset=offset,
+                label="left",
+                closed="left",
+            )
+            .agg(aggs)
+            .with_columns(pl.lit(str(resolution)).alias(RESOLUTION))
+        )
+        return resampled
+
     def _get_default_transformations_for_download(self, request: RequestT, /) -> list[Callable[..., Any]]:
-        from pfeed._etl import market as etl
         from pfeed.utils import lambda_with_name
 
         default_transformations = [
@@ -224,17 +366,17 @@ class MarketFeed[
                     self._normalize_downloaded_data,
                     lambda_with_name(
                         "standardize_columns",
-                        lambda df: etl.standardize_columns(
+                        lambda df: self._standardize_columns(
                             df, request.product, request.data_resolution
                         ),
                     ),
                     lambda_with_name(
                         "resample_data_if_necessary",
-                        lambda df: etl.resample_data(
+                        lambda df: self._resample_data(
                             df, request.target_resolution, request.product
                         ),
                     ),
-                    etl.organize_columns,
+                    self._organize_columns,
                 ]
             )
         return default_transformations
@@ -383,7 +525,6 @@ class MarketFeed[
     def _get_default_transformations_for_retrieve(
         self, request: RequestT, /
     ) -> list[Callable[..., Any]]:
-        from pfeed._etl import market as etl
         from pfeed.utils import lambda_with_name
 
         is_retrieving_streaming_data = request.env in (
@@ -409,11 +550,11 @@ class MarketFeed[
                 [
                     lambda_with_name(
                         "resample_data_if_necessary",
-                        lambda df: etl.resample_data(
+                        lambda df: self._resample_data(
                             df, request.target_resolution, request.product
                         ),
                     ),
-                    etl.organize_columns,
+                    self._organize_columns,
                 ]
             )
         return default_transformations

@@ -180,7 +180,7 @@ class PFundComponentDataHandler(BaseDataHandler):
                         self.file_path, metadata=self._create_metadata()
                     )
             else:  # data artifact writing to deltalake
-                from pfeed._etl.base import convert_dataframe
+                from pfeed.utils.dataframe import convert_dataframe
                 from pfeed.sources.pfund.component_data_model import DataArtifact
 
                 table_path = self._table_path

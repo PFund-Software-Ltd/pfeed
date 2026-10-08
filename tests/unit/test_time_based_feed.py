@@ -10,9 +10,11 @@ if TYPE_CHECKING:
 import datetime
 from types import SimpleNamespace
 
+import polars as pl
 import pytest
 from pfund.datas.resolution import Resolution
 
+from pfeed.base.time_based_data_model import TimeBasedDataModel
 from pfeed.base.time_based_feed import TimeBasedFeed
 
 NOW = datetime.datetime(2025, 3, 15, 12, tzinfo=datetime.UTC)
@@ -128,3 +130,114 @@ def test_standardize_dates_invalid(
     feed = _fake_feed(source_start_date=source_start_date)
     with pytest.raises(ValueError, match=match):
         feed._standardize_dates(DAILY, start_date, end_date, rollback_period)
+
+
+def _fake_feed_with_date_cols(
+    *date_cols: str,
+) -> type[TimeBasedFeed[Any, Any, Any]]:
+    """Stand-in feed class: _standardize_date_column() only reads downloaded_data_date_cols and DataModel's date col names."""
+
+    class FakeFeed(TimeBasedFeed[Any, Any, Any]):
+        DataModel = TimeBasedDataModel
+        downloaded_data_date_cols = list(date_cols)
+
+    return FakeFeed
+
+
+JAN_1 = datetime.datetime(2025, 1, 1)
+JAN_1_NOON = datetime.datetime(2025, 1, 1, 12)
+
+
+def test_standardize_date_column_cleaned_renames_source_col() -> None:
+    feed = _fake_feed_with_date_cols("timestamp")
+    lf = pl.LazyFrame({"timestamp": [JAN_1], "price": [1.0]})
+    df = feed._standardize_date_column(lf, is_raw_data=False).collect()
+    assert df.columns == ["date", "price"]
+
+
+def test_standardize_date_column_raw_keeps_source_col() -> None:
+    feed = _fake_feed_with_date_cols("timestamp")
+    epoch_ms = 1735689600000  # 2025-01-01
+    lf = pl.LazyFrame({"timestamp": [epoch_ms], "price": [1.0]})
+    df = feed._standardize_date_column(lf, is_raw_data=True).collect()
+    assert df.columns == ["timestamp", "price", "_pfeed_date"]
+    # the source column stays a faithful mirror, only the added copy is converted
+    assert df.schema["timestamp"] == pl.Int64
+    assert df["timestamp"].to_list() == [epoch_ms]
+    assert df["_pfeed_date"].to_list() == [JAN_1]
+
+
+def test_standardize_date_column_uses_first_present_candidate() -> None:
+    feed = _fake_feed_with_date_cols("Datetime", "Date")
+    lf = pl.LazyFrame({"Date": [JAN_1], "Datetime": [JAN_1_NOON]})
+    df = feed._standardize_date_column(lf, is_raw_data=False).collect()
+    assert df["date"].to_list() == [JAN_1_NOON]
+    assert "Date" in df.columns
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        # strings
+        (["2025-01-01"], [JAN_1]),
+        (["2025-01-01 12:00:00"], [JAN_1_NOON]),
+        (["2025-01-01T20:00:00+08:00"], [JAN_1_NOON]),
+        (["2025-01-01T12:00:00Z"], [JAN_1_NOON]),
+        # epoch numbers, unit inferred from magnitude
+        ([1735689600], [JAN_1]),
+        ([1735689600_000], [JAN_1]),
+        ([1735689600_000_000], [JAN_1]),
+        ([1735689600_000_000_000], [JAN_1]),
+        ([1735732800.5], [JAN_1_NOON + datetime.timedelta(milliseconds=500)]),
+        # null epoch values don't break unit inference
+        ([None, 1735689600], [None, JAN_1]),
+        # datetimes, tz-aware ones converted to UTC
+        ([JAN_1], [JAN_1]),
+        ([JAN_1_NOON.replace(tzinfo=datetime.UTC)], [JAN_1_NOON]),
+        (
+            [datetime.datetime(2025, 1, 1, 20, tzinfo=datetime.timezone(datetime.timedelta(hours=8)))],
+            [JAN_1_NOON],
+        ),
+        # dates, midnight of that date
+        ([datetime.date(2025, 1, 1)], [JAN_1]),
+    ],
+)
+def test_standardize_date_column_converts_to_ns_datetime(
+    values: list[Any], expected: list[datetime.datetime]
+) -> None:
+    feed = _fake_feed_with_date_cols("ts")
+    lf = pl.LazyFrame({"ts": values})
+    df = feed._standardize_date_column(lf, is_raw_data=False).collect()
+    assert df.schema["date"] == pl.Datetime("ns")
+    assert df["date"].to_list() == expected
+
+
+def test_standardize_date_column_sorts_by_date() -> None:
+    feed = _fake_feed_with_date_cols("ts")
+    lf = pl.LazyFrame({"ts": [JAN_1_NOON, JAN_1], "price": [2.0, 1.0]})
+    df = feed._standardize_date_column(lf, is_raw_data=False).collect()
+    assert df["date"].to_list() == [JAN_1, JAN_1_NOON]
+    assert df["price"].to_list() == [1.0, 2.0]
+
+
+@pytest.mark.parametrize(
+    ("lf", "match"),
+    [
+        (pl.LazyFrame({"other": [JAN_1]}), "no date column"),
+        (pl.LazyFrame({"ts": [True]}), "unsupported dtype"),
+        (pl.LazyFrame({"ts": [datetime.time(12)]}), "unsupported dtype"),
+        (pl.LazyFrame({"ts": [1735689600, 1735689600_000]}), "mixes epoch time units"),
+    ],
+)
+def test_standardize_date_column_invalid(lf: pl.LazyFrame, match: str) -> None:
+    feed = _fake_feed_with_date_cols("ts")
+    with pytest.raises(ValueError, match=match):
+        feed._standardize_date_column(lf, is_raw_data=False)
+
+
+def test_standardize_date_column_empty_epoch_column() -> None:
+    feed = _fake_feed_with_date_cols("ts")
+    lf = pl.LazyFrame({"ts": pl.Series([], dtype=pl.Int64)})
+    df = feed._standardize_date_column(lf, is_raw_data=False).collect()
+    assert df.schema["date"] == pl.Datetime("ns")
+    assert df.is_empty()

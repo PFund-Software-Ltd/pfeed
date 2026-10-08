@@ -303,7 +303,7 @@ class DataFlow:
             if self.is_streaming():
                 self._handler.write_stream(data, **self._write_stream_kwargs)
             else:
-                from pfeed._etl.base import convert_dataframe
+                from pfeed.utils.dataframe import convert_dataframe
 
                 # user transformations may return any dataframe, the data handler only takes polars
                 df = cast(pl.LazyFrame, convert_dataframe(data)).collect()

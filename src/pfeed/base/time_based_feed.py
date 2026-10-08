@@ -25,7 +25,11 @@ from pfeed.base.feed import BaseFeed
 from pfeed.utils.temporal import parse_date_range
 
 
-class TimeBasedFeed[SourceT: BaseSource](BaseFeed[SourceT], ABC):
+class TimeBasedFeed[
+    SourceT: BaseSource,
+    RequestT: TimeBasedFeedBaseRequest,
+    DataModelT: TimeBasedDataModel,
+](BaseFeed[SourceT, RequestT], ABC):
     DataModel: ClassVar[type[TimeBasedDataModel]]
     downloaded_data_date_cols: ClassVar[list[str]]
     # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),
@@ -142,13 +146,13 @@ class TimeBasedFeed[SourceT: BaseSource](BaseFeed[SourceT], ABC):
         return parse_date_range(start_date, end_date, rollback_period)
 
     def _create_batch_dataflows(
-        self, extract_func: Callable[[TimeBasedDataModel], Any]
+        self, extract_func: Callable[[DataModelT], Any]
     ) -> list[DataFlow]:
-        request = cast("TimeBasedFeedBaseRequest", self._get_current_request())
+        request = self._get_current_request()
         self.logger.debug(
             f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
         )
-        data_model = request.to_data_model()
+        data_model = cast("DataModelT", request.to_data_model())
         faucet: Faucet = self._create_faucet(
             data_source=self.data_source,
             extract_func=extract_func,

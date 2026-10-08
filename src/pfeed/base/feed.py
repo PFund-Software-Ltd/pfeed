@@ -31,7 +31,7 @@ def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
 
     def decorator(func: F) -> F:
         @functools.wraps(func)
-        def wrapper(self: BaseFeed[Any], *args: Any, **kwargs: Any) -> Any:
+        def wrapper(self: BaseFeed[Any, Any], *args: Any, **kwargs: Any) -> Any:
             if not self._supports(verb):
                 raise NotImplementedError(f"{self.name} does not support {verb} for {self.data_domain}")
             return func(self, *args, **kwargs)
@@ -41,7 +41,7 @@ def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
     return decorator
 
 
-class BaseFeed[SourceT: BaseSource](ABC):
+class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest](ABC):
     # set by the source that lists this feed in its Feeds, see BaseSource.__init_subclass__
     DataSource: ClassVar[type[BaseSource]]
     DataModel: ClassVar[type[BaseDataModel]]
@@ -101,13 +101,13 @@ class BaseFeed[SourceT: BaseSource](ABC):
         self._data_source: SourceT = data_source
         self.logger: ColoredLogger = cast("ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}"))
         self._pipeline_mode = pipeline_mode
-        self._dataflows: dict[BaseRequest, list[DataFlow]] = {}
+        self._dataflows: dict[RequestT, list[DataFlow]] = {}
         # Flat list of result-bearing dataflows from the most recent run.
         # Survives `_cleanup_after_run` clearing `_dataflows`, so post-run callers
         # can access `completed_dataflows` / `failed_dataflows` regardless of
         # whether Ray was used (Ray returns new objects from workers).
         self._last_run_dataflows: list[DataFlow] = []
-        self._requests: list[BaseRequest] = []
+        self._requests: list[RequestT] = []
         self._num_workers: int | None = num_workers
         self._is_running = False
         if self._num_workers:
@@ -246,7 +246,7 @@ class BaseFeed[SourceT: BaseSource](ABC):
             extract_type=extract_type,
         )
 
-    def _get_current_request(self) -> BaseRequest:
+    def _get_current_request(self) -> RequestT:
         request = self._requests[-1] if self._requests else None
         if request is None:
             raise AssertionError(
@@ -254,7 +254,7 @@ class BaseFeed[SourceT: BaseSource](ABC):
             )
         return request
 
-    def _append_request(self, request: BaseRequest) -> None:
+    def _append_request(self, request: RequestT) -> None:
         # In pipeline mode requests accumulate before run(), but run() dispatches a
         # single path based on whether streaming dataflows exist — batch and streaming
         # requests cannot be mixed in one feed run. Reject the mix at the source rather
@@ -304,7 +304,7 @@ class BaseFeed[SourceT: BaseSource](ABC):
 
     def _load_for_request(
         self,
-        request: BaseRequest,
+        request: RequestT,
         io: BaseIO | None = None,
         data_layer: DataLayer | str | None = None,
     ) -> Self:
@@ -319,7 +319,7 @@ class BaseFeed[SourceT: BaseSource](ABC):
         return self
 
     def _get_default_transformations(
-        self, request: BaseRequest
+        self, request: RequestT
     ) -> list[Callable[..., Any]]:
         if request.extract_type == ExtractType.download:
             default_transformations = self._get_default_transformations_for_download(
@@ -339,19 +339,22 @@ class BaseFeed[SourceT: BaseSource](ABC):
 
     def _get_default_transformations_for_download(
         self,
-        _request: BaseRequest,
+        _request: RequestT,
+        /,
     ) -> list[Callable[..., Any]]:
         return []
 
     def _get_default_transformations_for_retrieve(
         self,
-        _request: BaseRequest,
+        _request: RequestT,
+        /,
     ) -> list[Callable[..., Any]]:
         return self._get_default_transformations_for_download(_request)
 
     def _get_default_transformations_for_stream(
         self,
-        _request: BaseRequest,
+        _request: RequestT,
+        /,
     ) -> list[Callable[..., Any]]:
         return []
 

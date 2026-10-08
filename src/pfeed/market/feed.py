@@ -12,10 +12,10 @@ if TYPE_CHECKING:
     from pfeed.base.data_handler import BaseDataHandler
     from pfeed.dataflow.result import RunResult
     from pfeed.market.requests import (
-        MarketFeedDownloadRequest,
         MarketFeedRetrieveRequest,
         MarketFeedStreamRequest,
     )
+    from pfeed.market.requests.base_request import MarketFeedBaseRequest
     from pfeed.source import BaseSource
     from pfeed.streaming.feed_mixin import (
         ChannelKey,
@@ -43,7 +43,11 @@ from pfeed.market.data_model import MarketDataModel
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
-class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
+class MarketFeed[
+    SourceT: BaseSource,
+    RequestT: MarketFeedBaseRequest = MarketFeedBaseRequest,
+    DataModelT: MarketDataModel = MarketDataModel,
+](TimeBasedFeed[SourceT, RequestT, DataModelT], ABC):
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
 
     class Capability(StrEnum):
@@ -199,14 +203,10 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
     def _normalize_downloaded_data(df: pl.LazyFrame) -> pl.LazyFrame:
         raise NotImplementedError
 
-    def _download_impl(
-        self, data_model: MarketDataModel, data_resolution: Resolution
-    ) -> pl.LazyFrame | None:
+    def _download_impl(self, data_model: DataModelT, data_resolution: Resolution) -> pl.LazyFrame | None:
         raise NotImplementedError
 
-    def _get_default_transformations_for_download(
-        self, request: MarketFeedDownloadRequest | MarketFeedRetrieveRequest
-    ) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_download(self, request: RequestT, /) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed.utils import lambda_with_name
 
@@ -362,7 +362,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         return self.run() if not self.is_pipeline() else self
 
     def _retrieve_impl(
-        self, data_model: MarketDataModel, request: MarketFeedRetrieveRequest
+        self, data_model: DataModelT, request: MarketFeedRetrieveRequest
     ) -> pl.LazyFrame | None:
         # data_model is of target resolution, copy it since it has the correct start_date and end_date
         # when dataflow_per_date = True, the handler should read the data model with data_resolution
@@ -381,7 +381,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         return lf
 
     def _get_default_transformations_for_retrieve(
-        self, request: MarketFeedRetrieveRequest
+        self, request: RequestT, /
     ) -> list[Callable[..., Any]]:
         from pfeed._etl import market as etl
         from pfeed.utils import lambda_with_name
@@ -580,7 +580,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
 
     async def _stream_impl(
         self,
-        data_model: MarketDataModel,
+        data_model: DataModelT,
         faucet_callback: Callable[
             [WebSocketName | str, RawMessage | ReplayData, ChannelKey | None],
             Coroutine[Any, Any, None],
@@ -642,7 +642,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _get_default_transformations_for_stream(
-        self, request: MarketFeedStreamRequest
+        self, request: RequestT, /
     ) -> list[Callable[..., Any]]:
         from itertools import count
 
@@ -680,7 +680,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
                 data_bar = BarData(
                     product=request.product,
                     resolution=request.target_resolution,
-                    config=request.data_config,
+                    config=cast("MarketFeedStreamRequest", request).data_config,
                 )
             else:
                 data_bar = None

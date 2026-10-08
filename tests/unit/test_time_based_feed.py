@@ -28,11 +28,11 @@ def freeze_today(mocker: MockerFixture) -> None:
 
 def _fake_feed(
     source_start_date: datetime.date | None = None,
-) -> type[TimeBasedFeed[Any]]:
+) -> type[TimeBasedFeed[Any, Any, Any]]:
     """Stand-in feed class: _standardize_dates() only reads DataSource.METADATA (name, start_date)."""
     metadata = SimpleNamespace(name="FAKE", start_date=source_start_date)
 
-    class FakeFeed(TimeBasedFeed[Any]):
+    class FakeFeed(TimeBasedFeed[Any, Any, Any]):
         DataSource = cast("type[BaseSource]", SimpleNamespace(METADATA=metadata))
 
     return FakeFeed

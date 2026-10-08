@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
+
+from collections.abc import Callable
 
 
 def is_lambda(func: Callable[..., Any]) -> bool:

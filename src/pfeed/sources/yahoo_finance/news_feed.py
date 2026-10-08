@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfeed.typing import GenericFrame
 
     from pfeed.enums import DataLayer, DataStorage
-    from pfeed.news.data_model import NewsDataModel
+    from pfeed..data_model import NewsDataModel
 
 from pfeed.feeds.news_feed import NewsFeed
 from pfeed.sources.yahoo_finance.source import YahooFinanceSource

@@ -33,7 +33,7 @@ class MarketDataModel(TimeBasedDataModel):
     @classmethod
     def _validate_env(cls, v: str | Environment) -> Environment:
         if isinstance(v, str):
-            return Environment[v.upper()]
+            return Environment(v.upper())
         return v
 
     @field_validator("resolution", mode="before")

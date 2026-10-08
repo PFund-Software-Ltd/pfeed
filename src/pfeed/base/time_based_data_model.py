@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import datetime
-from typing import ClassVar
+from typing import ClassVar, Self
 
-from pydantic import Field, ValidationInfo, field_validator
+import datetime
+
+from pydantic import Field, model_validator
 
 from pfeed.base.data_model import BaseDataModel
 
@@ -20,22 +21,19 @@ class TimeBasedDataModel(BaseDataModel):
 
     @property
     def date(self) -> datetime.date:
-        assert not self.is_date_range(), (
-            "start_date and end_date must be the same for a single date"
-        )
+        if self.is_date_range():
+            raise ValueError(
+                "start_date and end_date must be the same for a single date"
+            )
         return self.start_date
 
-    @field_validator("end_date")
-    @classmethod
-    def _validate_end_date(
-        cls, end_date: datetime.date, info: ValidationInfo
-    ) -> datetime.date:
-        """Validates the start and end dates of the data model."""
-        if info.data["start_date"] > end_date:
+    @model_validator(mode="after")
+    def _validate_date_range(self) -> Self:
+        if self.start_date > self.end_date:
             raise ValueError(
-                f"start date {info.data['start_date']} must be before or equal to end date {end_date}."
+                f"start date {self.start_date} must be before or equal to end date {self.end_date}."
             )
-        return end_date
+        return self
 
     @property
     def dates(self) -> list[datetime.date]:
@@ -49,9 +47,7 @@ class TimeBasedDataModel(BaseDataModel):
         return self.start_date != self.end_date
 
     def __str__(self) -> str:
-        if self.start_date == self.end_date:
-            return ":".join([super().__str__(), str(self.start_date)])
-        else:
+        if self.is_date_range():
             return ":".join(
                 [
                     super().__str__(),
@@ -59,3 +55,5 @@ class TimeBasedDataModel(BaseDataModel):
                     "(to)" + str(self.end_date),
                 ]
             )
+        else:
+            return ":".join([super().__str__(), str(self.start_date)])

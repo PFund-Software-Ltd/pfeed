@@ -18,12 +18,11 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Software Development :: Libraries",
     "Typing :: Typed",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     # "Programming Language :: Python :: 3.15",
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "pfund==0.0.25",  # use >= only when pfund is stable
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version

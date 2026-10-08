@@ -21,6 +21,7 @@ depends-on = [
   { task = "test", environment = "py313" },
   { task = "test", environment = "py314" },
   # { task = "test", environment = "py315" },
+  # TODO: add test-all to test all plugins, including e.g. pfeed-bybit
 ]
 
 [dependencies]
@@ -78,7 +79,6 @@ pfund = { path = "../pfund", editable = true }
 pfund-kit = { path = "../pfund-kit", editable = true }
 afterpython = ">=0.4.0"
 financetoolkit = ">=2.2.0"
-pyrefly = ">=1.3.2"
 # used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
 deltalake = ">=1.6.6"
 pyiceberg = {version = ">=0.12.0", extras = ['sql-sqlite', 'pyiceberg-core']}

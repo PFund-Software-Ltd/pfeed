@@ -269,7 +269,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a0/b6/78aaf9141fb46742928c113f3cf6ef2259d538cb02b604b7656c1dc9883c/fastapi-0.142.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a0/bf/258cd7c0a7ed92745dc93c31666d462d05b702807a689744bd49fb833bde/grpcio-1.84.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/a1/c1/6b31393a0206eb6232650556dfbbfbfb7bfeb3eff3c15081123d37e325ff/pyrefly-1.4.0.dev3-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/a2/40/97cec87c077eb3291fc7905e6633e08b7ca593c57d30238444bcb6bb3d53/uncalled_for-0.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a2/5e/4566006965545a6461d4b250faafd57a3ff04a193ed664790fbbfe7ba91d/mystmd-1.11.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a5/69/6da5581c6a7fede7dc261bf4e67d6adca4196f176b43288b55b3db395b6e/mdit_py_plugins-0.6.1-py3-none-any.whl
@@ -579,7 +578,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/83/4f/48865bd02a16ee5236bc46166b2946f37b93e07b0eae355dac0be0b216ca/propcache-0.5.4-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/83/ae/676feae8e4644a6d7169951a97f61c56f416c73f67bf1761f2461d75cc81/deprecated-3.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/83/f6/b55ec74cfe68c6584163faa311503c20b0da4c09883a41e8e00d6726c954/bottle-0.13.4-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/84/a0/f2d0ec58f5c79986d6e2d5b80d7bae04e18f2e66c1a7d6f89a3b235e0d33/pyrefly-1.4.0.dev3-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/85/e6/695f462fd473981325146edde01c12390413ebaa33c1f0b49191d6b55f86/marimo-0.25.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/86/84/1bf307b970d26a998e0cce179a51c6c06dd0cb75cb3e3b8452ec2cbf94a4/dayplot-0.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/87/5d/8d8231dbf5e2f57fdc9c6b0e1593910a5ae0932d7219fed729e16dc14414/logfire_api-6.0.0b7-py3-none-any.whl
@@ -1057,7 +1055,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fb/be/35261223d9416a0751cdff1c7b4a6f881387218a12d439fe22fefebc8c04/textual-8.2.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fc/6f/677afe0bc7af0f913c42c93fad2dad7b3c223735a3d0bbd4ec1bfa74a43e/opentelemetry_exporter_prometheus-0.66b0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fd/2f/b67e73d8bc367e03fe7861cd9c49fff9dcfa6db83bc0630c0adcfb25b7fa/pyobjc_framework_cocoa-12.2.2-cp312-cp312-macosx_10_13_universal2.whl
-      - pypi: https://files.pythonhosted.org/packages/fe/6a/96d542af1487ffc9569076f99a87a37785178f6884e7443df81f51b7adad/pyrefly-1.4.0.dev3-py3-none-macosx_11_0_arm64.whl
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-h4c7d964_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
@@ -1135,7 +1132,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/30/32/03a2ad4b3c6ebddaee2dc157f8342a9147dbafba0817c3452252749b0478/ujson-6.0.0-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/30/5f/63f927b5ffd1cc2c030fc2bd362bf920890e8806cf42f701198de5b3f9c7/dateparser-1.4.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/30/a4/2bffa9f8e804325a09867f0e9d30795c80ea9f8d62560bd1b6ad6220eb2f/pydantic_settings-2.15.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/30/dd/ddfc3b123529e0096e97619fd87614f578bb5665bb638cdd47cd99259979/pyrefly-1.4.0.dev3-py3-none-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/31/d2/7d4e6c6da7c6c31cc54437bc730f96fb4a05580769da54dd670158af450b/arro3_core-0.9.0-cp311-abi3-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/32/91/30151a39f7570f448ed84529390628a651d7f27c87d73c9b887f8189695e/docutils-0.23-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/33/23/885b3a3b510c305f1d84421913935e19b6a48b93d173a0541674c1e88c2a/huggingface_hub-2.1.1-py3-none-any.whl
@@ -9039,11 +9035,6 @@ packages:
   - multidict>=4.0
   - propcache>=0.2.1
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/30/dd/ddfc3b123529e0096e97619fd87614f578bb5665bb638cdd47cd99259979/pyrefly-1.4.0.dev3-py3-none-win_amd64.whl
-  name: pyrefly
-  version: 1.4.0.dev3
-  sha256: 414a80cfbc082d4afc75e86944e033a9cfd4a0eac29610b48ed2b94f2ec503bf
-  requires_python: '>=3.8'
 - pypi: https://files.pythonhosted.org/packages/31/24/97e8bd98f1e3b07e2ba08bcdff690674fbe16d69a7d2712cc3884665e615/pyarrow-25.0.1-cp313-cp313-win_amd64.whl
   name: pyarrow
   version: 25.0.1
@@ -14146,11 +14137,6 @@ packages:
   - trove-classifiers>=2024.10.12 ; extra == 'tests'
   - defusedxml ; extra == 'xmp'
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/84/a0/f2d0ec58f5c79986d6e2d5b80d7bae04e18f2e66c1a7d6f89a3b235e0d33/pyrefly-1.4.0.dev3-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
-  name: pyrefly
-  version: 1.4.0.dev3
-  sha256: 6a394df8553690e837cc09fd34b108b96f2d1ba2ba0bd25ef4e4d190ee9caa07
-  requires_python: '>=3.8'
 - pypi: https://files.pythonhosted.org/packages/84/b0/454f4a6aea48fd580eaaceb9d692cfa219b41e197c6bbfd534ee8945dad9/ujson-6.0.0-cp312-cp312-macosx_11_0_arm64.whl
   name: ujson
   version: 6.0.0
@@ -15176,11 +15162,6 @@ packages:
   version: 1.8.0
   sha256: 4970ece02dbc8c3a92fcc5228e36a3e933a01a999f7094ff7c23fbd2beeaa67c
   requires_python: '>=3.9'
-- pypi: https://files.pythonhosted.org/packages/a1/c1/6b31393a0206eb6232650556dfbbfbfb7bfeb3eff3c15081123d37e325ff/pyrefly-1.4.0.dev3-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-  name: pyrefly
-  version: 1.4.0.dev3
-  sha256: 6026a66345c5305797a31b68b351a7deac34ae456392c51230ba7cdb5d55db9b
-  requires_python: '>=3.8'
 - pypi: https://files.pythonhosted.org/packages/a2/40/97cec87c077eb3291fc7905e6633e08b7ca593c57d30238444bcb6bb3d53/uncalled_for-0.4.0-py3-none-any.whl
   name: uncalled-for
   version: 0.4.0
@@ -18992,11 +18973,6 @@ packages:
   requires_dist:
   - pyobjc-core>=12.2.2
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/fe/6a/96d542af1487ffc9569076f99a87a37785178f6884e7443df81f51b7adad/pyrefly-1.4.0.dev3-py3-none-macosx_11_0_arm64.whl
-  name: pyrefly
-  version: 1.4.0.dev3
-  sha256: 4e569085e52b22fa0b9cbdeee1ba66085a4b7d84c992a819255fa1b9415728da
-  requires_python: '>=3.8'
 - pypi: https://files.pythonhosted.org/packages/fe/ed/f1831681fce0e3242346e5458486003c5f124ed69e5e0b847fd029db4973/websockets-16.1.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
   name: websockets
   version: 16.1.1

@@ -168,12 +168,10 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
-        start_date, end_date = self._standardize_dates(
-            resolution, start_date, end_date, rollback_period
-        )
+        start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
         if not (candidates := [r for r in self.get_supported_resolutions() if r >= resolution]):
             raise ValueError(f"{resolution} is not supported by {self.name}")
-        # find the first resolution that is >= the target resolution
+        # find the first resolution that is >= (finer/higher) the target resolution
         data_resolution = min(candidates)
         request = MarketFeedDownloadRequest(
             data_source=self.name,
@@ -296,9 +294,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
-        start_date, end_date = self._standardize_dates(
-            resolution, start_date, end_date, rollback_period
-        )
+        start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
         # search for higher resolutions (highest first), e.g. if resolution is '1m', search '1m' -> '1t' -> '1s'
         search_resolutions = [
             resolution,
@@ -320,8 +316,9 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
             io = ParquetIO()
         self._validate_io(io)
 
-        # find the data resolution: the first search resolution stored for every date
-        data_resolution = None
+        # find the data resolution: the first search resolution stored for every date,
+        # falls back to the target resolution if none is fully stored
+        data_resolution = resolution
         for search_resolution in search_resolutions:
             data_model = self.create_data_model(
                 env=env,
@@ -342,7 +339,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
                 break
         else:
             self.logger.debug(
-                f"failed to find stored {product} data from {start_date} to {end_date} with search resolutions {search_resolutions} in {io!r}"
+                f"{product} data from {start_date} to {end_date} is not fully stored at any of {search_resolutions} in {io!r}, falling back to {resolution}"
             )
 
         request = MarketFeedRetrieveRequest(
@@ -353,7 +350,6 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
             env=env,
             product=product,
             target_resolution=resolution,
-            # NOTE: data_resolution could be None if data of target resolution is not found in storage
             data_resolution=data_resolution,
             start_date=start_date,
             end_date=end_date,
@@ -368,9 +364,6 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
     def _retrieve_impl(
         self, data_model: MarketDataModel, request: MarketFeedRetrieveRequest
     ) -> pl.LazyFrame | None:
-        if request.data_resolution is None:
-            self.logger.debug(f"no data found for {data_model} in {request.io_for_retrieval!r}")
-            return None
         # data_model is of target resolution, copy it since it has the correct start_date and end_date
         # when dataflow_per_date = True, the handler should read the data model with data_resolution
         data_model = data_model.model_copy(update={"resolution": request.data_resolution})
@@ -401,7 +394,7 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
         default_transformations = []
         if is_retrieving_streaming_data:
             # a bar's date is its start, like in batch data, see MarketDataHandler._get_date_col()
-            date_col = "start_ts" if cast(Resolution, request.data_resolution).is_bar() else "ts"
+            date_col = "start_ts" if request.data_resolution.is_bar() else "ts"
             default_transformations.append(
                 lambda_with_name(
                     "streaming_to_batch_schema",
@@ -680,10 +673,8 @@ class MarketFeed[SourceT: BaseSource](TimeBasedFeed[SourceT], ABC):
             )
             # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
             data_source: str = self.data_source.name
-            tick_counter = (
-                count() if cast(Resolution, request.data_resolution).is_tick() else None
-            )
-            is_resampling = bool(request.target_resolution < request.data_resolution)  # pyright: ignore[reportOperatorIssue]
+            tick_counter = count() if request.data_resolution.is_tick() else None
+            is_resampling = bool(request.target_resolution < request.data_resolution)
             if is_resampling:
                 # use data_bar to resample data, e.g. bybit doesn't support '1s' data (target resolution), use '1t' (data resolution) instead
                 data_bar = BarData(

@@ -11,11 +11,9 @@ DATE: Final = "date"
 class TimeBasedDataSchema(pa.DataFrameModel):
     """Base schema for all time-based data with monotonically increasing date validation."""
 
-    # Cleaned time-based data uses nanosecond precision, tz-naive. Annotating with a
-    # bare `datetime.datetime` would default to Datetime("us") (polars' default) and
-    # reject ns data; pin "ns" explicitly. IOs that can't store ns (e.g. DeltaLakeIO) raise
-    # instead of downcasting — not the schema's concern.
-    # Annotated args map to DateTime(time_zone_agnostic, time_zone, time_unit).
+    # date must be Datetime("ns"), tz-naive with values in UTC, i.e. DateTime(time_zone_agnostic=False, time_zone=None, time_unit="ns").
+    # The unit is explicit because a bare `datetime.datetime` annotation means Datetime("us").
+    # IOs that store only microseconds (e.g. DeltaLakeIO) cast it themselves.
     date: Annotated[DateTime, False, None, "ns"] = pa.Field(alias=DATE)
 
     @pa.check(DATE, error="date is not monotonic increasing")

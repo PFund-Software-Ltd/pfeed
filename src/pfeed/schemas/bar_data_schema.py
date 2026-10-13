@@ -1,11 +1,10 @@
 from typing import Final
 
-import warnings
-
 import pandera.polars as pa
 import polars as pl
+from pfund.datas.resolution import Resolution
 
-from pfeed.schemas.market_data_schema import VOLUME, MarketDataSchema
+from pfeed.schemas.market_data_schema import RESOLUTION, VOLUME, MarketDataSchema
 from pfeed.schemas.time_based_data_schema import DATE
 
 # column names of cleaned bar data, typed as str for code referring to them
@@ -15,26 +14,50 @@ LOW: Final = "low"
 CLOSE: Final = "close"
 
 
-class BarDataSchema(MarketDataSchema):
-    open: float = pa.Field(alias=OPEN, gt=0)
-    high: float = pa.Field(alias=HIGH, gt=0)
-    low: float = pa.Field(alias=LOW, gt=0)
-    close: float = pa.Field(alias=CLOSE, gt=0)
-    volume: float = pa.Field(alias=VOLUME, ge=0)
+def _bar_seconds(value: str) -> int | None:
+    """Bar length in seconds, or None if it has no fixed length (month, year) or value is invalid."""
+    try:
+        resolution = Resolution(value)
+    except ValueError:
+        return None
+    if not resolution.is_bar() or resolution.is_month() or resolution.is_year():
+        return None
+    return resolution.to_seconds()
 
-    @pa.dataframe_check
+
+def _is_bar_resolution(value: str) -> bool:
+    try:
+        return Resolution(value).is_bar()
+    except ValueError:
+        return False
+
+
+class BarDataSchema(MarketDataSchema):
+    # lt=inf rejects inf; NaN is already rejected since pandera treats it as null
+    open: float = pa.Field(alias=OPEN, gt=0, lt=float("inf"))
+    high: float = pa.Field(alias=HIGH, gt=0, lt=float("inf"))
+    low: float = pa.Field(alias=LOW, gt=0, lt=float("inf"))
+    close: float = pa.Field(alias=CLOSE, gt=0, lt=float("inf"))
+    # gt=0: a period without trades has no bar, a zero-volume bar has made-up prices
+    volume: float = pa.Field(alias=VOLUME, gt=0, lt=float("inf"))
+
+    @pa.check(RESOLUTION, error="resolution is not a bar resolution")
     @classmethod
-    def warn_zero_volume(cls, data: pa.PolarsData) -> bool:
-        zero_volume_df = data.lazyframe.filter(pl.col(VOLUME) == 0).collect()
-        if zero_volume_df.height > 0:
-            YELLOW = "\033[93m"  # color for warning
-            RESET = "\033[0m"  # Reset to default color
-            warning_message = (
-                f"{YELLOW}⚠️ Warning: The following rows have zero volume:\n"
-                f"{zero_volume_df}{RESET}"
-            )
-            warnings.warn(warning_message, UserWarning, stacklevel=1)
-        return True  # Always return True to ensure the schema validation doesn't fail
+    def validate_bar_resolution(cls, data: pa.PolarsData) -> pl.LazyFrame:
+        # e.g. bars resampled from ticks still labeled '1_TICK', which the date gap check would skip
+        return data.lazyframe.select(
+            pl.col(data.key)
+            .unique()
+            .map_elements(_is_bar_resolution, return_dtype=pl.Boolean)
+            .all()
+        )
+
+    @pa.check(DATE)
+    @classmethod
+    def validate_no_duplicate_timestamps(cls, data: pa.PolarsData) -> pl.LazyFrame:
+        return data.lazyframe.select(
+            pl.col(data.key).n_unique() == pl.col(data.key).len()
+        )
 
     @pa.dataframe_check
     @classmethod
@@ -49,28 +72,25 @@ class BarDataSchema(MarketDataSchema):
     @classmethod
     def validate_low_is_lowest(cls, data: pa.PolarsData) -> pl.LazyFrame:
         return data.lazyframe.select(
-            (pl.col(LOW) <= pl.col(OPEN))
-            & (pl.col(LOW) <= pl.col(HIGH))
-            & (pl.col(LOW) <= pl.col(CLOSE))
+            # low <= high is already checked in validate_high_is_highest
+            (pl.col(LOW) <= pl.col(OPEN)) & (pl.col(LOW) <= pl.col(CLOSE))
         )
 
-    @pa.dataframe_check
+    @pa.dataframe_check(error="date gaps are not whole multiples of the resolution")
     @classmethod
-    def validate_open_within_high_low(cls, data: pa.PolarsData) -> pl.LazyFrame:
-        return data.lazyframe.select(
-            (pl.col(OPEN) >= pl.col(LOW)) & (pl.col(OPEN) <= pl.col(HIGH))
+    def validate_date_gaps_are_multiples_of_resolution(
+        cls, data: pa.PolarsData
+    ) -> pl.LazyFrame:
+        # Bars without trades are skipped, so gaps can be any whole multiple of the resolution,
+        # e.g. 1m bars can be 1m, 3m or 10m apart, but never 90s; offset bars don't change the gaps.
+        # It catches 1m bars labeled 2_MINUTE, but not 2m bars labeled 1_MINUTE, which look exactly like
+        # 1m bars of a product trading every other minute, so the label is tested where pfeed writes it.
+        # Month and year bars have no fixed length and are skipped, the same for invalid resolutions,
+        # which validate_resolution rejects.
+        bar_seconds = (
+            pl.col(RESOLUTION).first().map_elements(_bar_seconds, return_dtype=pl.Int64)
         )
-
-    @pa.dataframe_check
-    @classmethod
-    def validate_close_within_high_low(cls, data: pa.PolarsData) -> pl.LazyFrame:
+        gaps = pl.col(DATE).diff().dt.total_nanoseconds()
         return data.lazyframe.select(
-            (pl.col(CLOSE) >= pl.col(LOW)) & (pl.col(CLOSE) <= pl.col(HIGH))
-        )
-
-    @pa.check(DATE)
-    @classmethod
-    def validate_no_duplicate_timestamps(cls, data: pa.PolarsData) -> pl.LazyFrame:
-        return data.lazyframe.select(
-            pl.col(data.key).n_unique() == pl.col(data.key).len()
+            (gaps % (bar_seconds * 1_000_000_000) == 0).fill_null(True)
         )

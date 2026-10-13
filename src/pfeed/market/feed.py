@@ -229,19 +229,21 @@ class MarketFeed[
         cols = df.collect_schema().names()
         is_tick_data = PRICE in cols
         if is_tick_data:
-            value_cols = [PRICE, VOLUME]
-            extra_cols = [SIDE]
+            value_cols = [PRICE, VOLUME, SIDE]
+            # side is a standard column even if the source has no trade direction, null means unknown
+            if SIDE not in cols:
+                df = df.with_columns(pl.lit(None, dtype=pl.Int8).alias(SIDE))
         else:
             value_cols = [OPEN, HIGH, LOW, CLOSE, VOLUME]
-            extra_cols = []
         standard_cols = [*KEY_COLS, *value_cols]
 
+        product_specific_cols = []
         if product.is_stock() or product.is_etf():
             from pfeed.schemas.stock_data_schema import DIVIDENDS, SPLITS
 
-            extra_cols.extend([DIVIDENDS, SPLITS])
+            product_specific_cols.extend([DIVIDENDS, SPLITS])
 
-        for col in extra_cols:
+        for col in product_specific_cols:
             if col in cols:
                 standard_cols.append(col)
         return df.select(standard_cols)
@@ -266,11 +268,16 @@ class MarketFeed[
         offset: str | None = None,
     ) -> pl.LazyFrame:
         """Resamples the input lazyframe based on the target resolution.
+
         Args:
             df: The input lazyframe to be resampled.
             resolution: The target resolution to resample the data to.
+            product: Product instance of the data, e.g. created from `'BTC_USDT_PERP'`.
+                Decides the product-specific columns to keep and aggregate,
+                e.g. `dividends` and `splits` for stocks and ETFs.
             offset: Optional polars duration string (e.g., '30m') to shift the resampling window.
-                   For example, with '1h' resolution and '30m' offset, timestamps will be XX:30:00.
+                For example, with '1h' resolution and '30m' offset, timestamps will be XX:30:00.
+
         Returns:
             The resampled lazyframe.
         """

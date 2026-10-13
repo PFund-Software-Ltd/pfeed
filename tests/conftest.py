@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pfund.venues.bybit.product import BybitProduct
+    from pfund.entities.products.product_base import BaseProduct
 
 import os
 from pathlib import Path
@@ -48,10 +48,13 @@ def vcr_config():
     }
 
 
-@pytest.fixture
-def bybit_product() -> BybitProduct:
-    from pfund.venues.bybit.venue import Bybit
-    return Bybit.create_product("BTC_USDT_PERP")
+# TODO: add more products (e.g. stocks) to params once they are supported
+@pytest.fixture(params=["bybit"])
+def product(request: pytest.FixtureRequest) -> BaseProduct:
+    if request.param == "bybit":
+        from pfund.venues.bybit.venue import Bybit
+        return Bybit.create_product("BTC_USDT_PERP")
+    raise ValueError(f"unknown product param: {request.param}")
 
 
 @pytest.fixture(scope="session", autouse=True)

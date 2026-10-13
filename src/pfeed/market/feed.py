@@ -32,7 +32,6 @@ from enum import StrEnum
 
 import polars as pl
 from pfund.datas.resolution import Resolution
-from pfund.datas.timeframe import Timeframe
 from pfund.enums.env import Environment
 
 from pfeed.base.feed import requires
@@ -291,13 +290,8 @@ class MarketFeed[
 
         df = MarketFeed._filter_columns(df, product)
 
-        eresolution = {
-            Timeframe.MINUTE: "1m",
-            Timeframe.DAY: "1d",
-            Timeframe.WEEK: "1w",
-            Timeframe.MONTH: "1mo",
-            Timeframe.YEAR: "1y",
-        }.get(resolution.timeframe, f"1{resolution.timeframe.canonical}")
+        # pfund's timeframe units (s, m, h, d, w, mo, y) are the same as polars' duration units
+        eresolution = f"{resolution.period}{resolution.timeframe.canonical}"
 
         cols = df.collect_schema().names()
         is_tick_data = PRICE in cols

@@ -8,15 +8,15 @@ if TYPE_CHECKING:
 
     from narwhals.typing import IntoFrame
 
-    from pfeed.feeds.base_feed import BaseFeed
-    from pfeed.feeds.streaming_feed_mixin import RawMessage, WebSocketName
+    from pfeed.base.feed import BaseFeed
+    from pfeed.streaming.feed_mixin import RawMessage, WebSocketName
     from pfeed.streaming.zeromq import ZeroMQ
 
 import asyncio
 import logging
 from threading import Thread
 
-from pfeed.enums import DataCategory, DataSource
+from pfeed.enums import DataCategory
 
 
 # TODO: backfilling
@@ -86,19 +86,14 @@ class DataEngine:
 
     def add_feed(
         self,
-        data_source: DataSource | str,
+        data_source: str,
         data_category: DataCategory | str = DataCategory.MARKET_DATA,
         num_workers: int | None = None,
     ) -> BaseFeed:
-        from pfeed.feeds import create_feed
+        from pfeed.base import get_feed
 
-        feed: BaseFeed = create_feed(
-            data_source=data_source,
-            data_category=data_category,
-            pipeline_mode=True,
-            num_workers=num_workers,
-        )
-        if feed.supports_streaming():
+        feed: BaseFeed = get_feed(data_source, data_category, pipeline_mode=True, num_workers=num_workers)
+        if feed._supports("stream"):
             feed._set_engine(self)
             # HACK: add a add_feed() dynamically to the feed for chaining purpose:
             # e.g. engine.add_feed(...).stream(...).add_feed(...).stream(...)

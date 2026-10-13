@@ -4,17 +4,14 @@ import click
 from pfund_kit.cli.utils import cli_args_to_kwargs
 
 import pfeed as pe
-from pfeed.enums import DataCategory, DataLayer, DataSource, DataStorage
+from pfeed import registry
+from pfeed.enums import DataCategory, DataLayer, DataStorage
 
-# add aliases to supported download data sources
-SUPPORTED_DATA_SOURCES = [data_source.value for data_source in DataSource]
-SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [
-    pe.alias(ds) for ds in SUPPORTED_DATA_SOURCES if pe.alias(ds)
-]
+SUPPORTED_DATA_SOURCES = registry.list_sources()
 
 # a data source exposes one feed per data category; "download" picks the feed of
-# the requested category via pfeed.feeds.create_feed. Not every category has a
-# downloadable feed — create_feed raises a clear error if it doesn't.
+# the requested category via pfeed.get_feed. Not every category has a
+# downloadable feed — get_feed raises a clear error if it doesn't.
 SUPPORTED_CATEGORIES = [category.value for category in DataCategory]
 
 
@@ -30,7 +27,7 @@ SUPPORTED_CATEGORIES = [category.value for category in DataCategory]
     "--source",
     "-d",
     required=True,
-    type=click.Choice(SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED, case_sensitive=False),
+    type=click.Choice(SUPPORTED_DATA_SOURCES, case_sensitive=False),
     help="Data source",
 )
 @click.option(
@@ -112,13 +109,11 @@ def download(
     debug: bool,
 ):
     """Download historical data from a data source"""
-    from pfeed.feeds import create_feed
     from pfeed.storages.storage_config import StorageConfig
 
     pe.configure(data_path=data_path)
     if debug:
         pe.configure_logging(debug=debug)
-    data_source = pe.alias.resolve(data_source)
     data_category = DataCategory[category.upper()]
     is_market = data_category == DataCategory.MARKET_DATA
 
@@ -159,5 +154,5 @@ def download(
     for k, v in product_specs.items():
         kwargs[k] = v
 
-    feed = create_feed(data_source=data_source, data_category=data_category)
+    feed = pe.get_feed(data_source, data_category)
     feed.download(**kwargs)

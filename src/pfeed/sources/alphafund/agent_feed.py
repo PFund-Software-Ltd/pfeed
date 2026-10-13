@@ -14,14 +14,17 @@ import polars as pl
 from pfeed.enums import DataCategory
 from pfeed.sources.alphafund.agent_data_model import AlphaFundAgentDataModel
 from pfeed.sources.alphafund.base_feed import AlphaFundBaseFeed
-from pfeed.sources.alphafund.mixin import AlphaFundMixin
+from pfeed.sources.alphafund.source import AlphaFundSource
 from pfeed.sources.alphafund.requests import (
     AlphaFundAgentFeedDownloadRequest,
     AlphaFundAgentFeedRetrieveRequest,
 )
 
 
-class AlphaFundAgentFeed(AlphaFundMixin, AlphaFundBaseFeed):
+class AlphaFundAgentFeed(AlphaFundBaseFeed):
+    DataSource: ClassVar[type[AlphaFundSource]] = AlphaFundSource
+    data_source: AlphaFundSource
+
     DataModel: ClassVar[type[AlphaFundAgentDataModel]] = AlphaFundAgentDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.AGENT_DATA
 

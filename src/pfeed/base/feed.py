@@ -1,0 +1,528 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from pfund_kit.logging.loggers import ColoredLogger
+    from prefect import Flow as PrefectFlow
+    from ray.util.queue import Queue
+
+    from pfeed.base.data_model import BaseDataModel
+    from pfeed.base.request import BaseRequest
+    from pfeed.dataflow.dataflow import DataFlow
+    from pfeed.dataflow.faucet import Faucet
+    from pfeed.dataflow.result import DataFlowResult
+    from pfeed.io.base_io import BaseIO
+    from pfeed.source import BaseSource
+
+import functools
+import logging
+import os
+from abc import ABC, abstractmethod
+from enum import StrEnum
+
+from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
+
+
+def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
+    """Gates a public verb method (e.g. download) on the feed's capabilities, before any of its body runs."""
+
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(self: BaseFeed[Any, Any], *args: Any, **kwargs: Any) -> Any:
+            if not self._supports(verb):
+                raise NotImplementedError(f"{self.name} does not support {verb} for {self.data_domain}")
+            return func(self, *args, **kwargs)
+
+        return cast("F", wrapper)
+
+    return decorator
+
+
+class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest](ABC):
+    # set by the source that lists this feed in its Feeds, see BaseSource.__init_subclass__
+    DataSource: ClassVar[type[BaseSource]]
+    DataModel: ClassVar[type[BaseDataModel]]
+
+    class Capability(StrEnum):
+        """Verbs a feed gates on. Each feed subclasses this with its own members."""
+
+    # verbs this feed supports, defaults to every verb in its Capability
+    capabilities: ClassVar[frozenset[Capability]]
+    # methods a feed must override for each verb it supports
+    required_methods: ClassVar[dict[str, tuple[str, ...]]] = {}
+    data_domain: ClassVar[DataCategory]
+
+    def __init_subclass__(cls, **kwargs: Any):
+        from pfeed.streaming.feed_mixin import StreamingFeedMixin
+
+        super().__init_subclass__(**kwargs)
+        cls.capabilities = frozenset(cls.__dict__.get("capabilities", cls.Capability))
+        # framework base classes (listing ABC directly) hold the defaults, so only concrete feeds are checked
+        if ABC not in cls.__bases__:
+            errors: list[str] = []
+            for verb in sorted(cls.capabilities):
+                missing: list[str] = []
+                for method in cls.required_methods.get(verb, ()):
+                    owner = next((c for c in cls.__mro__ if method in c.__dict__), None)
+                    # not defined at all, or still the default from a framework base class
+                    if owner is None or ABC in owner.__bases__:
+                        missing.append(method)
+                if verb == "stream" and not issubclass(cls, StreamingFeedMixin):
+                    missing.insert(0, "StreamingFeedMixin as a base class")
+                if missing:
+                    errors.append(f"'{verb}' needs {', '.join(missing)}")
+            if errors:
+                raise TypeError(
+                    f"{cls.__name__} supports {sorted(map(str, cls.capabilities))} but is missing what they need:\n  "
+                    + "\n  ".join(errors)
+                    + f"\nImplement them, or remove the verbs from {cls.__name__}.capabilities"
+                )
+
+    def __init__(self, data_source: SourceT, pipeline_mode: bool = False, num_workers: int | None = None):
+        """
+        Args:
+            data_source: the source that owns this feed, shared by all of its feeds
+            pipeline_mode: whether to run in pipeline mode
+            num_workers: number of Ray tasks to run the batch/streaming dataflows in parallel.
+                When provided, Ray will be automatically initialized if ray.init() hasn't been called yet.
+                To customize Ray initialization (e.g. specifying num_cpus), call ray.init() explicitly before using this.
+        """
+        from pfeed.config import setup_logging
+
+        setup_logging()
+        if not isinstance(data_source, self.DataSource):
+            raise TypeError(
+                f"{type(self).__name__} belongs to {self.DataSource.__name__}, "
+                f"got {type(data_source).__name__}"
+            )
+        self._data_source: SourceT = data_source
+        self.logger: ColoredLogger = cast("ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}"))
+        self._pipeline_mode = pipeline_mode
+        self._dataflows: dict[RequestT, list[DataFlow]] = {}
+        # Flat list of result-bearing dataflows from the most recent run.
+        # Survives `_cleanup_after_run` clearing `_dataflows`, so post-run callers
+        # can access `completed_dataflows` / `failed_dataflows` regardless of
+        # whether Ray was used (Ray returns new objects from workers).
+        self._last_run_dataflows: list[DataFlow] = []
+        self._requests: list[RequestT] = []
+        self._num_workers: int | None = num_workers
+        self._is_running = False
+        if self._num_workers:
+            self.set_num_workers(self._num_workers)
+
+    @classmethod
+    @abstractmethod
+    def create_data_model(cls, *args: Any, **kwargs: Any) -> BaseDataModel:
+        pass
+
+    def _create_batch_dataflows(
+        self,
+        extract_func: Callable[..., Any],
+    ) -> list[DataFlow]:
+        """Creates a batch dataflow for the current request"""
+        from pfund_kit.style import RichColor, TextStyle
+
+        request = self._get_current_request()
+        self.logger.debug(
+            f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
+        )
+        data_model = request.to_data_model()
+        faucet = self._create_faucet(
+            data_source=self.data_source,
+            extract_func=extract_func,
+            extract_type=request.extract_type,
+        )
+        dataflows = [self._create_dataflow(faucet=faucet, data_model=data_model)]
+        self._dataflows[request] = dataflows
+        return dataflows
+
+    @abstractmethod
+    def run(self, **prefect_kwargs: Any) -> Any:
+        pass
+
+    def is_pipeline(self) -> bool:
+        return self._pipeline_mode
+
+    def is_running(self) -> bool:
+        return self._is_running
+
+    def _is_using_ray(self) -> bool:
+        return bool(self._num_workers)
+
+    def _supports(self, verb: Capability | str) -> bool:
+        return verb in self.capabilities
+
+    @property
+    def data_source(self) -> SourceT:
+        return self._data_source
+
+    @property
+    def name(self):
+        return self.data_source.name
+
+    @property
+    def dataflows(self) -> list[DataFlow]:
+        # Before/during a run: read from the build-up dict. After a run (when
+        # `_dataflows` has been cleared by `_cleanup_after_run`): fall back to the
+        # captured `_last_run_dataflows` so post-run inspection keeps working.
+        if self._dataflows:
+            return [df for dfs in self._dataflows.values() for df in dfs]
+        return list(self._last_run_dataflows)
+
+    @property
+    def streaming_dataflows(self) -> list[DataFlow]:
+        return [dataflow for dataflow in self.dataflows if dataflow.is_streaming()]
+
+    @property
+    def completed_dataflows(self) -> list[DataFlow]:
+        """Dataflows from the most recent run whose result.success is True."""
+        return [df for df in self._last_run_dataflows if df.result.success]
+
+    @property
+    def failed_dataflows(self) -> list[DataFlow]:
+        """Dataflows from the most recent run whose result.success is False."""
+        return [df for df in self._last_run_dataflows if not df.result.success]
+
+    def to_prefect_dataflows(self, **kwargs: Any) -> list[PrefectFlow]:
+        """
+        Args:
+            kwargs: kwargs specific to prefect @flow decorator
+
+        Note: this is an export, not a run — once the prefect flows leave this
+        feed, the user owns their lifecycle. We only validate; we deliberately
+        skip `_prepare_before_run` / `_cleanup_after_run` so we don't leave the
+        feed in an `is_running=True` state with no way to clear it.
+        """
+        self._finalize_run()
+        return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
+
+    def set_num_workers(self, num_workers: int):
+        """
+        Sets the number of workers for parallel execution using Ray.
+        The number of workers is capped by the available CPU count.
+
+        Args:
+            num_workers: The desired number of workers. Must be greater than 0.
+        """
+        assert num_workers > 0, "num_workers must be greater than 0"
+        num_cpus: int = cast(int, os.cpu_count())
+        self._num_workers = min(num_workers, num_cpus)
+
+    def _set_running(self, is_running: bool) -> None:
+        if self.is_running() and is_running:
+            raise RuntimeError(f"{self} is already running")
+        self._is_running = is_running
+
+    @staticmethod
+    def _create_dataflow(faucet: Faucet, data_model: BaseDataModel) -> DataFlow:
+        from pfeed.dataflow.dataflow import DataFlow
+
+        assert faucet.data_source.name == data_model.data_source, (
+            "faucet and data_model must have the same data source"
+        )
+        dataflow = DataFlow(faucet=faucet, data_model=data_model)
+        return dataflow
+
+    @staticmethod
+    def _create_faucet(
+        data_source: BaseSource,
+        extract_func: Callable[..., Any],
+        extract_type: ExtractType,
+    ) -> Faucet:
+        """
+        Args:
+            data_source: the data source to extract from
+            extract_func: the function to perform the extraction, e.g. _download_impl(), _stream_impl(), _retrieve_impl()
+            extract_type: the type of the extraction, e.g. download, stream, retrieve
+        """
+        from pfeed.dataflow.faucet import Faucet
+
+        return Faucet(
+            data_source=data_source,
+            extract_func=extract_func,
+            extract_type=extract_type,
+        )
+
+    def _get_current_request(self) -> RequestT:
+        request = self._requests[-1] if self._requests else None
+        if request is None:
+            raise AssertionError(
+                "No current request found, did you forget to call download()/retrieve()/stream() first?"
+            )
+        return request
+
+    def _append_request(self, request: RequestT) -> None:
+        # In pipeline mode requests accumulate before run(), but run() dispatches a
+        # single path based on whether streaming dataflows exist — batch and streaming
+        # requests cannot be mixed in one feed run. Reject the mix at the source rather
+        # than letting a batch faucet hit run_stream() (or vice versa) downstream.
+        if (
+            self._requests
+            and request.is_streaming() != self._requests[-1].is_streaming()
+        ):
+            raise ValueError(
+                "cannot mix streaming and batch requests in one pipeline: "
+                + f"{request.extract_type} request is incompatible with the queued "
+                + f"{self._requests[-1].extract_type} request"
+            )
+        self._requests.append(request)
+
+    def _validate_io(self, io: BaseIO) -> None:
+        if self._is_using_ray() and not io.CAPABILITIES.concurrent_partition_writes:
+            raise RuntimeError(
+                f"{type(io).__name__} does not support concurrent partition writes, cannot be used with Ray"
+            )
+
+    def transform(self, *funcs: Callable[..., Any]) -> Self:
+        request = self._get_current_request()
+        for dataflow in self._dataflows[request]:
+            dataflow.add_user_transformations(list(funcs))
+        return self
+
+    def load(
+        self,
+        io: BaseIO | None = None,
+        data_layer: DataLayer | str | None = None,
+    ) -> Self:
+        """Store the data of the request just created.
+
+        Args:
+            io: Where and how to store the data. If None, data is not stored.
+            data_layer: Data layer to store the data in. If None, the request's data layer.
+                CLEANED data can be stored as CURATED (e.g. after transform()),
+                other combinations must match the request's data layer.
+        """
+        # fluent-chain entry point: always targets the request just created
+        return self._load_for_request(
+            request=self._get_current_request(),
+            io=io,
+            data_layer=data_layer,
+        )
+
+    def _load_for_request(
+        self,
+        request: RequestT,
+        io: BaseIO | None = None,
+        data_layer: DataLayer | str | None = None,
+    ) -> Self:
+        # allowing passing in None is useful for dynamically determining if load() is needed
+        if io is None:
+            return self
+        self._validate_io(io)
+        data_layer = request.data_layer if data_layer is None else DataLayer[str(data_layer).upper()]
+        request.finalize_load_config(io, data_layer)
+        for dataflow in self._dataflows[request]:
+            dataflow.setup_handler(io, data_layer, str(self.data_domain))
+        return self
+
+    def _get_default_transformations(
+        self, request: RequestT
+    ) -> list[Callable[..., Any]]:
+        if request.extract_type == ExtractType.download:
+            default_transformations = self._get_default_transformations_for_download(
+                request
+            )
+        elif request.extract_type == ExtractType.stream:
+            default_transformations = self._get_default_transformations_for_stream(
+                request
+            )
+        elif request.extract_type == ExtractType.retrieve:
+            default_transformations = self._get_default_transformations_for_retrieve(
+                request
+            )
+        else:
+            raise ValueError(f"Unknown extract type: {request.extract_type}")
+        return default_transformations
+
+    def _get_default_transformations_for_download(
+        self,
+        _request: RequestT,
+        /,
+    ) -> list[Callable[..., Any]]:
+        return []
+
+    def _get_default_transformations_for_retrieve(
+        self,
+        _request: RequestT,
+        /,
+    ) -> list[Callable[..., Any]]:
+        return self._get_default_transformations_for_download(_request)
+
+    def _get_default_transformations_for_stream(
+        self,
+        _request: RequestT,
+        /,
+    ) -> list[Callable[..., Any]]:
+        return []
+
+    def _finalize_run(self) -> None:
+        # run-time method: finalize EVERY queued request, not just the latest.
+        # In pipeline mode multiple download()/retrieve()/stream() calls accumulate
+        # requests before run(), and `dataflows` runs all of them — so each must be
+        # sealed. (Unlike transform()/load(), which target the current request only.)
+        for request in self._requests:
+            dataflows = self._dataflows[request]
+            has_no_destination = any(
+                not dataflow.has_handler() for dataflow in dataflows
+            )
+            # NOTE: _load_for_request() will finalize the io and data layer in request
+            if has_no_destination:
+                _ = self._load_for_request(
+                    request=request,
+                    io=request.io,
+                )
+            default_transformations = self._get_default_transformations(request)
+            for dataflow in dataflows:
+                dataflow.add_default_transformations(default_transformations)
+                dataflow.seal()
+
+    def _prepare_before_run(self):
+        self._last_run_dataflows = []
+        self._finalize_run()
+        self._set_running(True)
+
+    def _cleanup_after_run(self):
+        self._requests.clear()
+        self._dataflows = {}
+        self._set_running(False)
+
+    def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> list[DataFlow]:
+        from pfund_kit.utils.progress_bar import ProgressBar, track
+
+        from pfeed.config import get_config
+        from pfeed.utils import is_using_prefect
+
+        use_prefect = is_using_prefect()
+        disable_progress_bar = not get_config().show_progress_bar
+        self._prepare_before_run()
+
+        def _run_dataflow(dataflow: DataFlow) -> DataFlowResult:
+            return dataflow.run_batch(
+                flow_type=FlowType.prefect if use_prefect else FlowType.native,
+                prefect_kwargs=prefect_kwargs,
+            )
+
+        # Collect the result-bearing dataflow objects here. For non-Ray these are the
+        # same objects as in `self._dataflows` (mutated in place); for Ray they're the
+        # deserialized copies returned from workers (which carry the actual results).
+        last_run_dataflows: list[DataFlow] = []
+
+        try:
+            if self._is_using_ray():
+                import ray
+
+                from pfeed.utils.ray import (
+                    ray_logging_context,
+                    setup_logger_in_ray_task,
+                    setup_ray,
+                )
+
+                setup_ray()
+
+                @ray.remote
+                def ray_task(
+                    logger_name: str, dataflow: DataFlow, log_queue: Queue
+                ) -> DataFlow:
+                    logger = setup_logger_in_ray_task(logger_name, log_queue)
+                    try:
+                        _ = _run_dataflow(dataflow)
+                    except RuntimeError as err:
+                        if use_prefect:
+                            logger.exception(f"Error in running prefect {dataflow}:")
+                            dataflow.mark_failed(err)
+                        else:
+                            raise
+                    except Exception as err:
+                        logger.exception(f"Error in running {dataflow}:")
+                        dataflow.mark_failed(err)
+                    return dataflow
+
+                with ray_logging_context(self.logger) as log_queue:
+                    try:
+                        assert self._num_workers is not None, "num_workers is not set"
+                        batch_size = self._num_workers
+                        dataflow_batches = [
+                            self.dataflows[i : i + batch_size]
+                            for i in range(0, len(self.dataflows), batch_size)
+                        ]
+                        with ProgressBar(
+                            total=len(self.dataflows),
+                            description=f"Running {self.name} dataflows",
+                            disable=disable_progress_bar,
+                        ) as pbar:
+                            for dataflow_batch in dataflow_batches:
+                                futures = [
+                                    ray_task.remote(
+                                        logger_name=self.logger.name,  # pyright: ignore[reportCallIssue]
+                                        dataflow=dataflow,
+                                        log_queue=log_queue,
+                                    )
+                                    for dataflow in dataflow_batch
+                                ]
+                                unfinished = futures
+                                while unfinished:
+                                    finished, unfinished = ray.wait(
+                                        unfinished, num_returns=1
+                                    )
+                                    for future in finished:
+                                        dataflow = ray.get(future)
+                                        last_run_dataflows.append(dataflow)
+                                        pbar.advance(1)
+                    except KeyboardInterrupt:
+                        self.logger.warning(
+                            f"KeyboardInterrupt received, stopping {self.name} dataflows..."
+                        )
+                    except Exception:
+                        self.logger.exception(
+                            f"Error in running {self.name} dataflows:"
+                        )
+                self.logger.debug("ray tasks finished")
+                # NOTE: Do NOT shut down Ray here to avoid interfering with Ray's control in higher-level frameworks that might also be using Ray.
+                # shutdown_ray()
+            else:
+                for dataflow in track(
+                    self.dataflows,
+                    description=f"Running {self.name} dataflows",
+                    disable=disable_progress_bar,
+                ):
+                    try:
+                        _ = _run_dataflow(dataflow)
+                    except RuntimeError as err:
+                        if use_prefect:
+                            self.logger.exception(
+                                f"Error in running prefect {dataflow}:"
+                            )
+                            dataflow.mark_failed(err)
+                        else:
+                            raise
+                    except Exception as err:
+                        self.logger.exception(f"Error in running {dataflow}:")
+                        dataflow.mark_failed(err)
+                    last_run_dataflows.append(dataflow)
+
+            if failed := [
+                dataflow
+                for dataflow in last_run_dataflows
+                if not dataflow.result.success
+            ]:
+                only_retrieval_dataflows = all(
+                    dataflow.extract_type == ExtractType.retrieve for dataflow in failed
+                )
+                log_level = (
+                    logging.DEBUG if only_retrieval_dataflows else logging.WARNING
+                )
+                self.logger.log(
+                    log_level,
+                    f"{self.name} has {len(failed)} failed dataflows, check {self.logger.name}.log for more details",
+                )
+
+            return last_run_dataflows
+        finally:
+            # Always commit partial progress and tear down state, even if the run aborted.
+            # Without this, an escaping exception (e.g. the non-prefect RuntimeError re-raise)
+            # would leave `_is_running=True`, locking the feed against any future `.run()`.
+            self._last_run_dataflows = last_run_dataflows
+            self._cleanup_after_run()

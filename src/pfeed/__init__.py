@@ -6,19 +6,16 @@ if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
 
+    # NOTE: data sources (plugins), for IDE hints of pe.<Source> only, never executed at runtime.
+    # official: pfeed_bybit
+    # third-party (merged via PR, NOT installed in pfeed's env, do not install them;
+    #   listed in ty.toml allowed-unresolved-imports instead): (none yet)
+    from pfeed_bybit import Bybit as Bybit
+
+    from pfeed.base import get_feed
     from pfeed.engine import DataEngine
     from pfeed.io.ducklake_io import DuckLakeIO
     from pfeed.io.parquet_io import ParquetIO
-    from pfeed.sources.alphafund import AlphaFund
-    from pfeed.sources.bybit import Bybit
-    from pfeed.sources.crypto_hft_data import (
-        CryptoHftData,
-        CryptoHftData as CHD,
-        CryptoHftData as CryptoHFTData,
-    )
-    from pfeed.sources.fxmacrodata import FXMacroData
-    from pfeed.sources.pfund import PFund
-    from pfeed.utils.aliases import ALIASES as alias  # noqa: N811
 
 from pfeed.config import configure, configure_logging, get_config
 
@@ -28,10 +25,6 @@ def __getattr__(name: str):
         from importlib.metadata import version
 
         return version("pfeed")
-    elif name == "alias":
-        from pfeed.utils.aliases import ALIASES
-
-        return ALIASES
     elif name == "plot":
         import pfund_plot as plot
 
@@ -44,49 +37,37 @@ def __getattr__(name: str):
         from pfeed.io.ducklake_io import DuckLakeIO
 
         return DuckLakeIO
+    elif name == "get_feed":
+        from pfeed.base import get_feed
+
+        return get_feed
     elif name == "DataEngine":
         from pfeed.engine import DataEngine
 
         return DataEngine
-    elif name.lower() == "bybit":
-        from pfeed.sources.bybit import Bybit
-
-        return Bybit
-    elif name.lower() in ("cryptohftdata", "chd"):
-        from pfeed.sources.crypto_hft_data import CryptoHftData
-
-        return CryptoHftData
-    elif name.lower() == "pfund":
-        from pfeed.sources.pfund import PFund
-
-        return PFund
-    elif name.lower() == "alphafund":
-        from pfeed.sources.alphafund import AlphaFund
-
-        return AlphaFund
-    elif name.lower() in ("fxmacrodata", "fxmd"):
-        from pfeed.sources.fxmacrodata import FXMacroData
-
-        return FXMacroData
+    elif name in _get_sources():
+        # data source class (e.g. pe.Bybit), exposed by a plugin's entry point
+        return _get_sources()[name].load()
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 __all__ = (  # noqa: RUF022
-    "alias",
     "get_config", "configure", "configure_logging",
     "plot",
     "DataEngine",
+    "get_feed",
     # IOs
     "DuckLakeIO",
     "ParquetIO",
-    # Data Sources
-    "AlphaFund",
-    "PFund",
-    "Bybit",
-    "CHD", "CryptoHFTData", "CryptoHftData",
-    "FXMacroData",
 )
 
 
+def _get_sources():
+    """Returns {source class name: entry point} of installed data sources, e.g. {"Bybit": ep}."""
+    from pfeed.registry import get_entry_points
+
+    return {ep.attr: ep for ep in get_entry_points().values()}
+
+
 def __dir__():
-    return sorted(__all__)
+    return sorted([*__all__, *_get_sources()])

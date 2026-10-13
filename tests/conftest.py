@@ -1,14 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pfund.entities.products.product_base import BaseProduct
+
 import os
 from pathlib import Path
 
 import pytest
 
 import pfeed as pe
-
-
-@pytest.fixture
-def bybit(request):
-    return pe.Bybit(**getattr(request, "param", {}))
 
 
 def pytest_addoption(parser: pytest.Parser):
@@ -44,6 +46,15 @@ def vcr_config():
         # Redact secrets
         # "filter_headers": [("authorization", "DUMMY")],
     }
+
+
+# TODO: add more products (e.g. stocks) to params once they are supported
+@pytest.fixture(params=["bybit"])
+def product(request: pytest.FixtureRequest) -> BaseProduct:
+    if request.param == "bybit":
+        from pfund.venues.bybit.venue import Bybit
+        return Bybit.create_product("BTC_USDT_PERP")
+    raise ValueError(f"unknown product param: {request.param}")
 
 
 @pytest.fixture(scope="session", autouse=True)

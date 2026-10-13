@@ -1,23 +1,75 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from pfund.entities.products.product_base import BaseProduct
+
 import pandera.polars as pa
 import polars as pl
 from pfund.datas.resolution import Resolution
 
-from pfeed.enums import MarketDataType
-from pfeed.schemas.time_based_data_schema import TimeBasedDataSchema
+from pfeed.schemas.time_based_data_schema import DATE, TimeBasedDataSchema
+
+# column names of cleaned market data, typed as str for code referring to them
+PRODUCT: Final = "product"
+RESOLUTION: Final = "resolution"
+# shared by tick and bar data
+VOLUME: Final = "volume"
+# columns that identify a row, same as pfund's KEY_COLS
+KEY_COLS: Final = (DATE, PRODUCT, RESOLUTION)
+
+
+def _is_str_resolution(value: str) -> bool:
+    try:
+        return str(Resolution(value)) == value
+    except ValueError:
+        return False
 
 
 class MarketDataSchema(TimeBasedDataSchema):
-    product: str = pa.Field(nullable=True)
-    resolution: str = pa.Field(
-        isin={str(Resolution(dtype)) for dtype in MarketDataType.__members__}
-    )
+    product: str = pa.Field(alias=PRODUCT, description="product.name, e.g. 'BYBIT_BTC_USDT_PERPETUAL'")
+    resolution: str = pa.Field(alias=RESOLUTION, description="str(Resolution), e.g. '1_MINUTE'")
 
-    @pa.check("resolution")
+    @pa.check(PRODUCT)
+    @classmethod
+    def validate_unique_product(cls, data: pa.PolarsData) -> pl.LazyFrame:
+        return data.lazyframe.select(pl.col(data.key).n_unique() <= 1)
+
+    @pa.check(RESOLUTION)
     @classmethod
     def validate_unique_resolution(cls, data: pa.PolarsData) -> pl.LazyFrame:
         return data.lazyframe.select(pl.col(data.key).n_unique() <= 1)
 
-    @pa.check("product")
+    @pa.check(RESOLUTION, error="resolution is not in the form of str(Resolution), e.g. '1_MINUTE'")
     @classmethod
-    def validate_unique_product(cls, data: pa.PolarsData) -> pl.LazyFrame:
-        return data.lazyframe.select(pl.col(data.key).n_unique() <= 1)
+    def validate_resolution(cls, data: pa.PolarsData) -> pl.LazyFrame:
+        # parse in Python only the unique values, normally one since validate_unique_resolution requires it
+        return data.lazyframe.select(
+            pl.col(data.key).unique().map_elements(_is_str_resolution, return_dtype=pl.Boolean).all()
+        )
+
+
+def get_market_data_schema(product: BaseProduct, resolution: Resolution) -> type[MarketDataSchema]:
+    """The schema of cleaned market data, by the product's asset type and the resolution's data type.
+
+    Takes the product instead of its asset type, so schemas can later depend on its specs (e.g. options).
+
+    Raises:
+        NotImplementedError: If the resolution is quote data.
+    """
+    # lazy: these schemas subclass MarketDataSchema, importing them at the top would be circular
+    from pfeed.schemas.bar_data_schema import BarDataSchema
+    from pfeed.schemas.stock_data_schema import StockBarDataSchema, StockTickDataSchema
+    from pfeed.schemas.tick_data_schema import TickDataSchema
+
+    # TODO: handle other products, currently stock/etf is just a draft
+    is_stock = product.is_stock() or product.is_etf()
+    if resolution.is_quote():
+        raise NotImplementedError("quote data is not supported yet")
+    elif resolution.is_tick():
+        return StockTickDataSchema if is_stock else TickDataSchema
+    elif resolution.is_bar():
+        return StockBarDataSchema if is_stock else BarDataSchema
+    else:
+        return MarketDataSchema

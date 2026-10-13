@@ -8,13 +8,12 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
     from prefect import Flow as PrefectDataFlow
 
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.base.data_handler import BaseDataHandler
+    from pfeed.base.data_model import BaseDataModel
     from pfeed.dataflow.faucet import Faucet
     from pfeed.enums import DataLayer
-    from pfeed.feeds.streaming_feed_mixin import RawMessage, StreamingData
     from pfeed.io.base_io import BaseIO
-    from pfeed.source import BaseSource
+    from pfeed.streaming.feed_mixin import RawMessage, StreamingData
     from pfeed.streaming.zeromq import ZeroMQ
 
 import logging
@@ -29,7 +28,7 @@ from pfeed.enums import ExtractType, FlowType
 class DataFlow:
     def __init__(self, faucet: Faucet, data_model: BaseDataModel):
         self._data_model: BaseDataModel = data_model
-        self._logger = logging.getLogger(f"pfeed.{self.data_source.name.lower()}")
+        self._logger = logging.getLogger(f"pfeed.{self.data_source.lower()}")
         self._faucet: Faucet = faucet
         self._transformations: list[Callable[..., IntoFrame | StreamingData]] = []
         self._handler: BaseDataHandler | None = None
@@ -44,7 +43,7 @@ class DataFlow:
         self._write_stream_kwargs: dict[str, Any] = {}
 
     def _setup_messaging(self):
-        from pfeed.data_models.market_data_model import MarketDataModel
+        from pfeed.market.data_model import MarketDataModel
         from pfeed.streaming.zeromq import ZeroMQDataChannel
 
         data_model: MarketDataModel = cast(MarketDataModel, self._data_model)
@@ -68,10 +67,10 @@ class DataFlow:
 
     @property
     def name(self):
-        return f"{self.data_source.name}_DataFlow"
+        return f"{self.data_source}_DataFlow"
 
     @property
-    def data_source(self) -> BaseSource:
+    def data_source(self) -> str:
         return self._data_model.data_source
 
     @property
@@ -304,7 +303,7 @@ class DataFlow:
             if self.is_streaming():
                 self._handler.write_stream(data, **self._write_stream_kwargs)
             else:
-                from pfeed._etl.base import convert_dataframe
+                from pfeed.utils.dataframe import convert_dataframe
 
                 # user transformations may return any dataframe, the data handler only takes polars
                 df = cast(pl.LazyFrame, convert_dataframe(data)).collect()

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 import polars as pl
 
-from pfeed.data_handlers.base_data_handler import BaseDataHandler
+from pfeed.base.data_handler import BaseDataHandler
 from pfeed.enums import DataLayer, DataTool, IOType
 from pfeed.io.table_io import TablePath
 from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
@@ -180,7 +180,7 @@ class PFundComponentDataHandler(BaseDataHandler):
                         self.file_path, metadata=self._create_metadata()
                     )
             else:  # data artifact writing to deltalake
-                from pfeed._etl.base import convert_dataframe
+                from pfeed.utils.dataframe import convert_dataframe
                 from pfeed.sources.pfund.component_data_model import DataArtifact
 
                 table_path = self._table_path

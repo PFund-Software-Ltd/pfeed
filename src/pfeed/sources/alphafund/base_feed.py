@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 from abc import ABC
 from uuid import UUID
 
-from pfeed.feeds.base_feed import BaseFeed
+from pfeed.base.feed import BaseFeed
 from pfeed.enums import DataStorage, IOFormat
 from pfeed.enums.data_category import AlphaFundDataCategory
 from pfeed.storages.database_storage import DatabaseStorage
@@ -135,7 +135,7 @@ class AlphaFundBaseFeed(BaseFeed, ABC):
         return data_model.to_frame()
 
     def run(self, **prefect_kwargs: Any) -> RunResult:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
 
         dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
         # one request only (enforced in _append_request),

@@ -25,7 +25,7 @@ import polars as pl
 
 from pfeed.config import setup_logging
 from pfeed.enums import DataCategory, DataStorage, DataTool, IOFormat
-from pfeed.feeds.base_feed import BaseFeed
+from pfeed.base.feed import BaseFeed
 from pfeed.io.io_config import IOConfig
 from pfeed.sources.pfund.component_data_model import PFundComponentDataModel
 from pfeed.sources.pfund.component_metadata import (
@@ -33,12 +33,12 @@ from pfeed.sources.pfund.component_metadata import (
     PFundComponentDataMetadata,
     RunMetadata,
 )
-from pfeed.sources.pfund.mixin import PFundMixin
+from pfeed.sources.pfund.source import PFundSource
 from pfeed.storages.storage_config import StorageConfig
 from pfund.enums import ArtifactType, Environment
 
 
-class PFundComponentFeed(PFundMixin, BaseFeed):
+class PFundComponentFeed(BaseFeed):
     """Feed over a pfund component's artifacts (data, model, source).
 
     Architecture (see the design discussion):
@@ -52,6 +52,9 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         but the extract source is pfeed's STORAGE instead of the live component. No
         serialization happens — FileIO/DeltaLakeIO hand the persisted bytes/frame back.
     """
+
+    DataSource: ClassVar[type[PFundSource]] = PFundSource
+    data_source: PFundSource
 
     DataModel: ClassVar[type[PFundComponentDataModel]] = PFundComponentDataModel
     data_domain: ClassVar[DataCategory] = DataCategory.COMPONENT_DATA
@@ -209,7 +212,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         elif artifact_type == ArtifactType.model:
             return cast("BaseModel", self.component)._model_artifact
         elif artifact_type == ArtifactType.data:
-            from pfeed._etl.base import convert_dataframe
+            from pfeed.utils.dataframe import convert_dataframe
 
             return cast(
                 pl.DataFrame,
@@ -327,7 +330,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
     def _get_default_transformations_for_download(
         self, request: PFundComponentFeedDownloadRequest
     ) -> list[Callable[..., Any]]:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
         from pfeed.utils import lambda_with_name
 
         default_transformations = []
@@ -398,7 +401,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
     def _get_default_transformations_for_retrieve(
         self, request: PFundComponentFeedRetrieveRequest
     ) -> list[Callable[..., Any]]:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
         from pfeed.utils import lambda_with_name
 
         default_transformations = []
@@ -417,7 +420,7 @@ class PFundComponentFeed(PFundMixin, BaseFeed):
         raise NotImplementedError(f"{self.name} stream() is not implemented yet")
 
     def run(self, **prefect_kwargs: Any) -> RunResult:
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
         from pfeed.dataflow.result import RunResult
 
         dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)

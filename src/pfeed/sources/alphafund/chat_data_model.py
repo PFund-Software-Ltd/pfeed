@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pydantic import UUID4, Field, model_validator, PrivateAttr
 
-from pfeed.data_models.base_table_data_model import BaseTableDataModel
+from pfeed.base.table_data_model import BaseTableDataModel
 from pfeed.enums import IOFormat
 from pfeed.sources.alphafund.data_handler import AlphaFundDataHandler
 

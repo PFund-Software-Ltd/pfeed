@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 import polars as pl
 
 from pfeed.enums import MarketDataType
-from pfeed.feeds.market_feed import MarketFeed
+from pfeed.market.feed import MarketFeed
 from pfeed.sources.crypto_hft_data.market_data_model import (
     CryptoHftDataMarketDataModel,
 )
@@ -32,7 +32,7 @@ class CryptoHftDataMarketFeed(CryptoHftDataMixin, MarketFeed):
     data_model_class: ClassVar[type[CryptoHftDataMarketDataModel]] = (
         CryptoHftDataMarketDataModel
     )
-    date_columns_in_raw_data: ClassVar[list[str]] = [
+    downloaded_data_date_cols: ClassVar[list[str]] = [
         "trade_time",
         "event_time",
         "received_time",
@@ -101,9 +101,9 @@ class CryptoHftDataMarketFeed(CryptoHftDataMixin, MarketFeed):
         return pl.from_pandas(data).lazy()
 
     @staticmethod
-    def _parse_message(product: CryptoHftDataProduct, msg: Any) -> Any:
+    def _parse_streaming_message(product: CryptoHftDataProduct, msg: Any) -> Any:
         raise NotImplementedError("CryptoHFTData does not provide live streaming")
 
     @staticmethod
-    def _normalize_timestamps(msg: Any) -> Any:
+    def _normalize_streaming_timestamp(msg: Any) -> Any:
         raise NotImplementedError("CryptoHFTData does not provide live streaming")

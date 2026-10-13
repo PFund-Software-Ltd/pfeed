@@ -1,4 +1,4 @@
-# from pfeed.feeds.market_feed import MarketFeed
+# from pfeed.market.feed import MarketFeed
 
 
 # # download data date by date to avoid memory issue (pandas)

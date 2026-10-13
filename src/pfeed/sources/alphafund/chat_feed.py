@@ -15,7 +15,7 @@ from pfeed.sources.alphafund.channel_data_model import AlphaFundChannelDataModel
 from pfeed.sources.alphafund.chat_data_model import AlphaFundChatDataModel
 from pfeed.sources.alphafund.embedding_data_model import AlphaFundEmbeddingDataModel
 from pfeed.sources.alphafund.message_data_model import AlphaFundMessageDataModel
-from pfeed.sources.alphafund.mixin import AlphaFundMixin
+from pfeed.sources.alphafund.source import AlphaFundSource
 from pfeed.storages.storage_config import StorageConfig
 from pfeed.sources.alphafund.requests import (
     AlphaFundChatFeedChannelDownloadRequest,
@@ -29,7 +29,10 @@ from pfeed.sources.alphafund.requests import (
 )
 
 
-class AlphaFundChatFeed(AlphaFundMixin, AlphaFundBaseFeed):
+class AlphaFundChatFeed(AlphaFundBaseFeed):
+    DataSource: ClassVar[type[AlphaFundSource]] = AlphaFundSource
+    data_source: AlphaFundSource
+
     ChannelDataModel: ClassVar[type[AlphaFundChannelDataModel]] = (
         AlphaFundChannelDataModel
     )

@@ -7,16 +7,16 @@ from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, ParamSpec, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from pfeed.data_models.base_data_model import BaseDataModel
+    from pfeed.base.data_model import BaseDataModel
     from pfeed.dataflow.dataflow import DataFlow
-    from pfeed.feeds.streaming_feed_mixin import (
+    from pfeed.streaming.feed_mixin import (
         ChannelKey,
         RawMessage,
         ReplayData,
         WebSocketName,
     )
     from pfeed.source import BaseSource
-    from pfeed.data_handlers.base_data_handler import BaseDataHandler
+    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.streaming.zeromq import ZeroMQ
 
     ExtractFuncParams = ParamSpec("ExtractFuncParams")
@@ -28,7 +28,7 @@ import logging
 
 import polars as pl
 
-from pfeed.enums import DataSource, ExtractType
+from pfeed.enums import ExtractType
 
 
 class Faucet:
@@ -57,13 +57,13 @@ class Faucet:
         self._is_stream_opened = False
         self._streaming_queue: (
             asyncio.Queue[
-                tuple[WebSocketName | DataSource, RawMessage | ReplayData] | None
+                tuple[WebSocketName | str, RawMessage | ReplayData] | None
             ]
             | None
         ) = None
         self._user_callback: (
             Callable[
-                [WebSocketName | DataSource, RawMessage | ReplayData],
+                [WebSocketName | str, RawMessage | ReplayData],
                 Awaitable[None] | None,
             ]
             | None
@@ -76,7 +76,7 @@ class Faucet:
     def streaming_queue(
         self,
     ) -> asyncio.Queue[
-        tuple[WebSocketName | DataSource, RawMessage | ReplayData] | None
+        tuple[WebSocketName | str, RawMessage | ReplayData] | None
     ]:
         if self._streaming_queue is None:
             self._streaming_queue = asyncio.Queue(maxsize=self.STREAMING_QUEUE_MAXSIZE)
@@ -122,7 +122,8 @@ class Faucet:
             # Signal that streaming is ending
             if self._streaming_queue:
                 await self._streaming_queue.put(None)
-            stream_api = self.data_source.get_stream_api()
+            # TODO(0.2.0): faucet shouldn't reach into the source; have the feed pass in its stream API
+            stream_api = self.data_source.get_stream_api()  # pyright: ignore[reportAttributeAccessIssue]
             await stream_api.disconnect()
             # reset the states for streaming
             self._is_stream_opened = False
@@ -136,7 +137,7 @@ class Faucet:
 
     async def _callback(
         self,
-        source: WebSocketName | DataSource,
+        source: WebSocketName | str,
         data: RawMessage | ReplayData,
         channel_key: ChannelKey | None,
     ) -> None:
@@ -177,7 +178,7 @@ class Faucet:
     def set_user_callback(
         self,
         callback: Callable[
-            [WebSocketName | DataSource, RawMessage | ReplayData],
+            [WebSocketName | str, RawMessage | ReplayData],
             Awaitable[None] | None,
         ],
     ):

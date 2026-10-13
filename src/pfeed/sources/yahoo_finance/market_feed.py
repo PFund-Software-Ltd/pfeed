@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from yfinance import Ticker
 
     from pfeed.dataflow.result import RunResult
-    from pfeed.feeds.streaming_feed_mixin import RawMessage
+    from pfeed.streaming.feed_mixin import RawMessage
     from pfeed.storages.storage_config import StorageConfig
 
 import datetime
@@ -20,21 +20,25 @@ import time
 
 import polars as pl
 
-from pfeed.feeds.market_feed import MarketFeed
-from pfeed.feeds.streaming_feed_mixin import StreamingFeedMixin
+from pfeed.market.feed import MarketFeed
+from pfeed.streaming.feed_mixin import StreamingFeedMixin
 from pfeed.io.io_config import IOConfig
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
-from pfeed.sources.yahoo_finance.mixin import YahooFinanceMixin
+from pfeed.sources.yahoo_finance.source import YahooFinanceSource
 
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
-class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
+class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
+    DataSource: ClassVar[type[YahooFinanceSource]] = YahooFinanceSource
+    data_source: YahooFinanceSource
+    _yfinance_kwargs: dict[str, Any] | None = None
+
     DataModel: ClassVar[type[YahooFinanceMarketDataModel]] = YahooFinanceMarketDataModel
     # "Date" is used for daily data and "Datetime" is used for other resolutions in yfinance
-    date_columns_in_raw_data: ClassVar[list[str]] = ["Datetime", "Date"]
+    downloaded_data_date_cols: ClassVar[list[str]] = ["Datetime", "Date"]
     SUPPORTS_ROLLBACK_MAX_PERIOD: ClassVar[bool] = True
-    DOWNLOAD_DATAFLOW_PER_DATE: ClassVar[bool] = False
+    download_dataflow_per_date: ClassVar[bool] = False
     # HACK: use '1900-01-01' as the start date for daily data since we don't know the exact start date when rollback_period == 'max'
     DAILY_DATA_ROLLBACK_MAX_START_DATE: ClassVar[str] = "1900-01-01"
 
@@ -89,23 +93,23 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         df = df.with_columns(pl.col("volume").cast(pl.Float64))
         return df
 
-    def _rollback_max_period(
-        self, resolution: Resolution
-    ) -> tuple[datetime.date | str | None, datetime.date | str | None, str]:
+    @classmethod
+    def _max_date_range(
+        cls, resolution: Resolution
+    ) -> tuple[datetime.date, datetime.date]:
+        from pfund.datas.resolution import Resolution
+
+        from pfeed.utils.temporal import parse_date_range
+
         resolution = Resolution(resolution)
         if resolution.is_day():
-            start_date = self.DAILY_DATA_ROLLBACK_MAX_START_DATE
-            end_date = None
-            rollback_period = "max"
+            return parse_date_range(cls.DAILY_DATA_ROLLBACK_MAX_START_DATE)
         elif resolution.is_hour():
-            start_date = end_date = None
-            rollback_period = "2y"  # max is 2 years for hourly data
+            return parse_date_range(rollback_period="2y")  # max is 2 years for hourly data
         elif resolution.is_minute():
-            start_date = end_date = None
-            rollback_period = "8d"  # max is 8 days for minute data
+            return parse_date_range(rollback_period="8d")  # max is 8 days for minute data
         else:
             raise ValueError(f"{resolution} is not supported")
-        return start_date, end_date, rollback_period
 
     def _check_yfinance_kwargs(
         self, yfinance_kwargs: dict[str, Any] | None
@@ -156,7 +160,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             rollback_period: Lookback from today, only used when `start_date` is empty.
                 Accepts a resolution string (e.g. '7d'), 'ytd', or 'max'. With 'max',
                 yfinance-specific lookback caps apply per resolution (see
-                `_rollback_max_period`).
+                `_max_date_range`).
             start_date: Start date. If empty, derived from `rollback_period`.
             end_date: End date. If empty, defaults to today.
             clean_data: Whether to clean raw data after download.
@@ -261,7 +265,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         return pl.from_pandas(df).lazy() if df is not None else None
 
     @staticmethod
-    def _parse_message(product: BaseProduct, msg: RawMessage) -> ResponseData:
+    def _parse_streaming_message(product: BaseProduct, msg: RawMessage) -> ResponseData:
         """
         Args:
             msg: raw message from yahoo finance streaming data
@@ -328,7 +332,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
         return parsed_msg
 
     @staticmethod
-    def _normalize_timestamps(msg: ResponseData) -> ResponseData:
+    def _normalize_streaming_timestamp(msg: ResponseData) -> ResponseData:
         """Yahoo Finance timestamps are in milliseconds, convert to nanoseconds"""
         # Yahoo Finance sends 'time' as a string, cast before scaling ms -> ns
         msg["ts"] = int(msg["ts"]) * 10**6
@@ -356,7 +360,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, YahooFinanceMixin, MarketFeed):
             expiration: e.g. '2024-12-13', it must be one of the values returned by `get_option_expirations`.
             option_type: 'CALL' or 'PUT'
         """
-        from pfeed._etl.base import convert_dataframe
+        from pfeed.utils.dataframe import convert_dataframe
 
         batch_api = self.data_source.get_batch_api()
         ticker: Ticker = batch_api.Ticker(symbol)

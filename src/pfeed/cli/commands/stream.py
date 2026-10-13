@@ -4,13 +4,10 @@ import click
 from pfund_kit.cli.utils import cli_args_to_kwargs
 
 import pfeed as pe
-from pfeed.enums import DataLayer, DataSource, DataStorage
+from pfeed import registry
+from pfeed.enums import DataCategory, DataLayer, DataStorage
 
-# add aliases to supported streaming data sources
-SUPPORTED_DATA_SOURCES = [data_source.value for data_source in DataSource]
-SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED = SUPPORTED_DATA_SOURCES + [
-    pe.alias(ds) for ds in SUPPORTED_DATA_SOURCES if pe.alias(ds)
-]
+SUPPORTED_DATA_SOURCES = registry.list_sources()
 
 # streaming is only supported by market feeds, so unlike `download` there is no
 # --category flag — the command always targets the source's market feed.
@@ -29,7 +26,7 @@ SUPPORTED_ENVS = ["BACKTEST", "PAPER", "LIVE"]
     "--source",
     "-d",
     required=True,
-    type=click.Choice(SUPPORTED_DATA_SOURCES_ALIASES_INCLUDED, case_sensitive=False),
+    type=click.Choice(SUPPORTED_DATA_SOURCES, case_sensitive=False),
     help="Data source",
 )
 @click.option(
@@ -134,13 +131,11 @@ def stream(
     debug: bool,
 ):
     """Stream market data live from a data source, or replay it from storage (BACKTEST)"""
-    from pfeed.feeds import create_market_feed
     from pfeed.storages.storage_config import StorageConfig
 
     pe.configure(data_path=data_path)
     if debug:
         pe.configure_logging(debug=debug)
-    data_source = pe.alias.resolve(data_source)
     env = env.upper()
     is_replaying = env == "BACKTEST"
 
@@ -184,5 +179,5 @@ def stream(
 
     # feed.stream() handles both live websocket (LIVE) and historical replay
     # (BACKTEST, incl. replay_pace) natively — no manual replay loop needed here.
-    feed = create_market_feed(data_source=data_source)
+    feed = pe.get_feed(data_source, DataCategory.MARKET_DATA)
     feed.stream(**kwargs)

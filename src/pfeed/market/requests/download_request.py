@@ -1,0 +1,15 @@
+from typing import Literal
+
+from pydantic import Field
+
+from pfeed.market.feed import MarketFeed
+from pfeed.market.requests.base_request import MarketFeedBaseRequest
+
+
+class MarketFeedDownloadRequest(MarketFeedBaseRequest):
+    dataflow_per_date: bool = Field(
+        description="Whether to create a dataflow for each date"
+    )
+    extract_type: Literal[MarketFeed.Capability.download] = (
+        MarketFeed.Capability.download
+    )

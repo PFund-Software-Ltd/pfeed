@@ -98,7 +98,7 @@ pip install "pfeed[yfinance]"
 ```python
 import pfeed as pe
 
-bybit = pe.Bybit()  # initialize data client
+bybit = pe.Bybit()  # initialize data source
 feed = bybit.market_feed  # this could be {data_source}.news_feed if the data source supports it
 ```
 

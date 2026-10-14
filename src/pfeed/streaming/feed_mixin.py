@@ -121,7 +121,12 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                 ),
             )
         dataflow = cast(
-            "DataFlow", self._create_dataflow(faucet=faucet, data_model=data_model)
+            "DataFlow",
+            self._create_dataflow(
+                faucet=faucet,
+                data_model=data_model,
+                default_transformations=self._get_default_transformations(request),
+            ),
         )
         dataflow.set_stream_options(
             flush_interval=request.flush_interval,
@@ -166,8 +171,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
 
         # Snapshot dataflows up front: streaming runs them all concurrently and we need a
         # stable list to drive both per-task wrapping and end_stream teardown. This also
-        # survives `_cleanup_after_run` so post-run inspection (completed/failed_dataflows)
-        # keeps working — same purpose as `last_run_dataflows` in `_run_batch_dataflows`.
+        # survives `_cleanup_after_run`, so the run can still return them.
         last_run_dataflows: list[DataFlow] = list(self.dataflows)
 
         async def _run_dataflows():
@@ -304,7 +308,9 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                     except Exception:
                         logger.exception(f"Error in streaming Ray {worker_name}:")
 
-                num_workers = min(self._num_workers, len(last_run_dataflows))
+                # each stream worker holds a CPU for the whole stream, workers beyond Ray's free CPUs would never start
+                num_cpus = max(1, int(ray.available_resources().get("CPU", 1)))
+                num_workers = min(self._num_workers, len(last_run_dataflows), num_cpus)
                 futures: list[ray.ObjectRef[None]] = []
                 try:
                     with ray_logging_context(self.logger) as log_queue:
@@ -347,10 +353,10 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                                     dataflow.name
                                 ] = dataflow._write_stream_kwargs
                                 # get ports in use for dataflow's ZMQ.ROUTER
-                                assert dataflow._msg_queue is not None, (
+                                assert dataflow.faucet.msg_queue is not None, (
                                     f"{dataflow.name} _msg_queue is not set"
                                 )
-                                dataflow_zmq: ZeroMQ = dataflow._msg_queue
+                                dataflow_zmq: ZeroMQ = dataflow.faucet.msg_queue
                                 ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(
                                     dataflow_zmq.sender
                                 )
@@ -459,10 +465,9 @@ class StreamingFeedMixin(ABC):  # noqa: B024
 
             return last_run_dataflows
         finally:
-            # Always commit captured dataflows + tear down state, even if the run aborted.
+            # Always tear down state, even if the run aborted.
             # Mirrors the batch runner's finally so an escaping exception can't leave
             # `_is_running=True` and lock the feed against future `.run()` calls.
-            self._last_run_dataflows = last_run_dataflows
             self._cleanup_after_run()
 
     def run(self, **prefect_kwargs: Any) -> RunResult | list[DataFlow]:

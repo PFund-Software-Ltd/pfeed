@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 
 import functools
 import logging
-import os
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
@@ -102,16 +101,10 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self.logger: ColoredLogger = cast("ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}"))
         self._pipeline_mode = pipeline_mode
         self._dataflows: dict[RequestT, list[DataFlow]] = {}
-        # Flat list of result-bearing dataflows from the most recent run.
-        # Survives `_cleanup_after_run` clearing `_dataflows`, so post-run callers
-        # can access `completed_dataflows` / `failed_dataflows` regardless of
-        # whether Ray was used (Ray returns new objects from workers).
-        self._last_run_dataflows: list[DataFlow] = []
         self._requests: list[RequestT] = []
-        self._num_workers: int | None = num_workers
+        self._num_workers: int | None = None
         self._is_running = False
-        if self._num_workers:
-            self._set_num_workers(self._num_workers)
+        self.set_num_workers(num_workers)
 
     @classmethod
     @abstractmethod
@@ -148,51 +141,44 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
 
     @property
     def dataflows(self) -> list[DataFlow]:
-        # Before/during a run: read from the build-up dict. After a run (when
-        # `_dataflows` has been cleared by `_cleanup_after_run`): fall back to the
-        # captured `_last_run_dataflows` so post-run inspection keeps working.
-        if self._dataflows:
-            return [df for dfs in self._dataflows.values() for df in dfs]
-        return list(self._last_run_dataflows)
+        return [df for dfs in self._dataflows.values() for df in dfs]
 
     @property
     def streaming_dataflows(self) -> list[DataFlow]:
         return [dataflow for dataflow in self.dataflows if dataflow.is_streaming()]
-
-    @property
-    def completed_dataflows(self) -> list[DataFlow]:
-        """Dataflows from the most recent run whose result.success is True."""
-        return [df for df in self._last_run_dataflows if df.result.success]
-
-    @property
-    def failed_dataflows(self) -> list[DataFlow]:
-        """Dataflows from the most recent run whose result.success is False."""
-        return [df for df in self._last_run_dataflows if not df.result.success]
 
     def to_prefect_dataflows(self, **kwargs: Any) -> list[PrefectFlow]:
         """
         Args:
             kwargs: kwargs specific to prefect @flow decorator
 
-        Note: this is an export, not a run — once the prefect flows leave this
-        feed, the user owns their lifecycle. We only validate; we deliberately
-        skip `_prepare_before_run` / `_cleanup_after_run` so we don't leave the
-        feed in an `is_running=True` state with no way to clear it.
+        Note: this is an export, not a run. The returned prefect flows are self-contained,
+        run them directly (e.g. `flow()`), the feed is no longer used for them, feed.run() will not run them.
+        After exporting, the feed's queued requests and dataflows are cleared,
+        the feed is only reusable for new requests, e.g. feed.download(...) then feed.run().
         """
-        self._finalize_run()
-        return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
+        if self.is_running():
+            raise RuntimeError(f"cannot export {self} to prefect while it is running")
+        try:
+            self._finalize_run()
+            return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
+        finally:
+            # hand-off: the prefect flows hold their own dataflows
+            self._cleanup_after_run()
 
-    def _set_num_workers(self, num_workers: int):
+    def set_num_workers(self, num_workers: int | None) -> None:
         """
-        Sets the number of workers for parallel execution using Ray.
-        The number of workers is capped by the available CPU count.
+        Sets the number of Ray workers to run the dataflows in parallel, None to run without Ray.
 
         Args:
             num_workers: The desired number of workers. Must be greater than 0.
+                Not capped by the local CPU count, Ray may run on a cluster and queues the tasks it can't schedule yet.
         """
-        assert num_workers > 0, "num_workers must be greater than 0"
-        num_cpus: int = cast(int, os.cpu_count())
-        self._num_workers = min(num_workers, num_cpus)
+        if self.is_running():
+            raise RuntimeError(f"cannot set num_workers while {self.name} is running")
+        if num_workers is not None and num_workers <= 0:
+            raise ValueError("num_workers must be greater than 0")
+        self._num_workers = num_workers
 
     def _set_running(self, is_running: bool) -> None:
         if self.is_running() and is_running:
@@ -200,10 +186,12 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._is_running = is_running
 
     @staticmethod
-    def _create_dataflow(faucet: Faucet, data_model: BaseDataModel) -> DataFlow:
+    def _create_dataflow(
+        faucet: Faucet, data_model: BaseDataModel, default_transformations: list[Callable[..., Any]]
+    ) -> DataFlow:
         from pfeed.dataflow.dataflow import DataFlow
 
-        dataflow = DataFlow(faucet=faucet, data_model=data_model)
+        dataflow = DataFlow(faucet=faucet, data_model=data_model, default_transformations=default_transformations)
         return dataflow
 
     def _create_faucet(self, request: RequestT, extract_func: Callable[..., Any]) -> Faucet:
@@ -235,16 +223,10 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         ):
             mode, queued_mode = ("streaming", "batch") if request.is_streaming() else ("batch", "streaming")
             raise ValueError(
-                f"cannot mix streaming and batch requests in one pipeline: "
+                "cannot mix streaming and batch requests in one pipeline: "
                 + f"{mode} request is incompatible with the queued {queued_mode} requests"
             )
         self._requests.append(request)
-
-    def _validate_io(self, io: BaseIO) -> None:
-        if self._is_using_ray() and not io.CAPABILITIES.concurrent_partition_writes:
-            raise RuntimeError(
-                f"{type(io).__name__} does not support concurrent partition writes, cannot be used with Ray"
-            )
 
     def transform(self, *funcs: Callable[..., Any]) -> Self:
         request = self._get_current_request()
@@ -252,25 +234,18 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
             dataflow.add_user_transformations(list(funcs))
         return self
 
-    def load(
-        self,
-        io: BaseIO | None = None,
-        data_layer: DataLayer | str | None = None,
-    ) -> Self:
+    def load(self, io: BaseIO | None = None, data_layer: DataLayer | str | None = None) -> Self:
         """Store the data of the request just created.
 
         Args:
-            io: Where and how to store the data. If None, data is not stored.
+            io: Where and how to store the data. If None, the request's io; if that is also None, data is not stored.
             data_layer: Data layer to store the data in. If None, the request's data layer.
                 CLEANED data can be stored as CURATED (e.g. after transform()),
                 other combinations must match the request's data layer.
         """
         # fluent-chain entry point: always targets the request just created
-        return self._load_for_request(
-            request=self._get_current_request(),
-            io=io,
-            data_layer=data_layer,
-        )
+        current_request = self._get_current_request()
+        return self._load_for_request(request=current_request, io=io, data_layer=data_layer)
 
     def _load_for_request(
         self,
@@ -278,10 +253,10 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         io: BaseIO | None = None,
         data_layer: DataLayer | str | None = None,
     ) -> Self:
-        # allowing passing in None is useful for dynamically determining if load() is needed
+        io = io or request.io
+        # no io anywhere, nothing to store
         if io is None:
             return self
-        self._validate_io(io)
         data_layer = request.data_layer if data_layer is None else DataLayer[str(data_layer).upper()]
         request.finalize_load_config(io, data_layer)
         for dataflow in self._dataflows[request]:
@@ -295,24 +270,35 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         # sealed. (Unlike transform()/load(), which target the current request only.)
         for request in self._requests:
             dataflows = self._dataflows[request]
-            has_no_destination = any(
-                not dataflow.has_handler() for dataflow in dataflows
-            )
-            # NOTE: _load_for_request() will finalize the io and data layer in request
-            if has_no_destination:
-                _ = self._load_for_request(
-                    request=request,
-                    io=request.io,
-                )
-            default_transformations = self._get_default_transformations(request)
+            # load() was not called, store the data in the request's io (if any)
+            if not any(dataflow.has_handler() for dataflow in dataflows):
+                _ = self._load_for_request(request=request)
             for dataflow in dataflows:
-                dataflow.add_default_transformations(default_transformations)
                 dataflow.seal()
 
+    def _validate_io_for_ray(self) -> None:
+        """Checks that every io the dataflows write to supports concurrent writes from Ray workers.
+
+        Checked at run time, so num_workers can be set before or after load().
+        """
+        if not self._is_using_ray():
+            return
+        for dataflow in self.dataflows:
+            if (handler := dataflow.handler) is not None and not handler.io.CAPABILITIES.concurrent_partition_writes:
+                raise RuntimeError(
+                    f"{type(handler.io).__name__} does not support concurrent partition writes, cannot be used with Ray"
+                )
+
     def _prepare_before_run(self):
-        self._last_run_dataflows = []
-        self._finalize_run()
+        # raises if already running, before touching the other run's state
         self._set_running(True)
+        try:
+            self._finalize_run()
+            self._validate_io_for_ray()
+        except Exception:
+            # drop the queued requests, otherwise every later run re-finalizes them and fails again
+            self._cleanup_after_run()
+            raise
 
     def _cleanup_after_run(self):
         self._requests.clear()
@@ -331,7 +317,11 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         request = self._get_current_request()
         self.logger.debug(f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN)
         faucet = self._create_faucet(request=request, extract_func=extract_func)
-        dataflows = [self._create_dataflow(faucet=faucet, data_model=dm) for dm in data_models]
+        default_transformations = self._get_default_transformations(request)
+        dataflows = [
+            self._create_dataflow(faucet=faucet, data_model=dm, default_transformations=default_transformations)
+            for dm in data_models
+        ]
         self._dataflows[request] = dataflows
         return dataflows
 
@@ -467,8 +457,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
 
             return last_run_dataflows
         finally:
-            # Always commit partial progress and tear down state, even if the run aborted.
+            # Always tear down state, even if the run aborted.
             # Without this, an escaping exception (e.g. the non-prefect RuntimeError re-raise)
             # would leave `_is_running=True`, locking the feed against any future `.run()`.
-            self._last_run_dataflows = last_run_dataflows
             self._cleanup_after_run()

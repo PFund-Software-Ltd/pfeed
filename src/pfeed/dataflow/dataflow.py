@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from pfeed.enums import DataLayer
     from pfeed.io.base_io import BaseIO
     from pfeed.streaming.feed_mixin import RawMessage, StreamingData
-    from pfeed.streaming.zeromq import ZeroMQ
 
 import logging
 
@@ -26,11 +25,20 @@ from pfeed.enums import FlowType
 
 
 class DataFlow:
-    def __init__(self, faucet: Faucet, data_model: BaseDataModel):
-        self._data_model: BaseDataModel = data_model
-        self._logger = logging.getLogger(f"pfeed.{self.data_source.lower()}")
+    def __init__(
+        self,
+        faucet: Faucet,
+        data_model: BaseDataModel,
+        default_transformations: list[Callable[..., Any]] | None = None,
+    ):
+        """
+        Args:
+            default_transformations: the feed's transformations, run before the user's from transform()
+        """
+        self._logger = logging.getLogger(f"pfeed.{data_model.data_source.lower()}")
         self._faucet: Faucet = faucet
-        self._transformations: list[Callable[..., IntoFrame | StreamingData]] = []
+        self._data_model: BaseDataModel = data_model
+        self._transformations: list[Callable[..., IntoFrame | StreamingData]] = list(default_transformations or [])
         self._handler: BaseDataHandler | None = None
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
@@ -42,36 +50,9 @@ class DataFlow:
         self._flush_interval: float | None = None
         self._write_stream_kwargs: dict[str, Any] = {}
 
-    def _setup_messaging(self):
-        from pfeed.market.data_model import MarketDataModel
-        from pfeed.streaming.zeromq import ZeroMQDataChannel
-
-        data_model: MarketDataModel = cast(MarketDataModel, self._data_model)
-        self._zmq_channel: str = ZeroMQDataChannel.create_market_data_channel(
-            # data_source=self.data_source.name,
-            product=data_model.product,
-            resolution=data_model.resolution,
-        )
-        if data_model.resolution.is_quote():
-            self._zmq_topic = PublicDataChannel.orderbook
-        elif data_model.resolution.is_tick():
-            self._zmq_topic = PublicDataChannel.tradebook
-        else:
-            self._zmq_topic = PublicDataChannel.candlestick
-
-    def set_stream_worker(self, worker_name: str):
-        if self._assigned_stream_worker is None:
-            self._setup_messaging()
-        self._assigned_stream_worker = worker_name
-        self.faucet.add_stream_worker(worker_name)
-
     @property
     def name(self):
-        return f"{self.data_source}_DataFlow"
-
-    @property
-    def data_source(self) -> str:
-        return self._data_model.data_source
+        return f"{self._data_model.data_source}_DataFlow"
 
     @property
     def data_model(self) -> BaseDataModel:
@@ -82,10 +63,6 @@ class DataFlow:
         return self._faucet
 
     @property
-    def _msg_queue(self) -> ZeroMQ | None:
-        return self.faucet.msg_queue
-
-    @property
     def handler(self) -> BaseDataHandler | None:
         return self._handler
 
@@ -93,12 +70,30 @@ class DataFlow:
     def result(self) -> DataFlowResult:
         return self._result
 
-    def add_default_transformations(self, funcs: list[Callable[..., Any]]):
-        if self.is_sealed():
-            raise ValueError(
-                f"cannot add default transformations to sealed dataflow {self.name}"
-            )
-        self._transformations = funcs + self._transformations
+    def __str__(self):
+        if not self.is_streaming():
+            return f"{self.name}.{self.faucet.extract_type}"
+        else:
+            return f"{self.name}.{self.faucet.extract_type}.{self.data_model}"
+
+    def is_streaming(self) -> bool:
+        return self.faucet.extract_type == "stream"
+
+    def is_replaying(self) -> bool:
+        # In BACKTEST the streaming dataflow's storage is the source it READS replay
+        # data from, not a write destination — so it must never write back.
+        from pfund.enums.env import Environment
+
+        return (
+            self.is_streaming()
+            and getattr(self._data_model, "env", None) == Environment.BACKTEST
+        )
+
+    def is_sealed(self) -> bool:
+        return self._is_sealed
+
+    def seal(self):
+        self._is_sealed = True
 
     def add_user_transformations(self, funcs: list[Callable[..., Any]]):
         if self.is_sealed():
@@ -107,23 +102,30 @@ class DataFlow:
             )
         self._transformations.extend(funcs)
 
+    def _transform(self, data: IntoFrame | StreamingData) -> IntoFrame | StreamingData:
+        for transform in self._transformations:
+            if self.is_streaming():
+                data: StreamingData = transform(data)
+            else:
+                if self._flow_type == FlowType.prefect:
+                    from prefect import task
+                    from prefect.utilities.annotations import quote
+
+                    transform = task(transform)
+                    # NOTE: Removing prefect's task introspection with `quote(data)` to save time
+                    data: IntoFrame = transform(quote(data))
+                else:
+                    data: IntoFrame = transform(data)
+            assert data is not None, (
+                f"transform function {transform} should return transformed data, but got None"
+            )
+            self._logger.debug(
+                f"transformed {self.data_model} data by '{transform.__name__}'"
+            )
+        return data
+
     def has_handler(self) -> bool:
         return self._handler is not None
-
-    def set_stream_options(self, flush_interval: float, **write_stream_kwargs: Any):
-        """Sets how streamed data is stored, before setup_handler().
-
-        Args:
-            flush_interval: seconds between writes of the buffered streamed data, see Sink.
-            write_stream_kwargs: passed to the handler's write_stream() with every message,
-                e.g. store_incremental_bars for MarketDataHandler.
-        """
-        if not self.is_streaming():
-            raise ValueError(f"cannot set stream options for non-streaming dataflow {self.name}")
-        if self._handler is not None:
-            raise ValueError(f"cannot set stream options after the handler is set for dataflow {self.name}")
-        self._flush_interval = flush_interval
-        self._write_stream_kwargs = write_stream_kwargs
 
     def setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str):
         """Creates the data handler that loads the data to io, from the dataflow's own data model.
@@ -150,73 +152,34 @@ class DataFlow:
             sink=sink,
         )
 
-    def __str__(self):
-        if not self.is_streaming():
-            return f"{self.name}.{self.extract_type}"
-        else:
-            return f"{self.name}.{self.extract_type}.{self.data_model}"
+    def _load(self, data: IntoFrame | StreamingData) -> bool:
+        """Returns whether the data was loaded, False if the dataflow has no handler."""
+        if self._handler is None:
+            return False
+        try:
+            if self.is_streaming():
+                self._handler.write_stream(data, **self._write_stream_kwargs)
+            else:
+                from pfeed.utils.dataframe import convert_dataframe
 
-    def is_streaming(self) -> bool:
-        return self.extract_type == ExtractType.stream
+                # user transformations may return any dataframe, the data handler only takes polars
+                df = cast(pl.LazyFrame, convert_dataframe(data)).collect()
+                if self._flow_type == FlowType.prefect:
+                    from prefect import task
 
-    def is_replaying(self) -> bool:
-        # In BACKTEST the streaming dataflow's storage is the source it READS replay
-        # data from, not a write destination — so it must never write back.
-        from pfund.enums.env import Environment
-
-        return (
-            self.is_streaming()
-            and getattr(self._data_model, "env", None) == Environment.BACKTEST
-        )
-
-    def is_sealed(self) -> bool:
-        return self._is_sealed
-
-    def seal(self):
-        self._is_sealed = True
-
-    def _run_batch_etl(self) -> pl.LazyFrame | None:
-        from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
-
-        if self._flow_type == FlowType.prefect:
-            from prefect import task
-
-            extract = task(self.faucet.open_batch)
-        else:
-            extract = self.faucet.open_batch
-        data: pl.LazyFrame | None = extract(data_model=self.data_model)
-        if (data is not None) and not (is_dataframe(data) and is_empty_dataframe(data)):
-            data = self._transform(data)
-            self._load(data)
-        return data
-
-    def run_batch(
-        self, flow_type: FlowType = FlowType.native, prefect_kwargs: dict | None = None
-    ) -> DataFlowResult:
-        if not self.is_sealed():
-            raise ValueError(f"cannot run batch on unsealed dataflow {self.name}")
-        self._logger.debug(
-            f"{self} to {self.handler!r}"
-        )
-
-        self._flow_type = FlowType[flow_type.lower()]
-        if self._flow_type == FlowType.prefect:
-            prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
-            data = prefect_dataflow()
-        else:
-            data = self._run_batch_etl()
-
-        if data is None:
-            self._result = DataFlowResult.failed(
-                error=ValueError(f"{self.name} produced no data")
+                    write = task(self._handler.write_batch)
+                else:
+                    write = self._handler.write_batch
+                write(df)
+            self._logger.debug(f"loaded {self.data_model} data to {self._handler}")
+            return True
+        except Exception:
+            # Re-raise so the batch runner marks the dataflow failed; a write
+            # error must surface in RunResult, not only in the log.
+            self._logger.exception(
+                f"failed to load {self.data_model} data to {self._handler}:"
             )
-        elif (handler := self.handler) is not None:
-            # Lazy-load from storage on access so Ray workers don't copy large frames back to main.
-            # read() also returns the metadata, the result only needs the data
-            self._result = DataFlowResult.lazy(loader=lambda: handler.read()[0])
-        else:
-            self._result = DataFlowResult.materialized(data=data)
-        return self._result
+            raise
 
     def mark_failed(self, error: BaseException) -> None:
         """Replace the dataflow's result with a failed one carrying the error.
@@ -226,6 +189,110 @@ class DataFlow:
         """
         self._result = DataFlowResult.failed(error=error)
 
+    def _run_batch_etl(self) -> DataFlowResult:
+        """Runs extract, transform and load, sets and returns the dataflow's result.
+
+        Empty data is also loaded, so its partitions are stored as empty and not re-downloaded,
+        but it is not read back, since an empty partition reads back as None.
+        """
+        from pfeed.utils.dataframe import is_dataframe, is_empty_dataframe
+
+        if self._flow_type == FlowType.prefect:
+            from prefect import task
+
+            extract = task(self.faucet.open_batch)
+        else:
+            extract = self.faucet.open_batch
+
+        data: pl.LazyFrame | None = extract(data_model=self.data_model)
+        if data is None:
+            self._result = DataFlowResult.failed(error=ValueError(f"{self.name} produced no data"))
+            return self._result
+        is_empty = is_dataframe(data) and is_empty_dataframe(data)
+        data = self._transform(data)
+        is_loaded = self._load(data)
+        # an empty partition reads back as None, so keep the empty frame itself as the result
+        if is_loaded and not is_empty and (handler := self.handler) is not None:
+            # Lazy-load from storage on access so Ray workers don't copy large frames back to main.
+            # read() also returns the metadata, the result only needs the data
+            self._result = DataFlowResult.lazy(loader=lambda: handler.read()[0])
+        else:
+            self._result = DataFlowResult.materialized(data=data)
+        return self._result
+
+    def run_batch(
+        self, flow_type: FlowType = FlowType.native, prefect_kwargs: dict | None = None
+    ) -> DataFlowResult:
+        if not self.is_sealed():
+            raise ValueError(f"cannot run batch on unsealed dataflow {self.name}")
+
+        self._logger.debug(f"{self} to {self.handler!r}")
+        self._flow_type = FlowType[flow_type.lower()]
+
+        if self._flow_type == FlowType.prefect:
+            prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
+            return prefect_dataflow()
+        else:
+            return self._run_batch_etl()
+
+    def to_prefect_dataflow(self, **kwargs: Any) -> PrefectDataFlow:
+        """
+        Converts dataflow to prefect flow
+        Args:
+            kwargs: kwargs specific to prefect @flow decorator
+        """
+        from prefect import flow
+
+        if "log_prints" not in kwargs:
+            kwargs["log_prints"] = True
+
+        @flow(name=self.name, flow_run_name=str(self.data_model), **kwargs)
+        def prefect_flow() -> DataFlowResult:
+            # from prefect.logging import get_run_logger
+            # prefect_logger = get_run_logger()  # this is a logger adapter
+            self._flow_type = FlowType.prefect
+            return self._run_batch_etl()
+
+        return prefect_flow
+
+    def _setup_messaging(self):
+        from pfeed.market.data_model import MarketDataModel
+        from pfeed.streaming.zeromq import ZeroMQDataChannel
+
+        data_model: MarketDataModel = cast(MarketDataModel, self._data_model)
+        self._zmq_channel: str = ZeroMQDataChannel.create_market_data_channel(
+            # data_source=self._data_model.data_source,
+            product=data_model.product,
+            resolution=data_model.resolution,
+        )
+        if data_model.resolution.is_quote():
+            self._zmq_topic = PublicDataChannel.orderbook
+        elif data_model.resolution.is_tick():
+            self._zmq_topic = PublicDataChannel.tradebook
+        else:
+            self._zmq_topic = PublicDataChannel.candlestick
+
+    def set_stream_worker(self, worker_name: str):
+        if self._assigned_stream_worker is None:
+            self._setup_messaging()
+        self._assigned_stream_worker = worker_name
+        self.faucet.add_stream_worker(worker_name)
+
+    def set_stream_options(self, flush_interval: float, **write_stream_kwargs: Any):
+        """Sets how streamed data is stored, before setup_handler().
+
+        Args:
+            flush_interval: seconds between writes of the buffered streamed data, see Sink.
+            write_stream_kwargs: passed to the handler's write_stream() with every message,
+                e.g. store_incremental_bars for MarketDataHandler.
+        """
+        if not self.is_streaming():
+            raise ValueError(f"cannot set stream options for non-streaming dataflow {self.name}")
+        if self._handler is not None:
+            raise ValueError(f"cannot set stream options after the handler is set for dataflow {self.name}")
+        self._flush_interval = flush_interval
+        self._write_stream_kwargs = write_stream_kwargs
+
     def _run_stream_etl(self, msg: RawMessage) -> None:
         # Replay is read-only: the raw row already reached the user callback and the
         # streaming queue in the faucet. Its storage is the READ source, so there is
@@ -233,8 +300,8 @@ class DataFlow:
         if self.is_replaying():
             return
         # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
-        if self._msg_queue:
-            self._msg_queue.send(
+        if self.faucet.msg_queue:
+            self.faucet.msg_queue.send(
                 channel=self._zmq_channel,
                 topic=self._zmq_topic,
                 data=(self.name, msg),
@@ -269,72 +336,3 @@ class DataFlow:
         # with Ray, each worker flushes its own copy of the handler, this one's sink stays empty
         if self._handler is not None and self._handler.sink is not None:
             self._handler.flush()
-
-    def _transform(self, data: IntoFrame | StreamingData) -> IntoFrame | StreamingData:
-        for transform in self._transformations:
-            if self.is_streaming():
-                data: StreamingData = transform(data)
-            else:
-                if self._flow_type == FlowType.prefect:
-                    from prefect import task
-                    from prefect.utilities.annotations import quote
-
-                    transform = task(transform)
-                    # NOTE: Removing prefect's task introspection with `quote(data)` to save time
-                    data: IntoFrame = transform(quote(data))
-                else:
-                    data: IntoFrame = transform(data)
-            assert data is not None, (
-                f"transform function {transform} should return transformed data, but got None"
-            )
-            self._logger.debug(
-                f"transformed {self.data_model} data by '{transform.__name__}'"
-            )
-        return data
-
-    def _load(self, data: IntoFrame | StreamingData):
-        if self._handler is None:
-            return
-        try:
-            if self.is_streaming():
-                self._handler.write_stream(data, **self._write_stream_kwargs)
-            else:
-                from pfeed.utils.dataframe import convert_dataframe
-
-                # user transformations may return any dataframe, the data handler only takes polars
-                df = cast(pl.LazyFrame, convert_dataframe(data)).collect()
-                if self._flow_type == FlowType.prefect:
-                    from prefect import task
-
-                    write = task(self._handler.write_batch)
-                else:
-                    write = self._handler.write_batch
-                write(df)
-            self._logger.debug(f"loaded {self.data_model} data to {self._handler}")
-        except Exception:
-            # Re-raise so the batch runner marks the dataflow failed; a write
-            # error must surface in RunResult, not only in the log.
-            self._logger.exception(
-                f"failed to load {self.data_model} data to {self._handler}:"
-            )
-            raise
-
-    def to_prefect_dataflow(self, **kwargs: Any) -> PrefectDataFlow:
-        """
-        Converts dataflow to prefect flow
-        Args:
-            kwargs: kwargs specific to prefect @flow decorator
-        """
-        from prefect import flow
-
-        if "log_prints" not in kwargs:
-            kwargs["log_prints"] = True
-
-        @flow(name=self.name, flow_run_name=str(self.data_model), **kwargs)
-        def prefect_flow():
-            # from prefect.logging import get_run_logger
-            # prefect_logger = get_run_logger()  # this is a logger adapter
-            self._flow_type = FlowType.prefect
-            return self._run_batch_etl()
-
-        return prefect_flow

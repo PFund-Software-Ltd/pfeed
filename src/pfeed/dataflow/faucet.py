@@ -66,6 +66,10 @@ class Faucet:
         self._stream_workers: list[str] = []
 
     @property
+    def extract_type(self) -> str:
+        return self._request.extract_type
+
+    @property
     def msg_queue(self) -> ZeroMQ:
         assert self._msg_queue is not None, "msg_queue is not set"
         return self._msg_queue

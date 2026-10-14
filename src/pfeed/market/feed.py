@@ -482,7 +482,6 @@ class MarketFeed[
             from pfeed.io.parquet_io import ParquetIO
 
             io = ParquetIO()
-        self._validate_io(io)
 
         # find the data resolution: the first search resolution stored for every date,
         # falls back to the target resolution if none is fully stored
@@ -726,7 +725,6 @@ class MarketFeed[
                 from pfeed.io.parquet_io import ParquetIO
 
                 io = ParquetIO()
-            self._validate_io(io)
 
         request = self.StreamRequest(
             data_source=self.name,

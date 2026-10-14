@@ -66,6 +66,11 @@ class Faucet:
         self._stream_workers: list[str] = []
 
     @property
+    def msg_queue(self) -> ZeroMQ:
+        assert self._msg_queue is not None, "msg_queue is not set"
+        return self._msg_queue
+
+    @property
     def streaming_queue(
         self,
     ) -> asyncio.Queue[
@@ -95,9 +100,6 @@ class Faucet:
             self._stream_workers.append(worker_name)
 
     def open_batch(self, data_model: BaseDataModel) -> pl.LazyFrame | None:
-        # All extract impls (download, retrieve, fetch) return just the frame.
-        # Storage-side info (e.g. missing-dates-in-storage) is read separately
-        # by the run aggregator via `dataflow.storage.read_metadata()`.
         return cast(pl.LazyFrame | None, self._extract_func(self._data_source, self._request, data_model))
 
     async def open_stream(

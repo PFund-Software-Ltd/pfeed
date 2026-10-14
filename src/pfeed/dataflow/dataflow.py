@@ -83,7 +83,7 @@ class DataFlow:
 
     @property
     def _msg_queue(self) -> ZeroMQ | None:
-        return self.faucet._msg_queue
+        return self.faucet.msg_queue
 
     @property
     def handler(self) -> BaseDataHandler | None:

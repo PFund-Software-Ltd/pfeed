@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from pfeed.base.time_based_data_model import TimeBasedDataModel
 
 import datetime
+from abc import abstractmethod
 
 from pfeed.base.request import BaseRequest
 
@@ -14,5 +15,6 @@ class TimeBasedFeedBaseRequest(BaseRequest):
     start_date: datetime.date
     end_date: datetime.date
 
+    @abstractmethod
     def to_data_model(self) -> TimeBasedDataModel:
-        raise NotImplementedError
+        ...

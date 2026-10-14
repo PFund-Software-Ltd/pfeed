@@ -111,28 +111,16 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._num_workers: int | None = num_workers
         self._is_running = False
         if self._num_workers:
-            self.set_num_workers(self._num_workers)
+            self._set_num_workers(self._num_workers)
 
     @classmethod
     @abstractmethod
     def create_data_model(cls, *args: Any, **kwargs: Any) -> BaseDataModel:
         pass
 
-    def _create_batch_dataflows(self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]) -> list[DataFlow]:
-        """Creates batch dataflows for the current request, one per data model
-
-        Args:
-            extract_func: the function to perform the extraction, e.g. _download_impl(), _retrieve_impl()
-            data_models: the data models to create dataflows for.
-        """
-        from pfund_kit.style import RichColor, TextStyle
-
-        request = self._get_current_request()
-        self.logger.debug(f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN)
-        faucet = self._create_faucet(request=request, extract_func=extract_func)
-        dataflows = [self._create_dataflow(faucet=faucet, data_model=dm) for dm in data_models]
-        self._dataflows[request] = dataflows
-        return dataflows
+    @abstractmethod
+    def _get_default_transformations(self, request: RequestT, /) -> list[Callable[..., Any]]:
+        pass
 
     @abstractmethod
     def run(self, **prefect_kwargs: Any) -> Any:
@@ -194,7 +182,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._finalize_run()
         return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
 
-    def set_num_workers(self, num_workers: int):
+    def _set_num_workers(self, num_workers: int):
         """
         Sets the number of workers for parallel execution using Ray.
         The number of workers is capped by the available CPU count.
@@ -232,7 +220,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         request = self._requests[-1] if self._requests else None
         if request is None:
             raise AssertionError(
-                "No current request found, did you forget to call download()/retrieve()/stream() first?"
+                "No current request found, did you forget to call e.g. download()/retrieve()/stream() first?"
             )
         return request
 
@@ -300,46 +288,6 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
             dataflow.setup_handler(io, data_layer, str(self.data_domain))
         return self
 
-    def _get_default_transformations(
-        self, request: RequestT
-    ) -> list[Callable[..., Any]]:
-        if request.extract_type == ExtractType.download:
-            default_transformations = self._get_default_transformations_for_download(
-                request
-            )
-        elif request.extract_type == ExtractType.stream:
-            default_transformations = self._get_default_transformations_for_stream(
-                request
-            )
-        elif request.extract_type == ExtractType.retrieve:
-            default_transformations = self._get_default_transformations_for_retrieve(
-                request
-            )
-        else:
-            raise ValueError(f"Unknown extract type: {request.extract_type}")
-        return default_transformations
-
-    def _get_default_transformations_for_download(
-        self,
-        _request: RequestT,
-        /,
-    ) -> list[Callable[..., Any]]:
-        return []
-
-    def _get_default_transformations_for_retrieve(
-        self,
-        _request: RequestT,
-        /,
-    ) -> list[Callable[..., Any]]:
-        return self._get_default_transformations_for_download(_request)
-
-    def _get_default_transformations_for_stream(
-        self,
-        _request: RequestT,
-        /,
-    ) -> list[Callable[..., Any]]:
-        return []
-
     def _finalize_run(self) -> None:
         # run-time method: finalize EVERY queued request, not just the latest.
         # In pipeline mode multiple download()/retrieve()/stream() calls accumulate
@@ -370,6 +318,22 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._requests.clear()
         self._dataflows = {}
         self._set_running(False)
+
+    def _create_batch_dataflows(self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]) -> list[DataFlow]:
+        """Creates batch dataflows for the current request, one per data model
+
+        Args:
+            extract_func: the function to perform the extraction, e.g. _download_impl(), _retrieve_impl()
+            data_models: the data models to create dataflows for.
+        """
+        from pfund_kit.style import RichColor, TextStyle
+
+        request = self._get_current_request()
+        self.logger.debug(f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN)
+        faucet = self._create_faucet(request=request, extract_func=extract_func)
+        dataflows = [self._create_dataflow(faucet=faucet, data_model=dm) for dm in data_models]
+        self._dataflows[request] = dataflows
+        return dataflows
 
     def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> list[DataFlow]:
         from pfund_kit.utils.progress_bar import ProgressBar, track

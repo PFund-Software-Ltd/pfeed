@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from types import FunctionType
+
     from pfund.entities.products.product_base import BaseProduct
     from pytest_mock import MockerFixture, MockType
 
     from pfeed.source import BaseSource
 
 import datetime
+import threading
 from types import SimpleNamespace
 
 import polars as pl
@@ -156,6 +159,67 @@ def test_create_data_model_from_product_instance(
     assert data_model.end_date == data_model.start_date == datetime.date(2025, 1, 1)
 
 
+class _TransformationsFeed(MarketFeed):
+    # module-level so cloudpickle pickles it by reference, like a real feed class
+    capabilities = frozenset()
+
+
+def _download_transformations(
+    product: BaseProduct, *, should_clean_data: bool
+) -> list[FunctionType]:
+    """Builds the download transformations without running the feed's __init__.
+
+    The feed and the request both hold a lock, which can't be pickled,
+    so pickling a transformation fails if it captures either of them.
+    """
+    feed = _TransformationsFeed.__new__(_TransformationsFeed)
+    # unpicklable, never read: pickling a transformation fails if it captures the feed
+    feed.__dict__["_lock"] = threading.Lock()
+    request = SimpleNamespace(
+        should_clean_data=lambda: should_clean_data,
+        product=product,
+        data_resolution=Resolution("1t"),
+        target_resolution=Resolution("1m"),
+        # unpicklable, never read: pickling a transformation fails if it captures the request
+        lock=threading.Lock(),
+    )
+    transformations = feed._get_default_transformations_for_download(cast("Any", request))
+    # lambdas and staticmethods accessed via the class, all plain functions with a __name__
+    return cast("list[FunctionType]", transformations)
+
+
+@pytest.mark.parametrize(
+    ("should_clean_data", "expected"),
+    [
+        # raw data stays a faithful mirror of the source, only its date column is standardized
+        (False, ["standardize_date_column"]),
+        (
+            True,
+            [
+                "standardize_date_column",
+                "_normalize_downloaded_data",
+                "standardize_columns",
+                "resample_data_if_necessary",
+                "_organize_columns",
+            ],
+        ),
+    ],
+)
+def test_get_default_transformations_for_download(
+    should_clean_data: bool, expected: list[str], product: BaseProduct
+):
+    transformations = _download_transformations(product, should_clean_data=should_clean_data)
+    assert [f.__name__ for f in transformations] == expected
+
+
+def test_get_default_transformations_for_download_picklable_without_feed(product: BaseProduct):
+    # dataflows (and their transformations) are pickled to Ray workers,
+    # the transformations must not capture the feed or the request
+    cloudpickle = pytest.importorskip("cloudpickle")
+    for transformation in _download_transformations(product, should_clean_data=True):
+        cloudpickle.dumps(transformation)
+
+
 @pytest.mark.parametrize(
     ("df_resolution", "target"),
     [
@@ -168,14 +232,14 @@ def test_resample_data_noop_when_target_not_coarser(
 ):
     dates = [datetime.datetime(2025, 1, 1, h) for h in range(4)]
     lf = _bars(df_resolution, dates, product)
-    out = MarketFeed._resample_data(lf, target, product)
+    out = MarketFeed._resample_data(lf, product, target)
     assert_frame_equal(out.collect(), lf.collect())
 
 
 def test_resample_data_bars(product: BaseProduct):
     dates = [datetime.datetime(2025, 1, 1, 0, m) for m in range(4)]
     lf = _bars("1m", dates, product)
-    out = MarketFeed._resample_data(lf, "1h", product).collect()
+    out = MarketFeed._resample_data(lf, product, "1h").collect()
     assert out.height == 1
     assert out.row(0, named=True) == {
         "date": datetime.datetime(2025, 1, 1, 0, 0),
@@ -199,7 +263,7 @@ def test_resample_data_bars_multiple_windows(product: BaseProduct):
         datetime.datetime(2025, 1, 1, 1, 1),
     ]
     lf = _bars("1m", dates, product)
-    out = MarketFeed._resample_data(lf, "1h", product).collect()
+    out = MarketFeed._resample_data(lf, product, "1h").collect()
     # each bar aggregates only its own rows
     assert out.select("date", "open", "high", "low", "close", "volume").rows() == [
         (datetime.datetime(2025, 1, 1, 0, 0), 1.0, 20.0, 0.5, 6.0, 300.0),
@@ -216,7 +280,7 @@ def test_resample_data_bars_unsorted_input(product: BaseProduct):
         datetime.datetime(2025, 1, 1, 0, 2),  # open=4, close=8
     ]
     lf = _bars("1m", dates, product)
-    out = MarketFeed._resample_data(lf, "1h", product).collect()
+    out = MarketFeed._resample_data(lf, product, "1h").collect()
     # open/close come from the earliest/latest timestamp, not the first/last row
     assert out["open"].to_list() == [3.0]
     assert out["close"].to_list() == [5.0]
@@ -240,7 +304,7 @@ def test_resample_data_ticks(product: BaseProduct):
             "side": pl.Series([1, -1, 1, -1, 1], dtype=pl.Int8),
         }
     )
-    out = MarketFeed._resample_data(lf, "1m", product).collect()
+    out = MarketFeed._resample_data(lf, product, "1m").collect()
     # price becomes OHLC, volume is summed, side is dropped
     assert "price" not in out.columns
     assert "side" not in out.columns
@@ -319,7 +383,7 @@ def test_resample_data_multi_period(
     product: BaseProduct,
 ):
     lf = _bars(df_resolution, dates, product)
-    out = MarketFeed._resample_data(lf, target, product).collect()
+    out = MarketFeed._resample_data(lf, product, target).collect()
     assert out["date"].to_list() == expected_dates
     assert out["n_data_points"].to_list() == expected_n_data_points
 
@@ -374,7 +438,7 @@ def test_resample_data_offset(
     product: BaseProduct,
 ):
     lf = _bars(df_resolution, dates, product)
-    out = MarketFeed._resample_data(lf, target, product, offset=offset).collect()
+    out = MarketFeed._resample_data(lf, product, target, offset=offset).collect()
     assert out["date"].to_list() == expected_dates
     assert out["n_data_points"].to_list() == expected_n_data_points
 

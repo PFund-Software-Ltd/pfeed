@@ -5,15 +5,23 @@ from typing import TYPE_CHECKING, Self
 if TYPE_CHECKING:
     from pfeed.base.data_model import BaseDataModel
 
+from abc import ABC, abstractmethod
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from pfeed.enums import DataLayer
 from pfeed.io.base_io import BaseIO
 
 
-class BaseRequest(BaseModel):
+class BaseRequest(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
+    extract_type: str = Field(
+        description="""
+            How the data is extracted, i.e. the feed capability that created this request,
+            e.g. 'download', 'retrieve' or 'stream'. Subclasses narrow it to a Literal with a default.
+        """,
+    )
     data_source: str
     data_origin: str = ""
     io: BaseIO | None = None
@@ -25,8 +33,9 @@ class BaseRequest(BaseModel):
         """,
     )
 
+    @abstractmethod
     def to_data_model(self) -> BaseDataModel:
-        raise NotImplementedError
+        ...
 
     def __hash__(self) -> int:
         return hash(id(self))

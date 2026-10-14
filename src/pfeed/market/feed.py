@@ -139,18 +139,18 @@ class MarketFeed[
     @staticmethod
     def _resample_data(
         df: pl.LazyFrame,
-        resolution: str | Resolution,
         product: BaseProduct,
+        resolution: str | Resolution,
         offset: str | None = None,
     ) -> pl.LazyFrame:
         """Resamples the input lazyframe based on the target resolution.
 
         Args:
             df: The input lazyframe to be resampled.
-            resolution: The target resolution to resample the data to.
             product: Product instance of the data, e.g. created from `'BTC_USDT_PERP'`.
                 Decides the product-specific columns to keep and aggregate,
                 e.g. `dividends` and `splits` for stocks and ETFs.
+            resolution: The target resolution to resample the data to.
             offset: Optional polars duration string (e.g., '30m') to shift the resampling window.
                 For example, with '1h' resolution and '30m' offset, timestamps will be XX:30:00.
 
@@ -367,36 +367,46 @@ class MarketFeed[
     def _download_impl(data_source: SourceT, request: RequestT, data_model: DataModelT) -> pl.LazyFrame | None:
         raise NotImplementedError
 
+    def _get_default_transformations(self, request: RequestT, /) -> list[Callable[..., Any]]:
+        match request.extract_type:
+            case self.Capability.download:
+                return self._get_default_transformations_for_download(request)
+            case self.Capability.retrieve:
+                return self._get_default_transformations_for_retrieve(request)
+            case self.Capability.stream:
+                return self._get_default_transformations_for_stream(request)
+            case _:
+                raise ValueError(f"Unknown extract type: {request.extract_type}")
+
     def _get_default_transformations_for_download(self, request: RequestT, /) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
 
+        # bind the class and plain values so the lambdas don't capture self (the whole feed) when pickled by Ray
+        cls = type(self)
+        is_raw_data = not request.should_clean_data()
+        product, data_resolution, target_resolution = request.product, request.data_resolution, request.target_resolution
         default_transformations = [
             lambda_with_name(
                 "standardize_date_column",
-                lambda df: self._standardize_date_column(
-                    df, is_raw_data=not request.should_clean_data()
-                ),
+                lambda df: cls._standardize_date_column(df, is_raw_data=is_raw_data),
             ),
         ]
-        if request.should_clean_data():
-            default_transformations.extend(
-                [
-                    self._normalize_downloaded_data,
-                    lambda_with_name(
-                        "standardize_columns",
-                        lambda df: self._standardize_columns(
-                            df, request.product, request.data_resolution
-                        ),
-                    ),
-                    lambda_with_name(
-                        "resample_data_if_necessary",
-                        lambda df: self._resample_data(
-                            df, request.target_resolution, request.product
-                        ),
-                    ),
-                    self._organize_columns,
-                ]
-            )
+        if not is_raw_data:
+            return default_transformations
+        default_transformations.extend(
+            [
+                cls._normalize_downloaded_data,
+                lambda_with_name(
+                    "standardize_columns",
+                    lambda df: cls._standardize_columns(df, product, data_resolution),
+                ),
+                lambda_with_name(
+                    "resample_data_if_necessary",
+                    lambda df: cls._resample_data(df, product, target_resolution),
+                ),
+                cls._organize_columns,
+            ]
+        )
         return default_transformations
 
     @requires(Capability.retrieve)
@@ -566,15 +576,16 @@ class MarketFeed[
                 ),
             )
         if request.data_layer != DataLayer.RAW:
+            # bind the class and plain values so the lambdas don't capture self (the whole feed) when pickled by Ray
+            cls = type(self)
+            product, target_resolution = request.product, request.target_resolution
             default_transformations.extend(
                 [
                     lambda_with_name(
                         "resample_data_if_necessary",
-                        lambda df: self._resample_data(
-                            df, request.target_resolution, request.product
-                        ),
+                        lambda df: cls._resample_data(df, product, target_resolution),
                     ),
-                    self._organize_columns,
+                    cls._organize_columns,
                 ]
             )
         return default_transformations

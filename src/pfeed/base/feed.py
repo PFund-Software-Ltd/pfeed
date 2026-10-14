@@ -23,7 +23,7 @@ import os
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
-from pfeed.enums import DataCategory, DataLayer, ExtractType, FlowType
+from pfeed.enums import DataCategory, DataLayer, FlowType
 
 
 def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
@@ -31,7 +31,7 @@ def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
 
     def decorator(func: F) -> F:
         @functools.wraps(func)
-        def wrapper(self: BaseFeed[Any, Any], *args: Any, **kwargs: Any) -> Any:
+        def wrapper(self: BaseFeed[Any, Any, Any], *args: Any, **kwargs: Any) -> Any:
             if not self._supports(verb):
                 raise NotImplementedError(f"{self.name} does not support {verb} for {self.data_domain}")
             return func(self, *args, **kwargs)
@@ -41,7 +41,7 @@ def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
     return decorator
 
 
-class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest](ABC):
+class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataModel](ABC):
     # set by the source that lists this feed in its Feeds, see BaseSource.__init_subclass__
     DataSource: ClassVar[type[BaseSource]]
     DataModel: ClassVar[type[BaseDataModel]]
@@ -118,24 +118,19 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest](ABC):
     def create_data_model(cls, *args: Any, **kwargs: Any) -> BaseDataModel:
         pass
 
-    def _create_batch_dataflows(
-        self,
-        extract_func: Callable[..., Any],
-    ) -> list[DataFlow]:
-        """Creates a batch dataflow for the current request"""
+    def _create_batch_dataflows(self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]) -> list[DataFlow]:
+        """Creates batch dataflows for the current request, one per data model
+
+        Args:
+            extract_func: the function to perform the extraction, e.g. _download_impl(), _retrieve_impl()
+            data_models: the data models to create dataflows for.
+        """
         from pfund_kit.style import RichColor, TextStyle
 
         request = self._get_current_request()
-        self.logger.debug(
-            f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
-        )
-        data_model = request.to_data_model()
-        faucet = self._create_faucet(
-            data_source=self.data_source,
-            extract_func=extract_func,
-            extract_type=request.extract_type,
-        )
-        dataflows = [self._create_dataflow(faucet=faucet, data_model=data_model)]
+        self.logger.debug(f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN)
+        faucet = self._create_faucet(request=request, extract_func=extract_func)
+        dataflows = [self._create_dataflow(faucet=faucet, data_model=dm) for dm in data_models]
         self._dataflows[request] = dataflows
         return dataflows
 
@@ -220,31 +215,18 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest](ABC):
     def _create_dataflow(faucet: Faucet, data_model: BaseDataModel) -> DataFlow:
         from pfeed.dataflow.dataflow import DataFlow
 
-        assert faucet.data_source.name == data_model.data_source, (
-            "faucet and data_model must have the same data source"
-        )
         dataflow = DataFlow(faucet=faucet, data_model=data_model)
         return dataflow
 
-    @staticmethod
-    def _create_faucet(
-        data_source: BaseSource,
-        extract_func: Callable[..., Any],
-        extract_type: ExtractType,
-    ) -> Faucet:
+    def _create_faucet(self, request: RequestT, extract_func: Callable[..., Any]) -> Faucet:
         """
         Args:
-            data_source: the data source to extract from
+            request: the request the faucet extracts data for
             extract_func: the function to perform the extraction, e.g. _download_impl(), _stream_impl(), _retrieve_impl()
-            extract_type: the type of the extraction, e.g. download, stream, retrieve
         """
         from pfeed.dataflow.faucet import Faucet
 
-        return Faucet(
-            data_source=data_source,
-            extract_func=extract_func,
-            extract_type=extract_type,
-        )
+        return Faucet(data_source=self.data_source, request=request, extract_func=extract_func)
 
     def _get_current_request(self) -> RequestT:
         request = self._requests[-1] if self._requests else None
@@ -263,10 +245,10 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest](ABC):
             self._requests
             and request.is_streaming() != self._requests[-1].is_streaming()
         ):
+            mode, queued_mode = ("streaming", "batch") if request.is_streaming() else ("batch", "streaming")
             raise ValueError(
-                "cannot mix streaming and batch requests in one pipeline: "
-                + f"{request.extract_type} request is incompatible with the queued "
-                + f"{self._requests[-1].extract_type} request"
+                f"cannot mix streaming and batch requests in one pipeline: "
+                + f"{mode} request is incompatible with the queued {queued_mode} requests"
             )
         self._requests.append(request)
 
@@ -456,7 +438,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest](ABC):
                             for dataflow_batch in dataflow_batches:
                                 futures = [
                                     ray_task.remote(
-                                        logger_name=self.logger.name,  # pyright: ignore[reportCallIssue]
+                                        logger_name=self.logger.name,
                                         dataflow=dataflow,
                                         log_queue=log_queue,
                                     )

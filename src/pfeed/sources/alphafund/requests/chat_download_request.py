@@ -2,7 +2,6 @@ from typing import Any, Literal
 
 from pydantic import UUID4, BaseModel, Field
 
-from pfeed.enums import ExtractType
 from pfeed.base.request import BaseRequest
 from pfeed.storages.storage_config import StorageConfig
 from pfeed.io.io_config import IOConfig
@@ -10,8 +9,8 @@ from pfeed.io.io_config import IOConfig
 
 class AlphaFundChatFeedBaseDownloadRequest(BaseRequest):
     extract_type: ExtractType = ExtractType.download
-    storage_config: StorageConfig  # pyright: ignore[reportGeneralTypeIssues]
-    io_config: IOConfig  # pyright: ignore[reportGeneralTypeIssues]
+    storage_config: StorageConfig
+    io_config: IOConfig
     # None means "leave as is": an update only writes the flags it was given.
     is_deleted: bool | None = None
     is_archived: bool | None = None
@@ -61,8 +60,8 @@ class AlphaFundChatFeedEmbeddingDownloadRequest(BaseRequest):
     """One batch of embedded windows from a single chat under one model."""
 
     extract_type: ExtractType = ExtractType.download
-    storage_config: StorageConfig  # pyright: ignore[reportGeneralTypeIssues]
-    io_config: IOConfig  # pyright: ignore[reportGeneralTypeIssues]
+    storage_config: StorageConfig
+    io_config: IOConfig
 
     fund_id: UUID4
     chat_id: UUID4

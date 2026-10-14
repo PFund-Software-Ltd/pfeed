@@ -1,4 +1,3 @@
-# pyright: reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
@@ -12,6 +11,7 @@ if TYPE_CHECKING:
     from yfinance import Ticker
 
     from pfeed.dataflow.result import RunResult
+    from pfeed.market.requests.base_request import MarketFeedBaseRequest
     from pfeed.streaming.feed_mixin import RawMessage
     from pfeed.storages.storage_config import StorageConfig
 
@@ -200,8 +200,11 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
             **product_specs,
         )
 
+    @staticmethod
     def _download_impl(
-        self, data_model: YahooFinanceMarketDataModel, data_resolution: Resolution
+        data_source: YahooFinanceSource,
+        request: MarketFeedBaseRequest,
+        data_model: YahooFinanceMarketDataModel,
     ) -> pl.LazyFrame | None:
         # convert pfund's resolution format to yfinance's interval
         timeframe = repr(data_resolution.timeframe)
@@ -316,7 +319,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
         # self.stream_api.update_last_time_in_mts(channel_key, current_time_in_mts)
 
         parsed_msg: ResponseData = {
-            "ts": ts,  # pyright: ignore[reportAssignmentType]
+            "ts": ts,
             "channel": product.symbol,
             "data": {
                 "ts": ts,

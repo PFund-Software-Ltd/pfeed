@@ -46,6 +46,10 @@ class TimeBasedDataModel(BaseDataModel):
     def is_date_range(self) -> bool:
         return self.start_date != self.end_date
 
+    def split_by_date(self) -> list[Self]:
+        """Splits the date range into single-date copies of this data model"""
+        return [self.model_copy(update={"start_date": d, "end_date": d}) for d in self.dates]
+
     def __str__(self) -> str:
         if self.is_date_range():
             return ":".join(

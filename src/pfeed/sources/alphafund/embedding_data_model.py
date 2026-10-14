@@ -57,7 +57,7 @@ class AlphaFundEmbeddingDataModel(BaseTableDataModel):
     dimension: int | None = None
 
     @property
-    def table_name(self) -> str:  # pyright: ignore[reportIncompatibleVariableOverride]
+    def table_name(self) -> str:
         if self.embedding_model is None:
             raise ValueError(
                 "embedding_model must be set to locate the embeddings table"
@@ -70,7 +70,7 @@ class AlphaFundEmbeddingDataModel(BaseTableDataModel):
     def column_nullability(cls) -> dict[str, bool]:
         return {column_name: False for column_name in cls.column_names()}
 
-    def polars_schema(self) -> dict[str, pl.DataType]:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def polars_schema(self) -> dict[str, pl.DataType]:
         schema = super().polars_schema()
         if self.dimension is not None:
             schema["vector"] = pl.Array(pl.Float32(), self.dimension)

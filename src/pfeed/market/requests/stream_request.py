@@ -4,12 +4,13 @@ from pfund.datas.data_config import DataConfig
 from pydantic import Field
 
 from pfeed.enums import DataLayer
-from pfeed.market.feed import MarketFeed
 from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
 class MarketFeedStreamRequest(MarketFeedBaseRequest):
-    extract_type: Literal[MarketFeed.Capability.stream] = MarketFeed.Capability.stream
+    # hard-coded "stream" instead of MarketFeed.Capability.stream to avoid a circular import,
+    # MarketFeed.__init_subclass__ checks it matches the capability
+    extract_type: Literal["stream"] = "stream"
     data_config: DataConfig | None = None
     replay_pace: float | None = Field(
         default=0,

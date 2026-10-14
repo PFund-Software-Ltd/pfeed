@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
     from pfeed._io.io_config import IOConfig
     from pfeed.dataflow.result import RunResult
+    from pfeed.market.requests.base_request import MarketFeedBaseRequest
+    from pfeed.sources.crypto_hft_data.source import CryptoHftDataSource
     from pfeed.storages.storage_config import StorageConfig
 
 import polars as pl
@@ -81,10 +83,11 @@ class CryptoHftDataMarketFeed(CryptoHftDataMixin, MarketFeed):
             **product_specs,
         )
 
+    @staticmethod
     def _download_impl(
-        self,
+        data_source: CryptoHftDataSource,
+        request: MarketFeedBaseRequest,
         data_model: CryptoHftDataMarketDataModel,
-        data_resolution: Resolution,
     ) -> pl.LazyFrame | None:
         assert data_model.start_date == data_model.end_date, (
             f"{self.name} download() only supports downloading data for a single day"

@@ -104,6 +104,14 @@ class BaseSource(ABC):
         self._num_workers: int | dict[DataCategory | str, int] | None = num_workers
         self._create_feeds()
 
+    def __getstate__(self) -> dict[str, Any]:
+        # drop the feeds so a pickled source (e.g. sent to a Ray worker) doesn't drag them and their dataflows along
+        state = self.__dict__.copy()
+        state["_feeds"] = []
+        for data_category in self.Feeds:
+            state.pop(data_category.feed_name, None)
+        return state
+
     @property
     def name(self) -> str:
         return self.METADATA.name

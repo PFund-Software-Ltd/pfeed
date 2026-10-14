@@ -3,15 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from narwhals.typing import Frame, IntoFrame
     from pfund.datas.resolution import Resolution
 
     from pfeed.base.time_based_data_model import TimeBasedDataModel
     from pfeed.base.time_based_request import TimeBasedFeedBaseRequest
-    from pfeed.dataflow.dataflow import DataFlow
-    from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult, RunResult
     from pfeed.source import BaseSource
 
@@ -19,7 +15,6 @@ import datetime
 from abc import ABC
 
 import polars as pl
-from pfund_kit.style import RichColor, TextStyle
 
 from pfeed.base.feed import BaseFeed
 from pfeed.utils.temporal import parse_date_range
@@ -29,12 +24,12 @@ class TimeBasedFeed[
     SourceT: BaseSource,
     RequestT: TimeBasedFeedBaseRequest,
     DataModelT: TimeBasedDataModel,
-](BaseFeed[SourceT, RequestT], ABC):
+](BaseFeed[SourceT, RequestT, DataModelT], ABC):
     DataModel: ClassVar[type[TimeBasedDataModel]]
     downloaded_data_date_cols: ClassVar[list[str]]
     # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),
     # False = one dataflow spanning the whole range (e.g. a range query API).
-    download_dataflow_per_date: ClassVar[bool] = True
+    download_dataflow_per_date: ClassVar[bool]
 
     @classmethod
     def _standardize_date_column(cls, df: pl.LazyFrame, is_raw_data: bool) -> pl.LazyFrame:
@@ -186,32 +181,6 @@ class TimeBasedFeed[
             return cls._max_date_range(resolution)
         return parse_date_range(start_date, end_date, rollback_period)
 
-    def _create_batch_dataflows(
-        self, extract_func: Callable[[DataModelT], Any]
-    ) -> list[DataFlow]:
-        request = self._get_current_request()
-        self.logger.debug(
-            f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
-        )
-        data_model = cast("DataModelT", request.to_data_model())
-        faucet: Faucet = self._create_faucet(
-            data_source=self.data_source,
-            extract_func=extract_func,
-            extract_type=request.extract_type,
-        )
-        if request.dataflow_per_date:
-            data_models = [
-                data_model.model_copy(update={"start_date": d, "end_date": d})
-                for d in data_model.dates
-            ]
-        else:
-            data_models = [data_model]
-        dataflows = [
-            self._create_dataflow(faucet=faucet, data_model=dm) for dm in data_models
-        ]
-        self._dataflows[request] = dataflows
-        return dataflows
-
     def run(self, **prefect_kwargs: Any) -> RunResult:
         """Runs dataflows and returns a RunResult exposing the combined frame,
         per-flow successes/failures, and any dates that produced no data."""
@@ -233,7 +202,7 @@ class TimeBasedFeed[
             nw.from_native(df) for df in result_dfs if not is_empty_dataframe(df)
         ]
         if dfs:
-            df: Frame = cast("Frame", nw.concat(dfs))  # pyright: ignore[reportArgumentType]
+            df: Frame = cast("Frame", nw.concat(dfs))
             schema = df.collect_schema()
             columns = schema.names()
             if "date" in columns and schema["date"].is_temporal():

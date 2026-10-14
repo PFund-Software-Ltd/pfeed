@@ -1,6 +1,5 @@
 from pydantic import UUID4
 
-from pfeed.enums import ExtractType
 from pfeed.io.io_config import IOConfig
 from pfeed.base.request import BaseRequest
 from pfeed.storages.storage_config import StorageConfig

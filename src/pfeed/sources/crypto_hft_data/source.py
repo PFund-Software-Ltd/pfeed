@@ -1,4 +1,3 @@
-# pyright: reportArgumentType=false
 """CryptoHFTData source metadata and SDK construction."""
 
 from __future__ import annotations

@@ -2,7 +2,6 @@ from typing import Any
 
 from pydantic import UUID4, Field, model_validator
 
-from pfeed.enums import ExtractType
 from pfeed.io.io_config import IOConfig
 from pfeed.base.request import BaseRequest
 from pfeed.storages.storage_config import StorageConfig
@@ -42,7 +41,7 @@ class AlphaFundChatFeedSearchRequest(AlphaFundChatFeedEmbeddingRetrieveRequest):
     query_vector: list[float] | None = None
     query_text: str | None = None
     limit: int = Field(default=10, gt=0)
-    chat_id: UUID4 | list[UUID4] | None = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+    chat_id: UUID4 | list[UUID4] | None = Field(
         default=None, description="One chat or a set of chats; None means every chat in the fund"
     )
     search_kwargs: dict[str, Any] = Field(

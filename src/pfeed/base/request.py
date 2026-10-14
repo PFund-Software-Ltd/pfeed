@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from pfeed.enums import DataLayer, ExtractType
+from pfeed.enums import DataLayer
 from pfeed.io.base_io import BaseIO
 
 
@@ -16,7 +16,6 @@ class BaseRequest(BaseModel):
 
     data_source: str
     data_origin: str = ""
-    extract_type: ExtractType
     io: BaseIO | None = None
     data_layer: DataLayer = Field(
         default=DataLayer.CLEANED,

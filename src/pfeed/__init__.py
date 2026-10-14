@@ -7,9 +7,10 @@ if TYPE_CHECKING:
     import pfund_plot as plot
 
     # NOTE: data sources (plugins), for IDE hints of pe.<Source> only, never executed at runtime.
-    # official: pfeed_bybit
-    # third-party (merged via PR, NOT installed in pfeed's env, do not install them;
-    #   listed in ty.toml allowed-unresolved-imports instead): (none yet)
+    # pe.<Source> is reserved for OFFICIAL sources (currently: pfeed_bybit); only they are listed here.
+    # third-party sources are NOT exposed as pe.<Source>, use either:
+    #   from pfeed_xxx import XXX
+    #   pe.get_feed("xxx", ...)
     from pfeed_bybit import Bybit as Bybit
 
     from pfeed.base import get_feed

@@ -325,7 +325,7 @@ class AlphaFundChatFeed(AlphaFundBaseFeed):
             chat_id=chat_id,
             embedding_model=embedding_model,
             dimension=dimension,
-            windows=windows,  # pyright: ignore[reportArgumentType]
+            windows=windows,
             storage_config=storage_config,
             io_config=io_config,
         )

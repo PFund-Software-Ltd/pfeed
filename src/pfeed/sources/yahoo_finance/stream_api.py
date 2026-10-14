@@ -46,7 +46,7 @@ class StreamAPI:
             style=TextStyle.BOLD + RichColor.YELLOW,
         )
         await self._ws_api.subscribe(self._channels)
-        await self._ws_api.listen(self._callback)  # pyright: ignore[reportUnknownMemberType]
+        await self._ws_api.listen(self._callback)
 
     async def disconnect(self):
         # await self._ws_api.unsubscribe(list(self._ws_api._subscriptions))  # no need to unsubscribe, ws already closed

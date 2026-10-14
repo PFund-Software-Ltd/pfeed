@@ -3,18 +3,13 @@ from typing import Literal
 from pydantic import Field
 
 from pfeed.io.base_io import BaseIO
-from pfeed.market.feed import MarketFeed
 from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
 class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
-    dataflow_per_date: bool = Field(
-        description="Whether to create a dataflow for each date",
-        default=False,
-    )
-    extract_type: Literal[MarketFeed.Capability.retrieve] = (
-        MarketFeed.Capability.retrieve
-    )
+    # hard-coded "retrieve" instead of MarketFeed.Capability.retrieve to avoid a circular import,
+    # MarketFeed.__init_subclass__ checks it matches the capability
+    extract_type: Literal["retrieve"] = "retrieve"
     io_for_retrieval: BaseIO = Field(
         description="IO used for data retrieval, not for loading data to storage"
     )

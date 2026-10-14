@@ -22,7 +22,7 @@ import polars as pl
 from pfund.enums.data_channel import PublicDataChannel
 
 from pfeed.dataflow.result import DataFlowResult
-from pfeed.enums import ExtractType, FlowType
+from pfeed.enums import FlowType
 
 
 class DataFlow:
@@ -88,10 +88,6 @@ class DataFlow:
     @property
     def handler(self) -> BaseDataHandler | None:
         return self._handler
-
-    @property
-    def extract_type(self) -> ExtractType:
-        return self.faucet.extract_type
 
     @property
     def result(self) -> DataFlowResult:

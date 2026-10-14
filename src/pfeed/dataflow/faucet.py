@@ -1,22 +1,21 @@
-# pyright: reportArgumentType=false, reportUnknownMemberType=false, reportCallIssue=false, reportUnknownVariableType=false
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, ParamSpec, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Callable
 
+    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.base.data_model import BaseDataModel
+    from pfeed.base.request import BaseRequest
     from pfeed.dataflow.dataflow import DataFlow
+    from pfeed.source import BaseSource
     from pfeed.streaming.feed_mixin import (
         ChannelKey,
         RawMessage,
         ReplayData,
         WebSocketName,
     )
-    from pfeed.source import BaseSource
-    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.streaming.zeromq import ZeroMQ
 
     ExtractFuncParams = ParamSpec("ExtractFuncParams")
@@ -27,8 +26,6 @@ import inspect
 import logging
 
 import polars as pl
-
-from pfeed.enums import ExtractType
 
 
 class Faucet:
@@ -41,18 +38,14 @@ class Faucet:
     def __init__(
         self,
         data_source: BaseSource,
+        request: BaseRequest,
         extract_func: Callable[
-            Concatenate[BaseDataModel, ExtractFuncParams], Any
-        ],  # e.g. _download_impl(), _stream_impl(), _retrieve_impl(), _fetch_impl()
-        extract_type: ExtractType,
+            Concatenate[BaseSource, BaseRequest, BaseDataModel, ExtractFuncParams], Any
+        ],  # e.g. _download_impl(), _stream_impl(), _retrieve_impl()
     ):
-        self.data_source = data_source
-        self._logger = logging.getLogger(f"pfeed.{self.data_source.name.lower()}")
-        self.extract_type = (
-            ExtractType[extract_type.lower()]
-            if isinstance(extract_type, str)
-            else extract_type
-        )
+        self._logger = logging.getLogger(f"pfeed.{data_source.name.lower()}")
+        self._data_source = data_source
+        self._request = request
         self._extract_func = extract_func
         self._is_stream_opened = False
         self._streaming_queue: (
@@ -105,7 +98,7 @@ class Faucet:
         # All extract impls (download, retrieve, fetch) return just the frame.
         # Storage-side info (e.g. missing-dates-in-storage) is read separately
         # by the run aggregator via `dataflow.storage.read_metadata()`.
-        return cast(pl.LazyFrame | None, self._extract_func(data_model=data_model))
+        return cast(pl.LazyFrame | None, self._extract_func(self._data_source, self._request, data_model))
 
     async def open_stream(
         self, data_model: BaseDataModel, handler: BaseDataHandler | None = None
@@ -114,7 +107,11 @@ class Faucet:
         if not self._is_stream_opened:
             self._is_stream_opened = True
             await self._extract_func(
-                data_model=data_model, faucet_callback=self._callback, handler=handler
+                self._data_source,
+                self._request,
+                data_model,
+                faucet_callback=self._callback,
+                handler=handler,
             )
 
     async def close_stream(self):
@@ -123,7 +120,7 @@ class Faucet:
             if self._streaming_queue:
                 await self._streaming_queue.put(None)
             # TODO(0.2.0): faucet shouldn't reach into the source; have the feed pass in its stream API
-            stream_api = self.data_source.get_stream_api()  # pyright: ignore[reportAttributeAccessIssue]
+            stream_api = self._data_source.get_stream_api()
             await stream_api.disconnect()
             # reset the states for streaming
             self._is_stream_opened = False

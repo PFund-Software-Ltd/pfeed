@@ -1,4 +1,3 @@
-# pyright: reportUnknownParameterType=false, reportUnknownMemberType=false, reportAttributeAccessIssue=false, reportUnusedParameter=false, reportUnknownArgumentType=false, reportUninitializedInstanceVariable=false, reportUnknownLambdaType=false
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -94,7 +93,15 @@ class StreamingFeedMixin(ABC):  # noqa: B024
         )
         data_model = request.to_data_model()
 
-        # NOTE: reuse existing faucet for streaming dataflows since they share the same extract_func
+        # TODO(streaming refactor): one faucet per stream request + one stream hub per feed/stream API
+        #   - Faucet (per request): holds the source, the request and _stream_impl.
+        #     Subscribes its own channels through the hub (add_channel with request.data_resolution),
+        #     registers for its channel keys and unsubscribes on close.
+        #     In replay, plays its own request's data (replay's add_channel in _stream_impl misses data_resolution).
+        #   - Hub (shared): owns the connection (connect on the first faucet open, disconnect after the last close),
+        #     the single stream-API callback, channel_key -> faucet routing, the __aiter__ queue,
+        #     the user callback and zmq. Merges multiple replays into one time-ordered stream.
+        # Until then, one faucet (created from the first stream request) is shared by all stream requests.
         if self.streaming_dataflows:
             existing_dataflow = cast("DataFlow", self.streaming_dataflows[0])
             faucet: Faucet = existing_dataflow.faucet
@@ -102,7 +109,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
             faucet: Faucet = cast(
                 "Faucet",
                 self._create_faucet(
-                    data_source=self.data_source,
+                    request=request,
                     extract_func=(
                         lambda data_model, faucet_callback, handler: self._stream_impl(
                             data_model,
@@ -111,7 +118,6 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                             replay_pace=request.replay_pace,
                         )
                     ),
-                    extract_type=request.extract_type,
                 ),
             )
         dataflow = cast(
@@ -239,8 +245,8 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                         msg_queue = ZeroMQ(
                             name=f"{feed_name}.stream.{worker_name}",
                             logger=logger,
-                            sender_type=zmq.PUSH,  # pyright: ignore[reportArgumentType]
-                            receiver_type=zmq.DEALER,  # pyright: ignore[reportArgumentType]
+                            sender_type=zmq.PUSH,
+                            receiver_type=zmq.DEALER,
                             sender_method="connect",
                         )
                         msg_queue.receiver.setsockopt(
@@ -347,7 +353,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                                 dataflow_zmq: ZeroMQ = dataflow._msg_queue
                                 ports_in_use: list[int] = dataflow_zmq.get_ports_in_use(
                                     dataflow_zmq.sender
-                                )  # pyright: ignore[reportUnknownVariableType]
+                                )
                                 ports_to_connect[worker_name]["receiver"].update(
                                     ports_in_use
                                 )
@@ -374,7 +380,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                                 list[ray.ObjectRef[None]],
                                 [
                                     ray_task.remote(
-                                        logger_name=self.logger.name,  # pyright: ignore[reportCallIssue]
+                                        logger_name=self.logger.name,
                                         log_queue=log_queue,
                                         feed_name=self.name.value,
                                         worker_name=worker_name,
@@ -475,7 +481,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                 )
             return asyncio.run(self.run_async())
         else:
-            return super().run(**prefect_kwargs)  # pyright: ignore[reportUnknownVariableType]
+            return super().run(**prefect_kwargs)
 
     async def run_async(self) -> list[DataFlow]:
         if not self.streaming_dataflows:

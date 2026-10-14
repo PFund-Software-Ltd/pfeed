@@ -1,4 +1,3 @@
-# pyright: reportArgumentType=false, reportUnknownMemberType=false, reportOptionalMemberAccess=false, reportUnusedCallResult=false, reportAssignmentType=false, reportCallIssue=false, reportAttributeAccessIssue=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -79,7 +78,7 @@ class DataEngine:
             if msg is None:
                 continue
             # NOTE: received transformed/standardized data from Ray workers
-            channel, topic, data, msg_ts = msg  # pyright: ignore[reportUnusedVariable]
+            channel, topic, data, msg_ts = msg
             # send to subscribers, e.g. strategies, models in pfund
             self._msg_queue.send(channel=channel, topic=topic, data=data)
         self._msg_queue.terminate()

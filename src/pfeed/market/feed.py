@@ -11,10 +11,6 @@ if TYPE_CHECKING:
 
     from pfeed.base.data_handler import BaseDataHandler
     from pfeed.dataflow.result import RunResult
-    from pfeed.market.requests import (
-        MarketFeedRetrieveRequest,
-        MarketFeedStreamRequest,
-    )
     from pfeed.market.requests.base_request import MarketFeedBaseRequest
     from pfeed.source import BaseSource
     from pfeed.streaming.feed_mixin import (
@@ -40,6 +36,11 @@ from pfeed.config import setup_logging
 from pfeed.enums import DataCategory, DataLayer, MarketDataType
 from pfeed.io.base_io import BaseIO
 from pfeed.market.data_model import MarketDataModel
+from pfeed.market.requests import (
+    MarketFeedDownloadRequest,
+    MarketFeedRetrieveRequest,
+    MarketFeedStreamRequest,
+)
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
@@ -49,6 +50,9 @@ class MarketFeed[
     DataModelT: MarketDataModel = MarketDataModel,
 ](TimeBasedFeed[SourceT, RequestT, DataModelT], ABC):
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
+    DownloadRequest: ClassVar[type[MarketFeedDownloadRequest]] = MarketFeedDownloadRequest
+    RetrieveRequest: ClassVar[type[MarketFeedRetrieveRequest]] = MarketFeedRetrieveRequest
+    StreamRequest: ClassVar[type[MarketFeedStreamRequest]] = MarketFeedStreamRequest
 
     class Capability(StrEnum):
         """Verbs a market feed can support."""
@@ -64,147 +68,19 @@ class MarketFeed[
         Capability.stream: ("_get_stream_api", "_parse_streaming_message"),
     }
 
-    def get_supported_resolutions(self, include_resampled: bool = False) -> list[Resolution]:
-        """Get all supported resolutions for batch processing for the data source.
-
-        Args:
-            include_resampled: If False (default), return only the resolutions the
-                data source literally provides. If True, also include all coarser
-                resolutions derivable by resampling from the finest native one —
-                e.g. a source providing '1t' also "supports" '1s', '1m', '1h', '1d', etc.
-                Quote resolutions pass through but are never a resampling base, so a
-                quote-only source returns only its native resolutions.
-        """
-        native = [
-            Resolution(dtype_or_resol)
-            for dtype_or_resol in self.data_source.data_categories[self.data_domain]
-        ]
-        if not include_resampled or not native:
-            return native
-        resample_bases = [r for r in native if not r.is_quote()]
-        if not resample_bases:
-            return native
-        finest = max(resample_bases)
-        return sorted(
-            set(native) | set(finest.get_coarser_resolutions(exclude_quote=True)),
-            reverse=True,
-        )
-
-    @classmethod
-    def create_data_model(
-        cls,
-        product: BaseProduct | str,
-        resolution: Resolution | MarketDataType | str,
-        start_date: datetime.date | str,
-        end_date: datetime.date | str | None = None,
-        env: Environment | str = Environment.BACKTEST,
-        data_origin: str = "",
-        **product_specs: Any,
-    ) -> MarketDataModel:
-        """Create a MarketDataModel instance.
-
-        Args:
-            product: Product basis, e.g. `'BTC_USDT_PERP'`, or a product instance.
-            resolution: Resolution, e.g. `'1t'`, `'1m'`, a `MarketDataType` e.g. "minute", or a `Resolution` instance.
-            start_date: First date (inclusive), e.g. `'2025-01-01'`, or a `datetime.date`.
-            end_date: Last date (inclusive). If None, defaults to `start_date` (a single-day model).
-            env: Trading environment.
-            data_origin: Sub-label for data from the same source but different origins.
-                Defaults to the source name.
-            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
-                futures. Leave them out to get an error listing the required ones.
-        """
-        if isinstance(product, str):
-            product = cls.DataSource.create_product(product, **product_specs)
-        return cls.DataModel(
-            env=env,
-            data_source=cls.DataSource.METADATA.name,
-            data_origin=data_origin,
-            product=product,
-            resolution=resolution,
-            start_date=start_date,
-            end_date=end_date or start_date,
-        )
-
-    @requires(Capability.download)
-    def download(
-        self,
-        product: str,
-        resolution: Resolution | MarketDataType | str,
-        *,
-        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
-        start_date: datetime.date | str | None = None,
-        end_date: datetime.date | str | None = None,
-        data_origin: str = "",
-        data_layer: DataLayer | str = DataLayer.CLEANED,
-        io: BaseIO | None = None,
-        **product_specs: Any,
-    ) -> Self | RunResult:
-        """Download historical data from the data source.
-
-        Args:
-            product: Product basis, e.g. `'BTC_USDT_PERP'`, `'AAPL_USD_STK'`.
-            resolution: Target resolution, e.g. `'1t'` (tick), `'1m'`, `'1d'`.
-                If the source doesn't provide it, the closest finer resolution is
-                downloaded and downsampled.
-            rollback_period: How far to roll back from today (UTC) when `start_date`
-                is None, e.g. `'7d'` = the last 7 days up to yesterday.
-                Also accepts `'ytd'` (year to date) and `'max'` (all available data).
-            start_date: First date (inclusive), e.g. `'2025-01-01'`.
-            end_date: Last date (inclusive). If None, defaults to yesterday (UTC).
-                Requires `start_date`.
-            data_origin: Sub-label for data from the same source but different origins.
-                Defaults to the source name.
-            data_layer: Data layer of the downloaded data, `'raw'` or `'cleaned'` (default).
-                `'cleaned'` runs the default transformations (normalize, standardize columns,
-                downsample); `'raw'` returns the data as-is. The data is stored in this layer if `io` is given.
-            io: Where and how to store the data. If None, data is not stored.
-                e.g. `ParquetIO(base_path='./data')`, `DuckLakeIO()`
-            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
-                futures. Leave them out to get an error listing the required ones.
-
-        Returns:
-            `RunResult` with the downloaded data, or `self` in pipeline mode.
-        """
-        from pfeed.market.requests import MarketFeedDownloadRequest
-
-        env = Environment.BACKTEST
-        setup_logging(env=env)
-        product: BaseProduct = self.data_source.create_product(product, **product_specs)
-        resolution = Resolution(resolution)
-        start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
-        if not (candidates := [r for r in self.get_supported_resolutions() if r >= resolution]):
-            raise ValueError(f"{resolution} is not supported by {self.name}")
-        # find the first resolution that is >= (finer/higher) the target resolution
-        data_resolution = min(candidates)
-        request = MarketFeedDownloadRequest(
-            data_source=self.name,
-            data_origin=data_origin,
-            io=io,
-            data_layer=data_layer,
-            env=env,
-            product=product,
-            target_resolution=resolution,
-            data_resolution=data_resolution,
-            start_date=start_date,
-            end_date=end_date,
-            dataflow_per_date=self.download_dataflow_per_date,
-        )
-        self._append_request(request)
-        _ = self._create_batch_dataflows(
-            extract_func=lambda data_model: self._download_impl(
-                data_model=data_model,
-                data_resolution=data_resolution,
-            )
-        )
-        return self.run() if not self.is_pipeline() else self
-
-    @staticmethod
-    def _normalize_downloaded_data(df: pl.LazyFrame) -> pl.LazyFrame:
-        raise NotImplementedError
-
-    def _download_impl(self, data_model: DataModelT, data_resolution: Resolution) -> pl.LazyFrame | None:
-        raise NotImplementedError
+    def __init_subclass__(cls, **kwargs: Any):
+        super().__init_subclass__(**kwargs)
+        # requests hard-code their extract_type to avoid a circular import, check it matches the capability
+        for capability, Request in (
+            (cls.Capability.download, cls.DownloadRequest),
+            (cls.Capability.retrieve, cls.RetrieveRequest),
+            (cls.Capability.stream, cls.StreamRequest),
+        ):
+            extract_type = Request.model_fields["extract_type"].default
+            if extract_type != capability:
+                raise TypeError(
+                    f"{cls.__name__}: {Request.__name__}.extract_type={extract_type!r} must be {str(capability)!r}"
+                )
 
     @staticmethod
     def _standardize_columns(df: pl.LazyFrame, product: BaseProduct, resolution: Resolution) -> pl.LazyFrame:
@@ -350,6 +226,147 @@ class MarketFeed[
         )
         return resampled
 
+    def get_supported_resolutions(self, include_resampled: bool = False) -> list[Resolution]:
+        """Get all supported resolutions for batch processing for the data source.
+
+        Args:
+            include_resampled: If False (default), return only the resolutions the
+                data source literally provides. If True, also include all coarser
+                resolutions derivable by resampling from the finest native one —
+                e.g. a source providing '1t' also "supports" '1s', '1m', '1h', '1d', etc.
+                Quote resolutions pass through but are never a resampling base, so a
+                quote-only source returns only its native resolutions.
+        """
+        native = [
+            Resolution(dtype_or_resol)
+            for dtype_or_resol in self.data_source.data_categories[self.data_domain]
+        ]
+        if not include_resampled or not native:
+            return native
+        resample_bases = [r for r in native if not r.is_quote()]
+        if not resample_bases:
+            return native
+        finest = max(resample_bases)
+        return sorted(
+            set(native) | set(finest.get_coarser_resolutions(exclude_quote=True)),
+            reverse=True,
+        )
+
+    @classmethod
+    def create_data_model(
+        cls,
+        product: BaseProduct | str,
+        resolution: Resolution | MarketDataType | str,
+        start_date: datetime.date | str,
+        end_date: datetime.date | str | None = None,
+        env: Environment | str = Environment.BACKTEST,
+        data_origin: str = "",
+        **product_specs: Any,
+    ) -> MarketDataModel:
+        """Create a MarketDataModel instance.
+
+        Args:
+            product: Product basis, e.g. `'BTC_USDT_PERP'`, or a product instance.
+            resolution: Resolution, e.g. `'1t'`, `'1m'`, a `MarketDataType` e.g. "minute", or a `Resolution` instance.
+            start_date: First date (inclusive), e.g. `'2025-01-01'`, or a `datetime.date`.
+            end_date: Last date (inclusive). If None, defaults to `start_date` (a single-day model).
+            env: Trading environment.
+            data_origin: Sub-label for data from the same source but different origins.
+                Defaults to the source name.
+            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
+                futures. Leave them out to get an error listing the required ones.
+        """
+        if isinstance(product, str):
+            product = cls.DataSource.create_product(product, **product_specs)
+        return cls.DataModel(
+            env=env,
+            data_source=cls.DataSource.METADATA.name,
+            data_origin=data_origin,
+            product=product,
+            resolution=resolution,
+            start_date=start_date,
+            end_date=end_date or start_date,
+        )
+
+    @requires(Capability.download)
+    def download(
+        self,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str | None = None,
+        end_date: datetime.date | str | None = None,
+        data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        io: BaseIO | None = None,
+        **product_specs: Any,
+    ) -> Self | RunResult:
+        """Download historical data from the data source.
+
+        Args:
+            product: Product basis, e.g. `'BTC_USDT_PERP'`, `'AAPL_USD_STK'`.
+            resolution: Target resolution, e.g. `'1t'` (tick), `'1m'`, `'1d'`.
+                If the source doesn't provide it, the closest finer resolution is
+                downloaded and downsampled.
+            rollback_period: How far to roll back from today (UTC) when `start_date`
+                is None, e.g. `'7d'` = the last 7 days up to yesterday.
+                Also accepts `'ytd'` (year to date) and `'max'` (all available data).
+            start_date: First date (inclusive), e.g. `'2025-01-01'`.
+            end_date: Last date (inclusive). If None, defaults to yesterday (UTC).
+                Requires `start_date`.
+            data_origin: Sub-label for data from the same source but different origins.
+                Defaults to the source name.
+            data_layer: Data layer of the downloaded data, `'raw'` or `'cleaned'` (default).
+                `'cleaned'` runs the default transformations (normalize, standardize columns,
+                downsample); `'raw'` returns the data as-is. The data is stored in this layer if `io` is given.
+            io: Where and how to store the data. If None, data is not stored.
+                e.g. `ParquetIO(base_path='./data')`, `DuckLakeIO()`
+            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
+                futures. Leave them out to get an error listing the required ones.
+
+        Returns:
+            `RunResult` with the downloaded data, or `self` in pipeline mode.
+        """
+        env = Environment.BACKTEST
+        setup_logging(env=env)
+        product: BaseProduct = self.data_source.create_product(product, **product_specs)
+        resolution = Resolution(resolution)
+        start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
+        if not (candidates := [r for r in self.get_supported_resolutions() if r >= resolution]):
+            raise ValueError(f"{resolution} is not supported by {self.name}")
+        # find the first resolution that is >= (finer/higher) the target resolution
+        data_resolution = min(candidates)
+        request = cast("RequestT",
+            self.DownloadRequest(
+                data_source=self.name,
+                data_origin=data_origin,
+                io=io,
+                data_layer=data_layer,
+                env=env,
+                product=product,
+                target_resolution=resolution,
+                data_resolution=data_resolution,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+        self._append_request(request)
+        data_model = cast("DataModelT", request.to_data_model())
+        self._create_batch_dataflows(
+            extract_func=self._download_impl,
+            data_models=data_model.split_by_date() if self.download_dataflow_per_date else [data_model]
+        )
+        return self.run() if not self.is_pipeline() else self
+
+    @staticmethod
+    def _normalize_downloaded_data(df: pl.LazyFrame) -> pl.LazyFrame:
+        raise NotImplementedError
+
+    @staticmethod
+    def _download_impl(data_source: SourceT, request: RequestT, data_model: DataModelT) -> pl.LazyFrame | None:
+        raise NotImplementedError
+
     def _get_default_transformations_for_download(self, request: RequestT, /) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
 
@@ -431,8 +448,6 @@ class MarketFeed[
         Returns:
             `RunResult` with the retrieved data, or `self` in pipeline mode.
         """
-        from pfeed.market.requests import MarketFeedRetrieveRequest
-
         env = Environment[env.upper()]
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
@@ -485,31 +500,35 @@ class MarketFeed[
                 f"{product} data from {start_date} to {end_date} is not fully stored at any of {search_resolutions} in {io!r}, falling back to {resolution}"
             )
 
-        request = MarketFeedRetrieveRequest(
-            data_source=self.name,
-            data_origin=data_origin,
-            io_for_retrieval=io,
-            data_layer=data_layer,
-            env=env,
-            product=product,
-            target_resolution=resolution,
-            data_resolution=data_resolution,
-            start_date=start_date,
-            end_date=end_date,
-            dataflow_per_date=dataflow_per_date,
+        request = cast("RequestT",
+            self.RetrieveRequest(
+                data_source=self.name,
+                data_origin=data_origin,
+                io_for_retrieval=io,
+                data_layer=data_layer,
+                env=env,
+                product=product,
+                target_resolution=resolution,
+                data_resolution=data_resolution,
+                start_date=start_date,
+                end_date=end_date,
+            )
         )
         self._append_request(request)
+        data_model = cast("DataModelT", request.to_data_model())
         _ = self._create_batch_dataflows(
             extract_func=lambda data_model: self._retrieve_impl(data_model, request),
+            data_models=data_model.split_by_date() if dataflow_per_date else [data_model],
         )
         return self.run() if not self.is_pipeline() else self
 
     def _retrieve_impl(
-        self, data_model: DataModelT, request: MarketFeedRetrieveRequest
+        self, data_model: DataModelT, request: RequestT
     ) -> pl.LazyFrame | None:
         # data_model is of target resolution, copy it since it has the correct start_date and end_date
         # when dataflow_per_date = True, the handler should read the data model with data_resolution
         data_model = data_model.model_copy(update={"resolution": request.data_resolution})
+        assert isinstance(request, MarketFeedRetrieveRequest)
         handler = data_model.DataHandler(
             data_model=data_model,
             io=request.io_for_retrieval,
@@ -648,7 +667,6 @@ class MarketFeed[
         """
         from pfund_kit.utils.temporal import get_utc_now
 
-        from pfeed.market.requests import MarketFeedStreamRequest
         from pfeed.streaming.feed_mixin import StreamingFeedMixin
 
         SUPPORTED_ENVS = [Environment.BACKTEST, Environment.PAPER, Environment.LIVE]
@@ -699,7 +717,7 @@ class MarketFeed[
                 io = ParquetIO()
             self._validate_io(io)
 
-        request = MarketFeedStreamRequest(
+        request = self.StreamRequest(
             data_source=self.name,
             data_origin=data_origin,
             data_config=data_config,
@@ -715,10 +733,10 @@ class MarketFeed[
             store_incremental_bars=store_incremental_bars,
             flush_interval=flush_interval,
         )
-        self._append_request(request)
+        self._append_request(cast("RequestT", request))
         # supporting stream guarantees StreamingFeedMixin, see BaseFeed.__init_subclass__
         cast("StreamingFeedMixin", self)._create_stream_dataflow(user_callback=callback)
-        return self.run() if not self.is_pipeline() else self  # pyright: ignore[reportReturnType]
+        return self.run() if not self.is_pipeline() else self
 
     async def _stream_impl(
         self,

@@ -1,4 +1,3 @@
-# pyright: reportArgumentType=false
 from __future__ import annotations
 
 from types import ModuleType

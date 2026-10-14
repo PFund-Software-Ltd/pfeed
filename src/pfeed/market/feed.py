@@ -391,7 +391,7 @@ class MarketFeed[
                 lambda df: cls._standardize_date_column(df, is_raw_data=is_raw_data),
             ),
         ]
-        if not is_raw_data:
+        if is_raw_data:
             return default_transformations
         default_transformations.extend(
             [

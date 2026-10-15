@@ -105,7 +105,7 @@ class DataFlow:
     def _transform(self, data: IntoFrame | StreamingData) -> IntoFrame | StreamingData:
         for transform in self._transformations:
             if self.is_streaming():
-                data: StreamingData = transform(data)
+                data: StreamingData = cast("StreamingData", transform(data))
             else:
                 if self._flow_type == FlowType.prefect:
                     from prefect import task
@@ -115,15 +115,13 @@ class DataFlow:
                     # NO_CACHE: the default cache policy hashes the input data on every call
                     transform = task(cache_policy=NO_CACHE)(transform)
                     # NOTE: Removing prefect's task introspection with `quote(data)` to save time
-                    data: IntoFrame = transform(quote(data))
+                    data: IntoFrame = cast("IntoFrame", transform(quote(data)))
                 else:
-                    data: IntoFrame = transform(data)
-            assert data is not None, (
-                f"transform function {transform} should return transformed data, but got None"
-            )
-            self._logger.debug(
-                f"transformed {self.data_model} data by '{transform.__name__}'"
-            )
+                    data: IntoFrame = cast("IntoFrame", transform(data))
+            func_name = getattr(transform, "__name__", repr(transform))
+            if data is None:
+                raise TypeError(f"transform function '{func_name}' should return transformed data, but got None")
+            self._logger.debug(f"transformed {self.data_model} data by '{func_name}'")
         return data
 
     def has_handler(self) -> bool:
@@ -179,9 +177,7 @@ class DataFlow:
         except Exception:
             # Re-raise so the batch runner marks the dataflow failed; a write
             # error must surface in RunResult, not only in the log.
-            self._logger.exception(
-                f"failed to load {self.data_model} data to {self._handler}:"
-            )
+            self._logger.exception(f"failed to load {self.data_model} data to {self._handler}:")
             raise
 
     def mark_failed(self, error: BaseException) -> None:
@@ -208,12 +204,12 @@ class DataFlow:
         else:
             extract = self.faucet.open_batch
 
-        data: pl.LazyFrame | None = extract(data_model=self.data_model)
-        if data is None:
+        extracted_data: pl.LazyFrame | None = extract(data_model=self.data_model)
+        if extracted_data is None:
             self._result = DataFlowResult.failed(error=ValueError(f"{self.name} produced no data"))
             return self._result
-        is_empty = is_dataframe(data) and is_empty_dataframe(data)
-        data = self._transform(data)
+        is_empty = is_dataframe(extracted_data) and is_empty_dataframe(extracted_data)
+        data = cast("IntoFrame", self._transform(extracted_data))
         is_loaded = self._load(data)
         # an empty partition reads back as None, so keep the empty frame itself as the result
         if is_loaded and not is_empty and (handler := self.handler) is not None:

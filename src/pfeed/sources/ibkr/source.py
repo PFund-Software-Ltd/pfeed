@@ -17,7 +17,7 @@ from pfeed.sources.ibkr.stream_api import StreamAPI
 
 class InteractiveBrokersSource(DataProviderSource):
     name: ClassVar[DataSource] = DataSource.IBKR
-    METADATA: ClassVar[SourceMetadata] = SourceMetadata(
+    metadata: ClassVar[SourceMetadata] = SourceMetadata(
         # NOTE: technically IBKR is a venue, but its data has been aggregated
         provider_type=DataProviderType.AGGREGATOR,
     )

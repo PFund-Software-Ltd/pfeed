@@ -69,8 +69,16 @@ class SourceMetadata(BaseModel):
 
 
 class BaseSource(ABC):
-    METADATA: ClassVar[SourceMetadata]
     Feeds: ClassVar[dict[DataCategory, type[BaseFeed]]]
+    metadata: ClassVar[SourceMetadata]
+    # errors from the source's API that are transient (e.g. timeouts, dropped connections),
+    # so the faucet can retry the extraction; empty means never retry
+    retry_on: ClassVar[tuple[type[Exception], ...]] = ()
+    # retries of a batch extraction that failed with one of the retry_on errors,
+    # waiting retry_wait * retry_backoff**attempt seconds (with jitter) in between
+    max_retries: ClassVar[int] = 3
+    retry_wait: ClassVar[float] = 1.0
+    retry_backoff: ClassVar[float] = 2.0
 
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
@@ -114,15 +122,15 @@ class BaseSource(ABC):
 
     @property
     def name(self) -> str:
-        return self.METADATA.name
+        return self.metadata.name
 
     @property
     def data_categories(self) -> dict[DataCategory, dict[DataType, list[AssetType]]]:
-        return self.METADATA.data_categories
+        return self.metadata.data_categories
 
     @property
     def api_access(self) -> APIAccess | None:
-        return self.METADATA.api_access
+        return self.metadata.api_access
 
     @property
     def feeds(self) -> list[BaseFeed]:
@@ -145,8 +153,8 @@ class BaseSource(ABC):
             setattr(self, data_category.feed_name, feed)
 
     def get_data_categories(self) -> list[DataCategory]:
-        return list(self.METADATA.data_categories.keys())
+        return list(self.metadata.data_categories.keys())
 
     @classmethod
     def create_product(cls, basis: str, symbol: str = "", **specs: Any) -> BaseProduct:
-        raise NotImplementedError(f"{cls.METADATA.name} does not support creating products")
+        raise NotImplementedError(f"{cls.metadata.name} does not support creating products")

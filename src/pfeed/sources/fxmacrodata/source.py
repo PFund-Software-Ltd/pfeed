@@ -10,7 +10,7 @@ class FXMacroDataSource(DataProviderSource):
     """FXMacroData provider metadata and optional credential handling."""
 
     name: ClassVar[str] = "FXMACRODATA"
-    METADATA: ClassVar[SourceMetadata] = SourceMetadata(
+    metadata: ClassVar[SourceMetadata] = SourceMetadata(
         url="https://api.fxmacrodata.com",
         data_categories={DataCategory.ANNOUNCEMENT_DATA: {}},
         provider_type=DataProviderType.VENDOR,

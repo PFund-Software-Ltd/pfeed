@@ -51,9 +51,9 @@ def get_entry_point(name: str) -> EntryPoint:
 def get_source(name: str) -> type[BaseSource]:
     ep = get_entry_point(name)
     Source: type[BaseSource] = ep.load()
-    if Source.METADATA.name != ep.name.upper():
+    if Source.metadata.name != ep.name.upper():
         raise ValueError(
-            f"entry point '{ep.name}' ({ep.value}) loads a source whose name is {Source.METADATA.name}"
+            f"entry point '{ep.name}' ({ep.value}) loads a source whose name is {Source.metadata.name}"
         )
     return Source
 

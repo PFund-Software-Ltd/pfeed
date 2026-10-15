@@ -124,7 +124,7 @@ class TimeBasedFeed[
     def _max_date_range(cls, resolution: Resolution) -> tuple[datetime.date, datetime.date]:
         """Resolve rollback_period='max' into the source's full available history.
 
-        By default, the range runs from the data source's `METADATA.start_date` to yesterday,
+        By default, the range runs from the data source's `metadata.start_date` to yesterday,
         regardless of resolution. Override it if the source's history depends on the resolution,
         e.g. Yahoo Finance keeps only the last 8 days of minute data.
 
@@ -135,13 +135,13 @@ class TimeBasedFeed[
             (start_date, end_date), both inclusive.
 
         Raises:
-            ValueError: If the data source has no `METADATA.start_date`.
+            ValueError: If the data source has no `metadata.start_date`.
         """
 
-        data_source_start_date = cls.DataSource.METADATA.start_date
+        data_source_start_date = cls.DataSource.metadata.start_date
         if not data_source_start_date:
             raise ValueError(
-                f'{cls.DataSource.METADATA.name} has no data source start_date, cannot use rollback_period="max"'
+                f'{cls.DataSource.metadata.name} has no data source start_date, cannot use rollback_period="max"'
             )
         return parse_date_range(data_source_start_date)
 

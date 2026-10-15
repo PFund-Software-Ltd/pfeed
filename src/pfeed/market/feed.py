@@ -280,7 +280,7 @@ class MarketFeed[
             product = cls.DataSource.create_product(product, **product_specs)
         return cls.DataModel(
             env=env,
-            data_source=cls.DataSource.METADATA.name,
+            data_source=cls.DataSource.metadata.name,
             data_origin=data_origin,
             product=product,
             resolution=resolution,

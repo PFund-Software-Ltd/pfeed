@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 import asyncio
 import inspect
 import logging
+import random
+import time
 
 import polars as pl
 
@@ -108,7 +110,30 @@ class Faucet:
             self._stream_workers.append(worker_name)
 
     def open_batch(self, data_model: BaseDataModel) -> pl.LazyFrame | None:
-        return cast(pl.LazyFrame | None, self._extract_func(self._data_source, self._request, data_model))
+        source = self._data_source
+        attempt = 0
+        while True:
+            # TODO: rate limiting, e.g. source.rate_limiter.acquire() here before every attempt (retries included).
+            # - the limit (calls per period) comes from the source's APIAccess, the limiter is owned by the source
+            #   so all its feeds/faucets share one budget
+            # - this only counts extract calls; a source making many requests per extract should acquire per request
+            # - under Ray each worker gets its own limiter copy, so split the budget by num_workers (or use a Ray actor)
+            try:
+                return cast(
+                    pl.LazyFrame | None,
+                    self._extract_func(source, self._request, data_model),
+                )
+            except source.retry_on as e:
+                if attempt == source.max_retries:
+                    e.add_note(f'{self.name} extraction of {data_model} failed, gave up after {source.max_retries} retries')
+                    raise
+                wait = source.retry_wait * source.retry_backoff**attempt * random.uniform(0.5, 1.5)
+                attempt += 1
+                self._logger.warning(
+                    f'{self.name} extraction of {data_model} failed ({e!r}), '
+                    f'retry {attempt}/{source.max_retries} in {wait:.1f}s'
+                )
+                time.sleep(wait)
 
     async def open_stream(
         self, data_model: BaseDataModel, handler: BaseDataHandler | None = None

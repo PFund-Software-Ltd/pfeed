@@ -21,13 +21,13 @@ class FakeMarketFeed:
 
 
 class FakeSource:
-    METADATA = SimpleNamespace(name="FAKE")
+    metadata = SimpleNamespace(name="FAKE")
     Feeds: ClassVar[dict] = {DataCategory.MARKET_DATA: FakeMarketFeed}
 
 
 class MismatchedSource:
     # entry point is named "fake" but the source's name says otherwise
-    METADATA = SimpleNamespace(name="OTHER")
+    metadata = SimpleNamespace(name="OTHER")
     Feeds: ClassVar[dict] = {}
 
 

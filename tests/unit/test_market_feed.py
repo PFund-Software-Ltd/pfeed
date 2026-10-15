@@ -104,13 +104,13 @@ def test_get_supported_resolutions(
 def _fake_feed_with_product(
     mocker: MockerFixture, product: BaseProduct
 ) -> tuple[type[MarketFeed], MockType]:
-    """Stand-in for a feed class: create_data_model() only reads DataSource.METADATA.name/create_product().
+    """Stand-in for a feed class: create_data_model() only reads DataSource.metadata.name/create_product().
 
     Returns the feed class and its source's create_product mock.
     """
     create_product = mocker.Mock(return_value=product)
     data_source = SimpleNamespace(
-        METADATA=SimpleNamespace(name="TEST"), create_product=create_product
+        metadata=SimpleNamespace(name="TEST"), create_product=create_product
     )
 
     class FakeMarketFeed(MarketFeed):

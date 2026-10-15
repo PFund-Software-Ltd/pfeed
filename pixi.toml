@@ -25,15 +25,14 @@ depends-on = [
 
 [dependencies]
 
-# TEMP
-[pypi-options]
-prerelease-mode = "allow"
+# [pypi-options]
+# prerelease-mode = "allow"
 
 [pypi-dependencies]
 pfund = "==0.0.25"  # use >= only when pfund is stable
 pyarrow = ">=25.0.1"
 polars = ">=2.0.0"
-duckdb = ">=2.0.0.dev2609250715"
+duckdb = ">=1.5.6"
 pandera = ">=0.34.0"
 msgspec = ">=0.22.0"
 pydantic = ">=2.13.5"
@@ -60,7 +59,7 @@ libpq = ">=18.4"  # for postgresql
 [feature.optional.pypi-dependencies]
 ray = { version = ">=2.59.0", extras = ["default"] }
 huggingface-hub = ">=1.33.0"
-prefect = ">=3.8.7"
+prefect = ">=3.8.8"
 lancedb = ">=0.39.0"
 # IOs
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }

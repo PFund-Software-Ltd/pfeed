@@ -63,6 +63,15 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         self._streaming_schema: pa.Schema | None = self._build_streaming_schema() if sink is not None else None
 
     @property
+    def name(self) -> str:
+        return ".".join([
+            self._data_model.data_source,
+            self._data_domain,
+            str(self._data_layer),
+            str(self._io),
+        ])
+
+    @property
     def io(self) -> BaseIO:
         return self._io
 

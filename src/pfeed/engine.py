@@ -113,7 +113,7 @@ class DataEngine:
             )
         return is_streaming_feeds
 
-    def run(self, **prefect_kwargs: Any) -> dict[BaseFeed, IntoFrame | None]:
+    def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> dict[BaseFeed, IntoFrame | None]:
         if self.is_running():
             raise RuntimeError("Data Engine is already running, cannot run again")
         self._is_running = True
@@ -122,7 +122,7 @@ class DataEngine:
         if not self._is_streaming_feeds():
             results: dict[BaseFeed, IntoFrame | None] = {}
             for feed in self._feeds:
-                data = feed.run(**prefect_kwargs)
+                data = feed.run(use_prefect=use_prefect, **prefect_kwargs)
                 results[feed] = data
             return results
         else:

@@ -109,9 +109,11 @@ class DataFlow:
             else:
                 if self._flow_type == FlowType.prefect:
                     from prefect import task
+                    from prefect.cache_policies import NO_CACHE
                     from prefect.utilities.annotations import quote
 
-                    transform = task(transform)
+                    # NO_CACHE: the default cache policy hashes the input data on every call
+                    transform = task(cache_policy=NO_CACHE)(transform)
                     # NOTE: Removing prefect's task introspection with `quote(data)` to save time
                     data: IntoFrame = transform(quote(data))
                 else:
@@ -166,8 +168,9 @@ class DataFlow:
                 df = cast(pl.LazyFrame, convert_dataframe(data)).collect()
                 if self._flow_type == FlowType.prefect:
                     from prefect import task
+                    from prefect.cache_policies import NO_CACHE
 
-                    write = task(self._handler.write_batch)
+                    write = task(name=self._handler.name, cache_policy=NO_CACHE)(self._handler.write_batch)
                 else:
                     write = self._handler.write_batch
                 write(df)
@@ -199,8 +202,9 @@ class DataFlow:
 
         if self._flow_type == FlowType.prefect:
             from prefect import task
+            from prefect.cache_policies import NO_CACHE
 
-            extract = task(self.faucet.open_batch)
+            extract = task(name=self.faucet.name, cache_policy=NO_CACHE)(self.faucet.open_batch)
         else:
             extract = self.faucet.open_batch
 
@@ -220,9 +224,7 @@ class DataFlow:
             self._result = DataFlowResult.materialized(data=data)
         return self._result
 
-    def run_batch(
-        self, flow_type: FlowType = FlowType.native, prefect_kwargs: dict | None = None
-    ) -> DataFlowResult:
+    def run_batch(self, flow_type: FlowType = FlowType.native, prefect_kwargs: dict | None = None) -> DataFlowResult:
         if not self.is_sealed():
             raise ValueError(f"cannot run batch on unsealed dataflow {self.name}")
 
@@ -243,15 +245,26 @@ class DataFlow:
         """
         from prefect import flow
 
-        if "log_prints" not in kwargs:
-            kwargs["log_prints"] = True
+        kwargs.setdefault("log_prints", True)  # captures print() in user transformations
+        kwargs.setdefault("name", self.name)
+        kwargs.setdefault("flow_run_name", str(self.data_model))
 
-        @flow(name=self.name, flow_run_name=str(self.data_model), **kwargs)
+        @flow(**kwargs)
         def prefect_flow() -> DataFlowResult:
             # from prefect.logging import get_run_logger
             # prefect_logger = get_run_logger()  # this is a logger adapter
             self._flow_type = FlowType.prefect
-            return self._run_batch_etl()
+            # send the data source's logs (e.g. "pfeed.bybit") to the prefect UI, like PREFECT_LOGGING_EXTRA_LOGGERS,
+            # which prefect only applies at import time; "pfeed.<source>" doesn't propagate, so attach to it directly.
+            # Only during the run, outside a flow run prefect's API handler warns on every log
+            added_handlers = [h for h in logging.getLogger("prefect.extra").handlers if h not in self._logger.handlers]
+            for handler in added_handlers:
+                self._logger.addHandler(handler)
+            try:
+                return self._run_batch_etl()
+            finally:
+                for handler in added_handlers:
+                    self._logger.removeHandler(handler)
 
         return prefect_flow
 

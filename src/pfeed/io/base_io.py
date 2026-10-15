@@ -94,6 +94,9 @@ class BaseIO(ABC):
 
     CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities()
 
+    def __str__(self) -> str:
+        return type(self).__name__
+
     @staticmethod
     def _dump_metadata(metadata: Metadata) -> str:
         """Serializes metadata to JSON, raising TypeError if it wouldn't come back exactly as given.

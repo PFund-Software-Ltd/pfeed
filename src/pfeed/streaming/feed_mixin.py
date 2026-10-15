@@ -470,7 +470,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
             # `_is_running=True` and lock the feed against future `.run()` calls.
             self._cleanup_after_run()
 
-    def run(self, **prefect_kwargs: Any) -> RunResult | list[DataFlow]:
+    def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> RunResult | list[DataFlow]:
         if self.streaming_dataflows:
             try:
                 _ = asyncio.get_running_loop()
@@ -486,7 +486,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                 )
             return asyncio.run(self.run_async())
         else:
-            return super().run(**prefect_kwargs)
+            return super().run(use_prefect=use_prefect, **prefect_kwargs)
 
     async def run_async(self) -> list[DataFlow]:
         if not self.streaming_dataflows:

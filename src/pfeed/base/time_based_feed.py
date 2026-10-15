@@ -181,7 +181,7 @@ class TimeBasedFeed[
             return cls._max_date_range(resolution)
         return parse_date_range(start_date, end_date, rollback_period)
 
-    def run(self, **prefect_kwargs: Any) -> RunResult:
+    def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> RunResult:
         """Runs dataflows and returns a RunResult exposing the combined frame,
         per-flow successes/failures, and any dates that produced no data."""
         import narwhals as nw
@@ -191,7 +191,7 @@ class TimeBasedFeed[
 
         result_dfs: list[IntoFrame] = []
 
-        dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
+        dataflows = self._run_batch_dataflows(use_prefect=use_prefect, prefect_kwargs=prefect_kwargs)
         for dataflow in dataflows:
             result: DataFlowResult = dataflow.result
             _df: IntoFrame | None = result.data

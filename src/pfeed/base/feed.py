@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from pfund_kit.logging.loggers import ColoredLogger
-    from prefect import Flow as PrefectFlow
     from ray.util.queue import Queue
 
     from pfeed.base.data_model import BaseDataModel
@@ -71,6 +70,9 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                         missing.append(method)
                 if verb == "stream" and not issubclass(cls, StreamingFeedMixin):
                     missing.insert(0, "StreamingFeedMixin as a base class")
+                # downloaded data must be readable back, retrieve needs nothing from the feed, so leaving it out is a mistake
+                if verb == "download" and "retrieve" in cls.Capability.__members__ and "retrieve" not in cls.capabilities:
+                    missing.insert(0, "'retrieve' in capabilities")
                 if missing:
                     errors.append(f"'{verb}' needs {', '.join(missing)}")
             if errors:
@@ -116,8 +118,12 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         pass
 
     @abstractmethod
-    def run(self, **prefect_kwargs: Any) -> Any:
-        pass
+    def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> Any:
+        """
+        Args:
+            use_prefect: whether to run the batch dataflows as Prefect flows, requires the `prefect` extra.
+            prefect_kwargs: kwargs specific to prefect @flow decorator, only used if use_prefect is True.
+        """
 
     def is_pipeline(self) -> bool:
         return self._pipeline_mode
@@ -146,25 +152,6 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
     @property
     def streaming_dataflows(self) -> list[DataFlow]:
         return [dataflow for dataflow in self.dataflows if dataflow.is_streaming()]
-
-    def to_prefect_dataflows(self, **kwargs: Any) -> list[PrefectFlow]:
-        """
-        Args:
-            kwargs: kwargs specific to prefect @flow decorator
-
-        Note: this is an export, not a run. The returned prefect flows are self-contained,
-        run them directly (e.g. `flow()`), the feed is no longer used for them, feed.run() will not run them.
-        After exporting, the feed's queued requests and dataflows are cleared,
-        the feed is only reusable for new requests, e.g. feed.download(...) then feed.run().
-        """
-        if self.is_running():
-            raise RuntimeError(f"cannot export {self} to prefect while it is running")
-        try:
-            self._finalize_run()
-            return [dataflow.to_prefect_dataflow(**kwargs) for dataflow in self.dataflows]
-        finally:
-            # hand-off: the prefect flows hold their own dataflows
-            self._cleanup_after_run()
 
     def set_num_workers(self, num_workers: int | None) -> None:
         """
@@ -286,7 +273,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         for dataflow in self.dataflows:
             if (handler := dataflow.handler) is not None and not handler.io.CAPABILITIES.concurrent_partition_writes:
                 raise RuntimeError(
-                    f"{type(handler.io).__name__} does not support concurrent partition writes, cannot be used with Ray"
+                    f"{handler.io} does not support concurrent partition writes, cannot be used with Ray"
                 )
 
     def _prepare_before_run(self):
@@ -325,13 +312,15 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._dataflows[request] = dataflows
         return dataflows
 
-    def _run_batch_dataflows(self, prefect_kwargs: dict[str, Any]) -> list[DataFlow]:
+    def _run_batch_dataflows(self, use_prefect: bool, prefect_kwargs: dict[str, Any]) -> list[DataFlow]:
+        from importlib.util import find_spec
+
         from pfund_kit.utils.progress_bar import ProgressBar, track
 
         from pfeed.config import get_config
-        from pfeed.utils import is_using_prefect
 
-        use_prefect = is_using_prefect()
+        if use_prefect and find_spec("prefect") is None:
+            raise ImportError('use_prefect=True but `prefect` is not installed. Install it with `pip install "pfeed[prefect]"`.')
         disable_progress_bar = not get_config().show_progress_bar
         self._prepare_before_run()
 
@@ -358,13 +347,31 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
 
                 setup_ray()
 
+                # if feed.run() is called inside a prefect flow, pass its context to the Ray workers,
+                # so their dataflows become its subflows, not separate top-level flow runs
+                prefect_context: dict[str, Any] | None = None
+                if use_prefect:
+                    from prefect.context import FlowRunContext, serialize_context
+
+                    if FlowRunContext.get() is not None:
+                        prefect_context = serialize_context()
+
                 @ray.remote
                 def ray_task(
-                    logger_name: str, dataflow: DataFlow, log_queue: Queue
+                    logger_name: str, dataflow: DataFlow, log_queue: Queue, prefect_context: dict[str, Any] | None
                 ) -> DataFlow:
+                    from contextlib import nullcontext
+
                     logger = setup_logger_in_ray_task(logger_name, log_queue)
                     try:
-                        _ = _run_dataflow(dataflow)
+                        if prefect_context is not None:
+                            from prefect.context import hydrated_context
+
+                            context = hydrated_context(prefect_context)
+                        else:
+                            context = nullcontext()
+                        with context:
+                            _ = _run_dataflow(dataflow)
                     except RuntimeError as err:
                         if use_prefect:
                             logger.exception(f"Error in running prefect {dataflow}:")
@@ -395,6 +402,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                                         logger_name=self.logger.name,
                                         dataflow=dataflow,
                                         log_queue=log_queue,
+                                        prefect_context=prefect_context,
                                     )
                                     for dataflow in dataflow_batch
                                 ]

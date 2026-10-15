@@ -134,10 +134,10 @@ class AlphaFundBaseFeed(BaseFeed, ABC):
     def _download_impl(self, data_model: AlphaFundSQLDataModel) -> pl.DataFrame:
         return data_model.to_frame()
 
-    def run(self, **prefect_kwargs: Any) -> RunResult:
+    def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> RunResult:
         from pfeed.utils.dataframe import convert_dataframe
 
-        dataflows = self._run_batch_dataflows(prefect_kwargs=prefect_kwargs)
+        dataflows = self._run_batch_dataflows(use_prefect=use_prefect, prefect_kwargs=prefect_kwargs)
         # one request only (enforced in _append_request),
         # so there is exactly one dataflow — nothing to aggregate.
         [dataflow] = dataflows

@@ -30,7 +30,7 @@ dependencies = [
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
     "pyarrow>=25.0.1 ; sys_platform != 'emscripten'",
     "polars>=2.0.0 ; sys_platform != 'emscripten'",
-    "duckdb>=2.0.0.dev2609250715 ; sys_platform != 'emscripten'",
+    "duckdb>=1.5.6 ; sys_platform != 'emscripten'",
     "pandera>=0.34.0",
     "msgspec>=0.22.0 ; sys_platform != 'emscripten'",
     "pydantic>=2.13.5 ; sys_platform != 'emscripten'",
@@ -43,7 +43,7 @@ dependencies = [
 [project.optional-dependencies]
 ray = ["ray[default]>=2.59.0"]
 huggingface = ["huggingface-hub>=1.33.0"]
-prefect = ["prefect>=3.8.7"]
+prefect = ["prefect>=3.8.8"]
 # kafka = ["confluent-kafka>=2.8.2"]
 # Data Sources:
 # NOTE: data sources are plugins, each one is a separate package named `pfeed-xxx`.
@@ -77,7 +77,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.12.23,<0.13.0"]
+requires = ["uv_build>=0.13.1,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv]

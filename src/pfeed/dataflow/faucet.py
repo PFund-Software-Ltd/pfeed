@@ -66,6 +66,10 @@ class Faucet:
         self._stream_workers: list[str] = []
 
     @property
+    def name(self) -> str:
+        return f"{self._data_source.name}.{self.extract_type}"
+
+    @property
     def extract_type(self) -> str:
         return self._request.extract_type
 

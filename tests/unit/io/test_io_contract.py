@@ -243,7 +243,7 @@ def test_append(io: BaseIO, data: pa.Table):
     Writes `data` (BTC/D1 and BTC/D2), then appends a row to BTC/D1 (existing) and one to BTC/D3 (new), with new metadata.
     """
     if not io.CAPABILITIES.append:
-        pytest.skip(f'{type(io).__name__} does not support append')
+        pytest.skip(f'{io} does not support append')
     partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
     io.write(KEY, data, partitions=partitions)
 
@@ -262,7 +262,7 @@ def test_append_to_new_partition(io: BaseIO, data: pa.Table):
     Appends `data` (BTC/D1 and BTC/D2) to a new dataset, then a row to BTC/D3.
     """
     if not io.CAPABILITIES.append:
-        pytest.skip(f'{type(io).__name__} does not support append')
+        pytest.skip(f'{io} does not support append')
     partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
     io.write(KEY, data, partitions=partitions, mode='append')
 
@@ -283,7 +283,7 @@ def test_concurrent_partition_writes(io: BaseIO):
     The io is pickled into each process (spawn), like a Ray worker.
     """
     if not io.CAPABILITIES.concurrent_partition_writes:
-        pytest.skip(f'{type(io).__name__} does not support concurrent partition writes')
+        pytest.skip(f'{io} does not support concurrent partition writes')
     products = [f'P{i}' for i in range(20)]
     partitions: list[dict[Partition, Metadata]] = [{(product, D1): {'rows': i + 1}} for i, product in enumerate(products)]
     writes = [
@@ -309,7 +309,7 @@ def test_concurrent_partition_writes(io: BaseIO):
 def test_append_unsupported_raises(io: BaseIO, data: pa.Table):
     """IOs without CAPABILITIES.append must raise NotImplementedError on mode='append' and write nothing."""
     if io.CAPABILITIES.append:
-        pytest.skip(f'{type(io).__name__} supports append')
+        pytest.skip(f'{io} supports append')
     partitions: dict[Partition, Metadata] = {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}
 
     with pytest.raises(NotImplementedError):
@@ -405,7 +405,7 @@ def test_schema_drift_append(io: BaseIO, data: pa.Table):
     A column whose type differs from the dataset's still raises TypeError and appends nothing.
     """
     if not io.CAPABILITIES.append:
-        pytest.skip(f'{type(io).__name__} does not support append')
+        pytest.skip(f'{io} does not support append')
     d1 = data.filter(pc.field('date') == D1).append_column('RPI', pa.array([True, False]))
     io.write(KEY, d1, partitions={('BTC', D1): {'version': 1}})
     new_row = pa.table({'ts': [4], 'price': [103.0], 'product': ['BTC'], 'date': [D1], 'tick': ['PlusTick']})
@@ -532,7 +532,7 @@ def test_date_partition(io: BaseIO, tz: str | None):
     - replace: rewriting D1 leaves D3 untouched
     """
     if tz not in (None, 'UTC') and isinstance(io, (DeltaLakeIO, IcebergIO)):
-        pytest.skip(f'{type(io).__name__} only stores timestamps without a time zone or in UTC')
+        pytest.skip(f'{io} only stores timestamps without a time zone or in UTC')
     # us, so the table formats storing microseconds keep them as they are
     dtype = pa.timestamp('us', tz=tz)
     data = pa.table({

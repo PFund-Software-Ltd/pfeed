@@ -89,5 +89,5 @@ class PFundEngineFeed(BaseFeed):
     def _create_batch_dataflows(self, *args, **kwargs):
         pass
 
-    def run(self, **prefect_kwargs: Any):
+    def run(self, use_prefect: bool = False, **prefect_kwargs: Any):
         pass

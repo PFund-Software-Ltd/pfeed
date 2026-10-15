@@ -114,7 +114,10 @@ def _fake_feed_with_product(
     )
 
     class FakeMarketFeed(MarketFeed):
-        capabilities = frozenset()
+        class Requests(MarketFeed.Requests):
+            download = None
+            retrieve = None
+            stream = None
         DataSource = cast("type[BaseSource]", data_source)
 
     return FakeMarketFeed, create_product
@@ -161,7 +164,10 @@ def test_create_data_model_from_product_instance(
 
 class _TransformationsFeed(MarketFeed):
     # module-level so cloudpickle pickles it by reference, like a real feed class
-    capabilities = frozenset()
+    class Requests(MarketFeed.Requests):
+        download = None
+        retrieve = None
+        stream = None
 
 
 def _download_transformations(

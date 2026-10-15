@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 if TYPE_CHECKING:
     from pfeed.base.data_model import BaseDataModel
@@ -15,13 +15,9 @@ from pfeed.io.base_io import BaseIO
 
 class BaseRequest(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    # how the data is extracted, i.e. the feed verb that created this request, e.g. 'download', 'retrieve' or 'stream'
+    extract_type: ClassVar[str]
 
-    extract_type: str = Field(
-        description="""
-            How the data is extracted, i.e. the feed capability that created this request,
-            e.g. 'download', 'retrieve' or 'stream'. Subclasses narrow it to a Literal with a default.
-        """,
-    )
     data_source: str
     data_origin: str = ""
     io: BaseIO | None = None

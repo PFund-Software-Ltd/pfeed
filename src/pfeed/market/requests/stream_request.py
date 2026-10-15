@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any, ClassVar
 
 from pfund.datas.data_config import DataConfig
 from pydantic import Field
@@ -8,9 +8,7 @@ from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
 class MarketFeedStreamRequest(MarketFeedBaseRequest):
-    # hard-coded "stream" instead of MarketFeed.Capability.stream to avoid a circular import,
-    # MarketFeed.__init_subclass__ checks it matches the capability
-    extract_type: Literal["stream"] = "stream"
+    extract_type: ClassVar[str] = "stream"
     data_config: DataConfig | None = None
     replay_pace: float | None = Field(
         default=0,

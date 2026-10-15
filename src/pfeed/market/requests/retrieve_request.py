@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -7,9 +7,7 @@ from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
 class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
-    # hard-coded "retrieve" instead of MarketFeed.Capability.retrieve to avoid a circular import,
-    # MarketFeed.__init_subclass__ checks it matches the capability
-    extract_type: Literal["retrieve"] = "retrieve"
+    extract_type: ClassVar[str] = "retrieve"
     io_for_retrieval: BaseIO = Field(
         description="IO used for data retrieval, not for loading data to storage"
     )

@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 import datetime
 import time
 from abc import ABC
-from enum import StrEnum
 
 import polars as pl
 from pfund.datas.resolution import Resolution
@@ -49,38 +48,19 @@ class MarketFeed[
     RequestT: MarketFeedBaseRequest = MarketFeedBaseRequest,
     DataModelT: MarketDataModel = MarketDataModel,
 ](TimeBasedFeed[SourceT, RequestT, DataModelT], ABC):
+    class Requests:
+        """Request class per verb, a subclass sets a verb to None if it doesn't support it."""
+
+        download: ClassVar[type[MarketFeedDownloadRequest] | None] = MarketFeedDownloadRequest
+        retrieve: ClassVar[type[MarketFeedRetrieveRequest] | None] = MarketFeedRetrieveRequest
+        stream: ClassVar[type[MarketFeedStreamRequest] | None] = MarketFeedStreamRequest
+
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
-    DownloadRequest: ClassVar[type[MarketFeedDownloadRequest]] = MarketFeedDownloadRequest
-    RetrieveRequest: ClassVar[type[MarketFeedRetrieveRequest]] = MarketFeedRetrieveRequest
-    StreamRequest: ClassVar[type[MarketFeedStreamRequest]] = MarketFeedStreamRequest
-
-    class Capability(StrEnum):
-        """Verbs a market feed can support."""
-
-        download = "download"
-        stream = "stream"
-        retrieve = "retrieve"
-
-    capabilities: ClassVar[frozenset[Capability]] = frozenset(Capability)
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
-    required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
-        Capability.download: ("_download_impl", "_normalize_downloaded_data"),
-        Capability.stream: ("_get_stream_api", "_parse_streaming_message"),
+    _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
+        MarketFeedDownloadRequest.extract_type: ("_download_impl", "_normalize_downloaded_data"),
+        MarketFeedStreamRequest.extract_type: ("_get_stream_api", "_parse_streaming_message"),
     }
-
-    def __init_subclass__(cls, **kwargs: Any):
-        super().__init_subclass__(**kwargs)
-        # requests hard-code their extract_type to avoid a circular import, check it matches the capability
-        for capability, Request in (
-            (cls.Capability.download, cls.DownloadRequest),
-            (cls.Capability.retrieve, cls.RetrieveRequest),
-            (cls.Capability.stream, cls.StreamRequest),
-        ):
-            extract_type = Request.model_fields["extract_type"].default
-            if extract_type != capability:
-                raise TypeError(
-                    f"{cls.__name__}: {Request.__name__}.extract_type={extract_type!r} must be {str(capability)!r}"
-                )
 
     @staticmethod
     def _standardize_columns(df: pl.LazyFrame, product: BaseProduct, resolution: Resolution) -> pl.LazyFrame:
@@ -288,7 +268,7 @@ class MarketFeed[
             end_date=end_date or start_date,
         )
 
-    @requires(Capability.download)
+    @requires("download")
     def download(
         self,
         product: str,
@@ -338,7 +318,7 @@ class MarketFeed[
         # find the first resolution that is >= (finer/higher) the target resolution
         data_resolution = min(candidates)
         request = cast("RequestT",
-            self.DownloadRequest(
+            cast("type[MarketFeedDownloadRequest]", self.Requests.download)(
                 data_source=self.name,
                 data_origin=data_origin,
                 io=io,
@@ -369,11 +349,11 @@ class MarketFeed[
 
     def _get_default_transformations(self, request: RequestT, /) -> list[Callable[..., Any]]:
         match request.extract_type:
-            case self.Capability.download:
+            case "download":
                 return self._get_default_transformations_for_download(request)
-            case self.Capability.retrieve:
+            case "retrieve":
                 return self._get_default_transformations_for_retrieve(request)
-            case self.Capability.stream:
+            case "stream":
                 return self._get_default_transformations_for_stream(request)
             case _:
                 raise ValueError(f"Unknown extract type: {request.extract_type}")
@@ -409,7 +389,7 @@ class MarketFeed[
         )
         return default_transformations
 
-    @requires(Capability.retrieve)
+    @requires("retrieve")
     def retrieve(
         self,
         product: str,
@@ -510,7 +490,7 @@ class MarketFeed[
             )
 
         request = cast("RequestT",
-            self.RetrieveRequest(
+            cast("type[MarketFeedRetrieveRequest]", self.Requests.retrieve)(
                 data_source=self.name,
                 data_origin=data_origin,
                 io_for_retrieval=io,
@@ -601,7 +581,7 @@ class MarketFeed[
         Touches top-level `ts` and any timestamp fields inside `data`."""
         raise NotImplementedError
 
-    @requires(Capability.stream)
+    @requires("stream")
     def stream(
         self,
         product: str,
@@ -726,7 +706,7 @@ class MarketFeed[
 
                 io = ParquetIO()
 
-        request = self.StreamRequest(
+        request = cast("type[MarketFeedStreamRequest]", self.Requests.stream)(
             data_source=self.name,
             data_origin=data_origin,
             data_config=data_config,

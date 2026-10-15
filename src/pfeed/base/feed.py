@@ -19,13 +19,12 @@ if TYPE_CHECKING:
 import functools
 import logging
 from abc import ABC, abstractmethod
-from enum import StrEnum
 
 from pfeed.enums import DataCategory, DataLayer, FlowType
 
 
 def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
-    """Gates a public verb method (e.g. download) on the feed's capabilities, before any of its body runs."""
+    """Gates a public verb method (e.g. download) on the feed's Requests, before any of its body runs."""
 
     def decorator(func: F) -> F:
         @functools.wraps(func)
@@ -44,43 +43,41 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
     DataSource: ClassVar[type[BaseSource]]
     DataModel: ClassVar[type[BaseDataModel]]
 
-    class Capability(StrEnum):
-        """Verbs a feed gates on. Each feed subclasses this with its own members."""
+    class Requests:
+        """Request class per verb. Each feed family subclasses this with its own verbs, None = not supported."""
 
-    # verbs this feed supports, defaults to every verb in its Capability
-    capabilities: ClassVar[frozenset[Capability]]
     # methods a feed must override for each verb it supports
-    required_methods: ClassVar[dict[str, tuple[str, ...]]] = {}
+    _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {}
     data_domain: ClassVar[DataCategory]
 
     def __init_subclass__(cls, **kwargs: Any):
         from pfeed.streaming.feed_mixin import StreamingFeedMixin
 
         super().__init_subclass__(**kwargs)
-        cls.capabilities = frozenset(cls.__dict__.get("capabilities", cls.Capability))
         # framework base classes (listing ABC directly) hold the defaults, so only concrete feeds are checked
-        if ABC not in cls.__bases__:
-            errors: list[str] = []
-            for verb in sorted(cls.capabilities):
-                missing: list[str] = []
-                for method in cls.required_methods.get(verb, ()):
-                    owner = next((c for c in cls.__mro__ if method in c.__dict__), None)
-                    # not defined at all, or still the default from a framework base class
-                    if owner is None or ABC in owner.__bases__:
-                        missing.append(method)
-                if verb == "stream" and not issubclass(cls, StreamingFeedMixin):
-                    missing.insert(0, "StreamingFeedMixin as a base class")
-                # downloaded data must be readable back, retrieve needs nothing from the feed, so leaving it out is a mistake
-                if verb == "download" and "retrieve" in cls.Capability.__members__ and "retrieve" not in cls.capabilities:
-                    missing.insert(0, "'retrieve' in capabilities")
-                if missing:
-                    errors.append(f"'{verb}' needs {', '.join(missing)}")
-            if errors:
-                raise TypeError(
-                    f"{cls.__name__} supports {sorted(map(str, cls.capabilities))} but is missing what they need:\n  "
-                    + "\n  ".join(errors)
-                    + f"\nImplement them, or remove the verbs from {cls.__name__}.capabilities"
-                )
+        if ABC in cls.__bases__:
+            return
+        errors: list[str] = []
+        for verb in cls.capabilities():
+            missing: list[str] = []
+            for method in cls._required_methods.get(verb, ()):
+                owner = next((c for c in cls.__mro__ if method in c.__dict__), None)
+                # not defined at all, or still the default from a framework base class
+                if owner is None or ABC in owner.__bases__:
+                    missing.append(method)
+            if verb == "stream" and not issubclass(cls, StreamingFeedMixin):
+                missing.insert(0, "StreamingFeedMixin as a base class")
+            # downloaded data must be readable back, retrieve needs nothing from the feed, so leaving it out is a mistake
+            if verb == "download" and hasattr(cls.Requests, "retrieve") and "retrieve" not in cls.capabilities():
+                missing.insert(0, "Requests.retrieve")
+            if missing:
+                errors.append(f"'{verb}' needs {', '.join(missing)}")
+        if errors:
+            raise TypeError(
+                f"{cls.__name__} supports {cls.capabilities()} but is missing what they need:\n  "
+                + "\n  ".join(errors)
+                + f"\nImplement them, or set the verbs to None in {cls.__name__}.Requests"
+            )
 
     def __init__(self, data_source: SourceT, pipeline_mode: bool = False, num_workers: int | None = None):
         """
@@ -134,8 +131,16 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
     def _is_using_ray(self) -> bool:
         return bool(self._num_workers)
 
-    def _supports(self, verb: Capability | str) -> bool:
-        return verb in self.capabilities
+    @classmethod
+    def capabilities(cls) -> list[str]:
+        """Verbs this feed supports, i.e. the Requests attributes not set to None."""
+        return sorted(
+            verb for verb in dir(cls.Requests)
+            if not verb.startswith("_") and getattr(cls.Requests, verb) is not None
+        )
+
+    def _supports(self, verb: str) -> bool:
+        return verb in self.capabilities()
 
     @property
     def data_source(self) -> SourceT:

@@ -35,7 +35,6 @@ dependencies = [
     "msgspec>=0.22.0 ; sys_platform != 'emscripten'",
     "pydantic>=2.13.5 ; sys_platform != 'emscripten'",
     "narwhals>=2.26.0 ; sys_platform != 'emscripten'",
-    "cloudpathlib>=0.26.0",
     "beautifulsoup4>=4.15.0",
     "pyzmq>=27.2.0 ; sys_platform != 'emscripten'",
 ]

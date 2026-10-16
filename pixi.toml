@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 name = "pfeed"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64", "win-64"]
 # NOTE: should match with setup-pixi in ci.yml
-requires-pixi = ">=0.81.0,<0.82.0"
+requires-pixi = ">=0.82.0,<0.83.0"
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0d"
 
@@ -68,14 +68,13 @@ lancedb = ">=0.39.0"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-pfeed-bybit = { path = "../pfeed-bybit", editable = true }
+pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
 pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
 # TEMP
 pfund = { path = "../pfund", editable = true }
 pfund-kit = { path = "../pfund-kit", editable = true }
 afterpython = { path ="../../afterpython.org/afterpython", editable = true }  # TEMP
 # afterpython = ">=0.4.1"
-financetoolkit = ">=2.2.0"
 # used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
 deltalake = ">=1.6.6"
 pyiceberg = {version = ">=0.12.0", extras = ['sql-sqlite', 'pyiceberg-core']}

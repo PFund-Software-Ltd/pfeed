@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     import pfund_plot as plot
 
     # NOTE: data sources (plugins), for IDE hints of pe.<Source> only, never executed at runtime.
-    # pe.<Source> is reserved for OFFICIAL sources (currently: pfeed_bybit); only they are listed here.
+    # pe.<Source> is reserved for OFFICIAL sources, only they are listed here and in __getattr__.
     # third-party sources are NOT exposed as pe.<Source>, use either:
     #   from pfeed_xxx import XXX
     #   pe.get_feed("xxx", ...)
@@ -46,10 +46,26 @@ def __getattr__(name: str):
         from pfeed.engine import DataEngine
 
         return DataEngine
-    elif name in _get_sources():
-        # data source class (e.g. pe.Bybit), exposed by a plugin's entry point
-        return _get_sources()[name].load()
+    elif name == "Bybit":
+        return _import_official_source("pfeed_bybit", "Bybit")
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def _import_official_source(module: str, source: str):
+    """Imports an official data source class (e.g. pe.Bybit) from its plugin, e.g. module="pfeed_bybit"."""
+    from importlib import import_module
+
+    try:
+        return getattr(import_module(module), source)
+    except ModuleNotFoundError as err:
+        # only rewrite the error if the plugin itself is missing, not a broken import inside it
+        if err.name != module:
+            raise
+        package = module.replace("_", "-")
+        raise ModuleNotFoundError(
+            f"pe.{source} requires the official plugin '{package}', install it with: pip install {package}",
+            name=err.name,
+        ) from err
 
 
 __all__ = (  # noqa: RUF022
@@ -63,12 +79,5 @@ __all__ = (  # noqa: RUF022
 )
 
 
-def _get_sources():
-    """Returns {source class name: entry point} of installed data sources, e.g. {"Bybit": ep}."""
-    from pfeed.registry import get_entry_points
-
-    return {ep.attr: ep for ep in get_entry_points().values()}
-
-
 def __dir__():
-    return sorted([*__all__, *_get_sources()])
+    return sorted(__all__)

@@ -205,3 +205,5 @@ afterpython/_website.backup/
 
 # zed settings
 **/.zed/
+
+/sources/

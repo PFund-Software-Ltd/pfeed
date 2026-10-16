@@ -19,7 +19,7 @@ pfund-kit = "0d"
 depends-on = [
   { task = "test", environment = "py313" },
   { task = "test", environment = "py314" },
-  # { task = "test", environment = "py315" },
+  { task = "test", environment = "py315" },
   # TODO: add test-all to test all plugins, including e.g. pfeed-bybit
 ]
 
@@ -30,13 +30,13 @@ depends-on = [
 
 [pypi-dependencies]
 pfund = "==0.0.25"  # use >= only when pfund is stable
-pyarrow = ">=25.0.1"
+pyarrow = ">=26.0.0"
 polars = ">=2.0.0"
 duckdb = ">=1.5.6"
-pandera = ">=0.34.0"
+pandera = ">=0.34.1"
 msgspec = ">=0.22.0"
-pydantic = ">=2.13.5"
-narwhals = ">=2.26.0"
+pydantic = ">=2.14.1"
+narwhals = ">=2.27.1"
 beautifulsoup4 = ">=4.15.0"
 pyzmq = ">=27.2.0"
 
@@ -44,7 +44,7 @@ pyzmq = ">=27.2.0"
 default = ["py313", "dev", "test", "optional"]
 py313 = ["py313", "test", "optional"]
 py314 = ["py314", "test", "optional"]
-# py315 = ["py315", "test", "optional"]
+py315 = ["py315", "test", "optional"]
 
 [activation.env]
 # JAVA_HOME = "$CONDA_PREFIX/lib/jvm"
@@ -56,10 +56,12 @@ py314 = ["py314", "test", "optional"]
 libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
-ray = { version = ">=2.59.0", extras = ["default"] }
-huggingface-hub = ">=1.33.0"
+# TODO: remove the env-markers when ray supports python 3.15
+ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_full_version < '3.15'" }
+huggingface-hub = ">=2.2.0"
 prefect = ">=3.8.8"
-lancedb = ">=0.39.0"
+lancedb = ">=0.40.0"
+# pfeed-bybit = ">=0.0.1"
 # IOs
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 # Data Sources:
@@ -69,7 +71,7 @@ lancedb = ">=0.39.0"
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
 pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
-pfund-plot = {version = ">=0.0.5", extras = ["marimo"]}
+pfund-plot = { version = ">=0.0.5", extras = ["marimo"] }
 # TEMP
 pfund = { path = "../pfund", editable = true }
 pfund-kit = { path = "../pfund-kit", editable = true }
@@ -77,7 +79,7 @@ afterpython = { path ="../../afterpython.org/afterpython", editable = true }  # 
 # afterpython = ">=0.4.1"
 # used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
 deltalake = ">=1.6.6"
-pyiceberg = {version = ">=0.12.0", extras = ['sql-sqlite', 'pyiceberg-core']}
+pyiceberg = { version = ">=0.12.0", extras = ["sql-sqlite", "pyiceberg-core"] }
 # dask = { version = ">=2026.6.0", extras = ["complete", "dataframe"] }
 # pyspark = { version = ">=4.1.2", extras = ["connect", "pandas-on-spark", "sql"] }
 # daft = ">=0.7.15"
@@ -105,5 +107,5 @@ python = "3.13.*"
 [feature.py314.dependencies]
 python = "3.14.*"
 
-# [feature.py315.dependencies]
-# python = "3.15.*"
+[feature.py315.dependencies]
+python = "3.15.*"

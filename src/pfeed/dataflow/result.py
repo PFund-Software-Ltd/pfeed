@@ -17,11 +17,13 @@ from dataclasses import dataclass
 class DataFlowResult:
     """Result of a single DataFlow run.
 
-    A result is in exactly one of three states:
+    A result is in exactly one of four states:
       - materialized: `_data` is set (retrieve flows, or download without storage)
       - lazy:         `_loader` is set; data is fetched from storage on access
                       (download flow with storage — used under Ray to avoid copying
                       large frames back from worker to main process)
+      - no data:      `success` is True but there is no data, e.g. a retrieve flow
+                      whose dates are not in storage
       - failed:       `error` is set; `success` is False
 
     Construct via the factory classmethods rather than the bare constructor.
@@ -40,6 +42,10 @@ class DataFlowResult:
     @classmethod
     def lazy(cls, loader: Callable[[], pl.LazyFrame | bytes | None]) -> DataFlowResult:
         return cls(success=True, _loader=loader)
+
+    @classmethod
+    def no_data(cls) -> DataFlowResult:
+        return cls(success=True)
 
     @classmethod
     def failed(cls, error: BaseException | None = None) -> DataFlowResult:

@@ -198,8 +198,14 @@ class DataFlow:
 
         extracted_data: pl.LazyFrame | None = extract(data_model=self.data_model)
         if extracted_data is None:
-            self._result = DataFlowResult.failed(error=ValueError(f"{self.name} produced no data"))
+            self._logger.debug(f"no {self.data_model} data extracted by {self.faucet.name}")
+            # retrieve reads storage, where missing data is a valid answer, the feed reports the missing dates
+            if self.faucet.extract_type == "retrieve":
+                self._result = DataFlowResult.no_data()
+            else:
+                self._result = DataFlowResult.failed(error=ValueError(f"{self.name} produced no data"))
             return self._result
+        self._logger.debug(f"extracted {self.data_model} data by {self.faucet.name}")
         is_empty = is_dataframe(extracted_data) and is_empty_dataframe(extracted_data)
         data = cast("IntoFrame", self._transform(extracted_data))
         is_loaded = self._load(data)

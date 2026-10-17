@@ -48,14 +48,14 @@ class MarketFeed[
     RequestT: MarketFeedBaseRequest = MarketFeedBaseRequest,
     DataModelT: MarketDataModel = MarketDataModel,
 ](TimeBasedFeed[SourceT, RequestT, DataModelT], ABC):
-    class Requests:
+    class Requests:  # ty: ignore[invalid-attribute-override]
         """Request class per verb, a subclass sets a verb to None if it doesn't support it."""
 
         download: ClassVar[type[MarketFeedDownloadRequest] | None] = MarketFeedDownloadRequest
         retrieve: ClassVar[type[MarketFeedRetrieveRequest] | None] = MarketFeedRetrieveRequest
         stream: ClassVar[type[MarketFeedStreamRequest] | None] = MarketFeedStreamRequest
 
-    DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel
+    DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel  # ty: ignore[invalid-mutable-override]
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
         MarketFeedDownloadRequest.extract_type: ("_download_impl", "_normalize_downloaded_data"),
@@ -319,7 +319,7 @@ class MarketFeed[
         data_resolution = min(candidates)
         request = cast("RequestT",
             cast("type[MarketFeedDownloadRequest]", self.Requests.download)(
-                data_source=self.name,
+                data_source=self.data_source,
                 data_origin=data_origin,
                 io=io,
                 data_layer=data_layer,
@@ -344,7 +344,7 @@ class MarketFeed[
         raise NotImplementedError
 
     @staticmethod
-    def _download_impl(data_source: SourceT, request: RequestT, data_model: DataModelT) -> pl.LazyFrame | None:
+    def _download_impl(request: RequestT, data_model: DataModelT) -> pl.LazyFrame | None:
         raise NotImplementedError
 
     def _get_default_transformations(self, request: RequestT, /) -> list[Callable[..., Any]]:
@@ -438,97 +438,73 @@ class MarketFeed[
         Returns:
             `RunResult` with the retrieved data, or `self` in pipeline mode.
         """
-        env = Environment[env.upper()]
+        from functools import partial
+
+        from pfeed.io.parquet_io import ParquetIO
+
+        env = Environment(env.upper())
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
         start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
-        # search for higher resolutions (highest first), e.g. if resolution is '1m', search '1m' -> '1t' -> '1s'
-        search_resolutions = [
+        data_layer = DataLayer.parse(data_layer)
+        # search for higher resolutions (closest first), e.g. if resolution is '1m', search '1m' -> '1s' -> '1t'
+        # only cleaned data has a known schema to resample, raw and curated data only use the requested resolution
+        search_resolutions = [resolution] if data_layer != DataLayer.CLEANED else [
             resolution,
-            *sorted(
-                [
-                    _resolution
-                    for _resolution in self.get_supported_resolutions(
-                        include_resampled=True
-                    )
-                    if _resolution > resolution
-                ],
-                reverse=True,
-            ),
-        ]
-
-        if io is None:
-            from pfeed.io.parquet_io import ParquetIO
-
-            io = ParquetIO()
+            *sorted([
+                _resolution
+                for _resolution in self.get_supported_resolutions(include_resampled=True)
+                # quote data has no price or OHLC columns to resample into bars
+                if _resolution > resolution and not _resolution.is_quote()
+            ]
+        )]
 
         # find the data resolution: the first search resolution stored for every date,
         # falls back to the target resolution if none is fully stored
-        data_resolution = resolution
-        for search_resolution in search_resolutions:
-            data_model = self.create_data_model(
-                env=env,
-                product=product,
-                resolution=search_resolution,
-                start_date=start_date,
-                end_date=end_date,
-                data_origin=data_origin,
-            )
-            handler = data_model.DataHandler(
-                data_model=data_model,
-                io=io,
-                data_layer=data_layer,
-                data_domain=str(self.data_domain),
-            )
-            if not handler.find_missing_dates_in_storage():
-                data_resolution = search_resolution
-                break
-        else:
-            self.logger.debug(
-                f"{product} data from {start_date} to {end_date} is not fully stored at any of {search_resolutions} in {io!r}, falling back to {resolution}"
-            )
-
-        request = cast("RequestT",
-            cast("type[MarketFeedRetrieveRequest]", self.Requests.retrieve)(
-                data_source=self.name,
-                data_origin=data_origin,
-                io_for_retrieval=io,
-                data_layer=data_layer,
-                env=env,
-                product=product,
-                target_resolution=resolution,
-                data_resolution=data_resolution,
-                start_date=start_date,
-                end_date=end_date,
-            )
+        partial_request = partial(
+            cast("type[MarketFeedRetrieveRequest]", self.Requests.retrieve),
+            data_source=self.data_source,
+            data_origin=data_origin,
+            io_for_retrieval=io or ParquetIO(),
+            data_layer=data_layer,
+            env=env,
+            product=product,
+            target_resolution=resolution,
+            start_date=start_date,
+            end_date=end_date,
         )
+        # data probing, checks storage before any dataflow is created, so the request carries the exact data_resolution to read
+        missing_dates: list[datetime.date] = []
+        for search_resolution in search_resolutions:
+            request = partial_request(data_resolution=search_resolution)
+            if not (_missing_dates := request.create_data_resolution_handler().find_missing_dates_in_storage()):
+                break
+            # the target resolution is the one fallen back to, report its missing dates
+            if search_resolution == resolution:
+                missing_dates = _missing_dates
+        else:
+            # list at most 10 missing dates, a long range can miss thousands
+            shown_dates = ", ".join(str(date) for date in missing_dates[:10]) + (", ..." if len(missing_dates) > 10 else "")
+            self.logger.warning(
+                f"{product} data from {start_date} to {end_date} is not fully stored at any of {search_resolutions} in {request.io_for_retrieval!r}, "
+                + f"falling back to {resolution}, missing {len(missing_dates)} dates: {shown_dates}"
+            )
+            request = partial_request(data_resolution=resolution)
         self._append_request(request)
         data_model = cast("DataModelT", request.to_data_model())
-        _ = self._create_batch_dataflows(
-            extract_func=lambda data_model: self._retrieve_impl(data_model, request),
+        self._create_batch_dataflows(
+            extract_func=self._retrieve_impl,
             data_models=data_model.split_by_date() if dataflow_per_date else [data_model],
         )
         return self.run() if not self.is_pipeline() else self
 
-    def _retrieve_impl(
-        self, data_model: DataModelT, request: RequestT
-    ) -> pl.LazyFrame | None:
-        # data_model is of target resolution, copy it since it has the correct start_date and end_date
-        # when dataflow_per_date = True, the handler should read the data model with data_resolution
-        data_model = data_model.model_copy(update={"resolution": request.data_resolution})
+    @staticmethod
+    def _retrieve_impl(request: RequestT, data_model: DataModelT) -> pl.LazyFrame | None:
+        # data_model is of target resolution and has the dataflow's date range (one date when dataflow_per_date=True),
+        # the handler reads that range at data_resolution
         assert isinstance(request, MarketFeedRetrieveRequest)
-        handler = data_model.DataHandler(
-            data_model=data_model,
-            io=request.io_for_retrieval,
-            data_layer=request.data_layer,
-            data_domain=str(self.data_domain),
-        )
-        lf, _ = handler.read()
-        if lf is not None:
-            self.logger.debug(f"retrived data {data_model} from {handler!r}")
-        else:
-            self.logger.debug(f"no data found for {data_model} in {handler!r}")
+        lf, _ = request.create_data_resolution_handler(data_model).read()
         return lf
 
     def _get_default_transformations_for_retrieve(
@@ -542,6 +518,8 @@ class MarketFeed[
         )
 
         default_transformations = []
+
+        # REVIEW: after fixing streaming
         if is_retrieving_streaming_data:
             # a bar's date is its start, like in batch data, see MarketDataHandler._get_date_col()
             date_col = "start_ts" if request.data_resolution.is_bar() else "ts"
@@ -554,7 +532,8 @@ class MarketFeed[
                     ),
                 ),
             )
-        if request.data_layer != DataLayer.RAW:
+        # only cleaned data has a known schema to resample and organize, raw and curated data are returned as stored
+        if request.data_layer == DataLayer.CLEANED:
             # bind the class and plain values so the lambdas don't capture self (the whole feed) when pickled by Ray
             cls = type(self)
             product, target_resolution = request.product, request.target_resolution
@@ -660,7 +639,7 @@ class MarketFeed[
         from pfeed.streaming.feed_mixin import StreamingFeedMixin
 
         SUPPORTED_ENVS = [Environment.BACKTEST, Environment.PAPER, Environment.LIVE]
-        env = Environment[env.upper()]
+        env = Environment(env.upper())
         if env not in SUPPORTED_ENVS:
             raise ValueError(f"streaming is only supported in envs {SUPPORTED_ENVS}")
         setup_logging(env=env)
@@ -707,7 +686,7 @@ class MarketFeed[
                 io = ParquetIO()
 
         request = cast("type[MarketFeedStreamRequest]", self.Requests.stream)(
-            data_source=self.name,
+            data_source=self.data_source,
             data_origin=data_origin,
             data_config=data_config,
             io=io,

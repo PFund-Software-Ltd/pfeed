@@ -39,14 +39,13 @@ class Faucet:
 
     def __init__(
         self,
-        data_source: BaseSource,
         request: BaseRequest,
         extract_func: Callable[
-            Concatenate[BaseSource, BaseRequest, BaseDataModel, ExtractFuncParams], Any
+            Concatenate[BaseRequest, BaseDataModel, ExtractFuncParams], Any
         ],  # e.g. _download_impl(), _stream_impl(), _retrieve_impl()
     ):
-        self._logger = logging.getLogger(f"pfeed.{data_source.name.lower()}")
-        self._data_source = data_source
+        self._logger = logging.getLogger(f"pfeed.{request.data_source.name.lower()}")
+        self._data_source: BaseSource = request.data_source
         self._request = request
         self._extract_func = extract_func
         self._is_stream_opened = False
@@ -110,7 +109,7 @@ class Faucet:
             self._stream_workers.append(worker_name)
 
     def open_batch(self, data_model: BaseDataModel) -> pl.LazyFrame | None:
-        source = self._data_source
+        policy = self._request.retry_policy
         attempt = 0
         while True:
             # TODO: rate limiting, e.g. source.rate_limiter.acquire() here before every attempt (retries included).
@@ -121,17 +120,17 @@ class Faucet:
             try:
                 return cast(
                     pl.LazyFrame | None,
-                    self._extract_func(source, self._request, data_model),
+                    self._extract_func(self._request, data_model),
                 )
-            except source.retry_on as e:
-                if attempt == source.max_retries:
-                    e.add_note(f'{self.name} extraction of {data_model} failed, gave up after {source.max_retries} retries')
+            except policy.retry_on as e:
+                if attempt == policy.max_retries:
+                    e.add_note(f'{self.name} extraction of {data_model} failed, gave up after {policy.max_retries} retries')
                     raise
-                wait = source.retry_wait * source.retry_backoff**attempt * random.uniform(0.5, 1.5)
+                wait = policy.wait * policy.backoff**attempt * random.uniform(0.5, 1.5)
                 attempt += 1
                 self._logger.warning(
                     f'{self.name} extraction of {data_model} failed ({e!r}), '
-                    f'retry {attempt}/{source.max_retries} in {wait:.1f}s'
+                    f'retry {attempt}/{policy.max_retries} in {wait:.1f}s'
                 )
                 time.sleep(wait)
 
@@ -142,7 +141,6 @@ class Faucet:
         if not self._is_stream_opened:
             self._is_stream_opened = True
             await self._extract_func(
-                self._data_source,
                 self._request,
                 data_model,
                 faucet_callback=self._callback,

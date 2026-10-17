@@ -9,8 +9,10 @@ from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from pfeed.dataflow.retry_policy import RetryPolicy
 from pfeed.enums import DataLayer
 from pfeed.io.base_io import BaseIO
+from pfeed.source import BaseSource
 
 
 class BaseRequest(BaseModel, ABC):
@@ -18,7 +20,8 @@ class BaseRequest(BaseModel, ABC):
     # how the data is extracted, i.e. the feed verb that created this request, e.g. 'download', 'retrieve' or 'stream'
     extract_type: ClassVar[str]
 
-    data_source: str
+    # the source object of the feed that created this request, so the extraction can reach its APIs, e.g. source.batch_api
+    data_source: BaseSource
     data_origin: str = ""
     io: BaseIO | None = None
     data_layer: DataLayer = Field(
@@ -27,6 +30,10 @@ class BaseRequest(BaseModel, ABC):
             Data layer of the data: what is produced for download/stream (RAW or CLEANED),
             where it is read from for retrieve.
         """,
+    )
+    retry_policy: RetryPolicy = Field(
+        default_factory=RetryPolicy,
+        description="Retries of a failed extraction, e.g. the source's policy for download, never retries by default",
     )
 
     @abstractmethod
@@ -53,26 +60,15 @@ class BaseRequest(BaseModel, ABC):
     def is_replaying(self) -> bool:
         return False
 
-    @field_validator("data_source", mode="before")
-    @classmethod
-    def _validate_data_source(cls, value: str) -> str:
-        from pfeed import registry
-        return registry.get_entry_point(value).name.upper()
-
     @field_validator("data_layer", mode="before")
     @classmethod
     def _validate_data_layer(cls, value: DataLayer | str) -> DataLayer:
-        if isinstance(value, str):
-            try:
-                return DataLayer[value.upper()]
-            except KeyError:
-                raise ValueError(f"invalid data layer '{value}', must be one of {[dl.name for dl in DataLayer]}") from None
-        return value
+        return DataLayer.parse(value)
 
     @model_validator(mode="after")
     def _default_data_origin(self) -> Self:
         if not self.data_origin:
-            self.data_origin = self.data_source
+            self.data_origin = self.data_source.name
         return self
 
     def finalize_load_config(

@@ -111,7 +111,7 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                 self._create_faucet(
                     request=request,
                     extract_func=(
-                        lambda data_model, faucet_callback, handler: self._stream_impl(
+                        lambda request, data_model, faucet_callback, handler: self._stream_impl(
                             data_model,
                             faucet_callback,
                             handler=handler,

@@ -182,8 +182,18 @@ class TimeBasedFeed[
         return parse_date_range(start_date, end_date, rollback_period)
 
     def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> RunResult:
-        """Runs dataflows and returns a RunResult exposing the combined frame
-        and per-flow successes/failures."""
+        """Run the batch dataflows and combine their outputs.
+
+        A failed dataflow doesn't stop the others; its error is recorded in the result.
+
+        Args:
+            use_prefect: If True, run each dataflow as a Prefect flow.
+            prefect_kwargs: kwargs for Prefect's `@flow` decorator, e.g. `retries=2`.
+
+        Returns:
+            RunResult with the combined LazyFrame sorted by date (None if no data)
+            and the per-dataflow results.
+        """
         import narwhals as nw
 
         from pfeed.dataflow.result import RunResult

@@ -50,12 +50,11 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
         return self
 
     def to_data_model(self) -> MarketDataModel:
-        from pfeed import registry
         from pfeed.enums import DataCategory
         from pfeed.market.data_model import MarketDataModel
 
         # the source's own feed declares the DataModel (plugins may narrow it, e.g. BybitMarketDataModel)
-        Feed = registry.get_feed(self.data_source, DataCategory.MARKET_DATA)
+        Feed = self.data_source.Feeds[DataCategory.MARKET_DATA]
         DataModel = Feed.DataModel
         if not issubclass(DataModel, MarketDataModel):
             raise TypeError(
@@ -63,7 +62,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
             )
         return DataModel(
             env=self.env,
-            data_source=self.data_source,
+            data_source=self.data_source.name,
             data_origin=self.data_origin,
             product=self.product,
             resolution=self.target_resolution,
@@ -75,7 +74,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
         from pprint import pformat
 
         data: dict[str, str] = {
-            "data_source": self.data_source,
+            "data_source": self.data_source.name,
             "env": str(self.env),
             "start_date": str(self.start_date),
             "end_date": str(self.end_date),
@@ -85,7 +84,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
             "data_resolution": str(self.data_resolution),
             "data_layer": str(self.data_layer),
         }
-        if self.data_origin != self.data_source:
+        if self.data_origin != self.data_source.name:
             data["data_origin"] = self.data_origin
         if self.io:
             data["io"] = repr(self.io)

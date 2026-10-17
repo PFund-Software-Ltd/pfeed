@@ -24,7 +24,7 @@ def setup_logging(env: Environment | str | None = None, reset: bool = False) -> 
 
     from pfeed.registry import list_sources
 
-    env = Environment[env.upper()] if env else None
+    env = Environment(env.upper()) if env else None
     logging_config = copy.deepcopy(get_logging_config())
     loggers = logging_config["loggers"]
     # derive a logger (i.e. a log file) per installed data source, e.g. "pfeed.bybit", unless logging.yml has it

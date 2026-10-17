@@ -20,6 +20,7 @@ from pydantic import (
     model_validator,
 )
 
+from pfeed.dataflow.retry_policy import RetryPolicy
 from pfeed.enums import DataAccessType, DataCategory, DataProviderType, DataType
 
 
@@ -71,14 +72,9 @@ class SourceMetadata(BaseModel):
 class BaseSource(ABC):
     Feeds: ClassVar[dict[DataCategory, type[BaseFeed]]]
     metadata: ClassVar[SourceMetadata]
-    # errors from the source's API that are transient (e.g. timeouts, dropped connections),
-    # so the faucet can retry the extraction; empty means never retry
-    retry_on: ClassVar[tuple[type[Exception], ...]] = ()
-    # retries of a batch extraction that failed with one of the retry_on errors,
-    # waiting retry_wait * retry_backoff**attempt seconds (with jitter) in between
-    max_retries: ClassVar[int] = 3
-    retry_wait: ClassVar[float] = 1.0
-    retry_backoff: ClassVar[float] = 2.0
+    # retries for the source's API, which errors are transient (e.g. timeouts, dropped connections) and how often to retry;
+    # passed to the requests that call the API, e.g. download, the default never retries
+    retry_policy: ClassVar[RetryPolicy] = RetryPolicy()
 
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)

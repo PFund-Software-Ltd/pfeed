@@ -15,7 +15,7 @@ class PFundBaseRequest(BaseRequest):
     @classmethod
     def _validate_env(cls, v: Environment | str) -> Environment:
         if isinstance(v, str):
-            return Environment[v.upper()]
+            return Environment(v.upper())
         return v
 
     @field_validator("project_name", mode="before")

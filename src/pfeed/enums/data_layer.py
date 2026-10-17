@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from enum import IntEnum
 
 
@@ -11,3 +13,13 @@ class DataLayer(IntEnum):
         return self.name
 
     __repr__ = __str__
+
+    @classmethod
+    def parse(cls, value: DataLayer | str) -> DataLayer:
+        """Parses a data layer name (case-insensitive), e.g. 'raw', or returns the member as is."""
+        if isinstance(value, str):
+            try:
+                return cls[value.upper()]
+            except KeyError:
+                raise ValueError(f"invalid data layer '{value}', must be one of {[dl.name for dl in cls]}") from None
+        return value

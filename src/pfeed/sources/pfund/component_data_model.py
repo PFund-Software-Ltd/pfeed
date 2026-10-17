@@ -41,7 +41,7 @@ class PFundComponentDataModel(BaseDataModel):
     @classmethod
     def _validate_env(cls, v: str | Environment) -> Environment:
         if isinstance(v, str):
-            return Environment[v.upper()]
+            return Environment(v.upper())
         return v
 
     @field_validator("component_type", mode="before")

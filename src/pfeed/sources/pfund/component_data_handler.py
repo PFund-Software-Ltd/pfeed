@@ -114,7 +114,7 @@ class PFundComponentDataHandler(BaseDataHandler):
         artifact = self._data_model
         run_path = BaseEngine._create_run_path(
             data_path=cast(FilePath, self._data_path),
-            env=Environment[artifact.env],
+            env=Environment(artifact.env),
             project_name=artifact.project_name,
             run_name=artifact.run_name,
         )

@@ -194,7 +194,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         """
         from pfeed.dataflow.faucet import Faucet
 
-        return Faucet(data_source=self.data_source, request=request, extract_func=extract_func)
+        return Faucet(request=request, extract_func=extract_func)
 
     def _get_current_request(self) -> RequestT:
         request = self._requests[-1] if self._requests else None
@@ -437,14 +437,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                 for dataflow in last_run_dataflows
                 if not dataflow.result.success
             ]:
-                only_retrieval_dataflows = all(
-                    dataflow.faucet.extract_type == "retrieve" for dataflow in failed
-                )
-                log_level = (
-                    logging.DEBUG if only_retrieval_dataflows else logging.WARNING
-                )
-                self.logger.log(
-                    log_level,
+                self.logger.warning(
                     f"{self.name} has {len(failed)} failed dataflows, check {self.logger.name}.log for more details",
                 )
 

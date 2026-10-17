@@ -17,6 +17,7 @@ from pydantic import (
     ConfigDict,
     Field,
     HttpUrl,
+    field_validator,
     model_validator,
 )
 
@@ -52,7 +53,8 @@ class SourceMetadata(BaseModel):
 
     name: str
     url: HttpUrl
-    data_categories: dict[DataCategory, dict[DataType, list[AssetType]]]
+    # str is accepted for convenience, e.g. "PERPETUAL", and converted to AssetType in _convert_asset_types()
+    data_categories: dict[DataCategory, dict[DataType, list[AssetType | str]]]
     provider_type: DataProviderType
     access_type: DataAccessType
     api_access: APIAccess | None = None
@@ -67,6 +69,24 @@ class SourceMetadata(BaseModel):
     docs_url: HttpUrl | None = None
     github_repo: HttpUrl | None = None
     is_repo_official: bool | None = None
+
+    @field_validator("data_categories", mode="after")
+    @classmethod
+    def _convert_asset_types(
+        cls, data_categories: dict[DataCategory, dict[DataType, list[AssetType | str]]]
+    ) -> dict[DataCategory, dict[DataType, list[AssetType | str]]]:
+        # pydantic keeps a str as str since it matches `str` exactly, convert it here so that aliases are expanded too,
+        # e.g. "IPERP" -> "INVERSE-PERPETUAL"
+        return {
+            data_category: {
+                data_type: [
+                    AssetType.model_validate(asset_type) if isinstance(asset_type, str) else asset_type
+                    for asset_type in asset_types
+                ]
+                for data_type, asset_types in data_types.items()
+            }
+            for data_category, data_types in data_categories.items()
+        }
 
 
 class BaseSource(ABC):
@@ -121,7 +141,7 @@ class BaseSource(ABC):
         return self.metadata.name
 
     @property
-    def data_categories(self) -> dict[DataCategory, dict[DataType, list[AssetType]]]:
+    def data_categories(self) -> dict[DataCategory, dict[DataType, list[AssetType | str]]]:
         return self.metadata.data_categories
 
     @property

@@ -22,7 +22,10 @@ from polars.testing import assert_frame_equal
 
 from pfeed.enums import DataCategory, DataLayer, MarketDataType as DataType
 from pfeed.io.base_io import BaseIO
+from pfeed.io.parquet_io import ParquetIO
+from pfeed.market.data_handler import MarketDataHandler
 from pfeed.market.feed import MarketFeed
+from pfeed.market.requests import MarketFeedRetrieveRequest
 from pfeed.source import BaseSource
 
 
@@ -182,6 +185,195 @@ def test_download_in_pipeline_mode_returns_feed(mocker: MockerFixture, feed: Mar
     run = mocker.patch.object(feed, "run")
 
     assert feed.download(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is feed
+    run.assert_not_called()
+
+
+def _patch_storage(mocker: MockerFixture, missing_dates: dict[Resolution, list[datetime.date]]) -> MockType:
+    """Fakes the storage probe: a resolution misses its dates in missing_dates, any other resolution is fully stored.
+
+    Returns the patched create_data_resolution_handler, its calls are the probed requests in order.
+    """
+
+    def create_handler(request: MarketFeedRetrieveRequest, data_model: MarketDataModel | None = None) -> MockType:
+        handler = mocker.Mock(spec=MarketDataHandler)
+        handler.find_missing_dates_in_storage.return_value = missing_dates.get(request.data_resolution, [])
+        return handler
+
+    return mocker.patch.object(
+        MarketFeedRetrieveRequest, "create_data_resolution_handler", autospec=True, side_effect=create_handler
+    )
+
+
+def _probed_resolutions(create_handler: MockType) -> list[Resolution]:
+    return [call.args[0].data_resolution for call in create_handler.call_args_list]
+
+
+def test_retrieve(mocker: MockerFixture, feed: MarketFeed, source: MockType, product: BaseProduct):
+    _patch_storage(mocker, {})
+    basis = str(product.basis)
+    resolution = Resolution("1m")
+    start_date, end_date = datetime.date(2025, 1, 1), datetime.date(2025, 1, 3)
+    # non-default values, so a dropped argument can't pass by falling back to the request's own default
+    env, data_layer, data_origin = Environment.PAPER, DataLayer.RAW, "ORIGIN"
+    io = mocker.Mock(spec=BaseIO)
+
+    feed.retrieve(
+        basis,
+        resolution,
+        start_date=start_date,
+        end_date=end_date,
+        data_origin=data_origin,
+        data_layer=data_layer,
+        env=env,
+        io=io,
+        symbol=product.symbol,
+    )
+
+    source.create_product.assert_called_once_with(basis, symbol=product.symbol)
+    [request] = feed._requests
+    assert isinstance(request, MarketFeedRetrieveRequest)
+    assert request.product is product
+    assert request.env == env
+    assert request.target_resolution == resolution
+    assert request.data_resolution == resolution
+    assert request.start_date == start_date
+    assert request.end_date == end_date
+    assert request.data_layer == data_layer
+    assert request.io_for_retrieval is io
+    assert request.data_origin == data_origin
+
+
+def test_retrieve_defaults_to_parquet_io(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+    _patch_storage(mocker, {})
+
+    feed.retrieve(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1))
+
+    [request] = feed._requests
+    assert isinstance(request, MarketFeedRetrieveRequest)
+    assert isinstance(request.io_for_retrieval, ParquetIO)
+
+
+def test_retrieve_rolls_back_from_yesterday(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+    _patch_storage(mocker, {})
+
+    feed.retrieve(str(product.basis), "1m", rollback_period="3d")
+
+    [request] = feed._requests
+    yesterday = datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(days=1)
+    assert request.start_date == yesterday - datetime.timedelta(days=2)
+    assert request.end_date == yesterday
+
+
+def test_retrieve_probes_finer_resolutions_closest_first(
+    mocker: MockerFixture, feed: MarketFeed, source: MockType, product: BaseProduct
+):
+    # quote data has no price or OHLC columns to resample into bars, so it is never probed
+    source.data_categories = {DataCategory.MARKET_DATA: {DataType.QUOTE_L1: [], DataType.TICK: [], DataType.MINUTE: []}}
+    date = datetime.date(2025, 1, 1)
+    create_handler = _patch_storage(mocker, {Resolution(r): [date] for r in ("1q_L1", "1t", "1s", "1m")})
+
+    feed.retrieve(str(product.basis), "1m", start_date=date, end_date=date)
+
+    assert _probed_resolutions(create_handler) == _resols("1m", "1s", "1t")
+
+
+@pytest.mark.parametrize(
+    ("unstored", "data_resolution"),
+    [
+        ([], "1m"),
+        (["1m"], "1s"),
+        (["1m", "1s"], "1t"),
+    ],
+)
+def test_retrieve_picks_first_fully_stored_resolution(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, unstored: list[str], data_resolution: str
+):
+    date = datetime.date(2025, 1, 1)
+    create_handler = _patch_storage(mocker, {Resolution(r): [date] for r in unstored})
+
+    feed.retrieve(str(product.basis), "1m", start_date=date, end_date=date)
+
+    [request] = feed._requests
+    assert request.target_resolution == Resolution("1m")
+    assert request.data_resolution == Resolution(data_resolution)
+    # probing stops at the first fully stored resolution
+    assert _probed_resolutions(create_handler) == _resols(*unstored, data_resolution)
+
+
+@pytest.mark.parametrize("data_layer", [DataLayer.RAW, DataLayer.CURATED])
+def test_retrieve_probes_only_target_resolution_outside_cleaned(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, data_layer: DataLayer
+):
+    # raw and curated data have no known schema to resample, so finer stored data is useless
+    date = datetime.date(2025, 1, 1)
+    create_handler = _patch_storage(mocker, {Resolution("1m"): [date]})
+
+    feed.retrieve(str(product.basis), "1m", start_date=date, end_date=date, data_layer=data_layer)
+
+    assert _probed_resolutions(create_handler) == _resols("1m")
+
+
+@pytest.mark.parametrize(
+    ("num_missing", "shown_dates_suffix"),
+    [
+        (3, ""),
+        # at most 10 missing dates are listed
+        (12, ", ..."),
+    ],
+)
+def test_retrieve_falls_back_to_target_resolution(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, num_missing: int, shown_dates_suffix: str
+):
+    resolution = Resolution("1m")
+    start_date = datetime.date(2025, 1, 1)
+    dates = [start_date + datetime.timedelta(days=i) for i in range(num_missing)]
+    # finer resolutions miss a different date, so only the target resolution's missing dates can be reported
+    other_date = datetime.date(2024, 1, 1)
+    _patch_storage(mocker, {resolution: dates, Resolution("1s"): [other_date], Resolution("1t"): [other_date]})
+    logger = mocker.patch.object(feed, "logger")
+
+    feed.retrieve(str(product.basis), resolution, start_date=start_date, end_date=dates[-1])
+
+    [request] = feed._requests
+    assert request.data_resolution == resolution
+    [message] = logger.warning.call_args.args
+    shown_dates = ", ".join(str(d) for d in dates[:10]) + shown_dates_suffix
+    assert message.endswith(f"falling back to {resolution}, missing {num_missing} dates: {shown_dates}")
+
+
+@pytest.mark.parametrize("per_date", [True, False])
+def test_retrieve_dataflow_per_date(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, per_date: bool):
+    _patch_storage(mocker, {})
+    start_date, end_date = datetime.date(2025, 1, 1), datetime.date(2025, 1, 3)
+
+    feed.retrieve(str(product.basis), "1m", start_date=start_date, end_date=end_date, dataflow_per_date=per_date)
+
+    dataflows = feed.dataflows
+    assert len(dataflows) == (3 if per_date else 1)
+    data_models = [cast("MarketDataModel", df.data_model) for df in dataflows]
+    date_ranges = [(dm.start_date, dm.end_date) for dm in data_models]
+    if per_date:
+        dates = [start_date + datetime.timedelta(days=i) for i in range(3)]
+        assert date_ranges == [(d, d) for d in dates]
+    else:
+        assert date_ranges == [(start_date, end_date)]
+
+
+def test_retrieve_returns_run_result(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+    _patch_storage(mocker, {})
+    result = object()
+    run = mocker.patch.object(feed, "run", return_value=result)
+
+    assert feed.retrieve(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is result
+    run.assert_called_once_with()
+
+
+def test_retrieve_in_pipeline_mode_returns_feed(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+    _patch_storage(mocker, {})
+    mocker.patch.object(feed, "_pipeline_mode", True)
+    run = mocker.patch.object(feed, "run")
+
+    assert feed.retrieve(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is feed
     run.assert_not_called()
 
 

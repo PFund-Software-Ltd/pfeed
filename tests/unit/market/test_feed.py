@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
     from pytest_mock import MockerFixture, MockType
 
-    from pfeed.source import BaseSource
+    from pfeed.market.data_model import MarketDataModel
 
 import datetime
 import threading
@@ -20,8 +20,10 @@ from pfund.datas.resolution import Resolution
 from pfund.enums.env import Environment
 from polars.testing import assert_frame_equal
 
-from pfeed.enums import DataCategory, MarketDataType as DataType
+from pfeed.enums import DataCategory, DataLayer, MarketDataType as DataType
+from pfeed.io.base_io import BaseIO
 from pfeed.market.feed import MarketFeed
+from pfeed.source import BaseSource
 
 
 def _fake_feed(*data_types: DataType) -> MarketFeed:
@@ -56,6 +58,131 @@ def _bars(
             "volume": [100.0 * (i + 1) for i in range(n)],
         }
     )
+
+
+@pytest.fixture
+def source(mocker: MockerFixture, product: BaseProduct) -> MockType:
+    """Stand-in for the feed's source: isinstance-compatible with BaseSource, records create_product() calls."""
+    source = mocker.Mock(spec=BaseSource)
+    source.name = "TEST"
+    source.data_categories = {DataCategory.MARKET_DATA: {DataType.TICK: [], DataType.MINUTE: [], DataType.DAY: []}}
+    source.Feeds = {DataCategory.MARKET_DATA: MarketFeed}
+    source.create_product.return_value = product
+    return source
+
+
+@pytest.fixture
+def feed(mocker: MockerFixture, source: MockType) -> MarketFeed:
+    """A real MarketFeed on the fake source, with run() patched so download() stops before executing dataflows."""
+    mocker.patch.object(MarketFeed, "DataSource", BaseSource, create=True)
+    mocker.patch.object(MarketFeed, "download_dataflow_per_date", True, create=True)
+    feed = MarketFeed(source)
+    mocker.patch.object(feed, "run")
+    return feed
+
+
+def test_download(mocker: MockerFixture, feed: MarketFeed, source: MockType, product: BaseProduct):
+    basis = str(product.basis)
+    resolution = Resolution("1m")
+    start_date, end_date = datetime.date(2025, 1, 1), datetime.date(2025, 1, 3)
+    # non-default values, so a dropped argument can't pass by falling back to the request's own default
+    data_layer, data_origin = DataLayer.RAW, "ORIGIN"
+    io = mocker.Mock(spec=BaseIO)
+
+    feed.download(
+        basis,
+        resolution,
+        start_date=start_date,
+        end_date=end_date,
+        data_origin=data_origin,
+        data_layer=data_layer,
+        io=io,
+        symbol=product.symbol,
+    )
+
+    source.create_product.assert_called_once_with(basis, symbol=product.symbol)
+    [request] = feed._requests
+    assert request.product is product
+    assert request.env == Environment.BACKTEST
+    assert request.target_resolution == resolution
+    assert request.data_resolution == resolution
+    assert request.start_date == start_date
+    assert request.end_date == end_date
+    assert request.data_layer == data_layer
+    assert request.io is io
+    assert request.data_origin == data_origin
+
+
+def test_download_rolls_back_from_yesterday(feed: MarketFeed, product: BaseProduct):
+    feed.download(str(product.basis), "1m", rollback_period="3d")
+
+    [request] = feed._requests
+    yesterday = datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(days=1)
+    assert request.start_date == yesterday - datetime.timedelta(days=2)
+    assert request.end_date == yesterday
+
+
+@pytest.mark.parametrize(
+    ("target_resolution", "data_resolution"),
+    [
+        ("1t", "1t"),  # supported natively
+        ("1s", "1t"),  # finer than every bar, only ticks can produce it
+        ("5m", "1m"),  # the coarsest supported resolution that can produce it
+        ("1h", "1m"),
+        ("1d", "1d"),
+    ],
+)
+def test_download_picks_data_resolution(
+    feed: MarketFeed, product: BaseProduct, target_resolution: str, data_resolution: str
+):
+    feed.download(str(product.basis), target_resolution, start_date=datetime.date(2025, 1, 1))
+
+    [request] = feed._requests
+    assert request.target_resolution == Resolution(target_resolution)
+    assert request.data_resolution == Resolution(data_resolution)
+
+
+def test_download_unsupported_resolution(feed: MarketFeed, source: MockType, product: BaseProduct):
+    source.data_categories = {DataCategory.MARKET_DATA: {DataType.DAY: []}}
+
+    with pytest.raises(ValueError, match="is not supported by"):
+        feed.download(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1))
+
+    assert feed._requests == []
+
+
+@pytest.mark.parametrize("per_date", [True, False])
+def test_download_dataflow_per_date(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, per_date: bool):
+    mocker.patch.object(MarketFeed, "download_dataflow_per_date", per_date)
+    start_date, end_date = datetime.date(2025, 1, 1), datetime.date(2025, 1, 3)
+
+    feed.download(str(product.basis), "1m", start_date=start_date, end_date=end_date)
+
+    dataflows = feed.dataflows
+    assert len(dataflows) == (3 if per_date else 1)
+    data_models = [cast("MarketDataModel", df.data_model) for df in dataflows]
+    date_ranges = [(dm.start_date, dm.end_date) for dm in data_models]
+    if per_date:
+        dates = [start_date + datetime.timedelta(days=i) for i in range(3)]
+        assert date_ranges == [(d, d) for d in dates]
+    else:
+        assert date_ranges == [(start_date, end_date)]
+
+
+def test_download_returns_run_result(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+    result = object()
+    run = mocker.patch.object(feed, "run", return_value=result)
+
+    assert feed.download(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is result
+    run.assert_called_once_with()
+
+
+def test_download_in_pipeline_mode_returns_feed(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+    mocker.patch.object(feed, "_pipeline_mode", True)
+    run = mocker.patch.object(feed, "run")
+
+    assert feed.download(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is feed
+    run.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -224,6 +351,75 @@ def test_get_default_transformations_for_download_picklable_without_feed(product
     cloudpickle = pytest.importorskip("cloudpickle")
     for transformation in _download_transformations(product, should_clean_data=True):
         cloudpickle.dumps(transformation)
+
+
+def _retrieve_transformations(product: BaseProduct, *, data_layer: DataLayer) -> list[FunctionType]:
+    """Builds the retrieve transformations of batch data without running the feed's __init__, see _download_transformations()."""
+    feed = _TransformationsFeed.__new__(_TransformationsFeed)
+    feed.__dict__["_lock"] = threading.Lock()
+    request = SimpleNamespace(
+        env=Environment.BACKTEST,
+        data_layer=data_layer,
+        product=product,
+        data_resolution=Resolution("1t"),
+        target_resolution=Resolution("1m"),
+        lock=threading.Lock(),
+    )
+    transformations = feed._get_default_transformations_for_retrieve(cast("Any", request))
+    return cast("list[FunctionType]", transformations)
+
+
+@pytest.mark.parametrize(
+    ("data_layer", "expected"),
+    [
+        (DataLayer.CLEANED, ["resample_data_if_necessary", "_organize_columns"]),
+        # raw and curated data have no known schema, returned as stored
+        (DataLayer.RAW, []),
+        (DataLayer.CURATED, []),
+    ],
+)
+def test_get_default_transformations_for_retrieve(data_layer: DataLayer, expected: list[str], product: BaseProduct):
+    transformations = _retrieve_transformations(product, data_layer=data_layer)
+    assert [f.__name__ for f in transformations] == expected
+
+
+def test_get_default_transformations_for_retrieve_resamples_to_target_resolution(product: BaseProduct):
+    dates = [datetime.datetime(2025, 1, 1, 0, 0, s) for s in range(4)]
+    lf = pl.LazyFrame({
+        "date": dates,
+        "product": [product.name] * 4,
+        "resolution": [str(Resolution("1t"))] * 4,
+        "price": [1.0, 3.0, 0.5, 2.0],
+        "volume": [1.0] * 4,
+    })
+    for transformation in _retrieve_transformations(product, data_layer=DataLayer.CLEANED):
+        lf = transformation(lf)
+    out = lf.collect()
+    assert out["resolution"].to_list() == [str(Resolution("1m"))]
+    # key columns are moved to the leftmost side after resampling
+    assert out.columns[:3] == ["date", "product", "resolution"]
+
+
+def test_get_default_transformations_for_retrieve_picklable_without_feed(product: BaseProduct):
+    cloudpickle = pytest.importorskip("cloudpickle")
+    for transformation in _retrieve_transformations(product, data_layer=DataLayer.CLEANED):
+        cloudpickle.dumps(transformation)
+
+
+@pytest.mark.parametrize("extract_type", ["download", "retrieve", "stream"])
+def test_get_default_transformations_dispatches_by_extract_type(mocker: MockerFixture, extract_type: str):
+    feed = _TransformationsFeed.__new__(_TransformationsFeed)
+    method = mocker.patch.object(feed, f"_get_default_transformations_for_{extract_type}", return_value=["t"])
+    request = cast("Any", SimpleNamespace(extract_type=extract_type))
+
+    assert feed._get_default_transformations(request) == ["t"]
+    method.assert_called_once_with(request)
+
+
+def test_get_default_transformations_unknown_extract_type():
+    feed = _TransformationsFeed.__new__(_TransformationsFeed)
+    with pytest.raises(ValueError, match="Unknown extract type: unknown"):
+        feed._get_default_transformations(cast("Any", SimpleNamespace(extract_type="unknown")))
 
 
 @pytest.mark.parametrize(
@@ -447,6 +643,73 @@ def test_resample_data_offset(
     out = MarketFeed._resample_data(lf, product, target, offset=offset).collect()
     assert out["date"].to_list() == expected_dates
     assert out["n_data_points"].to_list() == expected_n_data_points
+
+
+def test_standardize_columns(product: BaseProduct):
+    lf = pl.LazyFrame({"date": [datetime.datetime(2025, 1, 1)], "price": [1.0]})
+    out = MarketFeed._standardize_columns(lf, product, Resolution("1m")).collect()
+    assert out.columns == ["date", "price", "product", "resolution"]
+    assert out["product"].to_list() == [product.name]
+    # str(resolution), not repr(resolution)
+    assert out["resolution"].to_list() == [str(Resolution("1m"))]
+
+
+def _key_cols(product: BaseProduct, resolution: str) -> dict[str, list[Any]]:
+    return {
+        "date": [datetime.datetime(2025, 1, 1)],
+        "product": [product.name],
+        "resolution": [str(Resolution(resolution))],
+    }
+
+
+def test_filter_columns_ticks_drops_vendor_columns(product: BaseProduct):
+    lf = pl.LazyFrame({
+        "vendor_col": ["x"],
+        **_key_cols(product, "1t"),
+        "side": pl.Series([1], dtype=pl.Int8),
+        "volume": [2.0],
+        "price": [1.0],
+    })
+    out = MarketFeed._filter_columns(lf, product).collect()
+    # standard columns only, in the standard order
+    assert out.columns == ["date", "product", "resolution", "price", "volume", "side"]
+    assert out["side"].to_list() == [1]
+
+
+def test_filter_columns_ticks_adds_missing_side(product: BaseProduct):
+    lf = pl.LazyFrame({**_key_cols(product, "1t"), "price": [1.0], "volume": [2.0]})
+    out = MarketFeed._filter_columns(lf, product).collect()
+    # side is a standard column even if the source has no trade direction, null means unknown
+    assert out.columns == ["date", "product", "resolution", "price", "volume", "side"]
+    assert out.schema["side"] == pl.Int8
+    assert out["side"].to_list() == [None]
+
+
+def test_filter_columns_bars_drops_vendor_columns(product: BaseProduct):
+    lf = pl.LazyFrame({
+        **_key_cols(product, "1m"),
+        "vendor_col": ["x"],
+        "volume": [5.0],
+        "close": [4.0],
+        "low": [3.0],
+        "high": [2.0],
+        "open": [1.0],
+    })
+    out = MarketFeed._filter_columns(lf, product).collect()
+    assert out.columns == ["date", "product", "resolution", "open", "high", "low", "close", "volume"]
+    assert out.row(0)[3:] == (1.0, 2.0, 3.0, 4.0, 5.0)
+
+
+def test_organize_columns_moves_key_columns_left(product: BaseProduct):
+    lf = pl.LazyFrame({"price": [1.0], "resolution": ["1t"], "volume": [2.0], "date": [datetime.datetime(2025, 1, 1)], "product": [product.name]})
+    out = MarketFeed._organize_columns(lf)
+    # the other columns keep their relative order
+    assert out.collect_schema().names() == ["date", "product", "resolution", "price", "volume"]
+
+
+def test_organize_columns_returns_same_frame_when_already_organized(product: BaseProduct):
+    lf = pl.LazyFrame({**_key_cols(product, "1t"), "price": [1.0]})
+    assert MarketFeed._organize_columns(lf) is lf
 
 
 @pytest.mark.skip(

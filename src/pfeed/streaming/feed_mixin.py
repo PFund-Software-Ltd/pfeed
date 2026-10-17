@@ -176,20 +176,8 @@ class StreamingFeedMixin(ABC):  # noqa: B024
 
         async def _run_dataflows():
             try:
-
-                async def _run_dataflow(dataflow: DataFlow) -> None:
-                    try:
-                        await dataflow.run_stream(flow_type="native")
-                    except asyncio.CancelledError:
-                        # Graceful shutdown — propagate so gather knows this branch was cancelled.
-                        # Cancellation is NOT a failure, do not mark_failed.
-                        raise
-                    except Exception as err:
-                        self.logger.exception(f"Error in running {dataflow}:")
-                        dataflow.mark_failed(err)
-
                 _ = await asyncio.gather(
-                    *[_run_dataflow(dataflow) for dataflow in last_run_dataflows]
+                    *[dataflow.run_stream(flow_type="native") for dataflow in last_run_dataflows]
                 )
             except asyncio.CancelledError:
                 self.logger.warning(
@@ -197,16 +185,9 @@ class StreamingFeedMixin(ABC):  # noqa: B024
                 )
             finally:
                 # end_stream() must run for every dataflow for proper teardown
-                # (sentinel into the streaming queue + ZMQ termination). Use
-                # return_exceptions so one bad teardown doesn't skip the rest.
-                results = await asyncio.gather(
-                    *[df.end_stream() for df in last_run_dataflows],
-                    return_exceptions=True,
-                )
-                for df, result in zip(last_run_dataflows, results, strict=False):
-                    if isinstance(result, BaseException):
-                        self.logger.error(f"Error ending stream for {df}: {result!r}")
-                        df.mark_failed(result)
+                # (sentinel into the streaming queue + ZMQ termination);
+                # it records its own errors, so one bad teardown doesn't skip the rest.
+                _ = await asyncio.gather(*[df.end_stream() for df in last_run_dataflows])
                 self._optimize_stream_ios(last_run_dataflows)
 
         try:

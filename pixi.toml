@@ -64,9 +64,6 @@ lancedb = ">=0.40.0"
 # pfeed-bybit = ">=0.0.1"
 # IOs
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
-# Data Sources:
-# yfinance = ">=1.7.0"
-# edgartools = ">=5.60.0"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }

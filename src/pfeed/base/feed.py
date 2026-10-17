@@ -342,6 +342,9 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
 
         try:
             if self._is_using_ray():
+                from functools import partial
+                from itertools import islice
+
                 import ray
 
                 from pfeed.utils.ray import (
@@ -363,71 +366,60 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
 
                 @ray.remote
                 def ray_task(
-                    logger_name: str, dataflow: DataFlow, log_queue: Queue, prefect_context: dict[str, Any] | None
+                    logger_name: str, log_queue: Queue, prefect_context: dict[str, Any] | None, dataflow: DataFlow
                 ) -> DataFlow:
                     from contextlib import nullcontext
 
-                    logger = setup_logger_in_ray_task(logger_name, log_queue)
-                    try:
-                        if prefect_context is not None:
-                            from prefect.context import hydrated_context
+                    _ = setup_logger_in_ray_task(logger_name, log_queue)
+                    if prefect_context is not None:
+                        from prefect.context import hydrated_context
 
-                            context = hydrated_context(prefect_context)
-                        else:
-                            context = nullcontext()
-                        with context:
-                            _ = _run_dataflow(dataflow)
-                    except RuntimeError as err:
-                        if use_prefect:
-                            logger.exception(f"Error in running prefect {dataflow}:")
-                            dataflow.mark_failed(err)
-                        else:
-                            raise
-                    except Exception as err:
-                        logger.exception(f"Error in running {dataflow}:")
-                        dataflow.mark_failed(err)
+                        context = hydrated_context(prefect_context)
+                    else:
+                        context = nullcontext()
+                    with context:
+                        _ = _run_dataflow(dataflow)
                     return dataflow
 
                 with ray_logging_context(self.logger) as log_queue:
+                    unfinished: list[ray.ObjectRef] = []
                     try:
                         assert self._num_workers is not None, "num_workers is not set"
-                        batch_size = self._num_workers
-                        dataflow_batches = [
-                            self.dataflows[i : i + batch_size]
-                            for i in range(0, len(self.dataflows), batch_size)
-                        ]
+                        # Ray's .remote() only takes positional arguments (for type checkers), dataflow goes last
+                        submit = partial(ray_task.remote, self.logger.name, log_queue, prefect_context)
+                        dataflows = self.dataflows
+                        pending = iter(enumerate(dataflows))
+                        # dataflows finish in any order, keep the results in submission order so run() is deterministic
+                        ref_to_index: dict[ray.ObjectRef, int] = {}
+                        results: list[DataFlow | None] = [None] * len(dataflows)
+
+                        def submit_next(index: int, dataflow: DataFlow) -> ray.ObjectRef:
+                            ref = submit(dataflow)
+                            ref_to_index[ref] = index
+                            return ref
+
+                        # sliding window: keep num_workers tasks in flight, start the next dataflow
+                        # as soon as one finishes, so a slow dataflow doesn't leave the other workers idle
+                        unfinished = [submit_next(*item) for item in islice(pending, self._num_workers)]
                         with ProgressBar(
-                            total=len(self.dataflows),
+                            total=len(dataflows),
                             description=f"Running {self.name} dataflows",
                             disable=disable_progress_bar,
                         ) as pbar:
-                            for dataflow_batch in dataflow_batches:
-                                futures = [
-                                    ray_task.remote(
-                                        logger_name=self.logger.name,
-                                        dataflow=dataflow,
-                                        log_queue=log_queue,
-                                        prefect_context=prefect_context,
-                                    )
-                                    for dataflow in dataflow_batch
-                                ]
-                                unfinished = futures
-                                while unfinished:
-                                    finished, unfinished = ray.wait(
-                                        unfinished, num_returns=1
-                                    )
-                                    for future in finished:
-                                        dataflow = ray.get(future)
-                                        last_run_dataflows.append(dataflow)
-                                        pbar.advance(1)
-                    except KeyboardInterrupt:
-                        self.logger.warning(
-                            f"KeyboardInterrupt received, stopping {self.name} dataflows..."
-                        )
-                    except Exception:
-                        self.logger.exception(
-                            f"Error in running {self.name} dataflows:"
-                        )
+                            while unfinished:
+                                finished, unfinished = ray.wait(unfinished, num_returns=1)
+                                results[ref_to_index[finished[0]]] = ray.get(finished[0])
+                                pbar.advance(1)
+                                if (item := next(pending, None)) is not None:
+                                    unfinished.append(submit_next(*item))
+                        last_run_dataflows.extend(cast("list[DataFlow]", results))
+                    except BaseException:
+                        # e.g. KeyboardInterrupt or a crashed worker: cancel the in-flight tasks,
+                        # otherwise they keep running (and writing to storage) after run() returns.
+                        # force=True kills the worker, a non-forced cancel doesn't stop a task that's already running
+                        for future in unfinished:
+                            ray.cancel(future, force=True)
+                        raise
                 self.logger.debug("ray tasks finished")
                 # NOTE: Do NOT shut down Ray here to avoid interfering with Ray's control in higher-level frameworks that might also be using Ray.
                 # shutdown_ray()
@@ -437,19 +429,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                     description=f"Running {self.name} dataflows",
                     disable=disable_progress_bar,
                 ):
-                    try:
-                        _ = _run_dataflow(dataflow)
-                    except RuntimeError as err:
-                        if use_prefect:
-                            self.logger.exception(
-                                f"Error in running prefect {dataflow}:"
-                            )
-                            dataflow.mark_failed(err)
-                        else:
-                            raise
-                    except Exception as err:
-                        self.logger.exception(f"Error in running {dataflow}:")
-                        dataflow.mark_failed(err)
+                    _ = _run_dataflow(dataflow)
                     last_run_dataflows.append(dataflow)
 
             if failed := [
@@ -458,7 +438,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                 if not dataflow.result.success
             ]:
                 only_retrieval_dataflows = all(
-                    dataflow.extract_type == ExtractType.retrieve for dataflow in failed
+                    dataflow.faucet.extract_type == "retrieve" for dataflow in failed
                 )
                 log_level = (
                     logging.DEBUG if only_retrieval_dataflows else logging.WARNING
@@ -471,6 +451,6 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
             return last_run_dataflows
         finally:
             # Always tear down state, even if the run aborted.
-            # Without this, an escaping exception (e.g. the non-prefect RuntimeError re-raise)
+            # Without this, an escaping exception (e.g. KeyboardInterrupt)
             # would leave `_is_running=True`, locking the feed against any future `.run()`.
             self._cleanup_after_run()

@@ -77,16 +77,19 @@ def setup_logger_in_ray_task(logger_name: str, log_queue: Queue) -> logging.Logg
         Configured logger instance
     """
     logger = logging.getLogger(logger_name)
-    if not logger.handlers:
-        logger.addHandler(QueueHandler(log_queue))
-        logger.setLevel(logging.DEBUG)
-        # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
-        logger.propagate = False
+    # Ray reuses worker processes across runs, drop the QueueHandler of a previous run,
+    # its queue has no listener anymore, so logs sent to it are lost
+    for handler in [h for h in logger.handlers if isinstance(h, QueueHandler)]:
+        logger.removeHandler(handler)
+    logger.addHandler(QueueHandler(log_queue))
+    logger.setLevel(logging.DEBUG)
+    # needs this to avoid triggering the root logger's stream handlers with level=DEBUG
+    logger.propagate = False
     return logger
 
 
 @contextmanager
-def ray_logging_context(logger: logging.Logger) -> Generator[Queue, None, None]:
+def ray_logging_context(logger: logging.Logger) -> Generator[Queue]:
     """Context manager for Ray logging setup with QueueListener.
 
     Yields:

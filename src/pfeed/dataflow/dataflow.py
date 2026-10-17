@@ -180,14 +180,6 @@ class DataFlow:
             self._logger.exception(f"failed to load {self.data_model} data to {self._handler}:")
             raise
 
-    def mark_failed(self, error: BaseException) -> None:
-        """Replace the dataflow's result with a failed one carrying the error.
-
-        Called from the batch runner's catch sites so the failure reason survives
-        beyond a log line and is accessible via `dataflow.result.error`.
-        """
-        self._result = DataFlowResult.failed(error=error)
-
     def _run_batch_etl(self) -> DataFlowResult:
         """Runs extract, transform and load, sets and returns the dataflow's result.
 
@@ -227,11 +219,17 @@ class DataFlow:
         self._logger.debug(f"{self} to {self.handler!r}")
         self._flow_type = FlowType[flow_type.lower()]
 
-        if self._flow_type == FlowType.prefect:
-            prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
-            return prefect_dataflow()
-        else:
-            return self._run_batch_etl()
+        # a failed run is recorded as the dataflow's result, so one failure doesn't stop the other dataflows
+        try:
+            if self._flow_type == FlowType.prefect:
+                prefect_dataflow = self.to_prefect_dataflow(**(prefect_kwargs or {}))
+                return prefect_dataflow()
+            else:
+                return self._run_batch_etl()
+        except Exception as err:
+            self._logger.exception(f"Error in running {self}:")
+            self._result = DataFlowResult.failed(error=err)
+            return self._result
 
     def to_prefect_dataflow(self, **kwargs: Any) -> PrefectDataFlow:
         """
@@ -336,12 +334,22 @@ class DataFlow:
             f"{self} to {self.handler!r}"
         )
         self._flow_type = FlowType[flow_type.lower()]
-        await self.faucet.open_stream(
-            data_model=self.data_model, handler=self.handler
-        )  # this will trigger _run_stream_etl()
+        # a failed stream is recorded as the dataflow's result, so one failure doesn't stop the other dataflows;
+        # cancellation (graceful shutdown) is not an Exception, it propagates and is not a failure
+        try:
+            await self.faucet.open_stream(
+                data_model=self.data_model, handler=self.handler
+            )  # this will trigger _run_stream_etl()
+        except Exception as err:
+            self._logger.exception(f"Error in running {self}:")
+            self._result = DataFlowResult.failed(error=err)
 
     async def end_stream(self):
-        await self.faucet.close_stream()
-        # with Ray, each worker flushes its own copy of the handler, this one's sink stays empty
-        if self._handler is not None and self._handler.sink is not None:
-            self._handler.flush()
+        try:
+            await self.faucet.close_stream()
+            # with Ray, each worker flushes its own copy of the handler, this one's sink stays empty
+            if self._handler is not None and self._handler.sink is not None:
+                self._handler.flush()
+        except Exception as err:
+            self._logger.exception(f"Error ending stream for {self}:")
+            self._result = DataFlowResult.failed(error=err)

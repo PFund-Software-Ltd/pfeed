@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
-    from narwhals.typing import Frame, IntoFrame
+    from narwhals.typing import IntoFrame
     from pfund.datas.resolution import Resolution
 
     from pfeed.base.time_based_data_model import TimeBasedDataModel
@@ -25,7 +25,7 @@ class TimeBasedFeed[
     RequestT: TimeBasedFeedBaseRequest,
     DataModelT: TimeBasedDataModel,
 ](BaseFeed[SourceT, RequestT, DataModelT], ABC):
-    DataModel: ClassVar[type[TimeBasedDataModel]]
+    DataModel: ClassVar[type[TimeBasedDataModel]]  # ty: ignore[invalid-mutable-override]
     downloaded_data_date_cols: ClassVar[list[str]]
     # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),
     # False = one dataflow spanning the whole range (e.g. a range query API).
@@ -182,11 +182,12 @@ class TimeBasedFeed[
         return parse_date_range(start_date, end_date, rollback_period)
 
     def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> RunResult:
-        """Runs dataflows and returns a RunResult exposing the combined frame,
-        per-flow successes/failures, and any dates that produced no data."""
+        """Runs dataflows and returns a RunResult exposing the combined frame
+        and per-flow successes/failures."""
         import narwhals as nw
 
         from pfeed.dataflow.result import RunResult
+        from pfeed.schemas.time_based_data_schema import DATE
         from pfeed.utils.dataframe import convert_dataframe, is_empty_dataframe
 
         result_dfs: list[IntoFrame] = []
@@ -194,21 +195,28 @@ class TimeBasedFeed[
         dataflows = self._run_batch_dataflows(use_prefect=use_prefect, prefect_kwargs=prefect_kwargs)
         for dataflow in dataflows:
             result: DataFlowResult = dataflow.result
-            _df: IntoFrame | None = result.data
+            _df: IntoFrame | None = cast("IntoFrame | None", result.data)
             if _df is not None:
                 result_dfs.append(_df)
 
-        dfs: list[Frame] = [
-            nw.from_native(df) for df in result_dfs if not is_empty_dataframe(df)
+        # nw.concat() takes either all DataFrames or all LazyFrames, not a mix
+        dfs: list[nw.LazyFrame[Any]] = [
+            nw.from_native(df).lazy() for df in result_dfs if not is_empty_dataframe(df)
         ]
         if dfs:
-            df: Frame = cast("Frame", nw.concat(dfs))
-            schema = df.collect_schema()
-            columns = schema.names()
-            if "date" in columns and schema["date"].is_temporal():
-                df: Frame = df.sort(by="date", descending=False)
             # Convert once here so the aggregated frame is a polars LazyFrame.
-            combined: IntoFrame | None = convert_dataframe(nw.to_native(df))
+            lf = cast("pl.LazyFrame", convert_dataframe(nw.to_native(nw.concat(dfs))))
+            schema = lf.collect_schema()
+            # raw data keeps the source schema (which may have its own 'date' column in any format) plus '_pfeed_date',
+            # so '_pfeed_date' goes first, cleaned data only has 'date'
+            date_col = next(
+                (col for col in (self.DataModel.DATE_COL_IN_RAW_DATA, DATE) if col in schema),
+                None,
+            )
+            if date_col is not None and schema[date_col].is_temporal():
+                # stable sort: rows with the same date keep the dataflow order, so the output is deterministic
+                lf = lf.sort(by=date_col, descending=False, maintain_order=True)
+            combined: IntoFrame | None = lf
         else:
             combined = None
 

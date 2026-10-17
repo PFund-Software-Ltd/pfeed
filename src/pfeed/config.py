@@ -48,9 +48,9 @@ def get_logging_config() -> dict[str, Any]:
 
 
 def configure(
-    data_path: str | None = None,
-    log_path: str | None = None,
-    cache_path: str | None = None,
+    data_path: str | Path | None = None,
+    log_path: str | Path | None = None,
+    cache_path: str | Path | None = None,
     show_progress_bar: bool | None = None,
     allow_timestamp_precision_loss: bool | None = None,
     persist: bool = False,

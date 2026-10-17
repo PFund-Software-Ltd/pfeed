@@ -24,6 +24,7 @@ depends-on = [
 ]
 
 [dependencies]
+just = ">=1.59.0"
 
 # [pypi-options]
 # prerelease-mode = "allow"

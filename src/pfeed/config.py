@@ -27,7 +27,7 @@ def setup_logging(env: Environment | str | None = None, reset: bool = False) -> 
     env = Environment(env.upper()) if env else None
     logging_config = copy.deepcopy(get_logging_config())
     loggers = logging_config["loggers"]
-    # derive a logger (i.e. a log file) per installed data source, e.g. "pfeed.bybit", unless logging.yml has it
+    # derive a logger (i.e. a log file) per installed data source, e.g. "pfeed.bybit", unless logging.yaml has it
     for source in list_sources():
         loggers.setdefault(f"pfeed.{source.lower()}", dict(loggers["pfeed"]))
     kit_logging.setup_logging(get_config(), env=env, reset=reset, logging_config=logging_config)
@@ -114,5 +114,5 @@ class PFeedConfig(Configuration):
         }
 
     def prepare_docker_context(self):
-        """Prepare docker context (e.g. env variables) before running compose.yml"""
+        """Prepare docker context (e.g. env variables) before running compose.yaml"""
         pass

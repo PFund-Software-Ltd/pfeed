@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pfeed.engine import DataEngine
     from pfeed.io.ducklake_io import DuckLakeIO
     from pfeed.io.parquet_io import ParquetIO
+    from pfeed.market.feed import MarketFeed
 
 from pfeed.config import configure, configure_logging, get_config
 
@@ -38,6 +39,10 @@ def __getattr__(name: str):
         from pfeed.io.ducklake_io import DuckLakeIO
 
         return DuckLakeIO
+    elif name == "MarketFeed":
+        from pfeed.market.feed import MarketFeed
+
+        return MarketFeed
     elif name == "get_feed":
         from pfeed.base import get_feed
 
@@ -73,6 +78,8 @@ __all__ = (  # noqa: RUF022
     "plot",
     "DataEngine",
     "get_feed",
+    # Feeds (for the convenience of inheritance)
+    "MarketFeed",
     # IOs
     "DuckLakeIO",
     "ParquetIO",

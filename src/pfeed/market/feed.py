@@ -670,7 +670,9 @@ class MarketFeed[
                 )
                 data_config.data_resolutions = [data_resolution]
                 if product.venue is not None:
-                    VenueClass = product.venue.venue_class
+                    from pfund.enums import TradingVenue
+
+                    VenueClass = TradingVenue(product.venue).venue_class
                     resampled_data_config = data_config.auto_resample(
                         VenueClass.METADATA.get_supported_resolutions(product)
                     )

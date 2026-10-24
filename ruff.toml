@@ -40,6 +40,8 @@ section-order = ["future", "typing", "standard-library", "third-party", "first-p
 typing = ["typing", "typing_extensions"]
 
 [lint.pyflakes]
+# generic classes whose quoted type args (e.g. Handler["Model"]) ruff should treat as type references,
+# so TYPE_CHECKING imports used only there aren't flagged unused
 extend-generics = ["pfeed.base.time_based_data_handler.TimeBasedDataHandler"]
 
 [format]

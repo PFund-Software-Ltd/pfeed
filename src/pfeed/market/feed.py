@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast, no_type_check
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine, Iterator
@@ -561,6 +561,7 @@ class MarketFeed[
         raise NotImplementedError
 
     @requires("stream")
+    @no_type_check  # TODO: remove when streaming is ready
     def stream(
         self,
         product: str,
@@ -706,6 +707,7 @@ class MarketFeed[
         cast("StreamingFeedMixin", self)._create_stream_dataflow(user_callback=callback)
         return self.run() if not self.is_pipeline() else self
 
+    @no_type_check  # TODO: remove when streaming is ready
     async def _stream_impl(
         self,
         data_model: DataModelT,
@@ -830,6 +832,7 @@ class MarketFeed[
         return default_transformations
 
     @staticmethod
+    @no_type_check  # TODO: remove when streaming is ready
     def _standardize_streaming_message(
         data_source: str,
         data_origin: str,

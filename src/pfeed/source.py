@@ -171,6 +171,14 @@ class BaseSource(ABC):
     def get_data_categories(self) -> list[DataCategory]:
         return list(self.metadata.data_categories.keys())
 
+    # TODO: undecided, sources implement get_batch_api() / get_stream_api() by convention (e.g. pfeed-bybit, crypto_hft_data);
+    # if the pattern fits all data sources, promote them to base methods here:
+    #   def get_batch_api(self, *args, **kwargs) -> Any: raise NotImplementedError
+    #   def get_stream_api(self, *args, **kwargs) -> Any: raise NotImplementedError
+    # NOTE: with Ray, the source is pickled into the worker together with any API it has created,
+    # e.g. request.data_source in _download_impl(). If an API can't be pickled (e.g. it holds a session or socket),
+    # create it inside the implementation method (e.g. _download_impl) on the worker instead of reusing the source's, or don't use Ray
+
     @classmethod
     def create_product(cls, basis: str, symbol: str = "", **specs: Any) -> BaseProduct:
         raise NotImplementedError(f"{cls.metadata.name} does not support creating products")

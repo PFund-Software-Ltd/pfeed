@@ -6,11 +6,11 @@ if TYPE_CHECKING:
     from pfund.entities.products.product_base import BaseProduct
 
 import os
-from pathlib import Path
 
 import pytest
 
 import pfeed as pe
+from pfeed.utils.ray import shutdown_ray
 
 
 def pytest_addoption(parser: pytest.Parser):
@@ -26,26 +26,6 @@ def pytest_configure(config: pytest.Config):
     # xdist workers would compete to rotate the same log files in the real log_path
     if config.getoption("keep_log_path") and config.getoption("numprocesses", default=None):
         raise pytest.UsageError("--keep-log-path can't be used with -n (workers would share log files)")
-
-
-@pytest.fixture(scope="session")
-def vcr_config():
-    cassette_dir = (Path(__file__).parent / "cassettes").resolve()
-    cassette_dir.mkdir(parents=True, exist_ok=True)
-    return {
-        # Where to store cassettes (relative to test file unless absolute)
-        "cassette_library_dir": str(cassette_dir),
-        # Default record mode: 'once' is a good CI-safe default
-        #   'none'          -> never record; fail if no cassette
-        #   'once'          -> record if cassette missing, else replay
-        #   'new_episodes'  -> append new interactions, i.e. old recordings are kept, only missing ones are added
-        #   'all'           -> always record (overwrites)
-        "record_mode": "once",
-        # Matchers decide how requests are identified in a cassette
-        "match_on": ["method", "scheme", "host", "port", "path", "query", "body"],
-        # Redact secrets
-        # "filter_headers": [("authorization", "DUMMY")],
-    }
 
 
 # TODO: add more products (e.g. stocks) to params once they are supported
@@ -65,36 +45,10 @@ def configure_test_env(request: pytest.FixtureRequest, tmp_path_factory: pytest.
     # so workers never rotate the same log file
     if not request.config.getoption("keep_log_path"):
         pe.configure(log_path=tmp_path_factory.mktemp("logs"))
-    # # Silence logs below WARNING and disable file handlers entirely for tests
-    # pe.configure_logging(
-    #     {
-    #         "handlers": {"stream_handler": {"level": "WARNING"}},
-    #         # File handlers removed to avoid race conditions in parallel tests (pytest-xdist)
-    #         # Multiple workers would compete to rotate the same log file, causing FileNotFoundError
-    #         "loggers": {
-    #             "root": {
-    #                 "handlers": ["stream_handler"],  # Remove file handler
-    #                 "level": "WARNING",
-    #             },
-    #             "pfeed": {
-    #                 "handlers": ["stream_handler"],  # Remove file handler
-    #                 "level": "WARNING",
-    #             },
-    #         },
-    #     }
-    # )
 
 
 @pytest.fixture(scope="function", autouse=True)
 def cleanup_ray():
-    """Cleanup Ray after each test function to prevent pytest teardown warnings."""
+    """Shut down Ray after each test, so no test inherits another test's Ray instance."""
     yield
-    try:
-        import ray
-
-        if ray.is_initialized():
-            # Use _exiting_interpreter=True to avoid late imports during shutdown
-            # This prevents "cannot send (already closed?)" errors in pytest teardown
-            ray.shutdown(_exiting_interpreter=True)
-    except Exception:
-        pass
+    shutdown_ray()

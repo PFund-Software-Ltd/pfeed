@@ -7,7 +7,8 @@ from pydantic import Field, field_validator
 from pfeed.base.data_model import BaseDataModel
 from pfeed.sources.pfund.component_data_handler import PFundComponentDataHandler
 from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
-from pfund.enums import ArtifactType, ComponentType, Environment
+from pfund.enums import ArtifactType, ComponentType
+from pfund_blocks.enums.env import Environment
 
 
 class PFundComponentDataModel(BaseDataModel):

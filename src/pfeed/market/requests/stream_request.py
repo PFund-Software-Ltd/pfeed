@@ -34,12 +34,12 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
         return True
 
     def is_replaying(self) -> bool:
-        from pfund.enums.env import Environment
+        from pfund_blocks.enums.env import Environment
 
         return self.env == Environment.BACKTEST
 
     def model_post_init(self, context: Any, /) -> None:
-        from pfund.enums.env import Environment
+        from pfund_blocks.enums.env import Environment
 
         super().model_post_init(context)
         is_replaying = self.env == Environment.BACKTEST

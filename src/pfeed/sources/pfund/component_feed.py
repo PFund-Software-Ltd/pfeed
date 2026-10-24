@@ -34,7 +34,8 @@ from pfeed.sources.pfund.component_metadata import (
 )
 from pfeed.sources.pfund.source import PFundSource
 from pfeed.storages.storage_config import StorageConfig
-from pfund.enums import ArtifactType, Environment
+from pfund.enums import ArtifactType
+from pfund_blocks.enums.env import Environment
 
 
 class PFundComponentFeed(BaseFeed):

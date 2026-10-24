@@ -27,7 +27,7 @@ from abc import ABC
 
 import polars as pl
 from pfund.datas.resolution import Resolution
-from pfund.enums.env import Environment
+from pfund_blocks.enums.env import Environment
 
 from pfeed.base.feed import requires
 from pfeed.base.time_based_feed import TimeBasedFeed
@@ -718,7 +718,7 @@ class MarketFeed[
         handler: BaseDataHandler | None = None,
         replay_pace: float | None = None,
     ) -> None:
-        from pfund.enums.env import Environment
+        from pfund_blocks.enums.env import Environment
 
         stream_api = self._get_stream_api(data_model.env)
         is_replaying = data_model.env == Environment.BACKTEST

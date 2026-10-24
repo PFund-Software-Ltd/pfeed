@@ -4,7 +4,7 @@ from typing import ClassVar
 
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
-from pfund.enums.env import Environment
+from pfund_blocks.enums.env import Environment
 from pydantic import field_serializer, field_validator
 
 from pfeed.base.time_based_data_model import TimeBasedDataModel

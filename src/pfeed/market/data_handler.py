@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pfeed.streaming.sink import Sink
 
 import polars as pl
-from pfund.enums.env import Environment
+from pfund_blocks.enums.env import Environment
 
 from pfeed.base.data_handler import BaseDataMetadata
 from pfeed.base.time_based_data_handler import TimeBasedDataHandler

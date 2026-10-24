@@ -82,7 +82,7 @@ class DataFlow:
     def is_replaying(self) -> bool:
         # In BACKTEST the streaming dataflow's storage is the source it READS replay
         # data from, not a write destination — so it must never write back.
-        from pfund.enums.env import Environment
+        from pfund_blocks.enums.env import Environment
 
         return (
             self.is_streaming()

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pfund.enums.env import Environment
+from pfund_blocks.enums.env import Environment
 from pfund_kit import logging as kit_logging
 from pfund_kit.config import Configuration
 

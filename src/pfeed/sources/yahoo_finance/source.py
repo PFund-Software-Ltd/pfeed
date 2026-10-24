@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfeed.sources.yahoo_finance.product import YahooFinanceProduct
 
 import yfinance
-from pfund.enums.env import Environment
+from pfund_blocks.enums.env import Environment
 
 from pfeed.enums import (
     DataAccessType,

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 from pfund.datas.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
-from pfund.enums.env import Environment
+from pfund_blocks.enums.env import Environment
 from pydantic import Field, field_validator, model_validator
 
 from pfeed.base.time_based_request import TimeBasedFeedBaseRequest

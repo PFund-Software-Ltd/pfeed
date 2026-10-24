@@ -1,7 +1,7 @@
 from pydantic import field_validator
 
 from pfeed.base.request import BaseRequest
-from pfund.enums import Environment
+from pfund_blocks.enums.env import Environment
 
 
 class PFundBaseRequest(BaseRequest):

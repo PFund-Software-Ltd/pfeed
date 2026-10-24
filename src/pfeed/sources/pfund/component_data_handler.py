@@ -17,7 +17,8 @@ from pfeed.enums import DataLayer, DataTool, IOType
 from pfeed.io.table_io import TablePath
 from pfeed.sources.pfund.component_metadata import PFundComponentDataMetadata
 from pfeed.utils.file_path import FilePath
-from pfund.enums import ArtifactType, ComponentType, Environment
+from pfund.enums import ArtifactType, ComponentType
+from pfund_blocks.enums.env import Environment
 
 
 class PFundComponentDataHandler(BaseDataHandler):

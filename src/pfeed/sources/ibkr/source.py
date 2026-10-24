@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 if TYPE_CHECKING:
     from pfund.venues.ibkr.product import InteractiveBrokersProduct
 
-from pfund.enums.env import Environment
+from pfund_blocks.enums.env import Environment
 
 from pfeed.enums import (
     DataProviderType,

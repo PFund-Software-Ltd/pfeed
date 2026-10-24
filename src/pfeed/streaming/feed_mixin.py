@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable
 
-    from pfund.enums.env import Environment
+    from pfund_blocks.enums.env import Environment
 
     from pfeed.base.data_handler import BaseDataHandler
     from pfeed.dataflow.dataflow import DataFlow

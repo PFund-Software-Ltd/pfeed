@@ -347,7 +347,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
 
                 import ray
 
-                from pfeed.utils.ray import (
+                from pfund_kit.utils.ray import (
                     ray_logging_context,
                     setup_logger_in_ray_task,
                     setup_ray,

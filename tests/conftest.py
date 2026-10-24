@@ -10,7 +10,7 @@ import os
 import pytest
 
 import pfeed as pe
-from pfeed.utils.ray import shutdown_ray
+from pfund_kit.utils.ray import shutdown_ray
 
 
 def pytest_addoption(parser: pytest.Parser):

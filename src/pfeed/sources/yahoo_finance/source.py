@@ -81,9 +81,11 @@ class YahooFinanceSource(DataProviderSource):
         self, basis: str, symbol: str = "", **specs: Any
     ) -> YahooFinanceProduct:
         from pfund.entities.products import ProductFactory
+        from pfeed.sources.yahoo_finance.product import YahooFinanceProduct
 
         Product = cast(
-            "type[YahooFinanceProduct]", ProductFactory(source=self.name, basis=basis)
+            "type[YahooFinanceProduct]",
+            ProductFactory(basis, Product=YahooFinanceProduct),
         )
         product = Product(
             source=self.name,

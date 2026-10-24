@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 import polars as pl
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 import pfeed as pe
 from pfeed.sources.crypto_hft_data.market_feed import CryptoHftDataMarketFeed

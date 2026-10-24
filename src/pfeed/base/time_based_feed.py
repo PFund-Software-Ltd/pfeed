@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
 
     from pfeed.base.time_based_data_model import TimeBasedDataModel
     from pfeed.base.time_based_request import TimeBasedFeedBaseRequest

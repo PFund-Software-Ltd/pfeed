@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 import pandera.polars as pa
 import polars as pl
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 from pfeed.schemas.time_based_data_schema import DATE, TimeBasedDataSchema
 

@@ -10,7 +10,7 @@ import datetime
 import pandera.errors
 import polars as pl
 import pytest
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 from pfeed.schemas.bar_data_schema import BarDataSchema
 from pfeed.schemas.market_data_schema import (

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
 
 import datetime
 
@@ -124,7 +124,7 @@ def rollback_date_range(
     """Returns start_date and end_date based on the rollback_period (e.g. '1d', 'ytd' (Year To Date))."""
     import calendar
 
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
 
     utcnow = get_utc_now()
     end_date = utcnow - datetime.timedelta(days=1)  # Previous day

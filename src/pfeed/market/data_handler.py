@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     import pyarrow as pa
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
 
     from pfeed.io.base_io import BaseIO, Partition, PartitionValue
     from pfeed.market.data_model import MarketDataModel

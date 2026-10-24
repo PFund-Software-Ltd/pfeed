@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 import datetime
 
 import polars as pl
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from polars.testing import assert_frame_equal
 
 START_DATE = datetime.date(2026, 9, 1)

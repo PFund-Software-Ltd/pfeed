@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 if TYPE_CHECKING:
     import datetime
 
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
 
     from pfeed._io.io_config import IOConfig
     from pfeed.dataflow.result import RunResult

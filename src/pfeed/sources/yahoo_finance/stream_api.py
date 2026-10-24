@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
 
     from pfeed.sources.yahoo_finance.market_data_model import (

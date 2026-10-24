@@ -26,7 +26,7 @@ import time
 from abc import ABC
 
 import polars as pl
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund_blocks.enums.env import Environment
 
 from pfeed.base.feed import requires

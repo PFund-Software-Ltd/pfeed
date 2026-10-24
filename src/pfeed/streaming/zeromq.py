@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
     from pfund.entities.accounts.account_base import BaseAccount
     from pfund.entities.products.product_base import BaseProduct
     from pfund.enums import PrivateDataChannel

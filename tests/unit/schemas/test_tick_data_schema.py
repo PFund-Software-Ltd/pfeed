@@ -5,7 +5,7 @@ import datetime
 import pandera.errors
 import polars as pl
 import pytest
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 from pfeed.schemas.market_data_schema import PRODUCT, RESOLUTION, VOLUME
 from pfeed.schemas.tick_data_schema import PRICE, SIDE, TickDataSchema

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.market.data_model import MarketDataModel
 
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 from pfund.entities.products.product_base import BaseProduct
 from pfund_blocks.enums.env import Environment
 from pydantic import Field, field_validator, model_validator

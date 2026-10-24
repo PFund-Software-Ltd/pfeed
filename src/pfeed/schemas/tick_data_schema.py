@@ -2,7 +2,7 @@ from typing import Final
 
 import pandera.polars as pa
 import polars as pl
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 from pfeed.schemas.market_data_schema import RESOLUTION, VOLUME, MarketDataSchema
 

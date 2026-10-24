@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 if TYPE_CHECKING:
     import pandas as pd
     from narwhals.typing import IntoFrame
-    from pfund.datas.resolution import Resolution
+    from pfund_blocks.resolution import Resolution
     from pfund.entities.products.product_base import BaseProduct
     from pfund.venues._apis.typing import ResponseData
     from yfinance import Ticker
@@ -97,7 +97,7 @@ class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
     def _max_date_range(
         cls, resolution: Resolution
     ) -> tuple[datetime.date, datetime.date]:
-        from pfund.datas.resolution import Resolution
+        from pfund_blocks.resolution import Resolution
 
         from pfeed.utils.temporal import parse_date_range
 

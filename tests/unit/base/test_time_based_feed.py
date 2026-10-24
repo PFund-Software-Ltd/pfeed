@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import polars as pl
 import pytest
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 from pfeed.base.time_based_data_model import TimeBasedDataModel
 from pfeed.base.time_based_feed import TimeBasedFeed

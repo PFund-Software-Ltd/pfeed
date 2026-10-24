@@ -3,7 +3,7 @@ import time
 
 import pytest
 import pytz
-from pfund.datas.resolution import Resolution
+from pfund_blocks.resolution import Resolution
 
 import pfeed as pe
 from pfeed.utils.dataframe import convert_dataframe

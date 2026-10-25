@@ -1,4 +1,5 @@
-from pfund.venues.ibkr.product import InteractiveBrokersProduct
+# TODO: pfund is no longer a dependency
+# from pfund.venues.ibkr.product import InteractiveBrokersProduct
 
 from pfeed.market.data_model import MarketDataModel
 

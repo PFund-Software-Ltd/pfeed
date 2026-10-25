@@ -62,19 +62,9 @@ def __getattr__(name: str):
 
 def _import_official_source(module: str, source: str):
     """Imports an official data source class (e.g. pe.Bybit) from its plugin, e.g. module="pfeed_bybit"."""
-    from importlib import import_module
+    from pfund_kit.plugins import import_official_plugin
 
-    try:
-        return getattr(import_module(module), source)
-    except ModuleNotFoundError as err:
-        # only rewrite the error if the plugin itself is missing, not a broken import inside it
-        if err.name != module:
-            raise
-        package = module.replace("_", "-")
-        raise ModuleNotFoundError(
-            f"pe.{source} requires the official plugin '{package}', install it with: pip install {package}",
-            name=err.name,
-        ) from err
+    return import_official_plugin(module, source, label=f"pe.{source}")
 
 
 __all__ = (  # noqa: RUF022

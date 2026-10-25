@@ -8,6 +8,7 @@ from importlib.metadata import EntryPoint
 from types import SimpleNamespace
 
 import pytest
+from pfund_kit import plugins
 
 import pfeed as pe
 from pfeed import registry
@@ -44,11 +45,11 @@ def install_plugins(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setitem(sys.modules, FAKE_MODULE, module)
 
     def _install(*eps: EntryPoint):
-        monkeypatch.setattr(registry, "entry_points", lambda group: [ep for ep in eps if ep.group == group])
-        registry.get_entry_points.cache_clear()
+        monkeypatch.setattr(plugins, "entry_points", lambda group: [ep for ep in eps if ep.group == group])
+        registry.plugin_registry.cache_clear()
 
     yield _install
-    registry.get_entry_points.cache_clear()
+    registry.plugin_registry.cache_clear()
 
 
 def test_entry_point_names_are_uppercased(install_plugins):

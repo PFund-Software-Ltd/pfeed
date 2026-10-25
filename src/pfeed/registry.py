@@ -11,41 +11,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from importlib.metadata import EntryPoint
-
     from pfeed.base.feed import BaseFeed
     from pfeed.source import BaseSource
 
-from functools import cache
-from importlib.metadata import entry_points
+from pfund_kit.plugins import PluginRegistry
 
 from pfeed.enums import DataCategory
 
 ENTRY_POINT_GROUP = "pfeed.sources"
-
-
-@cache
-def get_entry_points() -> dict[str, EntryPoint]:
-    """Returns {source name: entry point} of all installed data sources, without importing them."""
-    eps: dict[str, EntryPoint] = {}
-    for ep in entry_points(group=ENTRY_POINT_GROUP):
-        name = ep.name.upper()
-        if name in eps:
-            dists = [e.dist.name if e.dist else "unknown" for e in (eps[name], ep)]
-            raise ValueError(f"data source {name} is registered by multiple packages: {dists}")
-        eps[name] = ep
-    return eps
-
-
-def list_sources() -> list[str]:
-    return sorted(get_entry_points())
-
-
-def get_entry_point(name: str) -> EntryPoint:
-    try:
-        return get_entry_points()[name.upper()]
-    except KeyError:
-        raise ValueError(f"unknown data source '{name}', installed data sources: {list_sources()}") from None
+plugin_registry = PluginRegistry(ENTRY_POINT_GROUP, kind="data source")
+get_entry_points = plugin_registry.get_entry_points
+list_sources = plugin_registry.list_names
+get_entry_point = plugin_registry.get_entry_point
 
 
 def get_source(name: str) -> type[BaseSource]:

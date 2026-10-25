@@ -25,7 +25,7 @@ classifiers = [
 requires-python = ">=3.13"
 dependencies = [
     "pfund-blocks>=0.0.1",
-    "pfund-kit>=0.1.21",
+    "pfund-kit>=0.1.22",
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.

@@ -14,8 +14,8 @@ import datetime
 
 import polars as pl
 import pytest
-from pfund.entities.products.product_base import BaseProduct
-from pfund.entities.products.product_basis import ProductBasis
+from pfund_blocks.entities.products.product_base import BaseProduct
+from pfund_blocks.entities.products.product_basis import ProductBasis
 
 import pfeed as pe
 from pfeed.enums import DataAccessType, DataCategory, DataProviderType, DataType

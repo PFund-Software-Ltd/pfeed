@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 if TYPE_CHECKING:
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
 
     from pfeed.base.feed import BaseFeed
 
@@ -11,7 +11,7 @@ import os
 from abc import ABC
 from datetime import date
 
-from pfund.entities.products.asset_type import AssetType
+from pfund_blocks.entities.products.asset_type import AssetType
 from pydantic import (
     BaseModel,
     ConfigDict,

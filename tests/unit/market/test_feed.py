@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from types import FunctionType
 
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pytest_mock import MockerFixture, MockType
 
     from pfeed.market.data_model import MarketDataModel

@@ -71,7 +71,7 @@ class CryptoHftDataSource(DataProviderSource):
         if not exchange:
             raise ValueError("exchange is required for CryptoHFTData products")
 
-        from pfund.entities.products import ProductFactory
+        from pfund_blocks.entities.products import ProductFactory
         from pfeed.sources.crypto_hft_data.product import CryptoHftDataProduct
 
         Product = cast(

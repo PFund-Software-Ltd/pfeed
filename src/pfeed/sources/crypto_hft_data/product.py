@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pfund.entities.products.product_base import BaseProduct
+from pfund_blocks.entities.products.product_base import BaseProduct
 from pydantic import Field
 
 

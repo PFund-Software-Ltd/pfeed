@@ -80,7 +80,7 @@ class YahooFinanceSource(DataProviderSource):
     def create_product(
         self, basis: str, symbol: str = "", **specs: Any
     ) -> YahooFinanceProduct:
-        from pfund.entities.products import ProductFactory
+        from pfund_blocks.entities.products import ProductFactory
         from pfeed.sources.yahoo_finance.product import YahooFinanceProduct
 
         Product = cast(

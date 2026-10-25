@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
     from pfund_blocks.resolution import Resolution
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
 
     from pfeed.sources.yahoo_finance.market_data_model import (
         YahooFinanceMarketDataModel,

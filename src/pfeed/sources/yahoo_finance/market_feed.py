@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import pandas as pd
     from narwhals.typing import IntoFrame
     from pfund_blocks.resolution import Resolution
-    from pfund.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund.venues._apis.typing import ResponseData
     from yfinance import Ticker
 

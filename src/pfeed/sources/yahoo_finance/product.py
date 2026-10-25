@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from pfund.entities.products.product_base import BaseProduct
+from pfund_blocks.entities.products.product_base import BaseProduct
 
 
 class YahooFinanceProduct(BaseProduct):
@@ -13,11 +13,11 @@ class YahooFinanceProduct(BaseProduct):
 
     def _create_symbol(self) -> str:
         if self.is_stock():
-            from pfund.entities.products.mixins.stock import StockMixin
+            from pfund_blocks.entities.products.mixins.stock import StockMixin
 
             symbol = StockMixin._create_symbol(self)
         elif self.is_option():
-            from pfund.entities.products.mixins.option import OptionMixin
+            from pfund_blocks.entities.products.mixins.option import OptionMixin
 
             symbol = OptionMixin._create_symbol(self)
         elif self.is_future():

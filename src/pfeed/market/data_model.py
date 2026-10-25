@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from pfund_blocks.resolution import Resolution
-from pfund.entities.products.product_base import BaseProduct
+from pfund_blocks.entities.products.product_base import BaseProduct
 from pfund_blocks.enums.env import Environment
 from pydantic import field_serializer, field_validator
 

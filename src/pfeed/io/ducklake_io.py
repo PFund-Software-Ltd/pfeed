@@ -269,7 +269,7 @@ class DuckLakeIO(TableIO):
         # only rows of the partitions with metadata (commit marker)
         predicate, params = self._in_partitions(key, list(metadata))
         relation = cursor.sql(f'SELECT * FROM {data_ref} AT (VERSION => {snapshot_id}) {predicate}', params=params)
-        if relation.limit(1).fetchone() is None:
+        if not relation.limit(1).fetchall():
             return None, metadata
         return relation.pl(lazy=True), metadata
 

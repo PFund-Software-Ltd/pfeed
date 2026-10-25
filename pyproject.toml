@@ -24,13 +24,14 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "pfund==0.0.25",  # use >= only when pfund is stable
+    "pfund-blocks>=0.0.1",
+    "pfund-kit>=0.1.21",
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
     "pyarrow>=26.0.0 ; sys_platform != 'emscripten'",
     "polars>=2.0.0 ; sys_platform != 'emscripten'",
-    "duckdb>=1.5.6 ; sys_platform != 'emscripten'",
+    "duckdb>=2.0.0 ; sys_platform != 'emscripten'",
     "pandera>=0.34.1",
     "msgspec>=0.22.0 ; sys_platform != 'emscripten'",
     "pydantic>=2.14.1 ; sys_platform != 'emscripten'",
@@ -49,7 +50,8 @@ prefect = ["prefect>=3.8.8"]
 # An extra exists here only for an OFFICIALLY SUPPORTED data source, and it pins a verified version:
 #   pip install "pfeed[bybit]"  # official, installs `pfeed-bybit`
 #   pip install pfeed-xxx       # 3rd party, not maintained or verified by pfeed
-# bybit = ["pfeed-bybit>=0.0.1"]
+# bybit = ["pfeed-bybit>=0.0.1.dev1"]
+# pfund = ["pfeed-pfund>=0.0.1.dev1"]
 # yfinance = ["yfinance>=1.7.0"]
 # edgartools = ["edgartools>=5.60.0"]
 # fmp = ["fmp-api-client>=0.0.1"]
@@ -76,13 +78,13 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.13.1,<0.14.0"]
+requires = ["uv_build>=0.13.5,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv]
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0 days"
-exclude-newer-package = { pfund = false, pfund-kit = false }
+exclude-newer-package = { uv_build = false, pfund-blocks = false, pfund-kit = false }
 
 [tool.uv.build-backend]
 module-name = "pfeed"

@@ -10,7 +10,8 @@ exclude-newer = "0d"
 
 [pypi-exclude-newer]
 afterpython = "0d"
-pfund = "0d"
+uv_build = "0d"
+pfund-blocks = "0d"
 pfund-kit = "0d"
 
 [tasks]
@@ -30,10 +31,11 @@ just = ">=1.59.0"
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
-pfund = "==0.0.25"  # use >= only when pfund is stable
+pfund-blocks = ">=0.0.1"
+pfund-kit = ">=0.1.21"
 pyarrow = ">=26.0.0"
 polars = ">=2.0.0"
-duckdb = ">=1.5.6"
+duckdb = ">=2.0.0"
 pandera = ">=0.34.1"
 msgspec = ">=0.22.0"
 pydantic = ">=2.14.1"
@@ -62,13 +64,20 @@ ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_full_v
 huggingface-hub = ">=2.2.0"
 prefect = ">=3.8.8"
 lancedb = ">=0.40.0"
-# pfeed-bybit = ">=0.0.1"
+# Data Sources:
+# NOTE: data sources are plugins, each one is a separate package named `pfeed-xxx`.
+# An extra exists here only for an OFFICIALLY SUPPORTED data source, and it pins a verified version:
+#   pip install "pfeed[bybit]"  # official, installs `pfeed-bybit`
+#   pip install pfeed-xxx       # 3rd party, not maintained or verified by pfeed
+# pfeed-bybit = ">=0.0.1.dev1"
+# pfeed-pfund = ">=0.0.1.dev1"
 # IOs
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
+pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }  # TEMP
+pfeed-pfund = { path = "sources/pfeed-pfund", editable = true }  # TEMP
 pfund-plot = { version = ">=0.0.5", extras = ["marimo"] }
 # TEMP
 pfund = { path = "../pfund", editable = true }

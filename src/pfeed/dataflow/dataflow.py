@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 import logging
 
 import polars as pl
-from pfund.enums.data_channel import PublicDataChannel
 
 from pfeed.dataflow.result import DataFlowResult
 from pfeed.enums import FlowType
@@ -43,7 +42,7 @@ class DataFlow:
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
         self._zmq_channel: str = ""
-        self._zmq_topic: PublicDataChannel | None = None
+        self._zmq_topic: str | None = None
         self._assigned_stream_worker: str | None = None
         self._is_sealed = False
         # set by set_stream_options(), only for streaming dataflows
@@ -269,6 +268,8 @@ class DataFlow:
         return prefect_flow
 
     def _setup_messaging(self):
+        from pfund.enums.data_channel import PublicDataChannel
+
         from pfeed.market.data_model import MarketDataModel
         from pfeed.streaming.zeromq import ZeroMQDataChannel
 

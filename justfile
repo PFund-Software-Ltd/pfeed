@@ -3,3 +3,4 @@
 #      (don't `cd ../..`, it keeps pfeed-bybit's env active)
 #      `just bybit test` runs pfeed-bybit's tests
 mod bybit 'sources/pfeed-bybit'
+mod pfund 'sources/pfeed-pfund'

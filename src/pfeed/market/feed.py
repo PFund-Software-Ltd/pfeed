@@ -679,7 +679,7 @@ class MarketFeed[
                     if resampled_data_config.resample != data_config.resample:
                         data_resolution = resampled_data_config.resample[resolution]
                         self.logger.warning(
-                            f"{product.desc_str()} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
+                            f"{product} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
                         )
         else:
             # NOTE: in replay mode, io means loading data FROM storage, not TO storage, so it must exist
@@ -981,7 +981,7 @@ class MarketFeed[
                         message = _create_bar_message(data_bar, is_incremental=True)
                 else:
                     raise NotImplementedError(
-                        f"{product.desc_str()} unexpected data resolution {data_resolution} for data bar"
+                        f"{product} unexpected data resolution {data_resolution} for data bar"
                     )
         else:
             raise NotImplementedError(

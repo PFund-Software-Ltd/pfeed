@@ -71,7 +71,7 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
 
     def _create_name(self) -> dict[str, str]:
         return {
-            'asset_type': str(self._data_model.product.asset_type),
+            'asset_type': str(self._data_model.product.product_type),
             'resolution': str(self._data_model.resolution),
         }
 

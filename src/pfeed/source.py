@@ -13,7 +13,7 @@ import os
 from abc import ABC
 from datetime import date
 
-from pfund_blocks.entities.products.asset_type import AssetType
+from pfund_blocks.entities.products.product_type import ProductType
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -55,8 +55,8 @@ class SourceMetadata(BaseModel):
 
     name: str
     url: HttpUrl
-    # str is accepted for convenience, e.g. "PERPETUAL", and converted to AssetType in _convert_asset_types()
-    data_categories: dict[DataCategory, dict[DataType, list[AssetType | str]]]
+    # str is accepted for convenience, e.g. "PERPETUAL", and converted to ProductType in _convert_asset_types()
+    data_categories: dict[DataCategory, dict[DataType, list[ProductType | str]]]
     provider_type: DataProviderType
     access_type: DataAccessType
     api_access: APIAccess | None = None
@@ -75,14 +75,14 @@ class SourceMetadata(BaseModel):
     @field_validator("data_categories", mode="after")
     @classmethod
     def _convert_asset_types(
-        cls, data_categories: dict[DataCategory, dict[DataType, list[AssetType | str]]]
-    ) -> dict[DataCategory, dict[DataType, list[AssetType | str]]]:
+        cls, data_categories: dict[DataCategory, dict[DataType, list[ProductType | str]]]
+    ) -> dict[DataCategory, dict[DataType, list[ProductType | str]]]:
         # pydantic keeps a str as str since it matches `str` exactly, convert it here so that aliases are expanded too,
         # e.g. "IPERP" -> "INVERSE-PERPETUAL"
         return {
             data_category: {
                 data_type: [
-                    AssetType.model_validate(asset_type) if isinstance(asset_type, str) else asset_type
+                    ProductType.model_validate(asset_type) if isinstance(asset_type, str) else asset_type
                     for asset_type in asset_types
                 ]
                 for data_type, asset_types in data_types.items()
@@ -147,7 +147,7 @@ class BaseSource(ABC):
         return self.metadata.name
 
     @property
-    def data_categories(self) -> dict[DataCategory, dict[DataType, list[AssetType | str]]]:
+    def data_categories(self) -> dict[DataCategory, dict[DataType, list[ProductType | str]]]:
         return self.metadata.data_categories
 
     @property

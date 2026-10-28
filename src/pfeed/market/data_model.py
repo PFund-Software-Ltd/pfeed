@@ -23,7 +23,7 @@ class MarketDataModel(TimeBasedDataModel):
             [
                 self.env,
                 super().__str__(),
-                str(self.product.asset_type),
+                str(self.product.product_type),
                 self.product.symbol,
                 str(self.resolution),
             ]

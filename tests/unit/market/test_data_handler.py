@@ -88,7 +88,7 @@ def test_dataset_key(io: ParquetIO, product: BaseProduct):
             'data_source': 'BYBIT',
             'data_origin': 'BYBIT',
         },
-        name={'asset_type': str(product.asset_type), 'resolution': '1_DAY'},
+        name={'asset_type': str(product.product_type), 'resolution': '1_DAY'},
         partition_by=('product', DatePartition('date')),
     )
 

@@ -32,8 +32,10 @@ def pytest_configure(config: pytest.Config):
 @pytest.fixture(params=["bybit"])
 def product(request: pytest.FixtureRequest) -> BaseProduct:
     if request.param == "bybit":
-        from pfund.venues.bybit.venue import Bybit
-        return Bybit.create_product("BTC_USDT_PERP")
+        from pfund_blocks.entities.products.product_factory import ProductFactory
+
+        basis = "BTC_USDT_PERP"
+        return ProductFactory(basis).model_validate({"source": "BYBIT", "basis": basis, "symbol": "BTCUSDT"})
     raise ValueError(f"unknown product param: {request.param}")
 
 

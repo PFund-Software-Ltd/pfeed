@@ -268,7 +268,7 @@ class DataFlow:
         return prefect_flow
 
     def _setup_messaging(self):
-        from pfund.enums.data_channel import PublicDataChannel
+        from pfund_blocks.enums.channel import PublicChannel
 
         from pfeed.market.data_model import MarketDataModel
         from pfeed.streaming.zeromq import ZeroMQDataChannel
@@ -280,11 +280,11 @@ class DataFlow:
             resolution=data_model.resolution,
         )
         if data_model.resolution.is_quote():
-            self._zmq_topic = PublicDataChannel.orderbook
+            self._zmq_topic = PublicChannel.orderbook
         elif data_model.resolution.is_tick():
-            self._zmq_topic = PublicDataChannel.tradebook
+            self._zmq_topic = PublicChannel.tradebook
         else:
-            self._zmq_topic = PublicDataChannel.candlestick
+            self._zmq_topic = PublicChannel.candlestick
 
     def set_stream_worker(self, worker_name: str):
         if self._assigned_stream_worker is None:

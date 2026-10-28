@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pfeed.base.data_handler import BaseDataHandler
     from pfeed.dataflow.result import RunResult
     from pfeed.market.requests.base_request import MarketFeedBaseRequest
+    from pfeed.market.requests.stream_request import MarketFeedStreamRequest
     from pfeed.source import BaseSource
     from pfeed.streaming.feed_mixin import (
         ChannelKey,
@@ -38,7 +39,8 @@ from pfeed.market.data_model import MarketDataModel
 from pfeed.market.requests import (
     MarketFeedDownloadRequest,
     MarketFeedRetrieveRequest,
-    MarketFeedStreamRequest,
+    # TODO: commented out until the streaming refactor, stream_request still needs pfund's DataConfig (no longer a dependency)
+    # MarketFeedStreamRequest,
 )
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
@@ -53,13 +55,16 @@ class MarketFeed[
 
         download: ClassVar[type[MarketFeedDownloadRequest] | None] = MarketFeedDownloadRequest
         retrieve: ClassVar[type[MarketFeedRetrieveRequest] | None] = MarketFeedRetrieveRequest
-        stream: ClassVar[type[MarketFeedStreamRequest] | None] = MarketFeedStreamRequest
+        # TODO: streaming is disabled until the streaming refactor, see the MarketFeedStreamRequest import
+        # stream: ClassVar[type[MarketFeedStreamRequest] | None] = MarketFeedStreamRequest
+        stream: ClassVar[type[MarketFeedStreamRequest] | None] = None
 
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel  # ty: ignore[invalid-mutable-override]
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
         MarketFeedDownloadRequest.extract_type: ("_download_impl", "_normalize_downloaded_data"),
-        MarketFeedStreamRequest.extract_type: ("_get_stream_api", "_parse_streaming_message"),
+        # TODO: streaming is disabled until the streaming refactor, see the MarketFeedStreamRequest import
+        # MarketFeedStreamRequest.extract_type: ("_get_stream_api", "_parse_streaming_message"),
     }
 
     @staticmethod

@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 if TYPE_CHECKING:
+    from pfund_blocks.entities.adapters.adapter_base import BaseAdapter
     from pfund_blocks.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_basis import ProductBasis
 
     from pfeed.base.feed import BaseFeed
 
@@ -95,6 +97,10 @@ class BaseSource(ABC):
     # retries for the source's API, which errors are transient (e.g. timeouts, dropped connections) and how often to retry;
     # passed to the requests that call the API, e.g. download, the default never retries
     retry_policy: ClassVar[RetryPolicy] = RetryPolicy()
+    # holds the source's mappings, e.g. product name -> symbol, None means the products use their own conventions
+    # NOTE: class-level since create_product() is a classmethod (e.g. called via Feed.DataSource),
+    # so the product mappings are shared by all instances of the source
+    adapter: ClassVar[BaseAdapter | None] = None
 
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
@@ -179,6 +185,29 @@ class BaseSource(ABC):
     # e.g. request.data_source in _download_impl(). If an API can't be pickled (e.g. it holds a session or socket),
     # create it inside the implementation method (e.g. _download_impl) on the worker instead of reusing the source's, or don't use Ray
 
+    # DRAFT: same as BaseVenue.create_product() in pfund-blocks
     @classmethod
-    def create_product(cls, basis: str, symbol: str = "", **specs: Any) -> BaseProduct:
-        raise NotImplementedError(f"{cls.metadata.name} does not support creating products")
+    def create_product(
+        cls, basis: str | ProductBasis, symbol: str = "", name: str = "", **specs: Any
+    ) -> BaseProduct:
+        """Creates a product with the source's symbol and name, and maps them in the adapter's group "product".
+
+        Args:
+            basis: e.g. "BTC_USDT_PERP"
+            symbol: the source's symbol, if not provided, derived by the adapter's create_symbol(),
+                pass it when the derived symbol is wrong
+            name: unique product name, if not provided, derived by the adapter's create_name()
+            specs: the product class's specs, e.g. expiration for a future
+        """
+        from pfund_blocks.entities.products.product_factory import ProductFactory
+
+        Product = ProductFactory(basis)
+        # the adapter is passed via the validation context, so that the product derives its symbol and name
+        # with the source's conventions once its specs are validated (e.g. expiration as a date)
+        product = Product.model_validate(
+            {"source": cls.metadata.name, "basis": basis, "symbol": symbol, "name": name, **specs},
+            context={"adapter": cls.adapter},
+        )
+        if cls.adapter is not None:
+            cls.adapter.add_mapping(product.name, product.symbol, group="product")
+        return product

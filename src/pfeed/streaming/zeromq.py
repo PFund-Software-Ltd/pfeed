@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
-    from pfund.entities.accounts.account_base import BaseAccount
+    from pfund_blocks.entities.accounts.account_base import BaseAccount
     from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund.enums import PrivateDataChannel
+    from pfund_blocks.enums.channel import PrivateChannel
     from zmq import SocketType
 
 import logging
@@ -29,7 +29,7 @@ class ZeroMQDataChannel(StrEnum):
     logging = "logging"
 
     @staticmethod
-    def create_private_channel(account: BaseAccount, channel: PrivateDataChannel):
+    def create_private_channel(account: BaseAccount, channel: PrivateChannel):
         return f"{account.venue}.{account.name}.{channel}"
 
     @staticmethod

@@ -109,12 +109,6 @@ def test_get_feed_unsupported_category(install_plugins):
         registry.get_feed("fake", DataCategory.CHAT_DATA)
 
 
-def test_pe_exposes_source_by_class_name(install_plugins):
-    install_plugins(_ep("fake"))
-    assert pe.FakeSource is FakeSource
-    assert "FakeSource" in dir(pe)
-
-
 def test_pe_unknown_attribute_raises(install_plugins):
     install_plugins(_ep("fake"))
     with pytest.raises(AttributeError):

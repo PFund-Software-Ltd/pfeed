@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pfund_blocks.entities.products.product_base import BaseProduct
+    from pfund_blocks.entities.products.product_basis import ProductBasis
+
     from pfeed.base.feed import BaseFeed
     from pfeed.io.base_io import BaseIO
     from pfeed.market.data_model import MarketDataModel
@@ -14,8 +17,6 @@ import datetime
 
 import polars as pl
 import pytest
-from pfund_blocks.entities.products.product_base import BaseProduct
-from pfund_blocks.entities.products.product_basis import ProductBasis
 
 import pfeed as pe
 from pfeed.enums import DataAccessType, DataCategory, DataProviderType, DataType
@@ -56,10 +57,6 @@ class FakeMarketFeed(pe.MarketFeed):
         )
 
 
-class FakeProduct(BaseProduct):
-    pass
-
-
 class FakeSource(BaseSource):
     """Deterministic in-memory vendor: one tick every TICK_INTERVAL per date."""
 
@@ -74,11 +71,11 @@ class FakeSource(BaseSource):
     market_feed: FakeMarketFeed
 
     @classmethod
-    def create_product(cls, basis: str, symbol: str = "", **specs: Any) -> FakeProduct:
-        # symbol must be set, otherwise BaseProduct names every product "FAKE_"
-        return FakeProduct(
-            source=cls.metadata.name, basis=ProductBasis(basis=basis), symbol=symbol or basis, specs=specs
-        )
+    def create_product(
+        cls, basis: str | ProductBasis, symbol: str = "", name: str = "", **specs: Any
+    ) -> BaseProduct:
+        # symbol must be set, the fake source has no adapter to derive it
+        return super().create_product(basis, symbol=symbol or str(basis), name=name, **specs)
 
 
 @pytest.fixture

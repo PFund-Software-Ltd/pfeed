@@ -1,7 +1,7 @@
 from typing import Any, ClassVar
 
 # TODO: pfund is no longer a dependency
-# from pfund.datas.data_config import DataConfig
+# from pfund.data_config import DataConfig
 from pydantic import Field
 
 from pfeed.enums import DataLayer

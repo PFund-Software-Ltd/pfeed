@@ -666,7 +666,7 @@ class MarketFeed[
         data_resolution = resolution
         if not is_replaying:
             if resolution.is_bar():
-                from pfund.datas.data_config import DataConfig
+                from pfund.data_config import DataConfig
 
                 # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
                 # e.g. '1s' is not supported by bybit, '1t' will be used instead to resample data

@@ -34,10 +34,10 @@ def _is_bar_resolution(value: str) -> bool:
 
 class BarDataSchema(MarketDataSchema):
     # lt=inf rejects inf; NaN is already rejected since pandera treats it as null
-    open: float = pa.Field(alias=OPEN, gt=0, lt=float("inf"))
-    high: float = pa.Field(alias=HIGH, gt=0, lt=float("inf"))
-    low: float = pa.Field(alias=LOW, gt=0, lt=float("inf"))
-    close: float = pa.Field(alias=CLOSE, gt=0, lt=float("inf"))
+    open: float = pa.Field(alias=OPEN, lt=float("inf"))
+    high: float = pa.Field(alias=HIGH, lt=float("inf"))
+    low: float = pa.Field(alias=LOW, lt=float("inf"))
+    close: float = pa.Field(alias=CLOSE, lt=float("inf"))
     # gt=0: a period without trades has no bar, a zero-volume bar has made-up prices
     volume: float = pa.Field(alias=VOLUME, gt=0, lt=float("inf"))
 

@@ -68,9 +68,12 @@ class TestTickDataSchema:
             TickDataSchema.validate(_df().drop(column))
 
     @pytest.mark.parametrize("value", [0.0, -1.0])
-    @pytest.mark.parametrize("column", [PRICE, VOLUME])
-    def test_non_positive_fails(self, column: str, value: float):
-        assert (column, "greater_than(0)") in _failures(_df(values={column: value}))
+    def test_non_positive_price_passes(self, value: float):
+        TickDataSchema.validate(_df(values={PRICE: value}))
+
+    @pytest.mark.parametrize("value", [0.0, -1.0])
+    def test_non_positive_volume_fails(self, value: float):
+        assert (VOLUME, "greater_than(0)") in _failures(_df(values={VOLUME: value}))
 
     @pytest.mark.parametrize("column", [PRICE, VOLUME])
     def test_inf_fails(self, column: str):

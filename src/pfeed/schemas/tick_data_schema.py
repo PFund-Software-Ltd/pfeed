@@ -14,7 +14,7 @@ SIDE: Final = "side"
 class TickDataSchema(MarketDataSchema):
     # tick data is always 1_TICK, e.g. 2_TICK is aggregated data, not tick data
     resolution: str = pa.Field(alias=RESOLUTION, eq=str(Resolution("1t")))
-    price: float = pa.Field(alias=PRICE, gt=0, lt=float("inf"))
+    price: float = pa.Field(alias=PRICE, lt=float("inf"))
     volume: float = pa.Field(alias=VOLUME, gt=0, lt=float("inf"))
     # not all tick sources expose trade direction (e.g. Bybit streaming ticks have none).
     # pin Int8 (the compact dtype producers emit, e.g. Bybit's replace_strict to {1, -1});

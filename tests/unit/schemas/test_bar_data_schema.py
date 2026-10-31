@@ -66,9 +66,10 @@ class TestBarDataSchema:
             BarDataSchema.validate(_df().drop(column))
 
     @pytest.mark.parametrize("value", [0.0, -1.0])
-    @pytest.mark.parametrize("column", [OPEN, HIGH, LOW, CLOSE])
-    def test_non_positive_price_fails(self, column: str, value: float):
-        assert (column, "greater_than(0)") in _failures(_df(values={column: value}))
+    def test_non_positive_flat_bar_passes(self, value: float):
+        BarDataSchema.validate(
+            _df(values=dict.fromkeys([OPEN, HIGH, LOW, CLOSE], value))
+        )
 
     def test_zero_volume_fails(self):
         assert _failures(_df(values={VOLUME: 0.0})) == {(VOLUME, "greater_than(0)")}

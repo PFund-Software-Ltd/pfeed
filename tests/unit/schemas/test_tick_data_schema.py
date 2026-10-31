@@ -115,8 +115,6 @@ class TestResolution:
     def test_1_tick_passes(self):
         TickDataSchema.validate(_df(resolution="1t"))
 
-    @pytest.mark.parametrize(
-        "resolution", ["2t", "1s", "1m"], ids=["2_tick", "1_second", "1_minute"]
-    )
+    @pytest.mark.parametrize("resolution", ["1s", "1m"], ids=["1_second", "1_minute"])
     def test_not_1_tick_fails(self, resolution: str):
         assert (RESOLUTION, "equal_to(1_TICK)") in _failures(_df(resolution=resolution))

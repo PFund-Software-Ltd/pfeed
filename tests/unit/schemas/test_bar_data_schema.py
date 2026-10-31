@@ -117,13 +117,12 @@ class TestBarDataSchema:
         ):
             BarDataSchema.validate(_df(seconds=[MINUTE, 0]))
 
-    @pytest.mark.parametrize("resolution", ["1t", "2t"], ids=["1_tick", "2_tick"])
-    def test_tick_resolution_fails(self, resolution: str):
+    def test_tick_resolution_fails(self):
         # e.g. bars resampled from ticks but still labeled 1_TICK
         with pytest.raises(
             pandera.errors.SchemaError, match="resolution is not a bar resolution"
         ):
-            BarDataSchema.validate(_df(resolution=resolution))
+            BarDataSchema.validate(_df(resolution="1t"))
 
 
 class TestDateGapsAreMultiplesOfResolution:

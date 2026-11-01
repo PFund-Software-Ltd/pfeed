@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from pfund_blocks.resolution import Resolution
     from pfund_blocks.entities.accounts.account_base import BaseAccount
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.enums.channel import PrivateChannel
+    from pfund_blocks.resolution import Resolution
     from zmq import SocketType
 
 import logging
@@ -61,29 +61,20 @@ class ZeroMQ:
         receiver_method: SocketMethod | Literal["bind", "connect"] = "connect",
         sender_type: SocketType | None = None,
         receiver_type: SocketType | None = None,
-        send_latest_only: bool = False,
-        recv_latest_only: bool = False,
-        recv_type: Any = None,
     ):
         """
         Args:
-            port: If not provided, a random port will be assigned.
-            send_latest_only : bool, optional
-                If True, sets `ZMQ_CONFLATE=1` on the sender socket.
-                Only the newest unsent message is kept; every new send overwrites any previous.
-                Use when only the latest update matters—intermediate messages are dropped.
-
-            recv_latest_only : bool, optional
-                If True, sets `ZMQ_CONFLATE=1` on the receiver socket.
-                Only the newest unprocessed message is kept; arriving messages overwrite older ones if not yet received.
-                Use when you only care about the most recent data and not the message history.
-
-            recv_type : optional
-                Expected payload type for non-signal channels (e.g. `TickMessage | BarMessage`).
-                When provided, payloads on non-signal channels are decoded into this type via a typed
-                msgspec Decoder. When None, all payloads are decoded with the untyped decoder.
+            name: Name of this instance, used in the sender/receiver names for logs and the STOP signal's topic.
+                "_zmq" is appended if it doesn't already contain "zmq" or "zeromq".
+            logger: Logger for send/recv failures.
+            io_threads: Number of the zmq context's IO threads.
+            sender_method: Whether the sender socket binds or connects.
+            receiver_method: Whether the receiver socket binds or connects.
+            sender_type: Socket type of the sender (e.g. zmq.ROUTER), no sender is created if None.
+            receiver_type: Socket type of the receiver (e.g. zmq.PULL), no receiver is created if None.
+                At least one of sender_type and receiver_type must be provided.
         """
-        assert any([sender_type, receiver_type]), (
+        assert sender_type is not None or receiver_type is not None, (
             "Either sender_type or receiver_type must be provided"
         )
         self._name = name
@@ -92,35 +83,28 @@ class ZeroMQ:
         self._socket_methods: dict[zmq.Socket, SocketMethod] = {}
         self._socket_addresses: defaultdict[zmq.Socket, list[str]] = defaultdict(list)
         self._sender: zmq.Socket | None = None
-        self._target_identity: bytes | None = (
-            None  # identity of the sender socket to send to, currently only used for ROUTER socket
-        )
         self._receiver: zmq.Socket | None = None
         self._poller: zmq.Poller | None = None
         self._encoder = msgpack.Encoder()
         self._decoder = msgpack.Decoder()
-        self._msg_decoder = (
-            msgpack.Decoder(type=recv_type) if recv_type is not None else None
-        )
 
-        if sender_type:
+        if sender_type is not None:
             self._sender = self._ctx.socket(sender_type)
             self._socket_methods[self._sender] = SocketMethod[sender_method.lower()]
             # only queue outgoing messages once the remote peer is fully connected—otherwise block (or error) instead of buffering endlessly.
             self._sender.setsockopt(zmq.IMMEDIATE, 1)
-            if send_latest_only:
-                self._sender.setsockopt(zmq.CONFLATE, 1)
-        if receiver_type:
+            # raise when a message can't be delivered, otherwise ROUTER silently drops it
+            if sender_type == zmq.ROUTER:
+                self._sender.setsockopt(zmq.ROUTER_MANDATORY, 1)
+        if receiver_type is not None:
             self._receiver = self._ctx.socket(receiver_type)
             self._socket_methods[self._receiver] = SocketMethod[receiver_method.lower()]
             self._poller = zmq.Poller()
             self._poller.register(self._receiver, zmq.POLLIN)
-            if recv_latest_only:
-                self._receiver.setsockopt(zmq.CONFLATE, 1)
 
     @property
     def name(self) -> str:
-        if "zeromq" not in self._name.lower() or "zmq" not in self._name.lower():
+        if "zeromq" not in self._name.lower() and "zmq" not in self._name.lower():
             return self._name + "_zmq"
         else:
             return self._name
@@ -148,7 +132,7 @@ class ZeroMQ:
 
     def get_urls_in_use(self, socket: zmq.Socket) -> list[str]:
         addresses = self.get_addresses_in_use(socket)
-        return [addr.split(":")[0] for addr in addresses]
+        return [addr.rsplit(":", 1)[0] for addr in addresses]
 
     def get_ports_in_use(self, socket: zmq.Socket) -> list[int]:
         addresses = self.get_addresses_in_use(socket)
@@ -247,7 +231,7 @@ class ZeroMQ:
         """
         Sends message to receivers
         Args:
-            data: A JSON serializable object.
+            data: A msgpack serializable object.
             topic: A message key used to group messages within a channel.
         """
         try:
@@ -264,7 +248,7 @@ class ZeroMQ:
         except zmq.error.Again:  # raised when send queue is full and using zmq.NOBLOCK
             hwm = self._sender.getsockopt(zmq.SNDHWM)
             self._logger.warning(
-                f"{self.sender_name} zmq.error.Again, HWM={hwm}, {msg=}"
+                f"{self.sender_name} zmq.error.Again, HWM={hwm}, {channel=}, {topic=}"
             )
         except zmq.error.ContextTerminated:
             self._logger.debug(f"{self.sender_name} context terminated")
@@ -282,21 +266,10 @@ class ZeroMQ:
             if events:
                 msg = self._receiver.recv_multipart(zmq.NOBLOCK)
                 channel, topic, data, msg_ts = msg
-                channel = channel.decode()
-                # Channels declared as explicit `ZeroMQDataChannel` members (e.g. `signal`) carry
-                # untyped payloads. Everything else is a dynamically-built channel (market data,
-                # private data, etc.) and is decoded into `recv_type` when one was provided.
-                if (
-                    self._msg_decoder is None
-                    or channel in ZeroMQDataChannel.__members__
-                ):
-                    decoded_data = self._decoder.decode(data)
-                else:
-                    decoded_data = self._msg_decoder.decode(data)
                 return (
-                    channel,
+                    channel.decode(),
                     topic.decode(),
-                    decoded_data,
+                    self._decoder.decode(data),
                     self._decoder.decode(msg_ts),
                 )
             else:

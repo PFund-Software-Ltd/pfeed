@@ -702,8 +702,6 @@ class MarketFeed[
     async def _stream_impl(self, request: RequestT, data_model: DataModelT):
         from pfund_blocks.enums.env import Environment
 
-        stream_self = cast("StreamingFeedMixin", self)
-
         if request.env in (Environment.PAPER, Environment.LIVE):
             stream_api = self.data_source.get_stream_api(request.env)
             try:
@@ -715,7 +713,7 @@ class MarketFeed[
                     # NOTE: cancelling wait_until_disconnected() doesn't disconnect the websockets
                     await stream_api.disconnect()
                 finally:
-                    for queue in stream_self._queues.values():
+                    for queue in cast("StreamingFeedMixin", self)._queues.values():
                         queue.shutdown()
         # TODO: replaying backtest data
         elif is_replaying := request.env == Environment.BACKTEST:

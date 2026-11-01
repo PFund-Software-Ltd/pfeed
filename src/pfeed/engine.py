@@ -106,11 +106,10 @@ class DataEngine:
         return any(feed._num_workers is not None for feed in self._feeds)
 
     def _is_streaming_feeds(self) -> bool:
-        # either all streaming dataflows or all batch dataflows, cannot mix them
-        if is_streaming_feeds := any(feed.streaming_dataflows for feed in self._feeds):
-            assert all(feed.streaming_dataflows for feed in self._feeds), (
-                "All feeds must be streaming feeds if any feed is streaming"
-            )
+        # either all streaming feeds or all batch feeds, cannot mix them
+        is_streaming = [feed.is_streaming() for feed in self._feeds]
+        if is_streaming_feeds := any(is_streaming):
+            assert all(is_streaming), "All feeds must be streaming feeds if any feed is streaming"
         return is_streaming_feeds
 
     def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> dict[BaseFeed, IntoFrame | None]:
@@ -157,7 +156,7 @@ class DataEngine:
                 *[
                     dataflow.end_stream()
                     for feed in self._feeds
-                    for dataflow in feed.streaming_dataflows
+                    for dataflow in feed.dataflows
                 ]
             )
             self.end()
@@ -188,7 +187,7 @@ class DataEngine:
             self._streaming_queue = asyncio.Queue(maxsize=STREAMING_QUEUE_MAXSIZE)
         # NOTE: make all faucets share the same streaming queue
         for feed in self._feeds:
-            faucet = feed.streaming_dataflows[0].faucet
+            faucet = feed.dataflows[0].faucet
             faucet._streaming_queue = self._streaming_queue
         queue = self._streaming_queue
 

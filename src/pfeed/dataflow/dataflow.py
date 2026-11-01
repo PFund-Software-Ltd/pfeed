@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from narwhals.typing import IntoFrame
     from prefect import Flow as PrefectDataFlow
+    from pfund_blocks.typing import Message
 
     from pfeed.base.data_handler import BaseDataHandler
     from pfeed.base.data_model import BaseDataModel
     from pfeed.dataflow.faucet import Faucet
     from pfeed.enums import DataLayer
     from pfeed.io.base_io import BaseIO
-    from pfeed.streaming.feed_mixin import RawMessage, StreamingData
 
+import asyncio
 import logging
 
 import polars as pl
@@ -307,46 +308,61 @@ class DataFlow:
         self._flush_interval = flush_interval
         self._write_stream_kwargs = write_stream_kwargs
 
-    def _run_stream_etl(self, msg: RawMessage) -> None:
+    async def _run_stream_etl(self, queue: asyncio.Queue[Message]) -> None:
         # Replay is read-only: the raw row already reached the user callback and the
         # streaming queue in the faucet. Its storage is the READ source, so there is
         # nothing to transform or load here — skip the whole ETL-to-storage step.
         if self.is_replaying():
             return
-        # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
-        if self.faucet.msg_queue:
-            self.faucet.msg_queue.send(
-                channel=self._zmq_channel,
-                topic=self._zmq_topic,
-                data=(self.name, msg),
-                target_identity=self._assigned_stream_worker,
-            )
-        else:
-            try:
-                data = cast("StreamingData", self._transform(msg))
-            # e.g. ValueError from StreamingMessage.__post_init__ validation, ValidationError from msgspec.convert
-            except Exception:
-                self._logger.exception(
-                    f"{self.name} failed to transform streaming message:"
-                )
-                # REVIEW: we will NOT load the bad data to storage, unless it can handle raw msg, for now, just return
-                # data = msg
-                return
-            self._load(data)
+        extract = self.faucet.open_stream(self.data_model)
+        try:
+            while True:
+                msg = await queue.get()
+                # TEMP: reference from _run_batch_etl
+                # is_loaded = self._load(data)
+                # # an empty partition reads back as None, so keep the empty frame itself as the result
+                # if is_loaded and not is_empty and (handler := self.handler) is not None:
+                #     # Lazy-load from storage on access so Ray workers don't copy large frames back to main.
+                #     # read() also returns the metadata, the result only needs the data
+                #     self._result = DataFlowResult.lazy(loader=lambda: handler.read()[0])
+                # else:
+                #     self._result = DataFlowResult.materialized(data=data)
+                # return self._result
+                # DEPRECATED: to be updated to perform E(TL)
+                # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
+                # if self.faucet.msg_queue:
+                #     self.faucet.msg_queue.send(
+                #         channel=self._zmq_channel,
+                #         topic=self._zmq_topic,
+                #         data=(self.name, msg),
+                #         target_identity=self._assigned_stream_worker,
+                #     )
+                # else:
+                #     try:
+                #         data = cast("StreamingData", self._transform(msg))
+                #     # e.g. ValueError from StreamingMessage.__post_init__ validation, ValidationError from msgspec.convert
+                #     except Exception:
+                #         self._logger.exception(
+                #             f"{self.name} failed to transform streaming message:"
+                #         )
+                #         # REVIEW: we will NOT load the bad data to storage, unless it can handle raw msg, for now, just return
+                #         # data = msg
+                #         return
+                #     self._load(data)
+        except asyncio.QueueShutDown:
+            pass
+        await extract
 
-    async def run_stream(self, flow_type: Literal["native"] = "native"):
+    async def run_stream(self, queue: asyncio.Queue[Message], flow_type: FlowType = FlowType.native):
         if not self.is_sealed():
             raise ValueError(f"cannot run stream on unsealed dataflow {self.name}")
-        self._logger.info(
-            f"{self} to {self.handler!r}"
-        )
+
+        self._logger.info(f"{self} to {self.handler!r}")
         self._flow_type = FlowType[flow_type.lower()]
         # a failed stream is recorded as the dataflow's result, so one failure doesn't stop the other dataflows;
         # cancellation (graceful shutdown) is not an Exception, it propagates and is not a failure
         try:
-            await self.faucet.open_stream(
-                data_model=self.data_model, handler=self.handler
-            )  # this will trigger _run_stream_etl()
+            return await self._run_stream_etl(queue)
         except Exception as err:
             self._logger.exception(f"Error in running {self}:")
             self._result = DataFlowResult.failed(error=err)

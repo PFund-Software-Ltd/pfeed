@@ -3,26 +3,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, ParamSpec, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Callable
 
-    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.base.data_model import BaseDataModel
     from pfeed.base.request import BaseRequest
-    from pfeed.dataflow.dataflow import DataFlow
     from pfeed.source import BaseSource
-    from pfeed.streaming.feed_mixin import (
-        ChannelKey,
-        RawMessage,
-        ReplayData,
-        WebSocketName,
-    )
     from pfeed.streaming.zeromq import ZeroMQ
 
     ExtractFuncParams = ParamSpec("ExtractFuncParams")
 
 
 import asyncio
-import inspect
 import logging
 import random
 import time
@@ -30,7 +21,7 @@ import time
 import polars as pl
 
 
-class Faucet:
+class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
     """Faucet is the starting point of a dataflow
     It contains a data model and a flow function to perform the extraction.
     """
@@ -39,30 +30,16 @@ class Faucet:
 
     def __init__(
         self,
-        request: BaseRequest,
+        request: RequestT,
         extract_func: Callable[
-            Concatenate[BaseRequest, BaseDataModel, ExtractFuncParams], Any
+            Concatenate[RequestT, DataModelT, ExtractFuncParams], Any
         ],  # e.g. _download_impl(), _stream_impl(), _retrieve_impl()
     ):
         self._logger = logging.getLogger(f"pfeed.{request.data_source.name.lower()}")
         self._data_source: BaseSource = request.data_source
         self._request = request
         self._extract_func = extract_func
-        self._is_stream_opened = False
-        self._streaming_queue: (
-            asyncio.Queue[
-                tuple[WebSocketName | str, RawMessage | ReplayData] | None
-            ]
-            | None
-        ) = None
-        self._user_callback: (
-            Callable[
-                [WebSocketName | str, RawMessage | ReplayData],
-                Awaitable[None] | None,
-            ]
-            | None
-        ) = None
-        self._streaming_bindings: dict[ChannelKey, DataFlow] = {}
+        self._stream_task: asyncio.Task[None] | None = None
         self._msg_queue: ZeroMQ | None = None
         self._stream_workers: list[str] = []
 
@@ -75,19 +52,13 @@ class Faucet:
         return self._request.extract_type
 
     @property
+    def request(self) -> RequestT:
+        return self._request
+
+    @property
     def msg_queue(self) -> ZeroMQ:
         assert self._msg_queue is not None, "msg_queue is not set"
         return self._msg_queue
-
-    @property
-    def streaming_queue(
-        self,
-    ) -> asyncio.Queue[
-        tuple[WebSocketName | str, RawMessage | ReplayData] | None
-    ]:
-        if self._streaming_queue is None:
-            self._streaming_queue = asyncio.Queue(maxsize=self.STREAMING_QUEUE_MAXSIZE)
-        return self._streaming_queue
 
     def _setup_messaging(self):
         import zmq
@@ -108,7 +79,7 @@ class Faucet:
         if worker_name not in self._stream_workers:
             self._stream_workers.append(worker_name)
 
-    def open_batch(self, data_model: BaseDataModel) -> pl.LazyFrame | None:
+    def open_batch(self, data_model: DataModelT) -> pl.LazyFrame | None:
         policy = self._request.retry_policy
         attempt = 0
         while True:
@@ -134,95 +105,20 @@ class Faucet:
                 )
                 time.sleep(wait)
 
-    async def open_stream(
-        self, data_model: BaseDataModel, handler: BaseDataHandler | None = None
-    ):
+    def open_stream(self, data_model: DataModelT) -> asyncio.Task[None]:
         # NOTE: streaming dataflows share the same faucet, so we only need to start the extraction once
-        if not self._is_stream_opened:
-            self._is_stream_opened = True
-            await self._extract_func(
-                self._request,
-                data_model,
-                faucet_callback=self._callback,
-                handler=handler,
-            )
+        if self._stream_task is None:
+            self._stream_task = asyncio.create_task(self._extract_func(self._request, data_model))
+        return self._stream_task
 
     async def close_stream(self):
-        if self._is_stream_opened:
-            # Signal that streaming is ending
-            if self._streaming_queue:
-                await self._streaming_queue.put(None)
-            # TODO(0.2.0): faucet shouldn't reach into the source; have the feed pass in its stream API
-            stream_api = self._data_source.get_stream_api()
-            await stream_api.disconnect()
-            # reset the states for streaming
-            self._is_stream_opened = False
-            self._streaming_queue = None
-            self._user_callback = None
-            self._streaming_bindings.clear()
+        if self._stream_task is not None:
+            # NOTE: all dataflows call this, swap first so that only the first one cancels
+            stream_task, self._stream_task = self._stream_task, None
+            # _stream_impl() disconnects in its finally
+            stream_task.cancel()
+            await asyncio.wait({stream_task})
         if self._msg_queue:
             self._msg_queue.terminate(target_identities=self._stream_workers)
             self._msg_queue = None
             self._stream_workers.clear()
-
-    async def _callback(
-        self,
-        source: WebSocketName | str,
-        data: RawMessage | ReplayData,
-        channel_key: ChannelKey | None,
-    ) -> None:
-        # NOTE: only send raw data (not transformed) to user callback and streaming queue
-        # if user wants to use transformed data, they should use the dataflow's transform() method
-        if self._user_callback:
-            result = self._user_callback(source, data)
-            if inspect.isawaitable(result):
-                await result
-        # put msg to streaming queue, which is mainly used in feed's __aiter__()
-        if self._streaming_queue:
-            if self._streaming_queue.full():
-                self._logger.warning(
-                    "Streaming queue full, dropping oldest message - consider increasing maxsize "
-                    + f"(current: {self.STREAMING_QUEUE_MAXSIZE}) or improving consumer speed"
-                )
-                _ = self._streaming_queue.get_nowait()  # Remove oldest
-            await self._streaming_queue.put((source, data))
-        # dispatch to bound dataflow
-        if channel_key:
-            if channel_key in self._streaming_bindings:
-                dataflow = self._streaming_bindings[channel_key]
-                dataflow._run_stream_etl(data)
-            else:
-                self._logger.error(
-                    f"Missing dataflow binding for channel key {channel_key}"
-                )
-        # channel_key is None only for non-data control messages from a live websocket
-        # (subscription acks, pongs). Never happens in replay.
-
-    def bind_channel_key_to_dataflow(self, channel_key: ChannelKey, dataflow: DataFlow):
-        if channel_key in self._streaming_bindings:
-            raise ValueError(
-                f"channel key {channel_key} is already bound to a dataflow"
-            )
-        self._streaming_bindings[channel_key] = dataflow
-
-    def set_user_callback(
-        self,
-        callback: Callable[
-            [WebSocketName | str, RawMessage | ReplayData],
-            Awaitable[None] | None,
-        ],
-    ):
-        if self._user_callback is not None and self._user_callback != callback:
-            from pfeed.utils import is_lambda
-
-            msg = (
-                f"streaming callback is already set, existing callback function: {self._user_callback}\n"
-                + f"new callback function: {callback}"
-            )
-            if is_lambda(callback) or is_lambda(self._user_callback):
-                msg += (
-                    "\nNote: lambda functions are always distinct objects even with identical code, "
-                    + "consider using a named function (def) instead of a lambda to avoid this"
-                )
-            raise ValueError(msg)
-        self._user_callback = callback

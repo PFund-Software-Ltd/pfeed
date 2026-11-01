@@ -1,8 +1,8 @@
-from typing import Any, ClassVar
+from typing import ClassVar, Self
 
 # TODO: pfund is no longer a dependency
 # from pfund.data_config import DataConfig
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from pfeed.enums import DataLayer
 from pfeed.market.requests.base_request import MarketFeedBaseRequest
@@ -10,7 +10,6 @@ from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 class MarketFeedStreamRequest(MarketFeedBaseRequest):
     extract_type: ClassVar[str] = "stream"
-    data_config: DataConfig | None = None
     replay_pace: float | None = Field(
         default=0,
         description="""
@@ -39,13 +38,11 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
 
         return self.env == Environment.BACKTEST
 
-    def model_post_init(self, context: Any, /) -> None:
-        from pfund_blocks.enums.env import Environment
-
-        super().model_post_init(context)
-        is_replaying = self.env == Environment.BACKTEST
-        if is_replaying:
+    @model_validator(mode="after")
+    def _check_replay(self) -> Self:
+        if self.is_replaying():
             if not self.io:
                 raise ValueError("io is missing, cannot retrieve data for replaying")
             if self.data_layer != DataLayer.CLEANED:
                 raise ValueError("Replaying only supports CLEANED data layer")
+        return self

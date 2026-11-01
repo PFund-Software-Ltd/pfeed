@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast, no_type_check
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine, Iterator
 
     from pfund.datas.data_bar import BarData
     from pfund_blocks.entities.products.product_base import BaseProduct
+    from pfund_blocks.typing import Message
     from pfund.venues._apis.typing import ResponseData
 
     from pfeed.base.data_handler import BaseDataHandler
@@ -14,13 +15,7 @@ if TYPE_CHECKING:
     from pfeed.market.requests.base_request import MarketFeedBaseRequest
     from pfeed.market.requests.stream_request import MarketFeedStreamRequest
     from pfeed.source import BaseSource
-    from pfeed.streaming.feed_mixin import (
-        ChannelKey,
-        RawMessage,
-        ReplayData,
-        WebSocketName,
-    )
-    from pfeed.streaming.market_data_message import MarketDataMessage
+    from pfeed.streaming.mixin import StreamingFeedMixin
 
 import datetime
 import time
@@ -39,8 +34,7 @@ from pfeed.market.data_model import MarketDataModel
 from pfeed.market.requests import (
     MarketFeedDownloadRequest,
     MarketFeedRetrieveRequest,
-    # TODO: commented out until the streaming refactor, stream_request still needs pfund's DataConfig (no longer a dependency)
-    # MarketFeedStreamRequest,
+    MarketFeedStreamRequest,
 )
 from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
@@ -566,7 +560,6 @@ class MarketFeed[
         raise NotImplementedError
 
     @requires("stream")
-    @no_type_check  # TODO: remove when streaming is ready
     def stream(
         self,
         product: str,
@@ -575,8 +568,7 @@ class MarketFeed[
         rollback_period: Resolution | str | Literal["ytd", "max"] = "7d",
         start_date: datetime.date | str = "",
         end_date: datetime.date | str = "",
-        callback: Callable[[WebSocketName, RawMessage], Awaitable[None] | None]
-        | None = None,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
         data_origin: str = "",
         data_layer: DataLayer | str = DataLayer.CLEANED,
         env: Environment | str = Environment.LIVE,
@@ -585,7 +577,7 @@ class MarketFeed[
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
         **product_specs: Any,
-    ) -> Self | None:
+    ) -> Self | RunResult:
         """Stream market data, either live from the data source or by replaying historical data from storage at CLEANED data layer.
 
         Args:
@@ -602,7 +594,7 @@ class MarketFeed[
                 Only meaningful when env=BACKTEST (defines the replay range).
             start_date: Start date. If empty, derived from `rollback_period`.
                 Only meaningful when env=BACKTEST.
-            end_date: End date. If empty, defaults to today.
+            end_date: End date. If empty, defaults to yesterday.
                 Only meaningful when env=BACKTEST.
             callback: Async or sync callable invoked for each incoming message.
                 Receives the raw message dict.
@@ -642,50 +634,37 @@ class MarketFeed[
         """
         from pfund_kit.utils.temporal import get_utc_now
 
-        from pfeed.streaming.feed_mixin import StreamingFeedMixin
-
-        SUPPORTED_ENVS = [Environment.BACKTEST, Environment.PAPER, Environment.LIVE]
+        SUPPORTED_ENVS = (Environment.BACKTEST, Environment.PAPER, Environment.LIVE)
         env = Environment(env.upper())
         if env not in SUPPORTED_ENVS:
             raise ValueError(f"streaming is only supported in envs {SUPPORTED_ENVS}")
         setup_logging(env=env)
-        product: BaseProduct = self.data_source.create_product(
-            product, symbol=symbol, **product_specs
-        )
+        product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
-        if any([start_date, end_date, rollback_period]):
+        is_replaying = (env == Environment.BACKTEST)
+        if is_replaying:
             start_date, end_date = self._standardize_dates(
                 resolution, start_date, end_date, rollback_period
             )
         else:
-            today = get_utc_now().date()
-            start_date = end_date = today
+            start_date = end_date = get_utc_now().date()
 
-        is_replaying = env == Environment.BACKTEST
-        data_config = None
         data_resolution = resolution
         if not is_replaying:
             if resolution.is_bar():
-                from pfund.data_config import DataConfig
+                supported = self.data_source.get_stream_api(env).get_supported_resolutions(product)
+                if resolution not in supported:
+                    from pfund_blocks.datas.bar_data import BarData
 
-                # borrow pfund's data config to reuse its auto-resampling logic to find out data resolution
-                # e.g. '1s' is not supported by bybit, '1t' will be used instead to resample data
-                data_config = DataConfig(
-                    data_source=self.data_source.name, data_origin=data_origin
-                )
-                data_config.data_resolutions = [data_resolution]
-                from pfund.enums import TradingVenue
-
-                if product.source in TradingVenue.__members__:
-                    VenueClass = TradingVenue(product.source).venue_class
-                    resampled_data_config = data_config.auto_resample(
-                        VenueClass.METADATA.get_supported_resolutions(product)
+                    target = BarData(product, resolution)
+                    candidates = [r for r in supported if target.can_resample_from(r)]
+                    if not candidates:
+                        raise ValueError(f"{resolution!r} is not supported in streaming by {self.name}")
+                    # the coarsest one that fits, e.g. 6m with [1m, 3m, 5m, 1t] -> 3m
+                    data_resolution = min(candidates)
+                    self.logger.warning(
+                        f"{product} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
                     )
-                    if resampled_data_config.resample != data_config.resample:
-                        data_resolution = resampled_data_config.resample[resolution]
-                        self.logger.warning(
-                            f"{product} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
-                        )
         else:
             # NOTE: in replay mode, io means loading data FROM storage, not TO storage, so it must exist
             if io is None:
@@ -693,29 +672,59 @@ class MarketFeed[
 
                 io = ParquetIO()
 
-        request = cast("type[MarketFeedStreamRequest]", self.Requests.stream)(
-            data_source=self.data_source,
-            data_origin=data_origin,
-            data_config=data_config,
-            io=io,
-            data_layer=data_layer,
-            env=env,
-            product=product,
-            target_resolution=resolution,
-            data_resolution=data_resolution,
-            start_date=start_date,
-            end_date=end_date,
-            replay_pace=replay_pace,
-            store_incremental_bars=store_incremental_bars,
-            flush_interval=flush_interval,
+        request = cast("RequestT",
+            cast("type[MarketFeedStreamRequest]", self.Requests.stream)(
+                data_source=self.data_source,
+                data_origin=data_origin,
+                io=io,
+                data_layer=data_layer,
+                env=env,
+                product=product,
+                target_resolution=resolution,
+                data_resolution=data_resolution,
+                start_date=start_date,
+                end_date=end_date,
+                replay_pace=replay_pace,
+                store_incremental_bars=store_incremental_bars,
+                flush_interval=flush_interval,
+            )
         )
-        self._append_request(cast("RequestT", request))
+        self._append_request(request)
+        data_model = cast("DataModelT", request.to_data_model())
         # supporting stream guarantees StreamingFeedMixin, see BaseFeed.__init_subclass__
-        cast("StreamingFeedMixin", self)._create_stream_dataflow(user_callback=callback)
+        cast("StreamingFeedMixin", self)._create_stream_dataflow(
+            extract_func=self._stream_impl,
+            data_model=data_model,
+            callback=callback,
+        )
         return self.run() if not self.is_pipeline() else self
 
-    @no_type_check  # TODO: remove when streaming is ready
-    async def _stream_impl(
+    async def _stream_impl(self, request: RequestT, data_model: DataModelT):
+        from pfund_blocks.enums.env import Environment
+
+        stream_self = cast("StreamingFeedMixin", self)
+
+        if request.env in (Environment.PAPER, Environment.LIVE):
+            stream_api = self.data_source.get_stream_api(request.env)
+            try:
+                await stream_api.connect()
+                # NOTE: connect() returns right away, this is what notices that the stream has stopped
+                await stream_api.wait_until_disconnected()
+            finally:
+                try:
+                    # NOTE: cancelling wait_until_disconnected() doesn't disconnect the websockets
+                    await stream_api.disconnect()
+                finally:
+                    for queue in stream_self._queues.values():
+                        queue.shutdown()
+        # TODO: replaying backtest data
+        elif is_replaying := request.env == Environment.BACKTEST:
+            pass
+        else:
+            raise ValueError(f"streaming does not support env {request.env}")
+
+    # DEPRECATED: to be removed
+    async def _stream_impl_DEPRECATED(
         self,
         data_model: DataModelT,
         faucet_callback: Callable[
@@ -727,7 +736,7 @@ class MarketFeed[
     ) -> None:
         from pfund_blocks.enums.env import Environment
 
-        stream_api = self._get_stream_api(data_model.env)
+        stream_api = self.data_source.get_stream_api(data_model.env)
         is_replaying = data_model.env == Environment.BACKTEST
         if not is_replaying:
             stream_api.set_callback(faucet_callback)
@@ -839,7 +848,6 @@ class MarketFeed[
         return default_transformations
 
     @staticmethod
-    @no_type_check  # TODO: remove when streaming is ready
     def _standardize_streaming_message(
         data_source: str,
         data_origin: str,

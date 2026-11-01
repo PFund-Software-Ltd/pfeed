@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 
 if TYPE_CHECKING:
     from pfund_blocks.adapters.adapter_base import BaseAdapter
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.entities.products.product_basis import ProductBasis
+    from pfund_blocks.enums.env import Environment
 
     from pfeed.base.feed import BaseFeed
+    from pfeed.base.stream_api import BaseStreamAPI
 
 import os
 from abc import ABC
@@ -177,10 +179,12 @@ class BaseSource(ABC):
     def get_data_categories(self) -> list[DataCategory]:
         return list(self.metadata.data_categories.keys())
 
-    # TODO: undecided, sources implement get_batch_api() / get_stream_api() by convention (e.g. pfeed-bybit, crypto_hft_data);
-    # if the pattern fits all data sources, promote them to base methods here:
-    #   def get_batch_api(self, *args, **kwargs) -> Any: raise NotImplementedError
-    #   def get_stream_api(self, *args, **kwargs) -> Any: raise NotImplementedError
+    def get_batch_api(self) -> Any:
+        raise NotImplementedError(f"{self.name} has no batch API")
+
+    def get_stream_api(self, env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"]) -> BaseStreamAPI:
+        raise NotImplementedError(f"{self.name} has no stream API")
+
     # NOTE: with Ray, the source is pickled into the worker together with any API it has created,
     # e.g. request.data_source in _download_impl(). If an API can't be pickled (e.g. it holds a session or socket),
     # create it inside the implementation method (e.g. _download_impl) on the worker instead of reusing the source's, or don't use Ray

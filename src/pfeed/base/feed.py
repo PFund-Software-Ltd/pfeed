@@ -51,7 +51,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
     data_domain: ClassVar[DataCategory]
 
     def __init_subclass__(cls, **kwargs: Any):
-        from pfeed.streaming.feed_mixin import StreamingFeedMixin
+        from pfeed.streaming.mixin import StreamingFeedMixin
 
         super().__init_subclass__(**kwargs)
         # framework base classes (listing ABC directly) hold the defaults, so only concrete feeds are checked
@@ -128,6 +128,9 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
     def is_running(self) -> bool:
         return self._is_running
 
+    def is_streaming(self) -> bool:
+        return any(request.is_streaming() for request in self._requests)
+
     def _is_using_ray(self) -> bool:
         return bool(self._num_workers)
 
@@ -153,10 +156,6 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
     @property
     def dataflows(self) -> list[DataFlow]:
         return [df for dfs in self._dataflows.values() for df in dfs]
-
-    @property
-    def streaming_dataflows(self) -> list[DataFlow]:
-        return [dataflow for dataflow in self.dataflows if dataflow.is_streaming()]
 
     def set_num_workers(self, num_workers: int | None) -> None:
         """
@@ -186,7 +185,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         dataflow = DataFlow(faucet=faucet, data_model=data_model, default_transformations=default_transformations)
         return dataflow
 
-    def _create_faucet(self, request: RequestT, extract_func: Callable[..., Any]) -> Faucet:
+    def _create_faucet(self, request: RequestT, extract_func: Callable[..., Any]) -> Faucet[RequestT, DataModelT]:
         """
         Args:
             request: the request the faucet extracts data for
@@ -346,7 +345,6 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                 from itertools import islice
 
                 import ray
-
                 from pfund_kit.utils.ray import (
                     ray_logging_context,
                     setup_logger_in_ray_task,
@@ -370,7 +368,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                 ) -> DataFlow:
                     from contextlib import nullcontext
 
-                    _ = setup_logger_in_ray_task(logger_name, log_queue)
+                    setup_logger_in_ray_task(logger_name, log_queue)
                     if prefect_context is not None:
                         from prefect.context import hydrated_context
 

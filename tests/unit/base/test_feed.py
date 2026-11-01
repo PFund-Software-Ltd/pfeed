@@ -280,7 +280,6 @@ def test_attributes(feed: _Feed):
     assert not feed.is_running()
     assert not feed._is_using_ray()
     assert feed.dataflows == []
-    assert feed.streaming_dataflows == []
 
 
 def test_init_options():

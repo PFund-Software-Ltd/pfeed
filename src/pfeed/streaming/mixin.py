@@ -117,7 +117,7 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
         extract_func: Callable[..., Any],
         data_model: DataModelT,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
-    ) -> DataFlow:
+    ) -> DataFlow[DataModelT]:
         from pfund_kit.style import RichColor, TextStyle
 
         request: RequestT = self._get_current_request()
@@ -143,9 +143,9 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
         self._dataflows[request] = [dataflow]
         return dataflow
 
-    async def _run_stream_dataflows(self) -> list[DataFlow]:
+    async def _run_stream_dataflows(self) -> list[DataFlow[DataModelT]]:
         self._prepare_before_run()
-        last_run_dataflows: list[DataFlow] = []
+        last_run_dataflows: list[DataFlow[DataModelT]] = []
 
         async def _run_dataflows():
             runs = [

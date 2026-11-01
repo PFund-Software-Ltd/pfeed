@@ -24,11 +24,11 @@ from pfeed.dataflow.result import DataFlowResult
 from pfeed.enums import FlowType
 
 
-class DataFlow:
+class DataFlow[DataModelT: BaseDataModel]:
     def __init__(
         self,
-        faucet: Faucet,
-        data_model: BaseDataModel,
+        faucet: Faucet[Any, DataModelT],
+        data_model: DataModelT,
         default_transformations: list[Callable[..., Any]] | None = None,
     ):
         """
@@ -36,15 +36,12 @@ class DataFlow:
             default_transformations: the feed's transformations, run before the user's from transform()
         """
         self._logger = logging.getLogger(f"pfeed.{data_model.data_source.lower()}")
-        self._faucet: Faucet = faucet
-        self._data_model: BaseDataModel = data_model
+        self._faucet: Faucet[Any, DataModelT] = faucet
+        self._data_model: DataModelT = data_model
         self._transformations: list[Callable[..., IntoFrame | StreamingData]] = list(default_transformations or [])
         self._handler: BaseDataHandler | None = None
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
-        self._zmq_channel: str = ""
-        self._zmq_topic: str | None = None
-        self._assigned_stream_worker: str | None = None
         self._is_sealed = False
         # set by set_stream_options(), only for streaming dataflows
         self._flush_interval: float | None = None
@@ -55,11 +52,11 @@ class DataFlow:
         return f"{self._data_model.data_source}_DataFlow"
 
     @property
-    def data_model(self) -> BaseDataModel:
+    def data_model(self) -> DataModelT:
         return self._data_model
 
     @property
-    def faucet(self) -> Faucet:
+    def faucet(self) -> Faucet[Any, DataModelT]:
         return self._faucet
 
     @property
@@ -268,31 +265,6 @@ class DataFlow:
 
         return prefect_flow
 
-    def _setup_messaging(self):
-        from pfund_blocks.enums.channel import PublicChannel
-
-        from pfeed.market.data_model import MarketDataModel
-        from pfeed.streaming.zeromq import ZeroMQDataChannel
-
-        data_model: MarketDataModel = cast(MarketDataModel, self._data_model)
-        self._zmq_channel: str = ZeroMQDataChannel.create_market_data_channel(
-            # data_source=self._data_model.data_source,
-            product=data_model.product,
-            resolution=data_model.resolution,
-        )
-        if data_model.resolution.is_quote():
-            self._zmq_topic = PublicChannel.orderbook
-        elif data_model.resolution.is_tick():
-            self._zmq_topic = PublicChannel.tradebook
-        else:
-            self._zmq_topic = PublicChannel.candlestick
-
-    def set_stream_worker(self, worker_name: str):
-        if self._assigned_stream_worker is None:
-            self._setup_messaging()
-        self._assigned_stream_worker = worker_name
-        self.faucet.add_stream_worker(worker_name)
-
     def set_stream_options(self, flush_interval: float, **write_stream_kwargs: Any):
         """Sets how streamed data is stored, before setup_handler().
 
@@ -328,15 +300,10 @@ class DataFlow:
                 # else:
                 #     self._result = DataFlowResult.materialized(data=data)
                 # return self._result
-                # DEPRECATED: to be updated to perform E(TL)
                 # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
-                # if self.faucet.msg_queue:
-                #     self.faucet.msg_queue.send(
-                #         channel=self._zmq_channel,
-                #         topic=self._zmq_topic,
-                #         data=(self.name, msg),
-                #         target_identity=self._assigned_stream_worker,
-                #     )
+                if self.faucet.is_using_ray():
+                    self.faucet.send_to_stream_worker(self, msg)
+                # DEPRECATED: to be updated to perform E(TL)
                 # else:
                 #     try:
                 #         data = cast("StreamingData", self._transform(msg))

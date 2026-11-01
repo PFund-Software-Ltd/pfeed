@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, ParamSpec, cast
+from typing import TYPE_CHECKING, Any, Concatenate, ParamSpec, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from pfund_blocks.typing import Message
+
     from pfeed.base.data_model import BaseDataModel
     from pfeed.base.request import BaseRequest
+    from pfeed.dataflow.dataflow import DataFlow
     from pfeed.source import BaseSource
-    from pfeed.streaming.zeromq import ZeroMQ
+    from pfeed.streaming.zeromq import ZeroMQ, ZeroMQChannel, ZeroMQTopic
 
     ExtractFuncParams = ParamSpec("ExtractFuncParams")
 
@@ -22,12 +25,6 @@ import polars as pl
 
 
 class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
-    """Faucet is the starting point of a dataflow
-    It contains a data model and a flow function to perform the extraction.
-    """
-
-    STREAMING_QUEUE_MAXSIZE: ClassVar[int] = 1000
-
     def __init__(
         self,
         request: RequestT,
@@ -41,7 +38,8 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         self._extract_func = extract_func
         self._stream_task: asyncio.Task[None] | None = None
         self._msg_queue: ZeroMQ | None = None
-        self._stream_workers: list[str] = []
+        self._stream_workers: dict[DataFlow[DataModelT], str] = {}  # dataflow -> worker name
+        self._zmq_routes: dict[DataFlow[DataModelT], tuple[ZeroMQChannel, ZeroMQTopic]] = {}
 
     @property
     def name(self) -> str:
@@ -59,25 +57,6 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
     def msg_queue(self) -> ZeroMQ:
         assert self._msg_queue is not None, "msg_queue is not set"
         return self._msg_queue
-
-    def _setup_messaging(self):
-        import zmq
-
-        from pfeed.streaming.zeromq import ZeroMQ
-
-        assert self._logger is not None, "logger is not set"
-        self._msg_queue = ZeroMQ(
-            name="Faucet",
-            logger=self._logger,
-            sender_type=zmq.ROUTER,
-        )
-        self._msg_queue.bind(self._msg_queue.sender)
-
-    def add_stream_worker(self, worker_name: str):
-        if not self._stream_workers:
-            self._setup_messaging()
-        if worker_name not in self._stream_workers:
-            self._stream_workers.append(worker_name)
 
     def open_batch(self, data_model: DataModelT) -> pl.LazyFrame | None:
         policy = self._request.retry_policy
@@ -111,6 +90,43 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             self._stream_task = asyncio.create_task(self._extract_func(self._request, data_model))
         return self._stream_task
 
+    def _register_zmq_route(self, dataflow: DataFlow[DataModelT]):
+        import zmq
+        from pfund_blocks.resolution import Resolution
+
+        from pfeed.market.data_model import MarketDataModel
+        from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel
+
+        if self._msg_queue is None:
+            self._msg_queue = ZeroMQ(name="Faucet", logger=self._logger, sender_type=zmq.ROUTER)
+            self._msg_queue.bind(self._msg_queue.sender)
+
+        data_model: MarketDataModel = cast(MarketDataModel, dataflow.data_model)
+        resolution = Resolution(data_model.resolution)
+        zmq_channel = ZeroMQDataChannel.create_market_data_channel(
+            product=data_model.product,
+            resolution=resolution,
+        )
+        zmq_topic = resolution.to_channel()
+        self._zmq_routes[dataflow] = (zmq_channel, zmq_topic)
+
+    def add_stream_worker(self, dataflow: DataFlow[DataModelT], worker_name: str):
+        self._stream_workers[dataflow] = worker_name
+        self._register_zmq_route(dataflow)
+
+    def is_using_ray(self) -> bool:
+        """Checks if using ray for streaming"""
+        return bool(self._stream_workers)
+
+    def send_to_stream_worker(self, dataflow: DataFlow[DataModelT], msg: Message):
+        channel, topic = self._zmq_routes[dataflow]
+        self.msg_queue.send(
+            channel=channel,
+            topic=topic,
+            data=(str(dataflow), msg),
+            target_identity=self._stream_workers[dataflow],
+        )
+
     async def close_stream(self):
         if self._stream_task is not None:
             # NOTE: all dataflows call this, swap first so that only the first one cancels
@@ -119,6 +135,8 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             stream_task.cancel()
             await asyncio.wait({stream_task})
         if self._msg_queue:
-            self._msg_queue.terminate(target_identities=self._stream_workers)
+            # workers can serve several dataflows, each only needs one STOP
+            self._msg_queue.terminate(target_identities=list(set(self._stream_workers.values())))
             self._msg_queue = None
             self._stream_workers.clear()
+            self._zmq_routes.clear()

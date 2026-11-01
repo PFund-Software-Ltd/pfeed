@@ -17,24 +17,29 @@ from enum import StrEnum
 import zmq
 from msgspec import msgpack
 
+type ZeroMQChannel = str
+type ZeroMQTopic = str
+
 
 class SocketMethod(StrEnum):
     bind = "bind"
     connect = "connect"
 
 
-# REVIEW
 class ZeroMQDataChannel(StrEnum):
     signal = "signal"
     logging = "logging"
 
     @staticmethod
     def create_private_channel(account: BaseAccount, channel: PrivateChannel):
-        return f"{account.venue}.{account.name}.{channel}"
+        # NOTE: the trailing "." marks the end of the account name, see create_market_data_channel()
+        return f"{account.venue}.{channel}.{account.name}."
 
     @staticmethod
     def create_market_data_channel(product: BaseProduct, resolution: Resolution) -> str:
-        return f"{product.source}.{resolution!r}.{product.name}"
+        # NOTE: the trailing "." marks the end of the product name. A subscription matches any channel starting with it,
+        # without it, subscribing to "BYBIT.1m.BTC" would also receive "BYBIT.1m.BTC_USDT"
+        return f"{product.source}.{resolution!r}.{product.name}."
 
 
 class ZeroMQSignal(StrEnum):

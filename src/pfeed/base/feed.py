@@ -99,7 +99,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._data_source: SourceT = data_source
         self.logger: ColoredLogger = cast("ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}"))
         self._pipeline_mode = pipeline_mode
-        self._dataflows: dict[RequestT, list[DataFlow]] = {}
+        self._dataflows: dict[RequestT, list[DataFlow[DataModelT]]] = {}
         self._requests: list[RequestT] = []
         self._num_workers: int | None = None
         self._is_running = False
@@ -154,7 +154,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         return self.data_source.name
 
     @property
-    def dataflows(self) -> list[DataFlow]:
+    def dataflows(self) -> list[DataFlow[DataModelT]]:
         return [df for dfs in self._dataflows.values() for df in dfs]
 
     def set_num_workers(self, num_workers: int | None) -> None:
@@ -176,10 +176,12 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
             raise RuntimeError(f"{self} is already running")
         self._is_running = is_running
 
-    @staticmethod
     def _create_dataflow(
-        faucet: Faucet, data_model: BaseDataModel, default_transformations: list[Callable[..., Any]]
-    ) -> DataFlow:
+        self,
+        faucet: Faucet[RequestT, DataModelT],
+        data_model: DataModelT,
+        default_transformations: list[Callable[..., Any]],
+    ) -> DataFlow[DataModelT]:
         from pfeed.dataflow.dataflow import DataFlow
 
         dataflow = DataFlow(faucet=faucet, data_model=data_model, default_transformations=default_transformations)
@@ -296,7 +298,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._dataflows = {}
         self._set_running(False)
 
-    def _create_batch_dataflows(self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]) -> list[DataFlow]:
+    def _create_batch_dataflows(self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]) -> list[DataFlow[DataModelT]]:
         """Creates batch dataflows for the current request, one per data model
 
         Args:
@@ -316,7 +318,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._dataflows[request] = dataflows
         return dataflows
 
-    def _run_batch_dataflows(self, use_prefect: bool, prefect_kwargs: dict[str, Any]) -> list[DataFlow]:
+    def _run_batch_dataflows(self, use_prefect: bool, prefect_kwargs: dict[str, Any]) -> list[DataFlow[DataModelT]]:
         from importlib.util import find_spec
 
         from pfund_kit.utils.progress_bar import ProgressBar, track
@@ -328,7 +330,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         disable_progress_bar = not get_config().show_progress_bar
         self._prepare_before_run()
 
-        def _run_dataflow(dataflow: DataFlow) -> DataFlowResult:
+        def _run_dataflow(dataflow: DataFlow[DataModelT]) -> DataFlowResult:
             return dataflow.run_batch(
                 flow_type=FlowType.prefect if use_prefect else FlowType.native,
                 prefect_kwargs=prefect_kwargs,
@@ -337,7 +339,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         # Collect the result-bearing dataflow objects here. For non-Ray these are the
         # same objects as in `self._dataflows` (mutated in place); for Ray they're the
         # deserialized copies returned from workers (which carry the actual results).
-        last_run_dataflows: list[DataFlow] = []
+        last_run_dataflows: list[DataFlow[DataModelT]] = []
 
         try:
             if self._is_using_ray():
@@ -364,8 +366,8 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
 
                 @ray.remote
                 def ray_task(
-                    logger_name: str, log_queue: Queue, prefect_context: dict[str, Any] | None, dataflow: DataFlow
-                ) -> DataFlow:
+                    logger_name: str, log_queue: Queue, prefect_context: dict[str, Any] | None, dataflow: DataFlow[DataModelT]
+                ) -> DataFlow[DataModelT]:
                     from contextlib import nullcontext
 
                     setup_logger_in_ray_task(logger_name, log_queue)
@@ -389,9 +391,9 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                         pending = iter(enumerate(dataflows))
                         # dataflows finish in any order, keep the results in submission order so run() is deterministic
                         ref_to_index: dict[ray.ObjectRef, int] = {}
-                        results: list[DataFlow | None] = [None] * len(dataflows)
+                        results: list[DataFlow[DataModelT] | None] = [None] * len(dataflows)
 
-                        def submit_next(index: int, dataflow: DataFlow) -> ray.ObjectRef:
+                        def submit_next(index: int, dataflow: DataFlow[DataModelT]) -> ray.ObjectRef:
                             ref = submit(dataflow)
                             ref_to_index[ref] = index
                             return ref
@@ -410,7 +412,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                                 pbar.advance(1)
                                 if (item := next(pending, None)) is not None:
                                     unfinished.append(submit_next(*item))
-                        last_run_dataflows.extend(cast("list[DataFlow]", results))
+                        last_run_dataflows.extend(cast("list[DataFlow[DataModelT]]", results))
                     except BaseException:
                         # e.g. KeyboardInterrupt or a crashed worker: cancel the in-flight tasks,
                         # otherwise they keep running (and writing to storage) after run() returns.

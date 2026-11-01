@@ -65,13 +65,16 @@ def io(tmp_path: Path) -> ParquetIO:
 
 
 def _faucet(extract_func: Any, extract_type: str = 'download') -> Faucet:
-    # the faucet only reads the request's data_source.name, extract_type and retry_policy
+    # the faucet only reads the request's data_source.name, extract_type and retry_policy,
+    # the dataflow only calls its is_streaming() and is_replaying()
     from pfeed.dataflow.retry_policy import RetryPolicy
 
     request = cast('BaseRequest', SimpleNamespace(
         data_source=SimpleNamespace(name='TEST'),
         extract_type=extract_type,
         retry_policy=RetryPolicy(),
+        is_streaming=lambda: False,
+        is_replaying=lambda: False,
     ))
     return Faucet(request, extract_func)
 

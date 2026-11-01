@@ -6,11 +6,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from narwhals.typing import IntoFrame
-    from prefect import Flow as PrefectDataFlow
     from pfund_blocks.typing import Message
+    from prefect import Flow as PrefectDataFlow
 
     from pfeed.base.data_handler import BaseDataHandler
     from pfeed.base.data_model import BaseDataModel
+    from pfeed.base.request import BaseRequest
     from pfeed.dataflow.faucet import Faucet
     from pfeed.enums import DataLayer
     from pfeed.io.base_io import BaseIO
@@ -27,7 +28,7 @@ from pfeed.enums import FlowType
 class DataFlow[DataModelT: BaseDataModel]:
     def __init__(
         self,
-        faucet: Faucet[Any, DataModelT],
+        faucet: Faucet[BaseRequest, DataModelT],
         data_model: DataModelT,
         default_transformations: list[Callable[..., Any]] | None = None,
     ):
@@ -36,9 +37,9 @@ class DataFlow[DataModelT: BaseDataModel]:
             default_transformations: the feed's transformations, run before the user's from transform()
         """
         self._logger = logging.getLogger(f"pfeed.{data_model.data_source.lower()}")
-        self._faucet: Faucet[Any, DataModelT] = faucet
+        self._faucet: Faucet[BaseRequest, DataModelT] = faucet
         self._data_model: DataModelT = data_model
-        self._transformations: list[Callable[..., IntoFrame | StreamingData]] = list(default_transformations or [])
+        self._transformations: list[Callable[..., Any]] = list(default_transformations or [])
         self._handler: BaseDataHandler | None = None
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
@@ -56,7 +57,7 @@ class DataFlow[DataModelT: BaseDataModel]:
         return self._data_model
 
     @property
-    def faucet(self) -> Faucet[Any, DataModelT]:
+    def faucet(self) -> Faucet[BaseRequest, DataModelT]:
         return self._faucet
 
     @property
@@ -74,17 +75,10 @@ class DataFlow[DataModelT: BaseDataModel]:
             return f"{self.name}.{self.faucet.extract_type}.{self.data_model}"
 
     def is_streaming(self) -> bool:
-        return self.faucet.extract_type == "stream"
+        return self.faucet.request.is_streaming()
 
     def is_replaying(self) -> bool:
-        # In BACKTEST the streaming dataflow's storage is the source it READS replay
-        # data from, not a write destination — so it must never write back.
-        from pfund_blocks.enums.env import Environment
-
-        return (
-            self.is_streaming()
-            and getattr(self._data_model, "env", None) == Environment.BACKTEST
-        )
+        return self.is_streaming() and self.faucet.request.is_replaying()
 
     def is_sealed(self) -> bool:
         return self._is_sealed
@@ -99,10 +93,10 @@ class DataFlow[DataModelT: BaseDataModel]:
             )
         self._transformations.extend(funcs)
 
-    def _transform(self, data: IntoFrame | StreamingData) -> IntoFrame | StreamingData:
+    def _transform(self, data: IntoFrame | Message) -> Any:
         for transform in self._transformations:
             if self.is_streaming():
-                data: StreamingData = cast("StreamingData", transform(data))
+                data = transform(data)
             else:
                 if self._flow_type == FlowType.prefect:
                     from prefect import task
@@ -149,7 +143,7 @@ class DataFlow[DataModelT: BaseDataModel]:
             sink=sink,
         )
 
-    def _load(self, data: IntoFrame | StreamingData) -> bool:
+    def _load(self, data: Any) -> bool:
         """Returns whether the data was loaded, False if the dataflow has no handler."""
         if self._handler is None:
             return False
@@ -290,42 +284,29 @@ class DataFlow[DataModelT: BaseDataModel]:
         try:
             while True:
                 msg = await queue.get()
-                # TEMP: reference from _run_batch_etl
-                # is_loaded = self._load(data)
-                # # an empty partition reads back as None, so keep the empty frame itself as the result
-                # if is_loaded and not is_empty and (handler := self.handler) is not None:
-                #     # Lazy-load from storage on access so Ray workers don't copy large frames back to main.
-                #     # read() also returns the metadata, the result only needs the data
-                #     self._result = DataFlowResult.lazy(loader=lambda: handler.read()[0])
-                # else:
-                #     self._result = DataFlowResult.materialized(data=data)
-                # return self._result
-                # NOTE: if zeromq is in use (when using ray), send msg to Ray's worker and let it perform ETL
                 if self.faucet.is_using_ray():
                     self.faucet.send_to_stream_worker(self, msg)
-                # DEPRECATED: to be updated to perform E(TL)
-                # else:
-                #     try:
-                #         data = cast("StreamingData", self._transform(msg))
-                #     # e.g. ValueError from StreamingMessage.__post_init__ validation, ValidationError from msgspec.convert
-                #     except Exception:
-                #         self._logger.exception(
-                #             f"{self.name} failed to transform streaming message:"
-                #         )
-                #         # REVIEW: we will NOT load the bad data to storage, unless it can handle raw msg, for now, just return
-                #         # data = msg
-                #         return
-                #     self._load(data)
+                    continue
+                try:
+                    data = self._transform(msg)
+                # e.g. a transformation can't handle this message
+                except Exception:
+                    self._logger.exception(f"{self} transformation failed, skipping message: {msg}")
+                    continue
+                self._load(data)
         except asyncio.QueueShutDown:
             pass
         await extract
 
-    async def run_stream(self, queue: asyncio.Queue[Message], flow_type: FlowType = FlowType.native):
+    async def run_stream(self, queue: asyncio.Queue[Message], flow_type: FlowType = FlowType.native) -> None:
         if not self.is_sealed():
             raise ValueError(f"cannot run stream on unsealed dataflow {self.name}")
 
         self._logger.info(f"{self} to {self.handler!r}")
         self._flow_type = FlowType[flow_type.lower()]
+        # a stream has no final data, its result only reports whether it failed,
+        # so it stays successful unless an error below overwrites it
+        self._result = DataFlowResult.no_data()
         # a failed stream is recorded as the dataflow's result, so one failure doesn't stop the other dataflows;
         # cancellation (graceful shutdown) is not an Exception, it propagates and is not a failure
         try:

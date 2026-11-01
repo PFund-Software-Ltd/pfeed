@@ -23,6 +23,7 @@ else:
     class _FeedBase: ...
 
 import asyncio
+import contextlib
 import inspect
 
 from pfund_blocks.enums.env import Environment
@@ -92,7 +93,9 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
                 await result
         # NOTE: error messages can have no product/resolution, so they have no queue
         if (queue := self._queues.get((msg["product"], msg["resolution"]))) is not None:
-            await queue.put(msg)
+            # NOTE: the queue is shut down when its dataflow has failed, drop the message, otherwise every new message raises here
+            with contextlib.suppress(asyncio.QueueShutDown):
+                await queue.put(msg)
 
     def _set_user_callback(self, callback: Callable[[Message], Awaitable[None] | None]):
         # NOTE: a connection has only one callback, a different one would silently replace the existing one
@@ -147,9 +150,16 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
         self._prepare_before_run()
         last_run_dataflows: list[DataFlow[DataModelT]] = []
 
+        async def _run_dataflow(dataflow: DataFlow[DataModelT], queue: asyncio.Queue[Message]):
+            await dataflow.run_stream(queue=queue)
+            # NOTE: run_stream() records a failure instead of raising.
+            # nothing reads this queue anymore, if it fills up, it would block the websocket reader shared with other dataflows
+            if not dataflow.result.success:
+                queue.shutdown(immediate=True)
+
         async def _run_dataflows():
             runs = [
-                dataflow.run_stream(queue=self._queues[self._create_queue_key(request)])
+                _run_dataflow(dataflow, self._queues[self._create_queue_key(request)])
                 for request, dataflows in self._dataflows.items()
                 for dataflow in dataflows
             ]

@@ -88,8 +88,8 @@ class TestInit:
 
     def test_accepts_pair_whose_socket_type_is_zero(self, make):
         assert zmq.PAIR == 0
-        assert make(sender_type=zmq.PAIR).sender.socket_type == zmq.PAIR
-        assert make(receiver_type=zmq.PAIR).receiver.socket_type == zmq.PAIR
+        assert make(sender_type=zmq.PAIR).sender.type == zmq.PAIR
+        assert make(receiver_type=zmq.PAIR).receiver.type == zmq.PAIR
 
     def test_sets_immediate_on_sender(self, make):
         assert make(sender_type=zmq.PUSH).sender.getsockopt(zmq.IMMEDIATE) == 1
@@ -273,7 +273,7 @@ class TestSendAndRecv:
         push = make(sender_type=zmq.PUSH, sender_method="connect")
         sender = mocker.Mock()
         sender.send_multipart.side_effect = zmq.error.ContextTerminated()
-        sender.socket_type.name = "PUSH"
+        sender.type = zmq.PUSH
         push._sender = sender
 
         push.send("channel", "topic", "data")

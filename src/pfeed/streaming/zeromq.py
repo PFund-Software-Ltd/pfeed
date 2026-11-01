@@ -111,11 +111,11 @@ class ZeroMQ:
 
     @property
     def sender_name(self) -> str:
-        return ".".join([self.name, self._sender.socket_type.name, "sender"])
+        return ".".join([self.name, zmq.SocketType(self.sender.type).name, "sender"])
 
     @property
     def receiver_name(self) -> str:
-        return ".".join([self.name, self._receiver.socket_type.name, "receiver"])
+        return ".".join([self.name, zmq.SocketType(self.receiver.type).name, "receiver"])
 
     @property
     def sender(self) -> zmq.Socket:
@@ -149,7 +149,7 @@ class ZeroMQ:
 
     def _is_sender_support_target_identity(self) -> bool:
         # EXTEND: only ROUTER socket supports target identity for now
-        return self.sender.socket_type == zmq.ROUTER
+        return self.sender.type == zmq.ROUTER
 
     def bind(self, socket: zmq.Socket, port: int | None = None, url: str = DEFAULT_URL):
         """Binds a socket which uses bind method to a port."""
@@ -244,9 +244,9 @@ class ZeroMQ:
             ]
             if target_identity and self._is_sender_support_target_identity():
                 msg.insert(0, target_identity.encode())
-            self._sender.send_multipart(msg, zmq.NOBLOCK)
+            self.sender.send_multipart(msg, zmq.NOBLOCK)
         except zmq.error.Again:  # raised when send queue is full and using zmq.NOBLOCK
-            hwm = self._sender.getsockopt(zmq.SNDHWM)
+            hwm = self.sender.getsockopt(zmq.SNDHWM)
             self._logger.warning(
                 f"{self.sender_name} zmq.error.Again, HWM={hwm}, {channel=}, {topic=}"
             )
@@ -262,9 +262,10 @@ class ZeroMQ:
     def recv(self) -> tuple[str, str, Any, float] | None:
         try:
             # REVIEW: blocks for 1ms to avoid busy-waiting and 100% CPU usage
+            assert self._poller, "receiver is not initialized"
             events = self._poller.poll(1)
             if events:
-                msg = self._receiver.recv_multipart(zmq.NOBLOCK)
+                msg = self.receiver.recv_multipart(zmq.NOBLOCK)
                 channel, topic, data, msg_ts = msg
                 return (
                     channel.decode(),

@@ -240,14 +240,14 @@ class TestSendAndRecv:
         assert msg[:3] == ("channel", "topic", "data")
 
     @pytest.mark.parametrize("target_identity", ["unknown", None])
-    def test_router_logs_undeliverable_message(self, make, logger, target_identity):
+    def test_router_raises_on_undeliverable_message(self, make, target_identity):
         router = make(sender_type=zmq.ROUTER)
         router.bind(router.sender)
 
-        router.send("channel", "topic", "data", target_identity=target_identity)
+        with pytest.raises(zmq.ZMQError) as exc_info:
+            router.send("channel", "topic", "data", target_identity=target_identity)
 
-        logger.exception.assert_called_once()
-        assert f"errno={zmq.EHOSTUNREACH}" in logger.exception.call_args.args[0]
+        assert exc_info.value.errno == zmq.EHOSTUNREACH
 
     def test_again_logs_channel_and_topic_but_not_the_message(self, make, logger):
         push = make(sender_type=zmq.PUSH, sender_method="connect")  # no peer, so zmq.Again
@@ -332,6 +332,25 @@ class TestTerminate:
             msg = _recv(dealer)
             assert msg is not None
             assert msg[:3] == ("signal", "router_zmq.ROUTER.sender", "STOP")
+
+    def test_dead_target_does_not_stop_terminate(self, make, logger):
+        router = make("router", sender_type=zmq.ROUTER)
+        router.bind(router.sender)
+        dealer = make("worker", receiver_type=zmq.DEALER)
+        dealer.receiver.setsockopt(zmq.IDENTITY, b"worker-1")
+        dealer.receiver.setsockopt(zmq.PROBE_ROUTER, 1)
+        dealer.connect(dealer.receiver, router.get_ports_in_use(router.sender)[0])
+        assert router.sender.poll(TIMEOUT_SECONDS * 1000)
+        router.sender.recv_multipart()
+
+        router.terminate(target_identities=["dead-worker", "worker-1"])
+
+        msg = _recv(dealer)
+        assert msg is not None
+        assert msg[2] == "STOP"
+        assert router.sender.closed
+        logger.warning.assert_called_once()
+        assert "dead-worker" in logger.warning.call_args.args[0]
 
     def test_sends_stop_without_target_identities(self, make):
         push, pull = _make_push_and_pull(make)

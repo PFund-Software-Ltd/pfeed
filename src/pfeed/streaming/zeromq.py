@@ -195,20 +195,18 @@ class ZeroMQ:
     def terminate(self, target_identities: list[str] | None = None):
         # send STOP signal to notice listeners, which probably have a while True loop running
         if self._sender:
-            if target_identities and self._is_sender_support_target_identity():
-                for target_identity in target_identities:
+            has_targets = target_identities and self._is_sender_support_target_identity()
+            for target_identity in target_identities if has_targets else [None]:
+                try:
                     self.send(
                         channel=ZeroMQDataChannel.signal,
                         topic=self.sender_name,
                         data=ZeroMQSignal.STOP,
                         target_identity=target_identity,
                     )
-            else:
-                self.send(
-                    channel=ZeroMQDataChannel.signal,
-                    topic=self.sender_name,
-                    data=ZeroMQSignal.STOP,
-                )
+                # NOTE: send() raises this when the target is gone, there is nothing left to stop, the sockets below must still be closed
+                except zmq.ZMQError as err:
+                    self._logger.warning(f"{self.sender_name} can't send STOP to {target_identity} (errno={err.errno})")
 
         if self._poller and self._receiver:
             self._poller.unregister(self._receiver)
@@ -238,6 +236,8 @@ class ZeroMQ:
         Args:
             data: A msgpack serializable object.
             topic: A message key used to group messages within a channel.
+        Raises:
+            zmq.ZMQError: EHOSTUNREACH when a ROUTER's target is gone, it won't recover, unlike the errors that are only logged.
         """
         try:
             msg_ts = time.time()
@@ -258,6 +258,8 @@ class ZeroMQ:
         except zmq.error.ContextTerminated:
             self._logger.debug(f"{self.sender_name} context terminated")
         except zmq.ZMQError as err:
+            if err.errno == zmq.EHOSTUNREACH:
+                raise
             self._logger.exception(
                 f"{self.sender_name} send() exception (errno={err.errno}):"
             )

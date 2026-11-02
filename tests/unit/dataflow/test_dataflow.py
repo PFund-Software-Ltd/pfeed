@@ -100,8 +100,7 @@ def _add_one(df: pl.LazyFrame) -> pl.LazyFrame:
 
 def test_attributes(df: pl.DataFrame):
     dataflow = _dataflow(df.lazy())
-    assert dataflow.name == 'TEST_DataFlow'
-    assert str(dataflow) == 'TEST_DataFlow.download'
+    assert str(dataflow) == 'TEST.download'
     assert dataflow.data_model == _DataModel(data_source='TEST')
     assert dataflow.faucet.extract_type == 'download'
     assert dataflow.handler is None
@@ -316,7 +315,7 @@ def test_run_batch_extract_error_is_recorded(caplog: pytest.LogCaptureFixture):
     assert not result.success
     assert result.error is err
     assert dataflow.result is result
-    assert 'Error in running TEST_DataFlow.download' in caplog.text
+    assert 'Error in running TEST.download' in caplog.text
 
 
 def test_run_batch_transform_error_is_recorded(df: pl.DataFrame):
@@ -367,7 +366,7 @@ def test_run_batch_invalid_flow_type_raises(df: pl.DataFrame):
 def test_to_prefect_dataflow_defaults():
     dataflow = _dataflow(None)
     prefect_flow = dataflow.to_prefect_dataflow()
-    assert prefect_flow.name == 'TEST_DataFlow'
+    assert prefect_flow.name == 'TEST.download'
     assert prefect_flow.flow_run_name == 'TEST'
     assert prefect_flow.log_prints is True
 

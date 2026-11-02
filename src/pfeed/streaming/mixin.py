@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -8,11 +8,15 @@ if TYPE_CHECKING:
     from pfund_blocks.typing import Message, ProductName
     from ray.util.queue import Queue
 
+    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.base.feed import BaseFeed
     from pfeed.dataflow.dataflow import DataFlow
+    from pfeed.dataflow.faucet import WorkerName
     from pfeed.dataflow.result import RunResult
+    from pfeed.engine import DataEngine
     from pfeed.market.data_model import MarketDataModel
     from pfeed.market.requests.stream_request import MarketFeedStreamRequest
+    from pfeed.streaming.zeromq import ZeroMQChannel
 
     # NOTE: only for the type checker, so that it knows the mixin's self is a feed; at runtime the mixin inherits an empty class.
     # the type arguments are Any because a specific request type conflicts with the one the feed passes to MarketFeed,
@@ -25,22 +29,28 @@ else:
 import asyncio
 import contextlib
 import inspect
+import time
 
 from pfund_blocks.enums.env import Environment
 
 
 class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDataModel](_FeedBase):
     QUEUE_MAXSIZE: ClassVar[int] = 1000
+    WORKER_READY_TIMEOUT: ClassVar[float] = 60  # seconds
 
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         # NOTE: one queue per dataflow
         self._queues: dict[tuple[ProductName, str], asyncio.Queue[Any]] = {}
         self._user_callback: Callable[[Message], Awaitable[None] | None] | None = None
+        self._engine: DataEngine | None = None
+
+    def _set_engine(self, engine: DataEngine) -> None:
+        self._engine = engine
 
     def __aiter__(
         self,
-    ) -> AsyncGenerator[tuple[Message], None]:
+    ) -> AsyncGenerator[tuple[Message]]:
         if not self.is_streaming():
             raise RuntimeError("No streaming dataflow to iterate over")
         # get the first dataflow, doesn't matter, they share the same faucet
@@ -126,20 +136,20 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
         request: RequestT = self._get_current_request()
         existing_dataflow = self.dataflows[0] if self.dataflows else None
         existing_faucet = existing_dataflow.faucet if existing_dataflow else None
-        existing_request = existing_faucet.request if existing_faucet else None
+        existing_request = cast("RequestT", existing_faucet.request) if existing_faucet else None
         if existing_request and request.env != existing_request.env:
             raise ValueError(f"cannot stream {request.env} and {existing_request.env} in the same feed")
         self.logger.debug(f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN)
 
         if callback:
             self._set_user_callback(callback)
-            
+
         if request.env in (Environment.PAPER, Environment.LIVE):
             stream_api = self.data_source.get_stream_api(request.env)
             stream_api.add_channel(request.product, request.data_resolution)
             stream_api.set_callback(self._callback)
             self._create_queue(request)
-            
+
         faucet = existing_faucet or self._create_faucet(request=request, extract_func=extract_func)
         default_transformations = self._get_default_transformations(request)
         dataflow = self._create_dataflow(faucet=faucet, data_model=data_model, default_transformations=default_transformations)
@@ -148,7 +158,6 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
 
     async def _run_stream_dataflows(self) -> list[DataFlow[DataModelT]]:
         self._prepare_before_run()
-        last_run_dataflows: list[DataFlow[DataModelT]] = []
 
         async def _run_dataflow(dataflow: DataFlow[DataModelT], queue: asyncio.Queue[Message]):
             await dataflow.run_stream(queue=queue)
@@ -175,13 +184,20 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
                 await asyncio.gather(*[df.end_stream() for df in self.dataflows])
 
         try:
-            # TODO
             if self._is_using_ray():
                 import ray
+                import zmq
                 from pfund_kit.utils.ray import (
                     ray_logging_context,
                     setup_logger_in_ray_task,
                     setup_ray,
+                )
+
+                from pfeed.dataflow.result import DataFlowResult
+                from pfeed.streaming.zeromq import (
+                    ZeroMQ,
+                    ZeroMQDataChannel,
+                    ZeroMQSignal,
                 )
 
                 setup_ray()
@@ -190,28 +206,141 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
                 def ray_task(
                     logger_name: str,
                     log_queue: Queue,
+                    worker_name: WorkerName,
+                    transformations: dict[ZeroMQChannel, list[Callable[..., Any]]],
+                    handlers: dict[ZeroMQChannel, BaseDataHandler | None],
+                    router_ports: list[int],
+                    engine_ports: list[int],
                 ) -> None:
-                    setup_logger_in_ray_task(logger_name, log_queue)
+                    logger = setup_logger_in_ray_task(logger_name, log_queue)
+                    msg_queue = ZeroMQ(
+                        name=f"{logger_name}.stream.{worker_name}",
+                        logger=logger,
+                        # NOTE: pushes the transformed data to the data engine's PULL, not needed without the engine
+                        sender_type=zmq.PUSH if engine_ports else None,
+                        sender_method="connect",
+                        receiver_type=zmq.DEALER,
+                    )
+                    try:
+                        for port in engine_ports:
+                            msg_queue.connect(msg_queue.sender, port)
+                        # NOTE: send() drops messages until PUSH has connected, so wait for it before sending the probe below,
+                        # then the main process's wait for the probes covers this connection too; if it never connects, the main process times out and kills this worker
+                        if engine_ports:
+                            msg_queue.sender.poll(flags=zmq.POLLOUT)
+                        # NOTE: must be set before connect(); the identity is the name the ROUTER sends to,
+                        # the probe tells the ROUTER this worker is routable, the main process waits for it before streaming
+                        msg_queue.receiver.setsockopt(zmq.IDENTITY, worker_name.encode())
+                        msg_queue.receiver.setsockopt(zmq.PROBE_ROUTER, 1)
+                        for port in router_ports:
+                            msg_queue.connect(msg_queue.receiver, port)
+                        while True:
+                            msg = msg_queue.recv()
+                            if msg is None:
+                                continue
+                            channel, topic, data, _msg_ts = msg
+                            if channel == ZeroMQDataChannel.signal:
+                                if data == ZeroMQSignal.STOP:
+                                    # TODO: stream IO isn't ready yet. Each worker has its own copies of the handlers holding their own buffered rows,
+                                    # so they probably need flushing here before stopping (or somewhere else), otherwise the rows are lost
+                                    logger.debug(f"Ray {worker_name} received STOP signal, terminating...")
+                                    break
+                            else:
+                                try:
+                                    for transform in transformations[channel]:
+                                        data = transform(data)
+                                        if data is None:
+                                            raise TypeError(f"transform function {transform} should return transformed data, but got None")
+                                # e.g. a transformation can't handle this message
+                                except Exception:
+                                    logger.exception(f"{worker_name} transformation failed on {channel}, skipping message: {msg}")
+                                    continue
+                                if engine_ports:
+                                    msg_queue.send(channel=channel, topic=topic, data=data)
+                                if handler := handlers[channel]:
+                                    handler.write_stream(data)
+                    except Exception:
+                        logger.exception(f"Error in streaming Ray {worker_name}:")
+                        raise
+                    finally:
+                        msg_queue.terminate()
+
+                assert self._num_workers is not None, "num_workers is not set"
+                dataflows = self.dataflows
+                # NOTE: each stream worker holds a CPU for the whole stream, workers beyond Ray's free CPUs would never start
+                num_cpus = max(1, int(ray.available_resources().get("CPU", 1)))
+                num_workers = min(self._num_workers, len(dataflows), num_cpus)
+                # NOTE: a dataflow stays on one worker, so its messages stay in order and its stateful transformations stay in one process
+                dataflows_per_worker: dict[WorkerName, list[DataFlow[DataModelT]]] = {
+                    f"worker-{i + 1}": dataflows[i::num_workers] for i in range(num_workers)
+                }
 
                 with ray_logging_context(self.logger) as log_queue:
+                    futures: list[ray.ObjectRef] = []
                     try:
-                        pass
+                        for worker_name, worker_dataflows in dataflows_per_worker.items():
+                            for dataflow in worker_dataflows:
+                                dataflow.faucet.add_stream_worker(dataflow, worker_name)
+                        # NOTE: all dataflows share one faucet, so there is only one ROUTER to connect to
+                        msg_queue = dataflows[0].faucet.msg_queue
+                        router = msg_queue.sender
+                        router_ports = msg_queue.get_ports_in_use(router)
+                        # NOTE: stays empty when the feed runs without the data engine, workers then have nothing to push to
+                        engine_ports: list[int] = []
+                        if self._engine:
+                            engine_msg_queue = self._engine._msg_queue
+                            assert engine_msg_queue is not None, "data engine's messaging is not set up"
+                            engine_ports = engine_msg_queue.get_ports_in_use(engine_msg_queue.receiver)
+                        # NOTE: the keys are the dataflows' zmq channels, every message from Faucet.send_to_stream_worker() carries its channel
+                        futures = [
+                            ray_task.remote(
+                                self.logger.name,
+                                log_queue,
+                                worker_name,
+                                {dataflow.faucet.get_zmq_channel(dataflow): dataflow._transformations for dataflow in worker_dataflows},
+                                {dataflow.faucet.get_zmq_channel(dataflow): dataflow.handler for dataflow in worker_dataflows},
+                                router_ports,
+                                engine_ports,
+                            )
+                            for worker_name, worker_dataflows in dataflows_per_worker.items()
+                        ]
+                        # NOTE: a ROUTER can't send to a worker until the handshake is done, even after the worker's connect() has returned,
+                        # so wait for the probe each worker sends on connecting
+                        missing_workers = set(dataflows_per_worker)
+                        deadline = time.monotonic() + self.WORKER_READY_TIMEOUT
+                        while missing_workers:
+                            remaining_ms = int((deadline - time.monotonic()) * 1000)
+                            if remaining_ms <= 0 or not router.poll(remaining_ms):
+                                raise TimeoutError(f"{msg_queue.sender_name} timed out waiting for workers: {sorted(missing_workers)}")
+                            identity, *_ = router.recv_multipart()
+                            missing_workers.discard(identity.decode())
+                        await _run_dataflows()
+                        # NOTE: end_stream() has sent STOP, wait for the workers to finish so their last logs still reach log_queue.
+                        # a worker's error can only be seen here, without this a dataflow whose worker died would count as successful
+                        worker_results = await asyncio.gather(*futures, return_exceptions=True)
+                        for worker_dataflows, worker_result in zip(dataflows_per_worker.values(), worker_results, strict=True):
+                            if isinstance(worker_result, BaseException):
+                                for dataflow in worker_dataflows:
+                                    dataflow._result = DataFlowResult.failed(error=worker_result)
                     except BaseException:
+                        # e.g. a worker never became ready: it would otherwise stay queued or keep waiting for a STOP that never comes.
+                        # force=True kills the worker, a non-forced cancel doesn't stop a task that's already running
+                        for future in futures:
+                            ray.cancel(future, force=True)
                         raise
             else:
-                last_run_dataflows.extend(self.dataflows)
                 await _run_dataflows()
 
             if failed := [
                 dataflow
-                for dataflow in last_run_dataflows
+                for dataflow in self.dataflows
                 if not dataflow.result.success
             ]:
                 self.logger.warning(
                     f"{self.name} has {len(failed)} failed dataflows, check {self.logger.name}.log for more details",
                 )
 
-            return last_run_dataflows
+            return self.dataflows
         finally:
             self._queues.clear()
             self._user_callback = None

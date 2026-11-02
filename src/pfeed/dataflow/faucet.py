@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQChannel, ZeroMQTopic
 
     ExtractFuncParams = ParamSpec("ExtractFuncParams")
-
+    type WorkerName = str
 
 import asyncio
 import logging
@@ -38,7 +38,7 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         self._extract_func = extract_func
         self._stream_task: asyncio.Task[None] | None = None
         self._msg_queue: ZeroMQ | None = None
-        self._stream_workers: dict[DataFlow[DataModelT], str] = {}  # dataflow -> worker name
+        self._stream_workers: dict[DataFlow[DataModelT], WorkerName] = {}
         self._zmq_routes: dict[DataFlow[DataModelT], tuple[ZeroMQChannel, ZeroMQTopic]] = {}
 
     @property
@@ -110,9 +110,12 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         zmq_topic = resolution.to_channel()
         self._zmq_routes[dataflow] = (zmq_channel, zmq_topic)
 
-    def add_stream_worker(self, dataflow: DataFlow[DataModelT], worker_name: str):
+    def add_stream_worker(self, dataflow: DataFlow[DataModelT], worker_name: WorkerName):
         self._stream_workers[dataflow] = worker_name
         self._register_zmq_route(dataflow)
+
+    def get_zmq_channel(self, dataflow: DataFlow[DataModelT]) -> ZeroMQChannel:
+        return self._zmq_routes[dataflow][0]
 
     def is_using_ray(self) -> bool:
         """Checks if using ray for streaming"""
@@ -120,11 +123,12 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
 
     def send_to_stream_worker(self, dataflow: DataFlow[DataModelT], msg: Message):
         channel, topic = self._zmq_routes[dataflow]
+        worker_name: WorkerName = self._stream_workers[dataflow]
         self.msg_queue.send(
             channel=channel,
             topic=topic,
-            data=(str(dataflow), msg),
-            target_identity=self._stream_workers[dataflow],
+            data=msg,
+            target_identity=worker_name,
         )
 
     async def close_stream(self):

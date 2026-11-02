@@ -44,13 +44,6 @@ class DataFlow[DataModelT: BaseDataModel]:
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
         self._is_sealed = False
-        # set by set_stream_options(), only for streaming dataflows
-        self._flush_interval: float | None = None
-        self._write_stream_kwargs: dict[str, Any] = {}
-
-    @property
-    def name(self):
-        return f"{self._data_model.data_source}_DataFlow"
 
     @property
     def data_model(self) -> DataModelT:
@@ -69,10 +62,9 @@ class DataFlow[DataModelT: BaseDataModel]:
         return self._result
 
     def __str__(self):
-        if not self.is_streaming():
-            return f"{self.name}.{self.faucet.extract_type}"
-        else:
-            return f"{self.name}.{self.faucet.extract_type}.{self.data_model}"
+        if self.is_streaming():
+            return f"{self.faucet.extract_type}:{self.data_model}"
+        return f"{self.data_model.data_source}.{self.faucet.extract_type}"
 
     def is_streaming(self) -> bool:
         return self.faucet.request.is_streaming()
@@ -89,7 +81,7 @@ class DataFlow[DataModelT: BaseDataModel]:
     def add_user_transformations(self, funcs: list[Callable[..., Any]]):
         if self.is_sealed():
             raise ValueError(
-                f"cannot add transformations to sealed dataflow {self.name}"
+                f"cannot add transformations to sealed dataflow {self}"
             )
         self._transformations.extend(funcs)
 
@@ -119,28 +111,25 @@ class DataFlow[DataModelT: BaseDataModel]:
         return self._handler is not None
 
     def setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str):
-        """Creates the data handler that loads the data to io, from the dataflow's own data model.
-
-        A streaming dataflow's handler buffers the messages in a Sink, except when replaying,
-        where the handler only reads the data to replay.
-        """
-        from pfeed.streaming.sink import Sink
-
+        """Creates the data handler that loads the data to io, from the dataflow's own data model."""
         if self._handler is not None:
-            raise ValueError(f"handler is already set for dataflow {self.name}")
+            raise ValueError(f"handler is already set for dataflow {self}")
         if self.is_sealed():
-            raise ValueError(f"cannot set handler for sealed dataflow {self.name}")
-        sink = None
-        if self.is_streaming() and not self.is_replaying():
-            if self._flush_interval is None:
-                raise ValueError(f"stream options are not set for dataflow {self.name}, see set_stream_options()")
-            sink = Sink(flush_interval=self._flush_interval)
+            raise ValueError(f"cannot set handler for sealed dataflow {self}")
+        # TODO: streaming has no sink for now, so a streaming handler can't write yet (write_stream() raises without one).
+        # Whether the Sink stays isn't decided. The stream io options (flush_interval, store_incremental_bars)
+        # are carried by the stream request and belong to the handler, how to pass them depends on that decision.
+        # sink = None
+        # if self.is_streaming() and not self.is_replaying():
+        #     if self._flush_interval is None:
+        #         raise ValueError(f"stream options are not set for dataflow {self.name}, see set_stream_options()")
+        #     sink = Sink(flush_interval=self._flush_interval)
         self._handler = self._data_model.DataHandler(
             data_model=self._data_model,
             io=io,
             data_layer=data_layer,
             data_domain=data_domain,
-            sink=sink,
+            sink=None,
         )
 
     def _load(self, data: Any) -> bool:
@@ -149,7 +138,7 @@ class DataFlow[DataModelT: BaseDataModel]:
             return False
         try:
             if self.is_streaming():
-                self._handler.write_stream(data, **self._write_stream_kwargs)
+                self._handler.write_stream(data)
             else:
                 from pfeed.utils.dataframe import convert_dataframe
 
@@ -194,7 +183,7 @@ class DataFlow[DataModelT: BaseDataModel]:
             if self.faucet.extract_type == "retrieve":
                 self._result = DataFlowResult.no_data()
             else:
-                self._result = DataFlowResult.failed(error=ValueError(f"{self.name} produced no data"))
+                self._result = DataFlowResult.failed(error=ValueError(f"{self} produced no data"))
             return self._result
         self._logger.debug(f"extracted {self.data_model} data by {self.faucet.name}")
         is_empty = is_dataframe(extracted_data) and is_empty_dataframe(extracted_data)
@@ -211,7 +200,7 @@ class DataFlow[DataModelT: BaseDataModel]:
 
     def run_batch(self, flow_type: FlowType = FlowType.native, prefect_kwargs: dict | None = None) -> DataFlowResult:
         if not self.is_sealed():
-            raise ValueError(f"cannot run batch on unsealed dataflow {self.name}")
+            raise ValueError(f"cannot run batch on unsealed dataflow {self}")
 
         self._logger.debug(f"{self} to {self.handler!r}")
         self._flow_type = FlowType[flow_type.lower()]
@@ -237,7 +226,7 @@ class DataFlow[DataModelT: BaseDataModel]:
         from prefect import flow
 
         kwargs.setdefault("log_prints", True)  # captures print() in user transformations
-        kwargs.setdefault("name", self.name)
+        kwargs.setdefault("name", str(self))
         kwargs.setdefault("flow_run_name", str(self.data_model))
 
         @flow(**kwargs)
@@ -258,21 +247,6 @@ class DataFlow[DataModelT: BaseDataModel]:
                     self._logger.removeHandler(handler)
 
         return prefect_flow
-
-    def set_stream_options(self, flush_interval: float, **write_stream_kwargs: Any):
-        """Sets how streamed data is stored, before setup_handler().
-
-        Args:
-            flush_interval: seconds between writes of the buffered streamed data, see Sink.
-            write_stream_kwargs: passed to the handler's write_stream() with every message,
-                e.g. store_incremental_bars for MarketDataHandler.
-        """
-        if not self.is_streaming():
-            raise ValueError(f"cannot set stream options for non-streaming dataflow {self.name}")
-        if self._handler is not None:
-            raise ValueError(f"cannot set stream options after the handler is set for dataflow {self.name}")
-        self._flush_interval = flush_interval
-        self._write_stream_kwargs = write_stream_kwargs
 
     async def _run_stream_etl(self, queue: asyncio.Queue[Message]) -> None:
         # Replay is read-only: the raw row already reached the user callback and the
@@ -300,7 +274,7 @@ class DataFlow[DataModelT: BaseDataModel]:
 
     async def run_stream(self, queue: asyncio.Queue[Message], flow_type: FlowType = FlowType.native) -> None:
         if not self.is_sealed():
-            raise ValueError(f"cannot run stream on unsealed dataflow {self.name}")
+            raise ValueError(f"cannot run stream on unsealed dataflow {self}")
 
         self._logger.info(f"{self} to {self.handler!r}")
         self._flow_type = FlowType[flow_type.lower()]

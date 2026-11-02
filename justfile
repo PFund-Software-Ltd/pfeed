@@ -4,3 +4,4 @@
 #      `just bybit test` runs pfeed-bybit's tests
 mod bybit 'sources/pfeed-bybit'
 mod pfund 'sources/pfeed-pfund'
+mod alpha 'sources/pfeed-alphafund'

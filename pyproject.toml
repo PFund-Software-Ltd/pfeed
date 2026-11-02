@@ -41,7 +41,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ray = ["ray[default]>=2.59.0"]
+ray = ["ray[default]>=2.59.0; python_version < '3.15'"]
 huggingface = ["huggingface-hub>=2.2.0"]
 prefect = ["prefect>=3.8.8"]
 # kafka = ["confluent-kafka>=2.8.2"]

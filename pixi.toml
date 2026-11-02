@@ -60,7 +60,7 @@ libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
 # TODO: remove the env-markers when ray supports python 3.15
-ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_full_version < '3.15'" }
+ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_version < '3.15'" }
 huggingface-hub = ">=2.2.0"
 prefect = ">=3.8.8"
 lancedb = ">=0.40.0"

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     #   pe.get_feed("xxx", ...)
     from pfeed_bybit import Bybit as Bybit
     from pfeed_pfund import PFund as PFund
+    from pfeed_alphafund import AlphaFund as AlphaFund
 
     from pfeed.base import get_feed
     from pfeed.engine import DataEngine
@@ -57,6 +58,9 @@ def __getattr__(name: str):
 
     elif name == "PFund":
         return _import_official_source("pfeed_pfund", "PFund")
+
+    elif name == "AlphaFund":
+        return _import_official_source("pfeed_alphafund", "AlphaFund")
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 

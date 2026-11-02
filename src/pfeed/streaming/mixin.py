@@ -178,10 +178,6 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
                 await asyncio.gather(*runs, return_exceptions=True)
             except asyncio.CancelledError:
                 self.logger.warning(f"{self.name} dataflows were cancelled, ending streams...")
-            finally:
-                # end_stream() must run for every dataflow for proper teardown;
-                # it records its own errors, so one bad teardown doesn't skip the rest.
-                await asyncio.gather(*[df.end_stream() for df in self.dataflows])
 
         try:
             if self._is_using_ray():
@@ -315,21 +311,27 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
                             identity, *_ = router.recv_multipart()
                             missing_workers.discard(identity.decode())
                         await _run_dataflows()
-                        # NOTE: end_stream() has sent STOP, wait for the workers to finish so their last logs still reach log_queue.
-                        # a worker's error can only be seen here, without this a dataflow whose worker died would count as successful
-                        worker_results = await asyncio.gather(*futures, return_exceptions=True)
-                        for worker_dataflows, worker_result in zip(dataflows_per_worker.values(), worker_results, strict=True):
-                            if isinstance(worker_result, BaseException):
+                    finally:
+                        # NOTE: end_stream() must run for every dataflow for proper teardown, it records its own errors, so one bad teardown doesn't skip the rest
+                        await asyncio.gather(*[dataflow.end_stream() for dataflow in self.dataflows])
+                        for future, worker_dataflows in zip(futures, dataflows_per_worker.values(), strict=True):
+                            # NOTE: without waiting, a worker that has already ended either stopped or crashed
+                            finished, _ = ray.wait([future], timeout=0)
+                            try:
+                                if finished:
+                                    # NOTE: if the worker function raised, ray.get() re-raises its exception here; returns None if it exited normally
+                                    ray.get(future)
+                            except Exception as err:
                                 for dataflow in worker_dataflows:
-                                    dataflow._result = DataFlowResult.failed(error=worker_result)
-                    except BaseException:
-                        # e.g. a worker never became ready: it would otherwise stay queued or keep waiting for a STOP that never comes.
-                        # force=True kills the worker, a non-forced cancel doesn't stop a task that's already running
-                        for future in futures:
+                                    dataflow._result = DataFlowResult.failed(error=err)
+                            # NOTE: force=True kills the worker, a non-forced cancel doesn't stop a task that's already running
                             ray.cancel(future, force=True)
-                        raise
             else:
-                await _run_dataflows()
+                try:
+                    await _run_dataflows()
+                finally:
+                    # NOTE: end_stream() must run for every dataflow for proper teardown, it records its own errors, so one bad teardown doesn't skip the rest
+                    await asyncio.gather(*[dataflow.end_stream() for dataflow in self.dataflows])
 
             if failed := [
                 dataflow

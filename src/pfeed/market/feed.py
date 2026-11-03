@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterator
 
+    from pfund_blocks.datas.bar_data import BarData
+    from pfund_blocks.datas.market_data import MarketData
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.typing import Message, ProductName
 
@@ -750,9 +752,8 @@ class MarketFeed[
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _get_default_transformations_for_stream(self, request: RequestT) -> list[Callable[..., Any]]:
-        from itertools import count
-
         from pfund_blocks.datas.bar_data import BarData
+        from pfund_blocks.datas.tick_data import TickData
 
         from pfeed.utils import lambda_with_name
 
@@ -765,188 +766,67 @@ class MarketFeed[
 
         default_transformations.append(self._parse_streaming_message)
 
-        # TODO
-        # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
-        # data_source: str = self.data_source.name
-        # tick_counter = count() if request.data_resolution.is_tick() else None
-        # is_resampling = bool(request.target_resolution < request.data_resolution)
-        # if is_resampling:
-        #     # use data_bar to resample data, e.g. bybit doesn't support '1s' data (target resolution), use '1t' (data resolution) instead
-        #     data_bar = BarData(
-        #         product=request.product,
-        #         resolution=request.target_resolution,
-        #         config=cast("MarketFeedStreamRequest", request).data_config,
-        #     )
-        # else:
-        #     data_bar = None
-        # default_transformations.append(
-        #     lambda_with_name(
-        #         "standardize_message",
-        #         lambda msg: MarketFeed._standardize_streaming_message(
-        #             data_source=data_source,
-        #             data_origin=request.data_origin,
-        #             product=request.product,
-        #             target_resolution=request.target_resolution,
-        #             data_resolution=request.data_resolution,
-        #             msg=msg,
-        #             data_bar=data_bar,
-        #             tick_counter=tick_counter,
-        #         ),
-        #     ),
-        # )
+        is_resampling = bool(request.target_resolution < request.data_resolution)
+        if is_resampling:
+            self.logger.warning(
+                f"{request.product.name} {request.target_resolution!r} bars will be created by resampling {request.data_resolution!r} data, "
+                + "incremental bars (not closed yet) will also be sent, check bar.is_closed if you only want closed bars"
+            )
+            product = request.product
+            target_resolution = request.target_resolution
+            data_resolution = request.data_resolution
+            # use data_bar to resample data, e.g. bybit doesn't support '1s' data (target resolution), use '1t' (data resolution) instead
+            data_bar = BarData(product=product, resolution=target_resolution)
+            # the resampler takes every update in data resolution, and only passes what can be merged to data_bar (its resamplee),
+            # i.e. every tick, but only closed bars, an unclosed bar's volume would otherwise be counted at each of its updates
+            if data_resolution.is_tick():
+                resampler = TickData(product=product, resolution=data_resolution)
+            elif data_resolution.is_bar():
+                resampler = BarData(product=product, resolution=data_resolution)
+            else:
+                raise TypeError(f"Invalid {data_resolution=} for resampling")
+            # raises if the resampler's bars don't fit in data_bar's, e.g. 3m bars can't be resampled to 5m bars
+            data_bar.bind_resampler(resampler)
+            # bind the class and plain values so the lambda doesn't capture self (the whole feed) when pickled by Ray
+            cls = type(self)
+            default_transformations.append(
+                lambda_with_name(
+                    "resample_streaming_message",
+                    lambda msg: cls._resample_streaming_message(
+                        message=msg,
+                        resampler=resampler,
+                        data_bar=data_bar,
+                        target_resolution=target_resolution,
+                        # tick_counter=tick_counter,
+                    )
+                )
+            )
         return default_transformations
 
     @staticmethod
-    def _standardize_streaming_message(
-        data_source: str,
-        data_origin: str,
-        product: BaseProduct,
+    def _resample_streaming_message(
+        message: Message,
+        resampler: MarketData,
+        data_bar: BarData,
         target_resolution: Resolution,
-        data_resolution: Resolution,
-        msg: ResponseData,
-        data_bar: BarData | None = None,
-        tick_counter: Iterator[int] | None = None,
-    ) -> MarketDataMessage:
-        from msgspec import convert
+    ) -> Message:
+        """Updates the resampler with the message's data point, returns the message with data_bar's bar as its data.
 
-        from pfeed.streaming import BarMessage, TickMessage
-
-        common = {
-            "msg_ts": msg.get("ts", None),
-            "data_source": data_source,
-            "data_origin": data_origin,
-            "product": product.name,
-            "basis": str(product.basis),
-            "symbol": product.symbol,
-            "specs": product.specs,
-            "resolution": repr(target_resolution),
-        }
-        if target_resolution.is_tick():
-            data: dict[str, Any] = msg["data"]
-            message = convert(
-                {
-                    **common,
-                    "index": next(tick_counter) if tick_counter is not None else 0,
-                    "ts": data["ts"],
-                    "price": data["price"],
-                    "volume": data["volume"],
-                    "extra": data.get("extra", {}),
-                },
-                TickMessage,
-            )
-        elif target_resolution.is_bar():
-            data: dict[str, Any] = msg["data"]
-            if not data_bar:  # case when resampling is not required
-                message = convert(
-                    {
-                        **common,
-                        "ts": data.get("ts"),
-                        "start_ts": data.get("start_ts"),
-                        "end_ts": data.get("end_ts"),
-                        "open": data["open"],
-                        "high": data["high"],
-                        "low": data["low"],
-                        "close": data["close"],
-                        "volume": data["volume"],
-                        "is_incremental": data["is_incremental"],
-                        "extra": data.get("extra", {}),
-                    },
-                    BarMessage,
-                )
-            # resampling: use higher resolution data (data resolution) to update data_bar (target resolution)
-            else:
-
-                def _create_bar_message(
-                    data_bar: BarData, is_incremental: bool
-                ) -> BarMessage:
-                    return convert(
-                        {
-                            **common,
-                            # data_bar (pfund Bar) works in float seconds; convert back
-                            # to pfeed's int-ns contract before building the message.
-                            "ts": seconds_to_ns(data_bar.ts),
-                            "start_ts": seconds_to_ns(data_bar.start_ts),
-                            "end_ts": seconds_to_ns(data_bar.end_ts),
-                            "open": data_bar.open,
-                            "high": data_bar.high,
-                            "low": data_bar.low,
-                            "close": data_bar.close,
-                            "volume": data_bar.volume,
-                            "is_incremental": is_incremental,
-                        },
-                        BarMessage,
-                    )
-
-                def _update_bar_data_by_tick(
-                    data_bar: BarData, data: dict[str, Any], msg: dict[str, Any]
-                ) -> None:
-                    data_bar.on_update(
-                        o=data["price"],
-                        h=data["price"],
-                        l=data["price"],
-                        c=data["price"],
-                        v=data["volume"],
-                        # pfund Bar is seconds-based; pfeed timestamps are int ns.
-                        ts=ns_to_seconds(data["ts"]),
-                        # NOTE: extra data is about tick data, don't pass it to bar data
-                        # extra=data.get('extra', {}),
-                        is_incremental=True,
-                        msg_ts=ns_to_seconds(msg.get("ts")),
-                    )
-
-                def _update_bar_data(
-                    data_bar: BarData, data: dict[str, Any], msg: dict[str, Any]
-                ) -> None:
-                    data_bar.on_update(
-                        # pfund Bar is seconds-based; pfeed timestamps are int ns.
-                        start_ts=ns_to_seconds(data.get("start_ts")),
-                        end_ts=ns_to_seconds(data.get("end_ts")),
-                        ts=ns_to_seconds(data.get("ts")),
-                        o=data["open"],
-                        h=data["high"],
-                        l=data["low"],
-                        c=data["close"],
-                        v=data["volume"],
-                        msg_ts=ns_to_seconds(msg.get("ts")),
-                        is_incremental=True,
-                        # extra data is about the data with data resolution, don't pass it to bar data (target resolution)
-                        # extra=data.get('extra', {}),
-                    )
-
-                if data_resolution.is_tick():
-                    # seconds to compare against data_bar's seconds-based end_ts / time.time()
-                    ts = ns_to_seconds(data.get("ts"))
-                    if not data_bar.is_closed() and data_bar.is_closed(
-                        now=ts or time.time()
-                    ):
-                        # bar is closed, finalize the message first before creating a new bar
-                        message = _create_bar_message(data_bar, is_incremental=False)
-                        # this will create a new bar since ts > bar's end_ts
-                        _update_bar_data_by_tick(data_bar, data, msg)
-                    else:
-                        _update_bar_data_by_tick(data_bar, data, msg)
-                        message = _create_bar_message(data_bar, is_incremental=True)
-                # e.g. target resolution is '5s', data resolution is '1s' -> resample data from '1s' to '5s'
-                # NOTE: data['is_incremental] is saying whether the data with **data resolution** (resampler) is incremental or not
-                # it is IRRELEVANT to the target resolution, i.e. for target resolution (resamplee) it is always incremental until the bar is closed
-                elif data_resolution.is_bar():
-                    # seconds to compare against data_bar's seconds-based end_ts / time.time()
-                    ts = ns_to_seconds(data.get("ts"))
-                    msg_ts = ns_to_seconds(msg.get("ts"))
-                    if not data_bar.is_closed() and data_bar.is_closed(
-                        now=ts or msg_ts or time.time()
-                    ):
-                        message = _create_bar_message(data_bar, is_incremental=False)
-                        _update_bar_data(data_bar, data, msg)
-                    else:
-                        _update_bar_data(data_bar, data, msg)
-                        message = _create_bar_message(data_bar, is_incremental=True)
-                else:
-                    raise NotImplementedError(
-                        f"{product} unexpected data resolution {data_resolution} for data bar"
-                    )
+        The data is None if the update didn't change data_bar, e.g. an unclosed finer bar, which the resampler keeps until it closes.
+        """
+        current_bar = data_bar.bar
+        # finest first, so the resampler's own closed bars come before data_bar's
+        closed_bars = [bar for bar in resampler.update(message["data"]) if bar.resolution == target_resolution]
+        # case 1: the update closed a bar, e.g. the 1m bar ending at 9:05 closes the 9:00 5m bar,
+        # it is sent with its final state, the bar opened by the same update (if any) is sent with the next update
+        # NOTE: if an update closes two bars, e.g. after a disconnection, only the later one is sent
+        if closed_bars:
+            resampled_bar = closed_bars[-1]
+        # case 2: the update changed the open bar, e.g. the 9:01 1m bar closes and is merged into the open 9:00 5m bar
+        # Bar is immutable, so a changed data_bar has a new bar object
+        elif data_bar.bar is not current_bar:
+            resampled_bar = data_bar.bar
+        # case 3: nothing changed, e.g. an unclosed 1m bar, or no 1m bar has closed since the stream started
         else:
-            raise NotImplementedError(
-                f"{product.symbol} {target_resolution} is not supported"
-            )
-        return message
+            resampled_bar = None
+        return {**message, "resolution": repr(target_resolution), "data": resampled_bar}

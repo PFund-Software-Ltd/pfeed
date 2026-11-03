@@ -118,7 +118,7 @@ class TimeBasedFeed[
 
         # Cleaned-data contract: nanosecond precision (lossless upcast from us/ms, and the
         # native precision of pandas-sourced data via pl.from_pandas).
-        return df.with_columns(pl.col(date_col).dt.cast_time_unit("ns")).sort(date_col)
+        return df.with_columns(pl.col(date_col).dt.cast_time_unit("ns")).sort(date_col, maintain_order=True)
 
     @classmethod
     def _max_date_range(cls, resolution: Resolution) -> tuple[datetime.date, datetime.date]:

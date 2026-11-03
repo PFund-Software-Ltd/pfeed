@@ -116,7 +116,10 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         from pfund_blocks.datas.bar_data import Bar
         if self._stream_buffer is None:
             raise ValueError(f'{self!r} is not set up for streaming, call setup_streaming() first')
-        data_point = cast("Bar | Tick", msg['data'])
+        data_point = cast("Bar | Tick | None", msg['data'])
+        # e.g. a resampled message whose update didn't change the resampled bar
+        if data_point is None:
+            return
         if isinstance(data_point, Bar) and not data_point.is_closed and not self._store_incremental_bars:
             return
         # columns not in the streaming schema (e.g. resolution) are dropped when the buffer builds its dataframe

@@ -160,7 +160,8 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
         if request.env in (Environment.PAPER, Environment.LIVE):
             stream_api = self.data_source.get_stream_api(request.env)
             stream_api.add_channel(request)
-            stream_api.set_callback(self._callback)
+            # NOTE: with Ray, the workers parse the messages
+            stream_api.set_callback(self._callback, skip_parse_message=self._is_using_ray())
             self._create_queue(request)
 
         faucet = existing_faucet or self._create_faucet(request=request, extract_func=extract_func)

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterator
 
-    from pfund.datas.data_bar import BarData
     from pfund_blocks.entities.products.product_base import BaseProduct
     from pfund_blocks.typing import Message, ProductName
 
@@ -52,7 +51,7 @@ class MarketFeed[
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
         MarketFeedDownloadRequest.extract_type: ("_download_impl", "_normalize_downloaded_data"),
-        MarketFeedStreamRequest.extract_type: ("_get_stream_api", "_parse_streaming_message"),
+        MarketFeedStreamRequest.extract_type: ("_parse_streaming_message",),
     }
 
     @staticmethod
@@ -756,7 +755,7 @@ class MarketFeed[
     def _get_default_transformations_for_stream(self, request: RequestT) -> list[Callable[..., Any]]:
         from itertools import count
 
-        from pfund.datas.data_bar import BarData
+        from pfund_blocks.datas.bar_data import BarData
 
         from pfeed.utils import lambda_with_name
 

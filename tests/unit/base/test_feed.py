@@ -330,6 +330,16 @@ def test_set_num_workers_while_running(feed: _Feed):
         feed.set_num_workers(2)
 
 
+def test_set_num_workers_after_verb_raises(feed: _Feed):
+    feed.download('A')
+    with pytest.raises(RuntimeError, match='cannot set num_workers after calling'):
+        feed.set_num_workers(2)
+    # allowed again once the requests are cleared, e.g. after a run
+    feed._cleanup_after_run()
+    feed.set_num_workers(2)
+    assert feed._num_workers == 2
+
+
 def test_set_running_twice_raises(feed: _Feed):
     feed._set_running(True)
     with pytest.raises(RuntimeError, match='already running'):
@@ -489,7 +499,9 @@ def test_validate_io_for_ray(feed: _Feed, tmp_path: Path):
     # without Ray, any io is fine
     feed._validate_io_for_ray()
 
+    feed._cleanup_after_run()
     feed.set_num_workers(2)
+    feed.download('A').load(_NoConcurrentWritesIO(base_path=str(tmp_path)))
     with pytest.raises(RuntimeError, match='does not support concurrent partition writes, cannot be used with Ray'):
         feed._validate_io_for_ray()
 

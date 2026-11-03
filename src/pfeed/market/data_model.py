@@ -12,7 +12,7 @@ from pfeed.market.data_handler import MarketDataHandler
 
 
 class MarketDataModel(TimeBasedDataModel):
-    DataHandler: ClassVar[type[MarketDataHandler]] = MarketDataHandler
+    DataHandler: ClassVar[type[MarketDataHandler]] = MarketDataHandler  # ty: ignore[invalid-mutable-override]
 
     env: Environment | str
     product: BaseProduct

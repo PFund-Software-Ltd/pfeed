@@ -40,11 +40,15 @@ class BaseStreamAPI(ABC):
         """Adds the product's market data channel, must be called before connect()."""
         ...
 
-    def set_callback(self, callback: Callable[[Message], Awaitable[None] | None]) -> None:
+    def set_callback(self, callback: Callable[[Message], Awaitable[None] | None], *, skip_parse_message: bool = False) -> None:
         """Sets callback function that receives messages from the streaming api (e.g. websocket API).
 
-        Message["message"] must be decoded. Message["data"] is None if not parsed, e.g. when parsing is outsourced to the T (transformation functions) in Ray workers.
+        Message["message"] must be decoded. Message["data"] is None if not parsed.
         A data source's error must still be set in Message["error"], e.g. a rejected subscription.
+
+        Args:
+            skip_parse_message: if True, the messages must not be parsed, i.e. Message["data"] is None,
+                e.g. when parsing is outsourced to the T (transformation functions) in Ray workers.
         """
         self._callback = callback
 

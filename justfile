@@ -3,5 +3,7 @@
 #      (don't `cd ../..`, it keeps pfeed-bybit's env active)
 #      `just bybit test` runs pfeed-bybit's tests
 mod bybit 'sources/pfeed-bybit'
+mod hyperliquid 'sources/pfeed-hyperliquid'
+mod hl 'sources/pfeed-hyperliquid'
 mod pfund 'sources/pfeed-pfund'
 mod alpha 'sources/pfeed-alphafund'

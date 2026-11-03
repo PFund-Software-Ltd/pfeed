@@ -167,6 +167,9 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         """
         if self.is_running():
             raise RuntimeError(f"cannot set num_workers while {self.name} is running")
+        # NOTE: the dataflows are set up for Ray or not when created, e.g. whether the stream API parses the messages
+        if self._requests:
+            raise RuntimeError(f"cannot set num_workers after calling {self.name}'s download()/retrieve()/stream(), set it before")
         if num_workers is not None and num_workers <= 0:
             raise ValueError("num_workers must be greater than 0")
         self._num_workers = num_workers
@@ -276,7 +279,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
     def _validate_io_for_ray(self) -> None:
         """Checks that every io the dataflows write to supports concurrent writes from Ray workers.
 
-        Checked at run time, so num_workers can be set before or after load().
+        Checked at run time, after load() has set up every dataflow's handler.
         """
         if not self._is_using_ray():
             return

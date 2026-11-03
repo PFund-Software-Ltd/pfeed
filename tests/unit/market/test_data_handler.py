@@ -25,6 +25,8 @@ from pfeed.io.base_io import DatasetKey, DatePartition
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.market.data_handler import MarketDataHandler, MarketDataMetadata
 from pfeed.market.data_model import MarketDataModel
+from pfeed.schemas.streaming.bar_message_schema import START_TS
+from pfeed.schemas.streaming.tick_message_schema import TS
 
 D1, D2, D3 = datetime.date(2025, 1, 1), datetime.date(2025, 1, 2), datetime.date(2025, 1, 3)
 RAW_DATE_COL = TimeBasedDataModel.DATE_COL_IN_RAW_DATA
@@ -43,6 +45,7 @@ def _create_handler(
     env: str = 'BACKTEST',
     resolution: str = '1d',
     data_layer: DataLayer = DataLayer.CLEANED,
+    is_streaming: bool = False,
 ) -> MarketDataHandler:
     data_model = MarketDataModel(
         data_source='BYBIT',
@@ -52,7 +55,7 @@ def _create_handler(
         start_date=start_date,
         end_date=end_date,
     )
-    return MarketDataHandler(data_model, io, data_layer=data_layer)
+    return MarketDataHandler(data_model, io, data_layer=data_layer, is_streaming=is_streaming)
 
 
 def _cleaned_df(product: BaseProduct, dates: list[datetime.date]) -> pl.DataFrame:
@@ -93,19 +96,19 @@ def test_dataset_key(io: ParquetIO, product: BaseProduct):
     )
 
 
-@pytest.mark.parametrize(('env', 'resolution', 'data_layer', 'date_col'), [
+@pytest.mark.parametrize(('is_streaming', 'resolution', 'data_layer', 'date_col'), [
     # batch data
-    ('BACKTEST', '1d', DataLayer.CLEANED, 'date'),
-    ('BACKTEST', '1t', DataLayer.CLEANED, 'date'),
-    ('BACKTEST', '1d', DataLayer.RAW, RAW_DATE_COL),
+    (False, '1d', DataLayer.CLEANED, 'date'),
+    (False, '1t', DataLayer.CLEANED, 'date'),
+    (False, '1d', DataLayer.RAW, RAW_DATE_COL),
     # streamed data: a bar is in the day it starts
-    ('LIVE', '1m', DataLayer.CLEANED, 'start_ts'),
-    ('LIVE', '1t', DataLayer.CLEANED, 'ts'),
-    ('PAPER', '1m', DataLayer.CLEANED, 'start_ts'),
-    ('LIVE', '1m', DataLayer.RAW, RAW_DATE_COL),
+    (True, '1m', DataLayer.CLEANED, START_TS),
+    (True, '1t', DataLayer.CLEANED, TS),
 ])
-def test_date_col(io: ParquetIO, product: BaseProduct, env: str, resolution: str, data_layer: DataLayer, date_col: str):
-    handler = _create_handler(io, product, env=env, resolution=resolution, data_layer=data_layer)
+def test_date_col(
+    io: ParquetIO, product: BaseProduct, is_streaming: bool, resolution: str, data_layer: DataLayer, date_col: str
+):
+    handler = _create_handler(io, product, resolution=resolution, data_layer=data_layer, is_streaming=is_streaming)
     assert handler.dataset_key.partition_by == ('product', DatePartition(date_col))
 
 

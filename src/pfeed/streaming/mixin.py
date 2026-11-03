@@ -44,48 +44,42 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
         # NOTE: one queue per dataflow
         self._queues: dict[Hashable, asyncio.Queue[Any]] = {}
         self._user_callback: Callable[[Message], Awaitable[None] | None] | None = None
+        # NOTE: only set while iterating the feed with __aiter__()
+        self._iter_queue: asyncio.Queue[Message] | None = None
         self._engine: DataEngine | None = None
 
     def _set_engine(self, engine: DataEngine) -> None:
         self._engine = engine
 
-    def __aiter__(
-        self,
-    ) -> AsyncGenerator[tuple[Message]]:
+    async def __aiter__(self) -> AsyncGenerator[Message]:
+        """Run the streams and yield each message the user callback gets, e.g. `async for msg in feed.stream(...)` in pipeline mode.
+
+        Breaking out of the loop ends the streams only when the generator is closed, which Python does lazily,
+        wrap it in `contextlib.aclosing()` to end them right at the break.
+        """
         if not self.is_streaming():
             raise RuntimeError("No streaming dataflow to iterate over")
-        # get the first dataflow, doesn't matter, they share the same faucet
-        dataflow = self.dataflows[0]
-        faucet = dataflow.faucet
-        queue: asyncio.Queue[
-            tuple[WebSocketName | str, RawMessage | ReplayData] | None
-        ] = faucet.streaming_queue
-        # NOTE: this snippet is copied from faucet as a reminder that we will need to handle the case when the queue is full
-        # it is NOT placed in order in this __aiter__ function
-        # put msg to streaming queue, which is mainly used in feed's __aiter__()
-        # if self._streaming_queue:
-        #     if self._streaming_queue.full():
-        #         self._logger.warning(
-        #             "Streaming queue full, dropping oldest message - consider increasing maxsize "
-        #             + f"(current: {self.STREAMING_QUEUE_MAXSIZE}) or improving consumer speed"
-        #         )
-        #         _ = self._streaming_queue.get_nowait()  # Remove oldest
-        #     await self._streaming_queue.put((source, data))
-
-        async def _iter():
-            async with asyncio.TaskGroup() as task_group:
-                producer = task_group.create_task(self.run_async())  # noqa: F841
-                while True:
-                    # try:
+        queue: asyncio.Queue[Message] = asyncio.Queue(maxsize=self.QUEUE_MAXSIZE)
+        self._iter_queue = queue
+        producer = asyncio.create_task(self.run_async())
+        # NOTE: a non-immediate shutdown lets the consumer drain the queued messages before get() raises QueueShutDown
+        producer.add_done_callback(lambda _: queue.shutdown())
+        try:
+            while True:
+                try:
                     msg = await queue.get()
-                    # except asyncio.CancelledError:
-                    #     _ = producer.cancel()
-                    #     break
-                    if msg is None:  # sentinel from faucet.close_stream()
-                        break
-                    yield msg
-
-        return _iter()
+                except asyncio.QueueShutDown:
+                    break
+                yield msg
+            # re-raises the producer's exception, if any
+            await producer
+        finally:
+            # NOTE: the consumer stopped early, e.g. break or cancelled, end the streams
+            if not producer.done():
+                _ = producer.cancel()
+                # NOTE: wait() instead of awaiting the producer, so the producer's cancellation isn't raised here, but this task's own is
+                _ = await asyncio.wait([producer])
+            self._iter_queue = None
 
     @staticmethod
     def _create_queue_key_from_request(request: RequestT) -> Hashable:
@@ -115,6 +109,15 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
             result = self._user_callback(message)
             if inspect.isawaitable(result):
                 await result
+        if (iter_queue := self._iter_queue) is not None:
+            # NOTE: drop the oldest message instead of blocking, a slow consumer would otherwise stall the websocket reader shared with the dataflows
+            if iter_queue.full():
+                self.logger.warning(
+                    f"{self.name} iteration queue is full, dropping the oldest message - consider increasing QUEUE_MAXSIZE "
+                    + f"(current: {self.QUEUE_MAXSIZE}) or improving the consumer's speed"
+                )
+                _ = iter_queue.get_nowait()
+            iter_queue.put_nowait(message)
         # NOTE: error messages can have no product/resolution, so they have no queue
         if (queue := self._queues.get(self._create_queue_key_from_message(message))) is not None:
             # NOTE: the queue is shut down when its dataflow has failed, drop the message, otherwise every new message raises here

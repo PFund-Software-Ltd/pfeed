@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 import datetime
 from abc import abstractmethod
 
-from pfeed.base.request import BaseRequest
+from pfeed.base.requests.base_request import BaseRequest
 
 
 class TimeBasedFeedBaseRequest(BaseRequest):

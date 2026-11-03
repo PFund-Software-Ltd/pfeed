@@ -24,7 +24,7 @@ from pydantic import HttpUrl
 from pfeed.base.data_handler import BaseDataHandler, BaseDataMetadata
 from pfeed.base.data_model import BaseDataModel
 from pfeed.base.feed import BaseFeed, requires
-from pfeed.base.request import BaseRequest
+from pfeed.base.requests.base_request import BaseRequest
 from pfeed.dataflow.dataflow import DataFlow
 from pfeed.enums import (
     DataAccessType,
@@ -237,7 +237,7 @@ def test_unsupported_verb_needs_nothing():
 
 
 def test_stream_needs_streaming_feed_mixin():
-    with pytest.raises(TypeError, match="'stream' needs StreamingFeedMixin as a base class, _stream_impl"):
+    with pytest.raises(TypeError, match="'stream' needs StreamingMixin as a base class, _stream_impl"):
         class Feed(_Feed):
             class Requests(_Feed.Requests):
                 stream = _StreamRequest
@@ -266,7 +266,7 @@ def test_all_errors_are_reported_together():
                 stream = _StreamRequest
     msg = str(exc_info.value)
     assert "'download' needs _download_impl" in msg
-    assert "'stream' needs StreamingFeedMixin as a base class, _stream_impl" in msg
+    assert "'stream' needs StreamingMixin as a base class, _stream_impl" in msg
 
 
 # --- __init__ and attributes ---

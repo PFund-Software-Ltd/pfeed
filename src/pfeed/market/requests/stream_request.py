@@ -1,15 +1,13 @@
-from typing import ClassVar, Self
+from typing import Self
 
-# TODO: pfund is no longer a dependency
-# from pfund.data_config import DataConfig
 from pydantic import Field, model_validator
 
+from pfeed.base.requests.stream_request import BaseStreamRequest
 from pfeed.enums import DataLayer
 from pfeed.market.requests.base_request import MarketFeedBaseRequest
 
 
-class MarketFeedStreamRequest(MarketFeedBaseRequest):
-    extract_type: ClassVar[str] = "stream"
+class MarketFeedStreamRequest(BaseStreamRequest, MarketFeedBaseRequest):
     replay_pace: float | None = Field(
         default=0,
         description="""
@@ -24,14 +22,6 @@ class MarketFeedStreamRequest(MarketFeedBaseRequest):
         default=False,
         description="Whether to also store the updates of a bar before it closes. Only used when storing streamed bars.",
     )
-    flush_interval: float = Field(
-        default=100,
-        gt=0,
-        description="Seconds between writes of the buffered streamed data to the io. Only used when storing streamed data.",
-    )
-
-    def is_streaming(self) -> bool:
-        return True
 
     def is_replaying(self) -> bool:
         from pfund_blocks.enums.env import Environment

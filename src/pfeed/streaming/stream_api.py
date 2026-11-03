@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
     from pfund_blocks.typing import Message
 
+    from pfeed.base.requests.stream_request import BaseStreamRequest
+
 from abc import ABC, abstractmethod
 
 
@@ -34,7 +36,7 @@ class BaseStreamAPI(ABC):
         ...
 
     @abstractmethod
-    def add_channel(self, product: BaseProduct, resolution: Resolution) -> None:
+    def add_channel(self, request: BaseStreamRequest) -> None:
         """Adds the product's market data channel, must be called before connect()."""
         ...
 

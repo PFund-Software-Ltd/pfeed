@@ -43,7 +43,7 @@ def file_io(request, tmp_path: Path) -> TableIO:
 
 KEY = DatasetKey(
     namespace={'env': 'BACKTEST', 'data_source': 'BYBIT'},
-    name={'asset_type': 'PERPETUAL', 'resolution': '1t'},
+    name={'product_type': 'PERPETUAL', 'resolution': '1t'},
     partition_by=('product', 'date'),
 )
 D1, D2 = datetime.date(2025, 1, 1), datetime.date(2025, 1, 2)

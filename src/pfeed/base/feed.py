@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from ray.util.queue import Queue
 
     from pfeed.base.data_model import BaseDataModel
-    from pfeed.base.request import BaseRequest
+    from pfeed.base.requests.base_request import BaseRequest
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult
@@ -51,7 +51,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
     data_domain: ClassVar[DataCategory]
 
     def __init_subclass__(cls, **kwargs: Any):
-        from pfeed.streaming.mixin import StreamingFeedMixin
+        from pfeed.streaming.mixin import StreamingMixin
 
         super().__init_subclass__(**kwargs)
         # framework base classes (listing ABC directly) hold the defaults, so only concrete feeds are checked
@@ -65,8 +65,8 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                 # not defined at all, or still the default from a framework base class
                 if owner is None or ABC in owner.__bases__:
                     missing.append(method)
-            if verb == "stream" and not issubclass(cls, StreamingFeedMixin):
-                missing.insert(0, "StreamingFeedMixin as a base class")
+            if verb == "stream" and not issubclass(cls, StreamingMixin):
+                missing.insert(0, "StreamingMixin as a base class")
             # downloaded data must be readable back, retrieve needs nothing from the feed, so leaving it out is a mistake
             if verb == "download" and hasattr(cls.Requests, "retrieve") and "retrieve" not in cls.capabilities():
                 missing.insert(0, "Requests.retrieve")
@@ -99,7 +99,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._data_source: SourceT = data_source
         self.logger: ColoredLogger = cast("ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}"))
         self._pipeline_mode = pipeline_mode
-        self._dataflows: dict[RequestT, list[DataFlow[DataModelT]]] = {}
+        self._dataflows: dict[RequestT, list[DataFlow[RequestT, DataModelT]]] = {}
         self._requests: list[RequestT] = []
         self._num_workers: int | None = None
         self._is_running = False
@@ -154,7 +154,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         return self.data_source.name
 
     @property
-    def dataflows(self) -> list[DataFlow[DataModelT]]:
+    def dataflows(self) -> list[DataFlow[RequestT, DataModelT]]:
         return [df for dfs in self._dataflows.values() for df in dfs]
 
     def set_num_workers(self, num_workers: int | None) -> None:
@@ -181,7 +181,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         faucet: Faucet[RequestT, DataModelT],
         data_model: DataModelT,
         default_transformations: list[Callable[..., Any]],
-    ) -> DataFlow[DataModelT]:
+    ) -> DataFlow[RequestT, DataModelT]:
         from pfeed.dataflow.dataflow import DataFlow
 
         dataflow = DataFlow(faucet=faucet, data_model=data_model, default_transformations=default_transformations)
@@ -253,8 +253,12 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         data_layer = request.data_layer if data_layer is None else DataLayer[str(data_layer).upper()]
         request.finalize_load_config(io, data_layer)
         for dataflow in self._dataflows[request]:
-            dataflow.setup_handler(io, data_layer, str(self.data_domain))
+            dataflow.setup_handler(io, data_layer, str(self.data_domain), **self._get_handler_kwargs(request))
         return self
+
+    def _get_handler_kwargs(self, request: RequestT) -> dict[str, Any]:
+        """Options from the request for the data model's handler, see DataFlow.setup_handler()."""
+        return {}
 
     def _finalize_run(self) -> None:
         # run-time method: finalize EVERY queued request, not just the latest.
@@ -298,7 +302,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._dataflows = {}
         self._set_running(False)
 
-    def _create_batch_dataflows(self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]) -> list[DataFlow[DataModelT]]:
+    def _create_batch_dataflows(self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]) -> list[DataFlow[RequestT, DataModelT]]:
         """Creates batch dataflows for the current request, one per data model
 
         Args:
@@ -318,7 +322,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         self._dataflows[request] = dataflows
         return dataflows
 
-    def _run_batch_dataflows(self, use_prefect: bool, prefect_kwargs: dict[str, Any]) -> list[DataFlow[DataModelT]]:
+    def _run_batch_dataflows(self, use_prefect: bool, prefect_kwargs: dict[str, Any]) -> list[DataFlow[RequestT, DataModelT]]:
         from importlib.util import find_spec
 
         from pfund_kit.utils.progress_bar import ProgressBar, track
@@ -330,7 +334,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         disable_progress_bar = not get_config().show_progress_bar
         self._prepare_before_run()
 
-        def _run_dataflow(dataflow: DataFlow[DataModelT]) -> DataFlowResult:
+        def _run_dataflow(dataflow: DataFlow[RequestT, DataModelT]) -> DataFlowResult:
             return dataflow.run_batch(
                 flow_type=FlowType.prefect if use_prefect else FlowType.native,
                 prefect_kwargs=prefect_kwargs,
@@ -339,7 +343,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
         # Collect the result-bearing dataflow objects here. For non-Ray these are the
         # same objects as in `self._dataflows` (mutated in place); for Ray they're the
         # deserialized copies returned from workers (which carry the actual results).
-        last_run_dataflows: list[DataFlow[DataModelT]] = []
+        last_run_dataflows: list[DataFlow[RequestT, DataModelT]] = []
 
         try:
             if self._is_using_ray():
@@ -366,8 +370,8 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
 
                 @ray.remote
                 def ray_task(
-                    logger_name: str, log_queue: Queue, prefect_context: dict[str, Any] | None, dataflow: DataFlow[DataModelT]
-                ) -> DataFlow[DataModelT]:
+                    logger_name: str, log_queue: Queue, prefect_context: dict[str, Any] | None, dataflow: DataFlow[RequestT, DataModelT]
+                ) -> DataFlow[RequestT, DataModelT]:
                     from contextlib import nullcontext
 
                     setup_logger_in_ray_task(logger_name, log_queue)
@@ -391,9 +395,9 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                         pending = iter(enumerate(dataflows))
                         # dataflows finish in any order, keep the results in submission order so run() is deterministic
                         ref_to_index: dict[ray.ObjectRef, int] = {}
-                        results: list[DataFlow[DataModelT] | None] = [None] * len(dataflows)
+                        results: list[DataFlow[RequestT, DataModelT] | None] = [None] * len(dataflows)
 
-                        def submit_next(index: int, dataflow: DataFlow[DataModelT]) -> ray.ObjectRef:
+                        def submit_next(index: int, dataflow: DataFlow[RequestT, DataModelT]) -> ray.ObjectRef:
                             ref = submit(dataflow)
                             ref_to_index[ref] = index
                             return ref
@@ -412,7 +416,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
                                 pbar.advance(1)
                                 if (item := next(pending, None)) is not None:
                                     unfinished.append(submit_next(*item))
-                        last_run_dataflows.extend(cast("list[DataFlow[DataModelT]]", results))
+                        last_run_dataflows.extend(cast("list[DataFlow[RequestT, DataModelT]]", results))
                     except BaseException:
                         # e.g. KeyboardInterrupt or a crashed worker: cancel the in-flight tasks,
                         # otherwise they keep running (and writing to storage) after run() returns.

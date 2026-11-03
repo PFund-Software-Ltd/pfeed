@@ -3,19 +3,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable
+    from collections.abc import AsyncGenerator, Awaitable, Callable, Hashable
 
-    from pfund_blocks.typing import Message, ProductName
+    from pfund_blocks.typing import Message
     from ray.util.queue import Queue
 
     from pfeed.base.data_handler import BaseDataHandler
     from pfeed.base.feed import BaseFeed
+    from pfeed.base.requests.stream_request import BaseStreamRequest
+    from pfeed.base.time_based_data_model import TimeBasedDataModel
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.dataflow.faucet import WorkerName
     from pfeed.dataflow.result import RunResult
     from pfeed.engine import DataEngine
-    from pfeed.market.data_model import MarketDataModel
-    from pfeed.market.requests.stream_request import MarketFeedStreamRequest
     from pfeed.streaming.zeromq import ZeroMQChannel
 
     # NOTE: only for the type checker, so that it knows the mixin's self is a feed; at runtime the mixin inherits an empty class.
@@ -34,14 +34,14 @@ import time
 from pfund_blocks.enums.env import Environment
 
 
-class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDataModel](_FeedBase):
+class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel](_FeedBase):
     QUEUE_MAXSIZE: ClassVar[int] = 1000
     WORKER_READY_TIMEOUT: ClassVar[float] = 60  # seconds
 
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         # NOTE: one queue per dataflow
-        self._queues: dict[tuple[ProductName, str], asyncio.Queue[Any]] = {}
+        self._queues: dict[Hashable, asyncio.Queue[Any]] = {}
         self._user_callback: Callable[[Message], Awaitable[None] | None] | None = None
         self._engine: DataEngine | None = None
 
@@ -87,25 +87,38 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
         return _iter()
 
     @staticmethod
-    def _create_queue_key(request: RequestT) -> tuple[ProductName, str]:
-        return (request.product.name, repr(request.data_resolution))
+    def _create_queue_key_from_request(request: RequestT) -> Hashable:
+        """The key of the request's queue, one queue per dataflow.
+
+        _callback() puts each message in the queue with the same key built from the message,
+        so the two must match, e.g. (product name, data resolution) for market data.
+        """
+        raise NotImplementedError
+
+    @staticmethod
+    def _create_queue_key_from_message(message: Message) -> Hashable:
+        """The key of the queue the message is put in, see _create_queue_key_from_request().
+
+        A message for no dataflow, e.g. an error message without a product, gets a key no queue has, so it is not queued.
+        """
+        raise NotImplementedError
 
     def _create_queue(self, request: RequestT) -> None:
-        key = self._create_queue_key(request)
+        key = self._create_queue_key_from_request(request)
         if key in self._queues:
             raise ValueError(f"{key} is already being streamed")
         self._queues[key] = asyncio.Queue(maxsize=self.QUEUE_MAXSIZE)
 
-    async def _callback(self, msg: Message):
+    async def _callback(self, message: Message):
         if self._user_callback:
-            result = self._user_callback(msg)
+            result = self._user_callback(message)
             if inspect.isawaitable(result):
                 await result
         # NOTE: error messages can have no product/resolution, so they have no queue
-        if (queue := self._queues.get((msg["product"], msg["resolution"]))) is not None:
+        if (queue := self._queues.get(self._create_queue_key_from_message(message))) is not None:
             # NOTE: the queue is shut down when its dataflow has failed, drop the message, otherwise every new message raises here
             with contextlib.suppress(asyncio.QueueShutDown):
-                await queue.put(msg)
+                await queue.put(message)
 
     def _set_user_callback(self, callback: Callable[[Message], Awaitable[None] | None]):
         # NOTE: a connection has only one callback, a different one would silently replace the existing one
@@ -130,10 +143,10 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
         extract_func: Callable[..., Any],
         data_model: DataModelT,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
-    ) -> DataFlow[DataModelT]:
+    ) -> DataFlow[RequestT, DataModelT]:
         from pfund_kit.style import RichColor, TextStyle
 
-        request: RequestT = self._get_current_request()
+        request = cast("RequestT", self._get_current_request())
         existing_dataflow = self.dataflows[0] if self.dataflows else None
         existing_faucet = existing_dataflow.faucet if existing_dataflow else None
         existing_request = cast("RequestT", existing_faucet.request) if existing_faucet else None
@@ -146,7 +159,7 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
 
         if request.env in (Environment.PAPER, Environment.LIVE):
             stream_api = self.data_source.get_stream_api(request.env)
-            stream_api.add_channel(request.product, request.data_resolution)
+            stream_api.add_channel(request)
             stream_api.set_callback(self._callback)
             self._create_queue(request)
 
@@ -156,10 +169,10 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
         self._dataflows[request] = [dataflow]
         return dataflow
 
-    async def _run_stream_dataflows(self) -> list[DataFlow[DataModelT]]:
+    async def _run_stream_dataflows(self) -> list[DataFlow[RequestT, DataModelT]]:
         self._prepare_before_run()
 
-        async def _run_dataflow(dataflow: DataFlow[DataModelT], queue: asyncio.Queue[Message]):
+        async def _run_dataflow(dataflow: DataFlow[RequestT, DataModelT], queue: asyncio.Queue[Message]):
             await dataflow.run_stream(queue=queue)
             # NOTE: run_stream() records a failure instead of raising.
             # nothing reads this queue anymore, if it fills up, it would block the websocket reader shared with other dataflows
@@ -168,7 +181,7 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
 
         async def _run_dataflows():
             runs = [
-                _run_dataflow(dataflow, self._queues[self._create_queue_key(request)])
+                _run_dataflow(dataflow, self._queues[self._create_queue_key_from_request(request)])
                 for request, dataflows in self._dataflows.items()
                 for dataflow in dataflows
             ]
@@ -267,7 +280,7 @@ class StreamingFeedMixin[RequestT: MarketFeedStreamRequest, DataModelT: MarketDa
                 num_cpus = max(1, int(ray.available_resources().get("CPU", 1)))
                 num_workers = min(self._num_workers, len(dataflows), num_cpus)
                 # NOTE: a dataflow stays on one worker, so its messages stay in order and its stateful transformations stay in one process
-                dataflows_per_worker: dict[WorkerName, list[DataFlow[DataModelT]]] = {
+                dataflows_per_worker: dict[WorkerName, list[DataFlow[RequestT, DataModelT]]] = {
                     f"worker-{i + 1}": dataflows[i::num_workers] for i in range(num_workers)
                 }
 

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from pfund_blocks.resolution import Resolution
 
     from pfeed.base.time_based_data_model import TimeBasedDataModel
-    from pfeed.base.time_based_request import TimeBasedFeedBaseRequest
+    from pfeed.base.requests.time_based_request import TimeBasedFeedBaseRequest
     from pfeed.dataflow.result import DataFlowResult, RunResult
     from pfeed.source import BaseSource
 

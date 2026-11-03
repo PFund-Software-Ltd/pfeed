@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import pyarrow as pa
 
     from pfeed.base.data_model import BaseDataModel
     from pfeed.io.base_io import BaseIO, DatasetKey, Metadata as IOMetadata, Partition
-    from pfeed.streaming.sink import Sink
+    from pfeed.streaming.buffer import StreamBuffer
 
 from abc import ABC, abstractmethod
 
@@ -43,24 +43,21 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         io: BaseIO,
         data_domain: str,
         data_layer: DataLayer | str = DataLayer.CLEANED,
-        sink: Sink | None = None,
+        is_streaming: bool = False,
     ):
         """
         Args:
             data_domain: the kind of data, e.g. DataCategory.MARKET_DATA, see BaseFeed.data_domain.
-            sink: buffers streamed data until a flush is due; None if the handler doesn't write streamed data.
-                Streamed data is appended, so `io` must support append.
+            is_streaming: whether the dataset holds streamed data, which is stored with a different schema,
+                e.g. partitioned by start_ts instead of date, see _get_date_col().
         """
-        if sink is not None and not io.CAPABILITIES.append:
-            raise ValueError(f'{io!r} does not support append, it cannot store streamed data')
         self._data_model = data_model
         self._io = io
-        self._sink = sink
         self._data_layer = DataLayer[str(data_layer).upper()]
         self._data_domain = data_domain.upper()
+        self._is_streaming = is_streaming
         self._dataset_key: DatasetKey = self._create_dataset_key()
-        # built up front, so a handler that doesn't support streaming raises here, not at the first flush
-        self._streaming_schema: pa.Schema | None = self._build_streaming_schema() if sink is not None else None
+        self._stream_buffer: StreamBuffer | None = None
 
     @property
     def name(self) -> str:
@@ -74,10 +71,6 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
     @property
     def io(self) -> BaseIO:
         return self._io
-
-    @property
-    def sink(self) -> Sink | None:
-        return self._sink
 
     @property
     def data_model(self) -> DataModelT:
@@ -119,26 +112,39 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         """The partitions of the streamed rows in `df`, each with its metadata; override to support streaming."""
         raise NotImplementedError(f'{type(self).__name__} does not support streaming')
 
-    def write_stream(self, msg: Any, **kwargs: Any) -> None:
+    def setup_streaming(self, flush_interval: float):
+        from pfeed.streaming.buffer import StreamBuffer
+
+        if not self._is_streaming:
+            raise ValueError(f'{self!r} is not for streamed data, create it with is_streaming=True')
+        if self._data_layer == DataLayer.RAW:
+            raise NotImplementedError('storing streamed raw data is not supported yet')
+        if not self._io.CAPABILITIES.append:
+            raise ValueError(f'{self._io!r} does not support append, it cannot store streamed data')
+        # built up front, so a handler that doesn't support streaming raises here, not at the first flush
+        self._stream_buffer = StreamBuffer(
+            schema=self._build_streaming_schema(),
+            flush_interval=flush_interval
+        )
+
+    def flush(self) -> None:
+        """Appends the stream buffer's rows to the IO.
+
+        The rows are only cleared after a successful write, so a failed write is retried at the next flush.
+        """
+        if self._stream_buffer is None or not self._stream_buffer.rows:
+            return
+        df = self._stream_buffer.to_dataframe()
+        self._write(df, self._stream_partitions(df), mode='append')
+        self._stream_buffer.clear()
+
+    def write_stream(self, msg: Any) -> None:
         """Buffers one streamed message in the sink, flushing it if due; override to support streaming.
 
         Args:
             kwargs: handler-specific options, see e.g. MarketDataHandler.write_stream().
         """
         raise NotImplementedError(f'{type(self).__name__} does not support streaming')
-
-    def flush(self) -> None:
-        """Appends the sink's buffered rows to the IO.
-
-        The rows are only cleared after a successful write, so a failed write is retried at the next flush.
-        """
-        if self._sink is None or not self._sink.rows:
-            return
-        import pyarrow as pa
-
-        df = cast('pl.DataFrame', pl.from_arrow(pa.Table.from_pylist(self._sink.rows, schema=self._streaming_schema)))
-        self._write(df, self._stream_partitions(df), mode='append')
-        self._sink.clear()
 
     def _write(
         self,

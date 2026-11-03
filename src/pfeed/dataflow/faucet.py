@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pfund_blocks.typing import Message
 
     from pfeed.base.data_model import BaseDataModel
-    from pfeed.base.request import BaseRequest
+    from pfeed.base.requests.base_request import BaseRequest
     from pfeed.dataflow.dataflow import DataFlow
     from pfeed.source import BaseSource
     from pfeed.streaming.zeromq import ZeroMQ, ZeroMQChannel, ZeroMQTopic
@@ -38,8 +38,8 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         self._extract_func = extract_func
         self._stream_task: asyncio.Task[None] | None = None
         self._msg_queue: ZeroMQ | None = None
-        self._stream_workers: dict[DataFlow[DataModelT], WorkerName] = {}
-        self._zmq_routes: dict[DataFlow[DataModelT], tuple[ZeroMQChannel, ZeroMQTopic]] = {}
+        self._stream_workers: dict[DataFlow[RequestT, DataModelT], WorkerName] = {}
+        self._zmq_routes: dict[DataFlow[RequestT, DataModelT], tuple[ZeroMQChannel, ZeroMQTopic]] = {}
 
     @property
     def name(self) -> str:
@@ -90,7 +90,7 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             self._stream_task = asyncio.create_task(self._extract_func(self._request, data_model))
         return self._stream_task
 
-    def _register_zmq_route(self, dataflow: DataFlow[DataModelT]):
+    def _register_zmq_route(self, dataflow: DataFlow[RequestT, DataModelT]):
         import zmq
         from pfund_blocks.resolution import Resolution
 
@@ -110,18 +110,18 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         zmq_topic = resolution.to_channel()
         self._zmq_routes[dataflow] = (zmq_channel, zmq_topic)
 
-    def add_stream_worker(self, dataflow: DataFlow[DataModelT], worker_name: WorkerName):
+    def add_stream_worker(self, dataflow: DataFlow[RequestT, DataModelT], worker_name: WorkerName):
         self._stream_workers[dataflow] = worker_name
         self._register_zmq_route(dataflow)
 
-    def get_zmq_channel(self, dataflow: DataFlow[DataModelT]) -> ZeroMQChannel:
+    def get_zmq_channel(self, dataflow: DataFlow[RequestT, DataModelT]) -> ZeroMQChannel:
         return self._zmq_routes[dataflow][0]
 
     def is_using_ray(self) -> bool:
         """Checks if using ray for streaming"""
         return bool(self._stream_workers)
 
-    def send_to_stream_worker(self, dataflow: DataFlow[DataModelT], msg: Message):
+    def send_to_stream_worker(self, dataflow: DataFlow[RequestT, DataModelT], msg: Message):
         channel, topic = self._zmq_routes[dataflow]
         worker_name: WorkerName = self._stream_workers[dataflow]
         self.msg_queue.send(

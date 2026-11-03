@@ -47,7 +47,7 @@ class DatasetKey:
 
     Attributes:
         namespace: ordered (key -> value), e.g. {'env': 'BACKTEST', 'data_layer': 'CLEANED', ...}
-        name: ordered (key -> value), e.g. {'asset_type': 'PERPETUAL', 'resolution': '1t'}
+        name: ordered (key -> value), e.g. {'product_type': 'PERPETUAL', 'resolution': '1t'}
         partition_by: partition levels of the dataset, e.g. ('product', DatePartition('date')).
             Empty for unpartitioned datasets.
             A partition is a logical unit of write (replace), metadata and existence, not a physical layout;

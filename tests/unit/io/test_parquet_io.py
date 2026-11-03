@@ -20,9 +20,9 @@ from pfeed.io.base_io import DatasetKey, DatePartition
 from pfeed.io.parquet_io import ParquetIO
 
 NAMESPACE = {'env': 'BACKTEST', 'data_source': 'BYBIT'}
-NAME = {'asset_type': 'PERPETUAL', 'resolution': '1t'}
+NAME = {'product_type': 'PERPETUAL', 'resolution': '1t'}
 # where ParquetIO puts a dataset with NAMESPACE and NAME, relative to base_path
-DATASET_DIR = 'env=BACKTEST/data_source=BYBIT/asset_type=PERPETUAL/resolution=1t'
+DATASET_DIR = 'env=BACKTEST/data_source=BYBIT/product_type=PERPETUAL/resolution=1t'
 D1, D2, D3 = datetime.date(2025, 1, 1), datetime.date(2025, 1, 2), datetime.date(2025, 1, 3)
 DATE_KEY = DatasetKey(namespace=NAMESPACE, name=NAME, partition_by=('product', DatePartition('date')))
 

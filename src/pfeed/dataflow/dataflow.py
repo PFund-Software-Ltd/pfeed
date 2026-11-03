@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
     from pfeed.base.data_handler import BaseDataHandler
     from pfeed.base.data_model import BaseDataModel
-    from pfeed.base.request import BaseRequest
+    from pfeed.base.requests import BaseRequest, BaseStreamRequest
     from pfeed.dataflow.faucet import Faucet
     from pfeed.enums import DataLayer
     from pfeed.io.base_io import BaseIO
@@ -25,10 +25,10 @@ from pfeed.dataflow.result import DataFlowResult
 from pfeed.enums import FlowType
 
 
-class DataFlow[DataModelT: BaseDataModel]:
+class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
     def __init__(
         self,
-        faucet: Faucet[BaseRequest, DataModelT],
+        faucet: Faucet[RequestT, DataModelT],
         data_model: DataModelT,
         default_transformations: list[Callable[..., Any]] | None = None,
     ):
@@ -37,7 +37,7 @@ class DataFlow[DataModelT: BaseDataModel]:
             default_transformations: the feed's transformations, run before the user's from transform()
         """
         self._logger = logging.getLogger(f"pfeed.{data_model.data_source.lower()}")
-        self._faucet: Faucet[BaseRequest, DataModelT] = faucet
+        self._faucet: Faucet[RequestT, DataModelT] = faucet
         self._data_model: DataModelT = data_model
         self._transformations: list[Callable[..., Any]] = list(default_transformations or [])
         self._handler: BaseDataHandler | None = None
@@ -50,7 +50,7 @@ class DataFlow[DataModelT: BaseDataModel]:
         return self._data_model
 
     @property
-    def faucet(self) -> Faucet[BaseRequest, DataModelT]:
+    def faucet(self) -> Faucet[RequestT, DataModelT]:
         return self._faucet
 
     @property
@@ -110,27 +110,29 @@ class DataFlow[DataModelT: BaseDataModel]:
     def has_handler(self) -> bool:
         return self._handler is not None
 
-    def setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str):
-        """Creates the data handler that loads the data to io, from the dataflow's own data model."""
+    def setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str, **handler_kwargs: Any):
+        """Creates the data handler that loads the data to io, from the dataflow's own data model.
+
+        Args:
+            handler_kwargs: options specific to the data model's handler, forwarded as is,
+                e.g. store_incremental_bars for MarketDataHandler.
+        """
         if self._handler is not None:
             raise ValueError(f"handler is already set for dataflow {self}")
         if self.is_sealed():
             raise ValueError(f"cannot set handler for sealed dataflow {self}")
-        # TODO: streaming has no sink for now, so a streaming handler can't write yet (write_stream() raises without one).
-        # Whether the Sink stays isn't decided. The stream io options (flush_interval, store_incremental_bars)
-        # are carried by the stream request and belong to the handler, how to pass them depends on that decision.
-        # sink = None
-        # if self.is_streaming() and not self.is_replaying():
-        #     if self._flush_interval is None:
-        #         raise ValueError(f"stream options are not set for dataflow {self.name}, see set_stream_options()")
-        #     sink = Sink(flush_interval=self._flush_interval)
+        is_storing_stream = self.is_streaming() and not self.is_replaying()
         self._handler = self._data_model.DataHandler(
             data_model=self._data_model,
             io=io,
             data_layer=data_layer,
             data_domain=data_domain,
-            sink=None,
+            is_streaming=is_storing_stream,
+            **handler_kwargs,
         )
+        if is_storing_stream:
+            request = cast("BaseStreamRequest", self.faucet.request)
+            self._handler.setup_streaming(request.flush_interval)
 
     def _load(self, data: Any) -> bool:
         """Returns whether the data was loaded, False if the dataflow has no handler."""
@@ -292,8 +294,8 @@ class DataFlow[DataModelT: BaseDataModel]:
     async def end_stream(self):
         try:
             await self.faucet.close_stream()
-            # with Ray, each worker flushes its own copy of the handler, this one's sink stays empty
-            if self._handler is not None and self._handler.sink is not None:
+            # with Ray, each worker flushes its own copy of the handler, this one's buffer stays empty
+            if self._handler is not None:
                 self._handler.flush()
         except Exception as err:
             self._logger.exception(f"Error ending stream for {self}:")

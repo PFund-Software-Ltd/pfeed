@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pfund_blocks.enums.env import Environment
 
     from pfeed.base.feed import BaseFeed
-    from pfeed.base.stream_api import BaseStreamAPI
+    from pfeed.streaming.stream_api import BaseStreamAPI
 
 import os
 from abc import ABC

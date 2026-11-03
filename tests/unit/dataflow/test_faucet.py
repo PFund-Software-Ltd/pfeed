@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
-    from pfeed.base.request import BaseRequest
+    from pfeed.base.requests.base_request import BaseRequest
 
 from types import SimpleNamespace
 

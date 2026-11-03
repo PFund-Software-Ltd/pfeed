@@ -6090,7 +6090,7 @@ packages:
   - narwhals>=2.27.1 ; sys_platform != 'emscripten'
   - beautifulsoup4>=4.15.0
   - pyzmq>=27.2.0 ; sys_platform != 'emscripten'
-  - ray[default]>=2.59.0 ; extra == 'ray'
+  - ray[default]>=2.59.0 ; python_full_version < '3.15' and extra == 'ray'
   - huggingface-hub>=2.2.0 ; extra == 'huggingface'
   - prefect>=3.8.8 ; extra == 'prefect'
   - lancedb>=0.40.0 ; extra == 'lancedb'

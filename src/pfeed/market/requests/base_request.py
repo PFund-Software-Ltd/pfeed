@@ -10,7 +10,7 @@ from pfund_blocks.entities.products.product_base import BaseProduct
 from pfund_blocks.enums.env import Environment
 from pydantic import Field, field_validator, model_validator
 
-from pfeed.base.time_based_request import TimeBasedFeedBaseRequest
+from pfeed.base.requests.time_based_request import TimeBasedFeedBaseRequest
 from pfeed.enums import DataLayer
 
 MIN_TARGET_RESOLUTION = Resolution("1d")

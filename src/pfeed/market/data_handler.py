@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     import pyarrow as pa
+    from pfund_blocks.datas.tick_data import Tick
     from pfund_blocks.resolution import Resolution
+    from pfund_blocks.typing import Message
 
     from pfeed.io.base_io import BaseIO, Partition, PartitionValue
     from pfeed.market.data_model import MarketDataModel
-    from pfeed.streaming.market_data_message import MarketDataMessage
-    from pfeed.streaming.sink import Sink
 
 import polars as pl
-from pfund_blocks.enums.env import Environment
 
 from pfeed.base.data_handler import BaseDataMetadata
 from pfeed.base.time_based_data_handler import TimeBasedDataHandler
@@ -41,23 +40,11 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         io: BaseIO,
         data_layer: DataLayer | str = DataLayer.CLEANED,
         data_domain: str = DataCategory.MARKET_DATA,
-        sink: Sink | None = None,
+        is_streaming: bool = False,
+        store_incremental_bars: bool = False,
     ):
-        super().__init__(data_model, io, data_domain=data_domain, data_layer=data_layer, sink=sink)
-        if sink is not None and not self._is_streamed():
-            raise ValueError(f'env={data_model.env} is not streamed, it cannot have a sink')
-        if sink is not None and self._data_layer == DataLayer.RAW:
-            raise NotImplementedError('storing streamed raw data is not supported yet')
-
-    def _is_streamed(self) -> bool:
-        """Data of env=BACKTEST is downloaded in batches, data of other envs is streamed."""
-        return self._data_model.env != Environment.BACKTEST
-
-    def _get_date_col(self) -> str:
-        """Streamed data has no 'date' column: ticks use 'ts', bars 'start_ts' so a bar is in the day it starts."""
-        if self._is_streamed() and self._data_layer != DataLayer.RAW:
-            return 'start_ts' if cast('Resolution', self._data_model.resolution).is_bar() else 'ts'
-        return super()._get_date_col()
+        super().__init__(data_model, io, data_domain=data_domain, data_layer=data_layer, is_streaming=is_streaming)
+        self._store_incremental_bars = store_incremental_bars
 
     def _create_namespace(self) -> dict[str, str]:
         data_model = self._data_model
@@ -71,7 +58,7 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
 
     def _create_name(self) -> dict[str, str]:
         return {
-            'asset_type': str(self._data_model.product.product_type),
+            'product_type': str(self._data_model.product.product_type),
             'resolution': str(self._data_model.resolution),
         }
 
@@ -79,6 +66,14 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         from pfeed.schemas.market_data_schema import PRODUCT
 
         return {PRODUCT: self._data_model.product.name}
+
+    def _get_date_col(self) -> str:
+        if self._is_streaming:
+            from pfeed.schemas.streaming.bar_message_schema import START_TS
+            from pfeed.schemas.streaming.tick_message_schema import TS
+
+            return START_TS if cast('Resolution', self._data_model.resolution).is_bar() else TS
+        return super()._get_date_col()
 
     def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
         from pfeed.schemas.market_data_schema import get_market_data_schema
@@ -105,9 +100,8 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         self._write(df, {partition: self._create_metadata() for partition in self._partitions()}, mode='replace')
 
     def _build_streaming_schema(self) -> pa.Schema:
-        from pfeed.schemas.bar_message_schema import BarMessageSchema
-        from pfeed.schemas.specs_schemas import get_specs_schema
-        from pfeed.schemas.tick_message_schema import TickMessageSchema
+        from pfeed.schemas.streaming.bar_message_schema import BarMessageSchema
+        from pfeed.schemas.streaming.tick_message_schema import TickMessageSchema
 
         resolution = cast('Resolution', self._data_model.resolution)
         if resolution.is_tick():
@@ -116,31 +110,19 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
             message_schema = BarMessageSchema
         else:
             raise NotImplementedError(f'streaming {resolution} data is not supported yet')
-        return message_schema.build(specs_schema=get_specs_schema(self._data_model.product))
+        return message_schema.build()
 
-    def write_stream(self, msg: MarketDataMessage, *, store_incremental_bars: bool = False, **kwargs: Any) -> None:
-        """Buffers `msg` in the sink, and flushes the sink if a flush is due.
-
-        Args:
-            store_incremental_bars: if True, also stores the updates of a bar before it closes,
-                e.g. for a venue that only streams such updates; otherwise only closed bars are stored.
-            kwargs: only to match BaseDataHandler.write_stream(), any option raises TypeError.
-        """
-        if kwargs:
-            raise TypeError(f'unexpected options {list(kwargs)}')
-        if self._sink is None:
-            raise ValueError(f'{self!r} has no sink, it cannot write streamed data')
-        from pfeed.streaming.bar_message import BarMessage
-
-        if isinstance(msg, BarMessage) and msg.is_incremental and not store_incremental_bars:
+    def write_stream(self, msg: Message) -> None:
+        from pfund_blocks.datas.bar_data import Bar
+        if self._stream_buffer is None:
+            raise ValueError(f'{self!r} is not set up for streaming, call setup_streaming() first')
+        data_point = cast("Bar | Tick", msg['data'])
+        if isinstance(data_point, Bar) and not data_point.is_closed and not self._store_incremental_bars:
             return
-        row = msg.to_dict()
-        # REVIEW: extra is dropped, only the columns in the streaming schema are stored
-        del row['extra']
-        # one column per spec, e.g. strike_price for options
-        row |= row.pop('specs')
-        self._sink.append(row)
-        if self._sink.is_due():
+        # columns not in the streaming schema (e.g. resolution) are dropped when the buffer builds its dataframe
+        row = {'product': msg['product'], 'received_at': msg['received_at'], **data_point.to_dict()}
+        self._stream_buffer.append(row)
+        if self._stream_buffer.is_due():
             self.flush()
 
     def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, MarketDataMetadata]]:

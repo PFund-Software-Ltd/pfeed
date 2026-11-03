@@ -37,7 +37,7 @@ def io(request, tmp_path) -> BaseIO:
 
 KEY = DatasetKey(
     namespace={'env': 'BACKTEST', 'data_source': 'BYBIT'},
-    name={'asset_type': 'PERPETUAL', 'resolution': '1t'},
+    name={'product_type': 'PERPETUAL', 'resolution': '1t'},
     partition_by=('product', 'date'),
 )
 D1, D2, D3 = datetime.date(2025, 1, 1), datetime.date(2025, 1, 2), datetime.date(2025, 1, 3)
@@ -329,7 +329,7 @@ def test_append_unsupported_raises(io: BaseIO, data: pa.Table):
     # KEY's dataset lives *inside* this one's dataset dir
     DatasetKey(
         namespace=KEY.namespace,
-        name={'asset_type': KEY.name['asset_type']},
+        name={'product_type': KEY.name['product_type']},
         partition_by=KEY.partition_by,
     ),
 ], ids=['sibling', 'parent'])

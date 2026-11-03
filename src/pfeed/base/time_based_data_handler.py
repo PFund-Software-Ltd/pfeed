@@ -47,10 +47,11 @@ class TimeBasedDataHandler[DataModelT: TimeBasedDataModel, MetadataT: BaseDataMe
         return DATE
 
     def _create_dataset_key(self) -> DatasetKey:
+        date_col = self._get_date_col()
         return DatasetKey(
             namespace=self._create_namespace(),
             name=self._create_name(),
-            partition_by=(*self._partition_prefix(), DatePartition(self._get_date_col())),
+            partition_by=(*self._partition_prefix(), DatePartition(date_col)),
         )
 
     def _stream_partitions(self, df: pl.DataFrame) -> dict[Partition, MetadataT]:

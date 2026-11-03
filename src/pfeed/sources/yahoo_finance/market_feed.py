@@ -21,7 +21,7 @@ import time
 import polars as pl
 
 from pfeed.market.feed import MarketFeed
-from pfeed.streaming.feed_mixin import StreamingFeedMixin
+from pfeed.streaming.feed_mixin import StreamingMixin
 from pfeed.io.io_config import IOConfig
 from pfeed.sources.yahoo_finance.market_data_model import YahooFinanceMarketDataModel
 from pfeed.sources.yahoo_finance.source import YahooFinanceSource
@@ -29,7 +29,7 @@ from pfeed.sources.yahoo_finance.source import YahooFinanceSource
 
 # NOTE: only yfinance's period='max' is used, everything else is converted to start_date and end_date
 # i.e. any resampling inside yfinance (interval always ='1x') is not used, it's all done by pfeed
-class YahooFinanceMarketFeed(StreamingFeedMixin, MarketFeed):
+class YahooFinanceMarketFeed(StreamingMixin, MarketFeed):
     DataSource: ClassVar[type[YahooFinanceSource]] = YahooFinanceSource
     data_source: YahooFinanceSource
     _yfinance_kwargs: dict[str, Any] | None = None

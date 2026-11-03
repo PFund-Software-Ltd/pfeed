@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
     from pytest_mock import MockerFixture
 
-    from pfeed.base.request import BaseRequest
+    from pfeed.base.requests.base_request import BaseRequest
     from pfeed.io.base_io import Partition
 
 import logging
@@ -184,7 +184,7 @@ def test_setup_handler(io: ParquetIO):
     assert isinstance(handler, _Handler)
     assert dataflow.has_handler()
     assert handler.name == 'TEST.TEST_DOMAIN.RAW.ParquetIO'
-    assert handler.sink is None  # batch dataflows don't buffer
+    assert handler._stream_buffer is None  # batch dataflows don't buffer
 
 
 def test_setup_handler_twice_raises(io: ParquetIO):

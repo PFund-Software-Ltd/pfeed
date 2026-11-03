@@ -22,6 +22,13 @@ class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
         # retrieved data is returned as stored, raw data is never cleaned on read
         return False
 
+    def is_streamed_data(self) -> bool:
+        """Whether the stored data was written by a stream:
+        download always stores in BACKTEST, only a stream stores in PAPER or LIVE."""
+        from pfund_blocks.enums.env import Environment
+
+        return self.env in (Environment.PAPER, Environment.LIVE)
+
     def create_data_resolution_handler(self, data_model: MarketDataModel | None = None) -> MarketDataHandler:
         """Handler reading this request's data from storage at data_resolution.
 
@@ -40,4 +47,5 @@ class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
             io=self.io_for_retrieval,
             data_layer=self.data_layer,
             data_domain=str(DataCategory.MARKET_DATA),
+            is_streaming=self.is_streamed_data(),
         )

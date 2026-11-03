@@ -584,6 +584,8 @@ class MarketFeed[
             callback: Sync or async callable called with each streamed `Message`, before it is transformed or stored.
                 `Message['data']` holds the parsed data, e.g. bars or ticks,
                 except when using Ray (see `set_num_workers()`), where the workers parse it and `Message['data']` is None.
+                It is awaited before the next message is read, so a slow callback delays every stream of the feed,
+                offload heavy work, e.g. to a task or a thread.
             replay_pace: Pacing between row emissions when replaying (env=BACKTEST). Ignored otherwise.
                 - 0 (default): ASAP — no sleep between rows. Backtests process the whole
                   range as fast as possible regardless of resolution or row count.

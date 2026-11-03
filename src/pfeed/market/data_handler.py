@@ -122,8 +122,7 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         # columns not in the streaming schema (e.g. resolution) are dropped when the buffer builds its dataframe
         row = {'product': msg['product'], 'received_at': msg['received_at'], **data_point.to_dict()}
         self._stream_buffer.append(row)
-        if self._stream_buffer.is_due():
-            self.flush()
+        self.flush_if_due()
 
     def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, MarketDataMetadata]]:
         from pfeed.schemas.market_data_schema import PRODUCT

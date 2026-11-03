@@ -14,9 +14,8 @@ class StreamBuffer:
     """Buffers streamed rows until a flush is due.
 
     The buffer owns no IO and no resources, so it has no open/close:
-    the data handler appends rows, checks is_due(), writes to_dataframe() through its IO,
-    then calls clear(). Rows are only cleared after a successful write,
-    so a failed write keeps them for the next flush.
+    the data handler appends rows, checks is_due(), drain()s the rows and writes them through its IO,
+    and restore()s them if the write fails, so they are written at the next flush.
     """
 
     def __init__(self, schema: pa.Schema, flush_interval: float = 100):
@@ -49,16 +48,24 @@ class StreamBuffer:
         """True if there are rows and flush_interval has passed since the last flush."""
         return bool(self._rows) and time.monotonic() - self._last_flush >= self._flush_interval
 
-    def to_dataframe(self) -> pl.DataFrame:
-        """The buffered rows as a dataframe with the buffer's schema."""
+    def to_dataframe(self, rows: list[dict[str, Any]]) -> pl.DataFrame:
+        """The rows, e.g. from drain(), as a dataframe with the buffer's schema."""
         import pyarrow as pa
 
-        return cast('pl.DataFrame', pl.from_arrow(pa.Table.from_pylist(self._rows, schema=self._schema)))
+        return cast('pl.DataFrame', pl.from_arrow(pa.Table.from_pylist(rows, schema=self._schema)))
 
-    def clear(self) -> None:
-        """Drops the buffered rows after they are written, and restarts the flush interval."""
-        self._rows = []
+    def drain(self) -> list[dict[str, Any]]:
+        """Removes and returns the buffered rows to be written, and restarts the flush interval.
+
+        The interval restarts even if the write fails, so a failed write is retried at the next flush, not at every append.
+        """
+        rows, self._rows = self._rows, []
         self._last_flush = time.monotonic()
+        return rows
+
+    def restore(self, rows: list[dict[str, Any]]) -> None:
+        """Puts back drained rows whose write failed, ahead of the rows appended since."""
+        self._rows = rows + self._rows
 
     def __len__(self) -> int:
         return len(self._rows)

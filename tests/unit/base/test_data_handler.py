@@ -1,20 +1,25 @@
 """BaseDataHandler tests, through a minimal concrete handler on a real IO.
 
 Backend behavior is covered by tests/unit/io/test_io_contract.py; these only cover what the handler adds on top,
-i.e. normalizing its inputs and (de)serializing the per-partition metadata. Streaming is not covered here.
+i.e. normalizing its inputs and (de)serializing the per-partition metadata.
+Streaming is only covered for flushing the stream buffer, with the IO write mocked.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pytest_mock import MockerFixture, MockType
+
     from pfeed.io.base_io import Partition
 
 import datetime
+import logging
 
 import polars as pl
+import pyarrow as pa
 import pytest
 from polars.testing import assert_frame_equal
 
@@ -23,6 +28,7 @@ from pfeed.base.data_model import BaseDataModel
 from pfeed.enums import DataLayer
 from pfeed.io.base_io import DatasetKey
 from pfeed.io.parquet_io import ParquetIO
+from pfeed.streaming.buffer import StreamBuffer
 
 KEY = DatasetKey(namespace={'data_source': 'TEST'}, name={'dataset': 'test'}, partition_by=('product',))
 D1 = datetime.date(2025, 1, 1)
@@ -138,3 +144,77 @@ def test_parse_metadata_ignores_unknown_keys(handler: _Handler):
 def test_parse_metadata_fills_missing_keys_with_defaults(handler: _Handler):
     """Partitions written before a metadata field was added stay readable."""
     assert handler._parse_metadata({}) == _Metadata()
+
+
+# --- flushing the stream buffer ---
+
+
+@pytest.fixture
+def streaming_handler(mocker: MockerFixture, handler: _Handler) -> _Handler:
+    """A handler whose stream buffer is always due once it has rows, and whose stream writes are mocked."""
+    handler._stream_buffer = StreamBuffer(pa.schema([('ts', pa.int64())]), flush_interval=1)
+    _ = mocker.patch.object(handler._stream_buffer, 'is_due', side_effect=lambda: bool(handler._stream_buffer and handler._stream_buffer.rows))
+    _ = mocker.patch.object(handler, '_stream_partitions', return_value={})
+    _ = mocker.patch.object(handler, '_write')
+    # NOTE: mocked, a real "pfeed.test" created before pfeed's logging is set up would break the feed tests' logger
+    _ = mocker.patch('pfeed.base.data_handler.logging.getLogger')
+    return handler
+
+
+def _buffer(handler: _Handler) -> StreamBuffer:
+    assert handler._stream_buffer is not None
+    return handler._stream_buffer
+
+
+def _write(handler: _Handler) -> MockType:
+    return cast("MockType", handler._write)
+
+
+def test_flush_writes_and_empties_the_buffer(streaming_handler: _Handler):
+    _buffer(streaming_handler).append({'ts': 1})
+    streaming_handler.flush()
+    df = _write(streaming_handler).call_args.args[0]
+    assert df['ts'].to_list() == [1]
+    assert len(_buffer(streaming_handler)) == 0
+
+
+def test_failed_flush_raises_and_keeps_the_rows(streaming_handler: _Handler):
+    _write(streaming_handler).side_effect = RuntimeError('database is locked')
+    _buffer(streaming_handler).append({'ts': 1})
+    with pytest.raises(RuntimeError, match='database is locked'):
+        streaming_handler.flush()
+    assert _buffer(streaming_handler).rows == [{'ts': 1}]
+
+
+def test_flush_if_due_retries_a_failed_write_at_the_next_flush(streaming_handler: _Handler):
+    _write(streaming_handler).side_effect = [RuntimeError('database is locked'), None]
+    _buffer(streaming_handler).append({'ts': 1})
+    streaming_handler.flush_if_due()
+    cast("MockType", logging.getLogger).return_value.exception.assert_called_once()
+    _buffer(streaming_handler).append({'ts': 2})
+    streaming_handler.flush_if_due()
+    df = _write(streaming_handler).call_args.args[0]
+    assert df['ts'].to_list() == [1, 2]
+    assert len(_buffer(streaming_handler)) == 0
+
+
+def test_flush_if_due_raises_after_max_consecutive_failures(streaming_handler: _Handler):
+    _write(streaming_handler).side_effect = RuntimeError('disk full')
+    _buffer(streaming_handler).append({'ts': 1})
+    for _ in range(streaming_handler.MAX_FAILED_FLUSHES - 1):
+        streaming_handler.flush_if_due()
+    with pytest.raises(RuntimeError, match='disk full'):
+        streaming_handler.flush_if_due()
+
+
+def test_successful_flush_resets_the_failure_count(streaming_handler: _Handler):
+    errors = [RuntimeError('database is locked')] * (streaming_handler.MAX_FAILED_FLUSHES - 1)
+    _write(streaming_handler).side_effect = [*errors, None, *errors]
+    _buffer(streaming_handler).append({'ts': 1})
+    for _ in range(2 * streaming_handler.MAX_FAILED_FLUSHES - 1):
+        streaming_handler.flush_if_due()
+
+
+def test_flush_if_due_does_nothing_when_not_due(streaming_handler: _Handler):
+    streaming_handler.flush_if_due()
+    _write(streaming_handler).assert_not_called()

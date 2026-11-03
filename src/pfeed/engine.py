@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from narwhals.typing import IntoFrame
+    from pfund_blocks.typing import Message
 
     from pfeed.base.feed import BaseFeed
-    from pfeed.streaming.feed_mixin import RawMessage, WebSocketName
+    # from pfeed.streaming.feed_mixin import RawMessage, WebSocketName
+    from pfeed.streaming.mixin import StreamingMixin
     from pfeed.streaming.zeromq import ZeroMQ
 
 import asyncio
+import contextlib
 import logging
 from threading import Thread
 
@@ -28,9 +31,9 @@ class DataEngine:
         self._is_running: bool = False
         self._has_setup_messaging: bool = False
         self._msg_queue: ZeroMQ | None = None
-        self._streaming_queue: (
-            asyncio.Queue[tuple[WebSocketName, RawMessage] | None] | None
-        ) = None
+        # self._streaming_queue: (
+        #     asyncio.Queue[tuple[WebSocketName, RawMessage] | None] | None
+        # ) = None
         self._zmq_thread: Thread | None = None
 
     def is_running(self) -> bool:
@@ -176,37 +179,83 @@ class DataEngine:
         self._msg_queue = None
         self._has_setup_messaging = False
 
-    def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, RawMessage], None]:
+    # def __aiter__(self) -> AsyncGenerator[tuple[WebSocketName, RawMessage], None]:
+    #     assert self._is_streaming_feeds(), (
+    #         "Only streaming feeds support async iteration"
+    #     )
+    #     from pfeed.dataflow.faucet import Faucet
+    #
+    #     STREAMING_QUEUE_MAXSIZE = Faucet.STREAMING_QUEUE_MAXSIZE
+    #     if self._streaming_queue is None:
+    #         self._streaming_queue = asyncio.Queue(maxsize=STREAMING_QUEUE_MAXSIZE)
+    #     # NOTE: make all faucets share the same streaming queue
+    #     for feed in self._feeds:
+    #         faucet = feed.dataflows[0].faucet
+    #         faucet._streaming_queue = self._streaming_queue
+    #     queue = self._streaming_queue
+    #
+    #     async def _iter():
+    #         async with asyncio.TaskGroup() as task_group:
+    #             producers = [  # noqa: F841
+    #                 task_group.create_task(feed.run_async()) for feed in self._feeds
+    #             ]
+    #             remaining = len(self._feeds)
+    #             while remaining:
+    #                 # try:
+    #                 msg = await queue.get()
+    #                 # except asyncio.CancelledError:
+    #                 #     for producer in producers:
+    #                 #         _ = producer.cancel()
+    #                 #     break
+    #                 if msg is None:  # one faucet finished
+    #                     remaining -= 1
+    #                     continue
+    #                 yield msg
+    #
+    #     return _iter()
+
+    async def __aiter__(self) -> AsyncGenerator[Message]:
+        """Run the feeds' streams and yield the messages of all of them, see StreamingMixin.__aiter__()."""
         assert self._is_streaming_feeds(), (
             "Only streaming feeds support async iteration"
         )
-        from pfeed.dataflow.faucet import Faucet
+        from pfeed.streaming.mixin import StreamingMixin
 
-        STREAMING_QUEUE_MAXSIZE = Faucet.STREAMING_QUEUE_MAXSIZE
-        if self._streaming_queue is None:
-            self._streaming_queue = asyncio.Queue(maxsize=STREAMING_QUEUE_MAXSIZE)
-        # NOTE: make all faucets share the same streaming queue
-        for feed in self._feeds:
-            faucet = feed.dataflows[0].faucet
-            faucet._streaming_queue = self._streaming_queue
-        queue = self._streaming_queue
+        # NOTE: blocks the feeds' iterations when full, each feed's own queue then drops its oldest messages
+        queue: asyncio.Queue[Message] = asyncio.Queue(maxsize=StreamingMixin.QUEUE_MAXSIZE)
 
-        async def _iter():
-            async with asyncio.TaskGroup() as task_group:
-                producers = [  # noqa: F841
-                    task_group.create_task(feed.run_async()) for feed in self._feeds
-                ]
-                remaining = len(self._feeds)
-                while remaining:
-                    # try:
+        async def _forward(feed: BaseFeed):
+            async with contextlib.aclosing(aiter(cast("StreamingMixin", feed))) as messages:
+                async for msg in messages:
+                    await queue.put(msg)
+
+        # NOTE: not a TaskGroup, it would wrap the GeneratorExit of a consumer closing the generator early in an exception group
+        forwards = [asyncio.create_task(_forward(feed)) for feed in self._feeds]
+        remaining = len(forwards)
+
+        def _on_done(forward: asyncio.Task[None]):
+            nonlocal remaining
+            remaining -= 1
+            # NOTE: once every feed has ended or one has failed;
+            # a non-immediate shutdown lets the consumer drain the queued messages before get() raises QueueShutDown
+            if not remaining or (not forward.cancelled() and forward.exception()):
+                queue.shutdown()
+
+        for forward in forwards:
+            forward.add_done_callback(_on_done)
+        try:
+            while True:
+                try:
                     msg = await queue.get()
-                    # except asyncio.CancelledError:
-                    #     for producer in producers:
-                    #         _ = producer.cancel()
-                    #     break
-                    if msg is None:  # one faucet finished
-                        remaining -= 1
-                        continue
-                    yield msg
-
-        return _iter()
+                except asyncio.QueueShutDown:
+                    break
+                yield msg
+            for forward in forwards:
+                if forward.done() and not forward.cancelled() and (err := forward.exception()):
+                    raise err
+        finally:
+            # NOTE: the consumer stopped early or a feed failed, end the other feeds' streams
+            if pending := [forward for forward in forwards if not forward.done()]:
+                for forward in pending:
+                    _ = forward.cancel()
+                _ = await asyncio.wait(pending)

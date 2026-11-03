@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pfeed.io.base_io import BaseIO, DatasetKey, Metadata as IOMetadata, Partition
     from pfeed.streaming.buffer import StreamBuffer
 
+import logging
 from abc import ABC, abstractmethod
 
 import polars as pl
@@ -36,6 +37,8 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
 
     # set by each subclass; not a ClassVar only because a ClassVar can't use the type parameter
     Metadata: type[MetadataT]
+    # consecutive failed due flushes tolerated before flush_if_due() raises, so a persistent error still fails the stream
+    MAX_FAILED_FLUSHES: ClassVar[int] = 3
 
     def __init__(
         self,
@@ -58,6 +61,7 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         self._is_streaming = is_streaming
         self._dataset_key: DatasetKey = self._create_dataset_key()
         self._stream_buffer: StreamBuffer | None = None
+        self._failed_flushes = 0
 
     @property
     def name(self) -> str:
@@ -130,13 +134,41 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
     def flush(self) -> None:
         """Appends the stream buffer's rows to the IO.
 
-        The rows are only cleared after a successful write, so a failed write is retried at the next flush.
+        A failed write raises and puts the rows back in the buffer, see flush_if_due() for retrying it.
         """
         if self._stream_buffer is None or not self._stream_buffer.rows:
             return
-        df = self._stream_buffer.to_dataframe()
-        self._write(df, self._stream_partitions(df), mode='append')
-        self._stream_buffer.clear()
+        rows = self._stream_buffer.drain()
+        try:
+            df = self._stream_buffer.to_dataframe(rows)
+            self._write(df, self._stream_partitions(df), mode='append')
+        except Exception:
+            self._stream_buffer.restore(rows)
+            raise
+
+    def is_flush_due(self) -> bool:
+        return self._stream_buffer is not None and self._stream_buffer.is_due()
+
+    def flush_if_due(self) -> None:
+        """Flushes if due; a failed write is logged and retried at the next flush, e.g. after a transient "database is locked".
+
+        Raises after MAX_FAILED_FLUSHES consecutive failures, so a persistent error (e.g. a full disk) doesn't grow the buffer forever.
+        """
+        if not self.is_flush_due():
+            return
+        try:
+            self.flush()
+        except Exception:
+            self._failed_flushes += 1
+            if self._failed_flushes >= self.MAX_FAILED_FLUSHES:
+                raise
+            # NOTE: looked up here, not in __init__, creating "pfeed.<source>" before pfeed's logging is set up makes it a plain Logger, not pfeed's
+            logger = logging.getLogger(f"pfeed.{self._data_model.data_source.lower()}")
+            logger.exception(
+                f"{self!r} flush failed ({self._failed_flushes}/{self.MAX_FAILED_FLUSHES}), retrying at the next flush:"
+            )
+        else:
+            self._failed_flushes = 0
 
     def write_stream(self, msg: Any) -> None:
         """Buffers one streamed message in the sink, flushing it if due; override to support streaming.

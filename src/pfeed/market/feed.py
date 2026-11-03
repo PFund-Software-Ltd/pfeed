@@ -546,41 +546,44 @@ class MarketFeed[
         self,
         product: str,
         resolution: Resolution | MarketDataType | str,
-        rollback_period: Resolution | str | Literal["ytd", "max"] = "7d",
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
         start_date: datetime.date | str = "",
         end_date: datetime.date | str = "",
-        callback: Callable[[Message], Awaitable[None] | None] | None = None,
         data_origin: str = "",
-        env: Environment | str = Environment.LIVE,
-        replay_pace: float | None = 0,
         io: BaseIO | None = None,
+        env: Environment | str = Environment.LIVE,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
+        replay_pace: float | None = 0,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
         **product_specs: Any,
     ) -> Self | RunResult:
-        """Stream market data, either live from the data source or by replaying historical data from storage at CLEANED data layer.
+        """Stream data live from the data source, or replay stored data at the cleaned data layer.
 
         Args:
-            product: Product basis (e.g. 'BTC_USDT_PERP', 'AAPL_USD_STK'). For products
-                with extra attributes (options, futures), pass them via `product_specs`.
-            resolution: Target data resolution (e.g. '1m', '1h', '1d'). If the source
-                doesn't provide this resolution natively, finer-grained source data is
-                downloaded and resampled down.
-            rollback_period: Lookback from today, only used when `start_date` is empty.
-                Accepts a resolution string (e.g. '7d'), 'ytd', or 'max'. With 'max',
-                the source's own `start_date` attribute is used.
-                Only meaningful when env=BACKTEST (defines the replay range).
-            start_date: Start date. If empty, derived from `rollback_period`.
-                Only meaningful when env=BACKTEST.
-            end_date: End date. If empty, defaults to yesterday.
-                Only meaningful when env=BACKTEST.
-            callback: Async or sync callable invoked for each incoming message.
-                Receives the raw message dict.
-            data_origin: Origin label used to distinguish data from different providers
-                of the same source.
-            env: Trading environment. LIVE (default) connects to the live data source
-                via websocket. BACKTEST replays historical data from storage.
-                only supports BACKTEST, PAPER (paper trading) and LIVE
+            product: Product basis, e.g. `'BTC_USDT_PERP'`, `'AAPL_USD_STK'`.
+            resolution: Target resolution, e.g. `'1t'` (tick), `'1m'`, `'1d'`.
+                If the source doesn't stream it, a finer streamed resolution is used and resampled.
+            rollback_period: How far to roll back from today (UTC) when `start_date`
+                is empty, e.g. `'7d'` = the last 7 days up to yesterday.
+                Also accepts `'ytd'` (year to date) and `'max'` (all available data).
+                Only meaningful when env is BACKTEST.
+            start_date: First date (inclusive), e.g. `'2025-01-01'`.
+                Only meaningful when env is BACKTEST.
+            end_date: Last date (inclusive). If empty, defaults to yesterday (UTC).
+                Requires `start_date`. Only meaningful when env is BACKTEST.
+            data_origin: Sub-label for data from the same source but different origins.
+                Defaults to the source name.
+            io: Where and how to store the data, its direction depends on env:
+                - PAPER/LIVE: where to store the streamed data. If None, data is not stored.
+                - BACKTEST: where to replay the data from. If None, uses `ParquetIO()`.
+                e.g. `ParquetIO(base_path='./data')`, `DuckLakeIO()`
+            env: Trading environment, `'BACKTEST'`, `'PAPER'` or `'LIVE'` (default).
+                PAPER/LIVE stream from the data source's websocket, BACKTEST replays the data from `io`.
+            callback: Sync or async callable called with each streamed `Message`, before it is transformed or stored.
+                `Message['data']` holds the parsed data, e.g. bars or ticks,
+                except when using Ray (see `set_num_workers()`), where the workers parse it and `Message['data']` is None.
             replay_pace: Pacing between row emissions when replaying (env=BACKTEST). Ignored otherwise.
                 - 0 (default): ASAP — no sleep between rows. Backtests process the whole
                   range as fast as possible regardless of resolution or row count.
@@ -590,21 +593,17 @@ class MarketFeed[
                   for ticks, sleep the timestamp difference between consecutive rows.
                   Opt-in only: for fine resolutions or tick data a per-row sleep
                   multiplied by row count can take hours, so it is not the default.
-            io: Where and how to store the data. Direction depends on env:
-                - LIVE: WHERE to persist streamed data (write destination).
-                  If None, streamed data will NOT be persisted.
-                - BACKTEST: WHERE to read historical data FROM (read source).
-                  If None, defaults to `ParquetIO()`.
             store_incremental_bars: Whether to also store the updates of a bar before it closes,
                 e.g. for a venue that only streams such updates. If False (default), only closed bars are stored.
                 Only meaningful for bar resolutions when `io` is given and env is not BACKTEST.
             flush_interval: Seconds between writes of the buffered streamed data to `io`.
                 Frequent writes create many small files, which slow down reads until the table is compacted.
                 Only meaningful when `io` is given and env is not BACKTEST.
-            product_specs: Extra product attributes for products that need them, e.g.
-                `stream(product='BTC_USDT_OPT', strike_price=10000,
-                expiration='2024-01-01', option_type='CALL')`. Leave empty first and
-                read the exception message to discover required keys.
+            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
+                futures. Leave them out to get an error listing the required ones.
+
+        Returns:
+            `RunResult` once the streams end, or `self` in pipeline mode.
         """
         from pfund_kit.utils.temporal import get_utc_now
 
@@ -681,10 +680,6 @@ class MarketFeed[
     @staticmethod
     def _parse_streaming_message(msg: Message) -> Message:
         raise NotImplementedError
-
-    @staticmethod
-    def _create_queue_key(request: RequestT) -> tuple[ProductName, str]:
-        return (request.product.name, repr(request.data_resolution))
 
     async def _stream_impl(self, request: RequestT, data_model: DataModelT):
         from pfund_blocks.enums.env import Environment

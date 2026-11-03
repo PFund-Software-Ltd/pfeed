@@ -37,6 +37,7 @@ from pfund_blocks.enums.env import Environment
 class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel](_FeedBase):
     QUEUE_MAXSIZE: ClassVar[int] = 1000
     WORKER_READY_TIMEOUT: ClassVar[float] = 60  # seconds
+    WORKER_STOP_TIMEOUT: ClassVar[float] = 60  # seconds
 
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
@@ -251,8 +252,6 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                             channel, topic, data, _msg_ts = msg
                             if channel == ZeroMQDataChannel.signal:
                                 if data == ZeroMQSignal.STOP:
-                                    # TODO: stream IO isn't ready yet. Each worker has its own copies of the handlers holding their own buffered rows,
-                                    # so they probably need flushing here before stopping (or somewhere else), otherwise the rows are lost
                                     logger.debug(f"Ray {worker_name} received STOP signal, terminating...")
                                     break
                             else:
@@ -273,7 +272,14 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                         logger.exception(f"Error in streaming Ray {worker_name}:")
                         raise
                     finally:
-                        msg_queue.terminate()
+                        # NOTE: each worker has its own copies of the handlers holding their own buffered rows, flush them before exiting, otherwise the rows are lost;
+                        # a failed flush raises, so ray.get() in the main process marks the worker's dataflows as failed
+                        try:
+                            for handler in handlers.values():
+                                if handler:
+                                    handler.flush()
+                        finally:
+                            msg_queue.terminate()
 
                 assert self._num_workers is not None, "num_workers is not set"
                 dataflows = self.dataflows
@@ -328,13 +334,15 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                     finally:
                         # NOTE: end_stream() must run for every dataflow for proper teardown, it records its own errors, so one bad teardown doesn't skip the rest
                         await asyncio.gather(*[dataflow.end_stream() for dataflow in self.dataflows])
-                        for future, worker_dataflows in zip(futures, dataflows_per_worker.values(), strict=True):
-                            # NOTE: without waiting, a worker that has already ended either stopped or crashed
-                            finished, _ = ray.wait([future], timeout=0)
+                        # NOTE: end_stream() has sent STOP, wait for the workers to flush their handlers and exit before killing them
+                        finished, _ = ray.wait(futures, num_returns=len(futures), timeout=self.WORKER_STOP_TIMEOUT) if futures else ([], [])
+                        for future, (worker_name, worker_dataflows) in zip(futures, dataflows_per_worker.items(), strict=False):
                             try:
-                                if finished:
+                                if future in finished:
                                     # NOTE: if the worker function raised, ray.get() re-raises its exception here; returns None if it exited normally
                                     ray.get(future)
+                                else:
+                                    raise TimeoutError(f"Ray {worker_name} did not stop within {self.WORKER_STOP_TIMEOUT}s, its buffered rows may be lost")
                             except Exception as err:
                                 for dataflow in worker_dataflows:
                                     dataflow._result = DataFlowResult.failed(error=err)

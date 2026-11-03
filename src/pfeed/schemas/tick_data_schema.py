@@ -16,7 +16,7 @@ class TickDataSchema(MarketDataSchema):
     resolution: str = pa.Field(alias=RESOLUTION, eq=str(Resolution("1t")))
     price: float = pa.Field(alias=PRICE, lt=float("inf"))
     volume: float = pa.Field(alias=VOLUME, gt=0, lt=float("inf"))
-    # not all tick sources expose trade direction (e.g. Bybit streaming ticks have none).
+    # not all tick sources expose trade direction.
     # pin Int8 (the compact dtype producers emit, e.g. Bybit's replace_strict to {1, -1});
     # a bare `int` annotation would default to Int64 and reject the Int8 data.
     side: pl.Int8 = pa.Field(alias=SIDE, isin=[1, -1], nullable=True)

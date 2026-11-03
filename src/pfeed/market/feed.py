@@ -769,34 +769,35 @@ class MarketFeed[
 
         default_transformations.append(self._parse_streaming_message)
 
+        # TODO
         # NOTE: cannot write self.data_source.name inside self.transform(), otherwise, "self" will be serialized by Ray and return an error
-        data_source: str = self.data_source.name
-        tick_counter = count() if request.data_resolution.is_tick() else None
-        is_resampling = bool(request.target_resolution < request.data_resolution)
-        if is_resampling:
-            # use data_bar to resample data, e.g. bybit doesn't support '1s' data (target resolution), use '1t' (data resolution) instead
-            data_bar = BarData(
-                product=request.product,
-                resolution=request.target_resolution,
-                config=cast("MarketFeedStreamRequest", request).data_config,
-            )
-        else:
-            data_bar = None
-        default_transformations.append(
-            lambda_with_name(
-                "standardize_message",
-                lambda msg: MarketFeed._standardize_streaming_message(
-                    data_source=data_source,
-                    data_origin=request.data_origin,
-                    product=request.product,
-                    target_resolution=request.target_resolution,
-                    data_resolution=request.data_resolution,
-                    msg=msg,
-                    data_bar=data_bar,
-                    tick_counter=tick_counter,
-                ),
-            ),
-        )
+        # data_source: str = self.data_source.name
+        # tick_counter = count() if request.data_resolution.is_tick() else None
+        # is_resampling = bool(request.target_resolution < request.data_resolution)
+        # if is_resampling:
+        #     # use data_bar to resample data, e.g. bybit doesn't support '1s' data (target resolution), use '1t' (data resolution) instead
+        #     data_bar = BarData(
+        #         product=request.product,
+        #         resolution=request.target_resolution,
+        #         config=cast("MarketFeedStreamRequest", request).data_config,
+        #     )
+        # else:
+        #     data_bar = None
+        # default_transformations.append(
+        #     lambda_with_name(
+        #         "standardize_message",
+        #         lambda msg: MarketFeed._standardize_streaming_message(
+        #             data_source=data_source,
+        #             data_origin=request.data_origin,
+        #             product=request.product,
+        #             target_resolution=request.target_resolution,
+        #             data_resolution=request.data_resolution,
+        #             msg=msg,
+        #             data_bar=data_bar,
+        #             tick_counter=tick_counter,
+        #         ),
+        #     ),
+        # )
         return default_transformations
 
     @staticmethod

@@ -600,6 +600,8 @@ class MarketFeed[
         default_transformations = []
 
         if cast("MarketFeedRetrieveRequest", request).is_streamed_data():
+            import polars.selectors as cs
+
             from pfeed.schemas.market_data_schema import RESOLUTION
             from pfeed.schemas.streaming.bar_message_schema import START_TS
             from pfeed.schemas.streaming.tick_message_schema import TS
@@ -611,9 +613,12 @@ class MarketFeed[
             default_transformations.append(
                 lambda_with_name(
                     "streaming_to_batch_schema",
-                    # stored as UTC, batch data's date is tz-naive UTC; streamed data has no resolution column
+                    # stored as UTC, returned tz-naive UTC like batch data, e.g. start_ts, received_at;
+                    # streamed data has no resolution column
                     lambda df: df.with_columns(
-                        pl.col(date_col).dt.replace_time_zone(None).alias(DATE),
+                        cs.datetime(time_zone="*").dt.replace_time_zone(None),
+                    ).with_columns(
+                        pl.col(date_col).alias(DATE),
                         pl.lit(str(data_resolution)).alias(RESOLUTION),
                     ),
                 ),

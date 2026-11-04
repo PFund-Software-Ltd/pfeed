@@ -22,6 +22,7 @@ import contextlib
 import json
 import logging
 import pickle
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -33,6 +34,7 @@ from pfeed.io.base_io import IOCapabilities
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.market.feed import MarketFeed
 from pfeed.source import BaseSource
+from pfeed.streaming.latency_tracker import LatencyTracker
 from pfeed.streaming.market import MarketFeedStreamingMixin
 from pfeed.streaming.stream_api import BaseStreamAPI
 
@@ -353,6 +355,25 @@ def test_stream_dataflow_is_pickled_without_its_faucet(feed: _Feed, product: Bas
     assert copy._process_stream_message(_stream_msg(product, TICK, 1)) == {**_stream_msg(product, TICK, 1), 'data': 'user:1'}
     assert copy.handler.rows == [1]
     assert dataflow._faucet is not None
+
+
+def test_stream_latency_is_logged_every_interval(feed: _Feed, product: BaseProduct, caplog: pytest.LogCaptureFixture):
+    dataflow = _stream(feed, product)
+    dataflow._latency_tracker = LatencyTracker(log_interval=60)
+    caplog.set_level(logging.DEBUG, logger='pfeed.fake')
+    with _capture_feed_logs(caplog):
+        _ = dataflow._process_stream_message({**_stream_msg(product, TICK, 0), 'received_at': time.time_ns()})
+        assert 'latency p50=' not in caplog.text
+        # the window has lasted a whole interval, so the next message logs it
+        dataflow._latency_tracker._window_start -= 60
+        _ = dataflow._process_stream_message({**_stream_msg(product, TICK, 1), 'received_at': time.time_ns()})
+
+    assert 'msg/s | latency p50=' in caplog.text
+    assert dataflow._latency_tracker._latencies_ms == []
+
+
+def test_stream_latency_is_not_tracked_by_default(feed: _Feed, product: BaseProduct):
+    assert _stream(feed, product)._latency_tracker is None
 
 
 def test_load_after_stream_raises(feed: _Feed, product: BaseProduct, tmp_path: Path):

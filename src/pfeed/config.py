@@ -53,6 +53,7 @@ def configure(
     cache_path: str | Path | None = None,
     show_progress_bar: bool | None = None,
     allow_timestamp_precision_loss: bool | None = None,
+    stream_latency_log_interval: float | None = None,
     persist: bool = False,
 ) -> PFeedConfig:
     """
@@ -65,6 +66,8 @@ def configure(
         allow_timestamp_precision_loss: Whether IOs that store timestamps in a coarser unit
             (e.g. DeltaLakeIO, microseconds) may truncate finer ones (e.g. nanoseconds), with a warning.
             If False, such writes raise. Defaults to False.
+        stream_latency_log_interval: Seconds between a stream's latency logs (at DEBUG level), e.g. 60.
+            Defaults to None, i.e. latency is not tracked.
         persist: If True, the config will be saved to the config file.
     """
     config = get_config()
@@ -105,12 +108,14 @@ class PFeedConfig(Configuration):
         """Initialize PFeedConfig-specific attributes from config data."""
         self.show_progress_bar = self._data.get("show_progress_bar", True)
         self.allow_timestamp_precision_loss = self._data.get("allow_timestamp_precision_loss", False)
+        self.stream_latency_log_interval = self._data.get("stream_latency_log_interval")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             **super().to_dict(),
             "show_progress_bar": self.show_progress_bar,
             "allow_timestamp_precision_loss": self.allow_timestamp_precision_loss,
+            "stream_latency_log_interval": self.stream_latency_log_interval,
         }
 
     def prepare_docker_context(self):

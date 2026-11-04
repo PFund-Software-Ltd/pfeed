@@ -21,8 +21,10 @@ import logging
 
 import polars as pl
 
+from pfeed.config import get_config
 from pfeed.dataflow.result import DataFlowResult
 from pfeed.enums import FlowType
+from pfeed.streaming.latency_tracker import LatencyTracker
 
 
 class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
@@ -49,6 +51,9 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
         self._is_sealed = False
+        # NOTE: created here in the main process, a Ray stream worker's config doesn't have the values set by pfeed.configure()
+        latency_log_interval = get_config().stream_latency_log_interval
+        self._latency_tracker = LatencyTracker(latency_log_interval) if latency_log_interval is not None else None
 
     def __getstate__(self) -> dict[str, Any]:
         # NOTE: a stream's faucet holds the live stream (e.g. its zmq ROUTER, extract task and stream API), which can't be pickled,
@@ -285,10 +290,13 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             return None
         self._load(data)
         try:
-            return self._transform(data, self._user_transformations)
+            data = self._transform(data, self._user_transformations)
         except Exception:
             self._logger.exception(f"{self} user transformation failed, skipping message: {data}")
             return None
+        if self._latency_tracker and (latency_stats := self._latency_tracker.track(msg["received_at"])):
+            self._logger.debug(f"{self} {latency_stats}")
+        return data
 
     async def _run_stream_etl(self, queue: asyncio.Queue[Message]) -> None:
         # Replay is read-only: the raw row already reached the user callback and the
@@ -329,7 +337,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         try:
             await self.faucet.close_stream()
             # with Ray, each worker flushes its own copy of the handler, this one's buffer stays empty
-            if self.has_handler():
+            if self._handler is not None:
                 self._handler.flush()
         except Exception as err:
             self._logger.exception(f"Error ending stream for {self}:")

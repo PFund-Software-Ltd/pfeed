@@ -223,7 +223,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         if not self.is_sealed():
             raise ValueError(f"cannot run batch on unsealed dataflow {self}")
 
-        self._logger.debug(f"{self} to {self.handler!r}")
+        self._logger.debug(f"{self} to {self.handler!r}" if self.handler else f"{self} (no storage)")
         self._flow_type = FlowType[flow_type.lower()]
 
         # a failed run is recorded as the dataflow's result, so one failure doesn't stop the other dataflows
@@ -312,7 +312,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         if not self.is_sealed():
             raise ValueError(f"cannot run stream on unsealed dataflow {self}")
 
-        self._logger.info(f"{self} to {self.handler!r}")
+        self._logger.info(f"{self} to {self.handler!r}" if self.handler else f"{self} (no storage)")
         self._flow_type = FlowType[flow_type.lower()]
         # a stream has no final data, its result only reports whether it failed,
         # so it stays successful unless an error below overwrites it

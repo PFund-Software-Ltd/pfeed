@@ -394,7 +394,7 @@ def test_create_batch_dataflows(feed: _Feed, mocker: MockerFixture):
     assert dataflows[0].faucet is dataflows[1].faucet
     assert dataflows[0].faucet._request is request
     # default transformations run first, user transformations are added by transform()
-    assert dataflows[0]._transformations == [_add_one]
+    assert dataflows[0]._default_transformations == [_add_one]
 
 
 def test_dataflows_across_requests(feed: _Feed):
@@ -410,8 +410,8 @@ def test_transform_targets_the_current_request_only(feed: _Feed):
     first, second = feed.dataflows
 
     assert feed.transform(_add_one, _add_one) is feed
-    assert first._transformations == []
-    assert second._transformations == [_add_one, _add_one]
+    assert first._user_transformations == []
+    assert second._user_transformations == [_add_one, _add_one]
 
 
 def test_transform_without_request(feed: _Feed):

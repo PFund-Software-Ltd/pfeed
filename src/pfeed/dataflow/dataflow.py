@@ -37,13 +37,27 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             default_transformations: the feed's transformations, run before the user's from transform()
         """
         self._logger = logging.getLogger(f"pfeed.{data_model.data_source.lower()}")
-        self._faucet: Faucet[RequestT, DataModelT] = faucet
+        self._faucet: Faucet[RequestT, DataModelT] | None = faucet
+        # NOTE: kept on the dataflow, not read from the faucet, since a stream worker's copy has no faucet, see __getstate__()
+        self._extract_type: str = faucet.extract_type
+        self._is_streaming: bool = faucet.request.is_streaming()
+        self._is_replaying: bool = self._is_streaming and faucet.request.is_replaying()
         self._data_model: DataModelT = data_model
-        self._transformations: list[Callable[..., Any]] = list(default_transformations or [])
+        self._default_transformations: list[Callable[..., Any]] = list(default_transformations or [])
+        self._user_transformations: list[Callable[..., Any]] = []
         self._handler: BaseDataHandler | None = None
         self._result = DataFlowResult()
         self._flow_type: FlowType = FlowType.native
         self._is_sealed = False
+
+    def __getstate__(self) -> dict[str, Any]:
+        # NOTE: a stream's faucet holds the live stream (e.g. its zmq ROUTER, extract task and stream API), which can't be pickled,
+        # and a Ray stream worker doesn't need it, it gets the messages from the faucet's ROUTER;
+        # a batch worker runs the whole dataflow, extract included, so it keeps its faucet
+        state = self.__dict__.copy()
+        if self._is_streaming:
+            state["_faucet"] = None
+        return state
 
     @property
     def data_model(self) -> DataModelT:
@@ -51,6 +65,8 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
 
     @property
     def faucet(self) -> Faucet[RequestT, DataModelT]:
+        if self._faucet is None:
+            raise RuntimeError(f"{self} has no faucet, e.g. a copy in a Ray stream worker")
         return self._faucet
 
     @property
@@ -63,14 +79,14 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
 
     def __str__(self):
         if self.is_streaming():
-            return f"{self.faucet.extract_type}:{self.data_model}"
-        return f"{self.data_model.data_source}.{self.faucet.extract_type}"
+            return f"{self._extract_type}:{self.data_model}"
+        return f"{self.data_model.data_source}.{self._extract_type}"
 
     def is_streaming(self) -> bool:
-        return self.faucet.request.is_streaming()
+        return self._is_streaming
 
     def is_replaying(self) -> bool:
-        return self.is_streaming() and self.faucet.request.is_replaying()
+        return self._is_replaying
 
     def is_sealed(self) -> bool:
         return self._is_sealed
@@ -83,10 +99,13 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             raise ValueError(
                 f"cannot add transformations to sealed dataflow {self}"
             )
-        self._transformations.extend(funcs)
+        self._user_transformations.extend(funcs)
 
-    def _transform(self, data: IntoFrame | Message) -> Any:
-        for transform in self._transformations:
+    def _transform(self, data: IntoFrame | Message, transformations: list[Callable[..., Any]] | None = None) -> Any:
+        """Runs the transformations on data, all of them (default then user) if None."""
+        if transformations is None:
+            transformations = self._default_transformations + self._user_transformations
+        for transform in transformations:
             if self.is_streaming():
                 data = transform(data)
             else:
@@ -250,6 +269,27 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
 
         return prefect_flow
 
+    def _process_stream_message(self, msg: Message) -> Any | None:
+        """Transforms and stores one streamed message, in the main process or in a Ray stream worker.
+
+        Returns:
+            The message transformed by the user's transformations, None if a transformation failed.
+        """
+        # NOTE: stores the message as transformed by the feed (e.g. parsed, resampled), before the user's transformations,
+        # so the stored stream stays pfeed's standardized data whatever the user's transformations return
+        try:
+            data = self._transform(msg, self._default_transformations)
+        # e.g. a transformation can't handle this message
+        except Exception:
+            self._logger.exception(f"{self} transformation failed, skipping message: {msg}")
+            return None
+        self._load(data)
+        try:
+            return self._transform(data, self._user_transformations)
+        except Exception:
+            self._logger.exception(f"{self} user transformation failed, skipping message: {data}")
+            return None
+
     async def _run_stream_etl(self, queue: asyncio.Queue[Message]) -> None:
         # Replay is read-only: the raw row already reached the user callback and the
         # streaming queue in the faucet. Its storage is the READ source, so there is
@@ -263,13 +303,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
                 if self.faucet.is_using_ray():
                     self.faucet.send_to_stream_worker(self, msg)
                     continue
-                try:
-                    data = self._transform(msg)
-                # e.g. a transformation can't handle this message
-                except Exception:
-                    self._logger.exception(f"{self} transformation failed, skipping message: {msg}")
-                    continue
-                self._load(data)
+                _ = self._process_stream_message(msg)
         except asyncio.QueueShutDown:
             pass
         await extract

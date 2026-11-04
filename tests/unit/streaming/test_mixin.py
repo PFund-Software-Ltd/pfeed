@@ -21,6 +21,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import pickle
 from types import SimpleNamespace
 
 import pytest
@@ -100,6 +101,11 @@ class _Feed(MarketFeedStreamingMixin, MarketFeed):
         if msg['data'] is not None:
             return msg
         return {**msg, 'data': f"parsed:{msg['message']}"}
+
+
+def _tag_by_user(msg: Message) -> Message:
+    # module-level so cloudpickle pickles it by reference into the Ray workers
+    return {**msg, 'data': f"user:{msg['data']}"}
 
 
 class _Handler:
@@ -331,6 +337,30 @@ def test_streaming_different_envs_in_one_feed_raises(feed: _Feed, product: BaseP
         _ = _stream(feed, product, MINUTE, env='PAPER')
 
 
+def test_stream_dataflow_is_pickled_without_its_faucet(feed: _Feed, product: BaseProduct, tmp_path: Path):
+    dataflow = _stream(feed, product)
+    dataflow._handler = cast("Any", _Handler(tmp_path / 'rows.json'))
+    _ = feed.transform(_tag_by_user)
+
+    copy = pickle.loads(pickle.dumps(dataflow))
+
+    # e.g. what a Ray stream worker gets, it receives the messages from the faucet's ROUTER, not from the faucet itself
+    assert copy._faucet is None
+    with pytest.raises(RuntimeError, match='has no faucet'):
+        _ = copy.faucet
+    assert copy.is_streaming()
+    assert str(copy) == str(dataflow)
+    assert copy._process_stream_message(_stream_msg(product, TICK, 1)) == {**_stream_msg(product, TICK, 1), 'data': 'user:1'}
+    assert copy.handler.rows == [1]
+    assert dataflow._faucet is not None
+
+
+def test_load_after_stream_raises(feed: _Feed, product: BaseProduct, tmp_path: Path):
+    _ = _stream(feed, product)
+    with pytest.raises(ValueError, match=r'pass io to stream\(\) instead'):
+        _ = feed.load(ParquetIO(base_path=str(tmp_path)))
+
+
 def test_same_callback_for_every_stream_is_allowed(feed: _Feed, product: BaseProduct):
     def callback(msg: Message) -> None: ...
 
@@ -422,24 +452,56 @@ def test_messages_go_to_their_own_dataflow(feed: _Feed, product: BaseProduct, st
     assert minute_received == [1]
 
 
-def test_transformed_messages_are_loaded(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path):
+def test_messages_are_stored_before_the_user_transformations(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path
+):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     dataflow = _stream(feed, product)
     handler = _Handler(tmp_path / 'rows.json')
     dataflow._handler = cast("Any", handler)
+    stored_when_transformed: list[int] = []
 
     def double(msg: Message) -> Message:
+        stored_when_transformed.append(len(handler.rows))
         return {**msg, 'data': cast("int", msg['data']) * 2}
 
     _ = feed.transform(double)
     result = feed.run()
 
     assert result.success
+    # the user's transformation runs after its message is stored, and doesn't change what is stored
+    assert stored_when_transformed == [1, 2, 3]
     # end_stream() flushes what's still buffered
-    assert handler.written() == [0, 2, 4]
+    assert handler.written() == [0, 1, 2]
 
 
-def test_failed_transformation_skips_the_message(
+def test_failed_default_transformation_skips_the_message(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
+    dataflow = _stream(feed, product)
+    handler = _Handler(tmp_path / 'rows.json')
+    dataflow._handler = cast("Any", handler)
+    user_received: list[Any] = []
+
+    def fail_on_one(msg: Message) -> Message:
+        if msg['data'] == 1:
+            raise ValueError('bad message')
+        return msg
+
+    dataflow._default_transformations.append(fail_on_one)
+    _ = feed.transform(_record_into(user_received))
+    with _capture_feed_logs(caplog):
+        result = feed.run()
+
+    assert result.success
+    # neither stored nor passed to the user's transformations
+    assert handler.written() == [0, 2]
+    assert user_received == [0, 2]
+    assert 'transformation failed, skipping message' in caplog.text
+
+
+def test_failed_user_transformation_still_stores_the_message(
     feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
@@ -457,8 +519,8 @@ def test_failed_transformation_skips_the_message(
         result = feed.run()
 
     assert result.success
-    assert handler.written() == [0, 2]
-    assert 'transformation failed, skipping message' in caplog.text
+    assert handler.written() == [0, 1, 2]
+    assert 'user transformation failed' in caplog.text
 
 
 def test_failed_dataflow_doesnt_stop_the_others(
@@ -549,13 +611,15 @@ def test_ray_workers_transform_and_flush(
     minute_dataflow = _stream(feed, product, MINUTE)
     minute_handler = _Handler(tmp_path / 'minute.json')
     minute_dataflow._handler = cast("Any", minute_handler)
+    _ = feed.transform(_tag_by_user)
 
     result = feed.run()
 
     assert result.success
     # the workers parse the messages, the callback gets them unparsed
     assert received == [None] * 6
-    # the workers' copies of the handlers are flushed when the workers stop
+    # the workers' copies of the handlers are flushed when the workers stop,
+    # with the messages stored before the user's transformations
     assert tick_handler.written() == minute_handler.written() == ['parsed:0', 'parsed:1', 'parsed:2']
     assert not feed.is_running()
 

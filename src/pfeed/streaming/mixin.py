@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from pfund_blocks.typing import Message
     from ray.util.queue import Queue
 
-    from pfeed.base.data_handler import BaseDataHandler
     from pfeed.base.feed import BaseFeed
     from pfeed.base.requests.stream_request import BaseStreamRequest
     from pfeed.base.time_based_data_model import TimeBasedDataModel
@@ -230,8 +229,7 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                     logger_name: str,
                     log_queue: Queue,
                     worker_name: WorkerName,
-                    transformations: dict[ZeroMQChannel, list[Callable[..., Any]]],
-                    handlers: dict[ZeroMQChannel, BaseDataHandler | None],
+                    dataflows: dict[ZeroMQChannel, DataFlow[RequestT, DataModelT]],
                     router_ports: list[int],
                     engine_ports: list[int],
                 ) -> None:
@@ -267,19 +265,10 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                                     logger.debug(f"Ray {worker_name} received STOP signal, terminating...")
                                     break
                             else:
-                                try:
-                                    for transform in transformations[channel]:
-                                        data = transform(data)
-                                        if data is None:
-                                            raise TypeError(f"transform function {transform} should return transformed data, but got None")
-                                # e.g. a transformation can't handle this message
-                                except Exception:
-                                    logger.exception(f"{worker_name} transformation failed on {channel}, skipping message: {msg}")
-                                    continue
-                                if engine_ports:
+                                # NOTE: the same transformations and storing as in the main process, see DataFlow._run_stream_etl()
+                                data = dataflows[channel]._process_stream_message(data)
+                                if data is not None and engine_ports:
                                     msg_queue.send(channel=channel, topic=topic, data=data)
-                                if handler := handlers[channel]:
-                                    handler.write_stream(data)
                     except Exception:
                         logger.exception(f"Error in streaming Ray {worker_name}:")
                         raise
@@ -287,8 +276,8 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                         # NOTE: each worker has its own copies of the handlers holding their own buffered rows, flush them before exiting, otherwise the rows are lost;
                         # a failed flush raises, so ray.get() in the main process marks the worker's dataflows as failed
                         try:
-                            for handler in handlers.values():
-                                if handler:
+                            for dataflow in dataflows.values():
+                                if handler := dataflow.handler:
                                     handler.flush()
                         finally:
                             msg_queue.terminate()
@@ -325,8 +314,8 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                                 self.logger.name,
                                 log_queue,
                                 worker_name,
-                                {dataflow.faucet.get_zmq_channel(dataflow): dataflow._transformations for dataflow in worker_dataflows},
-                                {dataflow.faucet.get_zmq_channel(dataflow): dataflow.handler for dataflow in worker_dataflows},
+                                # NOTE: pickled without their faucet, see DataFlow.__getstate__()
+                                {dataflow.faucet.get_zmq_channel(dataflow): dataflow for dataflow in worker_dataflows},
                                 router_ports,
                                 engine_ports,
                             )

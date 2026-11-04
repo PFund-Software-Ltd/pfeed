@@ -248,6 +248,9 @@ class BaseFeed[
         """
         # fluent-chain entry point: always targets the request just created
         current_request = self._get_current_request()
+        # NOTE: a stream is always stored as pfeed's CLEANED data, before the user's transformations, so only its io is configurable, see stream()
+        if current_request.is_streaming():
+            raise ValueError(f"load() is not supported after {self.name}'s stream(), pass io to stream() instead")
         return self._load_for_request(request=current_request, io=io, data_layer=data_layer)
 
     def _load_for_request(

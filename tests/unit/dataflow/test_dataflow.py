@@ -173,12 +173,12 @@ def test_transform_without_transformations_is_identity(df: pl.DataFrame):
     assert _dataflow(lf)._transform(lf) is lf
 
 
-# --- setup_handler ---
+# --- _setup_handler ---
 
 
 def test_setup_handler(io: ParquetIO):
     dataflow = _dataflow(None)
-    dataflow.setup_handler(io, DataLayer.RAW, 'test_domain')
+    dataflow._setup_handler(io, DataLayer.RAW, 'test_domain')
 
     handler = dataflow.handler
     assert isinstance(handler, _Handler)
@@ -189,16 +189,16 @@ def test_setup_handler(io: ParquetIO):
 
 def test_setup_handler_twice_raises(io: ParquetIO):
     dataflow = _dataflow(None)
-    dataflow.setup_handler(io, DataLayer.CLEANED, 'test_domain')
+    dataflow._setup_handler(io, DataLayer.CLEANED, 'test_domain')
     with pytest.raises(ValueError, match='already set'):
-        dataflow.setup_handler(io, DataLayer.CLEANED, 'test_domain')
+        dataflow._setup_handler(io, DataLayer.CLEANED, 'test_domain')
 
 
 def test_setup_handler_on_sealed_dataflow_raises(io: ParquetIO):
     dataflow = _dataflow(None)
     dataflow.seal()
     with pytest.raises(ValueError, match='sealed'):
-        dataflow.setup_handler(io, DataLayer.CLEANED, 'test_domain')
+        dataflow._setup_handler(io, DataLayer.CLEANED, 'test_domain')
 
 
 # --- run_batch ---
@@ -224,7 +224,7 @@ def test_run_batch_without_handler_materializes_transformed_data(df: pl.DataFram
 
 def test_run_batch_with_handler_loads_and_reads_back_lazily(mocker: MockerFixture, io: ParquetIO, df: pl.DataFrame):
     dataflow = _dataflow(df.lazy(), default_transformations=[_add_one])
-    dataflow.setup_handler(io, DataLayer.CLEANED, 'test_domain')
+    dataflow._setup_handler(io, DataLayer.CLEANED, 'test_domain')
     dataflow.seal()
     handler = cast(_Handler, dataflow.handler)
     read = mocker.spy(handler, 'read')
@@ -251,7 +251,7 @@ def test_run_batch_loads_any_dataframe_as_polars(mocker: MockerFixture, io: Parq
 
     dataflow = _dataflow(df.lazy())
     dataflow.add_user_transformations([to_pandas])
-    dataflow.setup_handler(io, DataLayer.CLEANED, 'test_domain')
+    dataflow._setup_handler(io, DataLayer.CLEANED, 'test_domain')
     dataflow.seal()
     write_batch = mocker.spy(cast(_Handler, dataflow.handler), 'write_batch')
 
@@ -265,7 +265,7 @@ def test_run_batch_empty_data_is_loaded_but_not_read_back(mocker: MockerFixture,
     """Empty data is stored so it isn't re-downloaded, but the result keeps the empty frame itself."""
     empty = df.clear().lazy()
     dataflow = _dataflow(empty)
-    dataflow.setup_handler(io, DataLayer.CLEANED, 'test_domain')
+    dataflow._setup_handler(io, DataLayer.CLEANED, 'test_domain')
     dataflow.seal()
     write_batch = mocker.spy(cast(_Handler, dataflow.handler), 'write_batch')
 
@@ -335,7 +335,7 @@ def test_run_batch_load_error_is_recorded(mocker: MockerFixture, io: ParquetIO, 
     """A write error surfaces in the result, not only in the log."""
     err = OSError('disk full')
     dataflow = _dataflow(df.lazy())
-    dataflow.setup_handler(io, DataLayer.CLEANED, 'test_domain')
+    dataflow._setup_handler(io, DataLayer.CLEANED, 'test_domain')
     dataflow.seal()
     mocker.patch.object(cast(_Handler, dataflow.handler), 'write_batch', side_effect=err)
 
@@ -402,7 +402,7 @@ def prefect_harness():
 @pytest.mark.usefixtures('prefect_harness')
 def test_run_batch_prefect(io: ParquetIO, df: pl.DataFrame):
     dataflow = _dataflow(df.lazy(), default_transformations=[_add_one])
-    dataflow.setup_handler(io, DataLayer.CLEANED, 'test_domain')
+    dataflow._setup_handler(io, DataLayer.CLEANED, 'test_domain')
     dataflow.seal()
     handlers_before = list(dataflow._logger.handlers)
 

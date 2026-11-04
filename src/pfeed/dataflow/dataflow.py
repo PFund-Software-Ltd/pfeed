@@ -134,7 +134,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
     def has_handler(self) -> bool:
         return self._handler is not None
 
-    def setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str, **handler_kwargs: Any):
+    def _setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str, **handler_kwargs: Any):
         """Creates the data handler that loads the data to io, from the dataflow's own data model.
 
         Args:
@@ -333,12 +333,16 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             self._logger.exception(f"Error in running {self}:")
             self._result = DataFlowResult.failed(error=err)
 
+    def _teardown_handler(self) -> None:
+        """Tears down the handler's streaming, writing its buffered rows, in the main process or in a Ray stream worker."""
+        if self._handler is not None:
+            self._handler.teardown_streaming()
+
     async def end_stream(self):
         try:
             await self.faucet.close_stream()
-            # with Ray, each worker flushes its own copy of the handler, this one's buffer stays empty
-            if self._handler is not None:
-                self._handler.flush()
+            # with Ray, each worker tears down its own copy of the handler, this one's buffer stays empty
+            self._teardown_handler()
         except Exception as err:
             self._logger.exception(f"Error ending stream for {self}:")
             self._result = DataFlowResult.failed(error=err)

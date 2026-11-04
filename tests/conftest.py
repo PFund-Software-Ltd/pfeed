@@ -11,6 +11,7 @@ import pytest
 
 import pfeed as pe
 from pfund_kit.utils.ray import shutdown_ray
+from pfeed.config import setup_logging
 
 
 def pytest_addoption(parser: pytest.Parser):
@@ -47,6 +48,9 @@ def configure_test_env(request: pytest.FixtureRequest, tmp_path_factory: pytest.
     # so workers never rotate the same log file
     if not request.config.getoption("keep_log_path"):
         pe.configure(log_path=tmp_path_factory.mktemp("logs"))
+    # before any test creates a "pfeed.<source>" logger, e.g. a data handler created without a feed,
+    # otherwise it is created as a plain Logger instead of pfeed's ColoredLogger, and the feeds of that source get it too
+    setup_logging()
 
 
 @pytest.fixture(scope="function", autouse=True)

@@ -266,11 +266,11 @@ class BaseFeed[
         data_layer = request.data_layer if data_layer is None else DataLayer[str(data_layer).upper()]
         request.finalize_load_config(io, data_layer)
         for dataflow in self._dataflows[request]:
-            dataflow.setup_handler(io, data_layer, str(self.data_domain), **self._get_handler_kwargs(request))
+            dataflow._setup_handler(io, data_layer, str(self.data_domain), **self._get_handler_kwargs(request))
         return self
 
     def _get_handler_kwargs(self, request: RequestT) -> dict[str, Any]:
-        """Options from the request for the data model's handler, see DataFlow.setup_handler()."""
+        """Options from the request for the data model's handler, see DataFlow._setup_handler()."""
         return {}
 
     def _finalize_run(self) -> None:

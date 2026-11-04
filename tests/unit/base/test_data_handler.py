@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from pfeed.io.base_io import Partition
 
 import datetime
-import logging
 
 import polars as pl
 import pyarrow as pa
@@ -156,8 +155,7 @@ def streaming_handler(mocker: MockerFixture, handler: _Handler) -> _Handler:
     _ = mocker.patch.object(handler._stream_buffer, 'is_due', side_effect=lambda: bool(handler._stream_buffer and handler._stream_buffer.rows))
     _ = mocker.patch.object(handler, '_stream_partitions', return_value={})
     _ = mocker.patch.object(handler, '_write')
-    # NOTE: mocked, a real "pfeed.test" created before pfeed's logging is set up would break the feed tests' logger
-    _ = mocker.patch('pfeed.base.data_handler.logging.getLogger')
+    _ = mocker.patch.object(handler, '_logger')
     return handler
 
 
@@ -186,11 +184,28 @@ def test_failed_flush_raises_and_keeps_the_rows(streaming_handler: _Handler):
     assert _buffer(streaming_handler).rows == [{'ts': 1}]
 
 
+def test_teardown_streaming_writes_the_rows_and_drops_the_buffer(streaming_handler: _Handler):
+    _buffer(streaming_handler).append({'ts': 1})
+    streaming_handler.teardown_streaming()
+    assert _write(streaming_handler).call_args.args[0]['ts'].to_list() == [1]
+    assert streaming_handler._stream_buffer is None
+
+
+def test_failed_teardown_streaming_keeps_the_buffer_and_its_rows(streaming_handler: _Handler):
+    _write(streaming_handler).side_effect = RuntimeError('database is locked')
+    buffer = _buffer(streaming_handler)
+    buffer.append({'ts': 1})
+    with pytest.raises(RuntimeError, match='database is locked'):
+        streaming_handler.teardown_streaming()
+    assert streaming_handler._stream_buffer is buffer
+    assert buffer.rows == [{'ts': 1}]
+
+
 def test_flush_if_due_retries_a_failed_write_at_the_next_flush(streaming_handler: _Handler):
     _write(streaming_handler).side_effect = [RuntimeError('database is locked'), None]
     _buffer(streaming_handler).append({'ts': 1})
     streaming_handler.flush_if_due()
-    cast("MockType", logging.getLogger).return_value.exception.assert_called_once()
+    cast("MockType", streaming_handler._logger).exception.assert_called_once()
     _buffer(streaming_handler).append({'ts': 2})
     streaming_handler.flush_if_due()
     df = _write(streaming_handler).call_args.args[0]

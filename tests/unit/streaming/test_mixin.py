@@ -111,7 +111,7 @@ def _tag_by_user(msg: Message) -> Message:
 
 
 class _Handler:
-    """Stand-in for a data handler, buffers the messages' data and writes them to a JSON file on flush().
+    """Stand-in for a data handler, buffers the messages' data and writes them to a JSON file on teardown_streaming().
 
     A file, so that what a Ray worker's copy flushes can be checked from the main process.
     """
@@ -128,7 +128,7 @@ class _Handler:
             raise RuntimeError('write failed')
         self.rows.append(msg['data'])
 
-    def flush(self) -> None:
+    def teardown_streaming(self) -> None:
         if not self.rows:
             return
         if self.fail_flush:

@@ -116,15 +116,18 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         from pfund_blocks.datas.bar_data import Bar
         if self._stream_buffer is None:
             raise ValueError(f'{self!r} is not set up for streaming, call setup_streaming() first')
-        data_point = cast("Bar | Tick | None", msg['data'])
+        data = cast("list[Bar | Tick] | Bar | Tick | None", msg['data'])
         # e.g. a resampled message whose update didn't change the resampled bar
-        if data_point is None:
+        if data is None:
             return
-        if isinstance(data_point, Bar) and not data_point.is_closed and not self._store_incremental_bars:
-            return
-        # columns not in the streaming schema (e.g. resolution) are dropped when the buffer builds its dataframe
-        row = {'product': msg['product'], 'received_at': msg['received_at'], **data_point.to_dict()}
-        self._stream_buffer.append(row)
+        # NOTE: a parsed message can hold several data points (e.g. Bybit sends a list), a resampled one holds a single bar
+        data_points = data if isinstance(data, list) else [data]
+        for data_point in data_points:
+            if isinstance(data_point, Bar) and not data_point.is_closed and not self._store_incremental_bars:
+                continue
+            # columns not in the streaming schema (e.g. resolution) are dropped when the buffer builds its dataframe
+            row = {'product': msg['product'], 'received_at': msg['received_at'], **data_point.to_dict()}
+            self._stream_buffer.append(row)
         self.flush_if_due()
 
     def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, MarketDataMetadata]]:

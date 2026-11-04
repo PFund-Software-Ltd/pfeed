@@ -54,6 +54,7 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
             is_streaming: whether the dataset holds streamed data, which is stored with a different schema,
                 e.g. partitioned by start_ts instead of date, see _get_date_col().
         """
+        self._logger = logging.getLogger(f"pfeed.{data_model.data_source.lower()}")
         self._data_model = data_model
         self._io = io
         self._data_layer = DataLayer[str(data_layer).upper()]
@@ -131,6 +132,16 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
             flush_interval=flush_interval
         )
 
+    def teardown_streaming(self) -> None:
+        """Ends the streaming set up by setup_streaming(): flushes the buffered rows, then drops the buffer, so write_stream() raises after it.
+
+        A failed flush raises and keeps the buffer with its rows.
+        """
+        if self._stream_buffer is None:
+            return
+        self.flush()
+        self._stream_buffer = None
+
     def flush(self) -> None:
         """Appends the stream buffer's rows to the IO.
 
@@ -145,6 +156,7 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         except Exception:
             self._stream_buffer.restore(rows)
             raise
+        self._logger.debug(f"flushed {len(rows)} rows to {self!r}")
 
     def is_flush_due(self) -> bool:
         return self._stream_buffer is not None and self._stream_buffer.is_due()
@@ -162,9 +174,7 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
             self._failed_flushes += 1
             if self._failed_flushes >= self.MAX_FAILED_FLUSHES:
                 raise
-            # NOTE: looked up here, not in __init__, creating "pfeed.<source>" before pfeed's logging is set up makes it a plain Logger, not pfeed's
-            logger = logging.getLogger(f"pfeed.{self._data_model.data_source.lower()}")
-            logger.exception(
+            self._logger.exception(
                 f"{self!r} flush failed ({self._failed_flushes}/{self.MAX_FAILED_FLUSHES}), retrying at the next flush:"
             )
         else:

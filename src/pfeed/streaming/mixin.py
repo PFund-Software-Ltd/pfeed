@@ -273,12 +273,11 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                         logger.exception(f"Error in streaming Ray {worker_name}:")
                         raise
                     finally:
-                        # NOTE: each worker has its own copies of the handlers holding their own buffered rows, flush them before exiting, otherwise the rows are lost;
-                        # a failed flush raises, so ray.get() in the main process marks the worker's dataflows as failed
+                        # NOTE: each worker has its own copies of the handlers holding their own buffered rows, write them before exiting, otherwise the rows are lost;
+                        # a failed write raises, so ray.get() in the main process marks the worker's dataflows as failed
                         try:
                             for dataflow in dataflows.values():
-                                if handler := dataflow.handler:
-                                    handler.flush()
+                                dataflow._teardown_handler()
                         finally:
                             msg_queue.terminate()
 

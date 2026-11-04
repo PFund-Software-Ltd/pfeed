@@ -604,6 +604,7 @@ class MarketFeed[
 
             from pfeed.schemas.market_data_schema import RESOLUTION
             from pfeed.schemas.streaming.bar_message_schema import START_TS
+            from pfeed.schemas.streaming.market_message_schema import RECEIVED_AT
             from pfeed.schemas.streaming.tick_message_schema import TS
             from pfeed.schemas.time_based_data_schema import DATE
 
@@ -614,13 +615,15 @@ class MarketFeed[
                 lambda_with_name(
                     "streaming_to_batch_schema",
                     # stored as UTC, returned tz-naive UTC like batch data, e.g. start_ts, received_at;
-                    # streamed data has no resolution column
+                    # streamed data has no resolution column;
+                    # sorted like batch data, the table IO doesn't keep the stored order, e.g. DuckLake's inlined rows and files,
+                    # received_at orders the updates of the same bar, e.g. incremental bars
                     lambda df: df.with_columns(
                         cs.datetime(time_zone="*").dt.replace_time_zone(None),
                     ).with_columns(
                         pl.col(date_col).alias(DATE),
                         pl.lit(str(data_resolution)).alias(RESOLUTION),
-                    ),
+                    ).sort(date_col, RECEIVED_AT),
                 ),
             )
         # only cleaned data has a known schema to resample and organize, raw and curated data are returned as stored

@@ -28,6 +28,7 @@ from types import SimpleNamespace
 import pytest
 from pfund_blocks.resolution import Resolution
 
+from pfeed.config import get_config
 from pfeed.dataflow.result import RunResult
 from pfeed.enums import DataCategory
 from pfeed.io.base_io import IOCapabilities
@@ -611,6 +612,33 @@ async def test_run_inside_an_event_loop_raises(feed: _Feed, product: BaseProduct
 async def test_run_async_without_streams_raises(feed: _Feed):
     with pytest.raises(RuntimeError, match=r'run_async\(\) is only for streaming dataflows'):
         await feed.run_async()
+
+
+
+# --- optimizing table IOs ---
+
+
+def test_lake_optimizer_runs_while_streaming_and_once_at_the_end(
+    mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path
+):
+    monkeypatch.setattr(get_config(), 'stream_optimize_interval', 60)
+    lake_optimizer = mocker.patch('pfeed.streaming.lake_optimizer.LakeOptimizer')
+    optimizer = lake_optimizer.return_value
+    optimizer.run = mocker.AsyncMock()
+    stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
+    handler = _Handler(tmp_path / 'rows.json')
+    _stream(feed, product)._handler = cast("Any", handler)
+    # without storage, so no IO
+    _ = _stream(feed, product, MINUTE)
+
+    result = feed.run()
+
+    assert result.success
+    lake_optimizer.assert_called_once_with([handler.io], interval=60, logger=feed.logger)
+    optimizer.run.assert_awaited_once_with()
+    # after the handlers have flushed
+    optimizer.optimize.assert_called_once_with()
+    assert handler.written() == [0, 1, 2]
 
 
 # --- running stream dataflows with Ray ---

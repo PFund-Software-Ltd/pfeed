@@ -178,7 +178,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
                 else:
                     write = self._handler.write_batch
                 write(df)
-            self._logger.debug(f"loaded {self.data_model} data to {self._handler}")
+                self._logger.debug(f"loaded {self.data_model} data to {self._handler}")
             return True
         except Exception:
             # Re-raise so the batch runner marks the dataflow failed; a write

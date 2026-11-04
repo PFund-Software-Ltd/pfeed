@@ -183,7 +183,15 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
         return dataflow
 
     async def _run_stream_dataflows(self) -> list[DataFlow[RequestT, DataModelT]]:
+        from pfeed.config import get_config
+        from pfeed.streaming.lake_optimizer import LakeOptimizer
+
         self._prepare_before_run()
+        optimizer = LakeOptimizer(
+            [dataflow.handler.io for dataflow in self.dataflows if dataflow.handler is not None],
+            interval=get_config().stream_optimize_interval,
+            logger=self.logger,
+        )
 
         async def _run_dataflow(dataflow: DataFlow[RequestT, DataModelT], queue: asyncio.Queue[Message]):
             await dataflow.run_stream(queue=queue)
@@ -198,12 +206,16 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                 for request, dataflows in self._dataflows.items()
                 for dataflow in dataflows
             ]
+            optimizing = asyncio.create_task(optimizer.run())
             try:
                 # NOTE: watches must come after runs, wait_until_disconnected() returns right away if connect() hasn't been called,
                 # gather() starts them in order, and a dataflow's run_stream() reaches connect() before its first wait
                 await asyncio.gather(*runs, return_exceptions=True)
             except asyncio.CancelledError:
                 self.logger.warning(f"{self.name} dataflows were cancelled, ending streams...")
+            finally:
+                _ = optimizing.cancel()
+                _ = await asyncio.wait([optimizing])
 
         try:
             if self._is_using_ray():
@@ -366,6 +378,8 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
 
             return self.dataflows
         finally:
+            # NOTE: after every handler (incl. the Ray workers' copies) has flushed, so the last rows are optimized too
+            optimizer.optimize()
             self._queues.clear()
             self._user_callback = None
             self._cleanup_after_run()

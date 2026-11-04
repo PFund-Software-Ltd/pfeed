@@ -54,6 +54,7 @@ def configure(
     show_progress_bar: bool | None = None,
     allow_timestamp_precision_loss: bool | None = None,
     stream_latency_log_interval: float | None = None,
+    stream_optimize_interval: float | None = None,
     persist: bool = False,
 ) -> PFeedConfig:
     """
@@ -68,6 +69,9 @@ def configure(
             If False, such writes raise. Defaults to False.
         stream_latency_log_interval: Seconds between a stream's latency logs (at DEBUG level), e.g. 60.
             Defaults to None, i.e. latency is not tracked.
+        stream_optimize_interval: Seconds between optimize() calls on the table IOs (e.g. DuckLakeIO) a feed streams to,
+            e.g. to move DuckLake's inlined rows out of its catalog into parquet files. 0 runs it only once, when the streams end.
+            Defaults to 1800.
         persist: If True, the config will be saved to the config file.
     """
     config = get_config()
@@ -109,6 +113,7 @@ class PFeedConfig(Configuration):
         self.show_progress_bar = self._data.get("show_progress_bar", True)
         self.allow_timestamp_precision_loss = self._data.get("allow_timestamp_precision_loss", False)
         self.stream_latency_log_interval = self._data.get("stream_latency_log_interval")
+        self.stream_optimize_interval = self._data.get("stream_optimize_interval", 1800)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -116,6 +121,7 @@ class PFeedConfig(Configuration):
             "show_progress_bar": self.show_progress_bar,
             "allow_timestamp_precision_loss": self.allow_timestamp_precision_loss,
             "stream_latency_log_interval": self.stream_latency_log_interval,
+            "stream_optimize_interval": self.stream_optimize_interval,
         }
 
     def prepare_docker_context(self):

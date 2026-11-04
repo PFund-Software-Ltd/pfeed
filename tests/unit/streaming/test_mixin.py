@@ -345,15 +345,17 @@ def test_different_callbacks_raise(feed: _Feed, product: BaseProduct):
     def other_callback(msg: Message) -> None: ...
 
     _ = _stream(feed, product, TICK, callback=callback)
-    with pytest.raises(ValueError, match='streaming callback is already set') as exc_info:
+    with pytest.raises(ValueError, match='a feed has one callback for all its streams') as exc_info:
         _ = _stream(feed, product, MINUTE, callback=other_callback)
-    assert 'lambda functions are always distinct objects' not in str(exc_info.value)
+    assert 'test_different_callbacks_raise.<locals>.callback (test_mixin.py:' in str(exc_info.value)
+    assert 'test_different_callbacks_raise.<locals>.other_callback (test_mixin.py:' in str(exc_info.value)
+    assert 'instead of a lambda' not in str(exc_info.value)
 
 
-def test_different_lambda_callbacks_raise_with_a_hint(feed: _Feed, product: BaseProduct):
-    _ = _stream(feed, product, TICK, callback=lambda msg: None)
-    with pytest.raises(ValueError, match='lambda functions are always distinct objects'):
-        _ = _stream(feed, product, MINUTE, callback=lambda msg: None)
+def test_lambda_callbacks_created_in_a_loop_raise_with_a_hint(feed: _Feed, product: BaseProduct):
+    with pytest.raises(ValueError, match=r'Use a named function \(def\) instead of a lambda'):
+        for resolution in (TICK, MINUTE):
+            _ = _stream(feed, product, resolution, callback=lambda msg: None)
 
 
 # --- running stream dataflows ---

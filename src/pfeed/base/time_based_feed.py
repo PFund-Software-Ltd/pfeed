@@ -21,10 +21,11 @@ from pfeed.utils.temporal import parse_date_range
 
 
 class TimeBasedFeed[
-    SourceT: BaseSource,
+    SourceT: BaseSource[bool],
     RequestT: TimeBasedFeedBaseRequest,
     DataModelT: TimeBasedDataModel,
-](BaseFeed[SourceT, RequestT, DataModelT], ABC):
+    PipelineT: bool = Literal[False],
+](BaseFeed[SourceT, RequestT, DataModelT, PipelineT], ABC):
     DataModel: ClassVar[type[TimeBasedDataModel]]  # ty: ignore[invalid-mutable-override]
     downloaded_data_date_cols: ClassVar[list[str]]
     # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),

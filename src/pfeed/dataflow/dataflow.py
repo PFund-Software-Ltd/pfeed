@@ -117,7 +117,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             handler_kwargs: options specific to the data model's handler, forwarded as is,
                 e.g. store_incremental_bars for MarketDataHandler.
         """
-        if self._handler is not None:
+        if self.has_handler():
             raise ValueError(f"handler is already set for dataflow {self}")
         if self.is_sealed():
             raise ValueError(f"cannot set handler for sealed dataflow {self}")
@@ -295,7 +295,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         try:
             await self.faucet.close_stream()
             # with Ray, each worker flushes its own copy of the handler, this one's buffer stays empty
-            if self._handler is not None:
+            if self.has_handler():
                 self._handler.flush()
         except Exception as err:
             self._logger.exception(f"Error ending stream for {self}:")

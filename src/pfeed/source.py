@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast, overload
 
 if TYPE_CHECKING:
     from pfund_blocks.adapters.adapter_base import BaseAdapter
@@ -93,7 +93,8 @@ class SourceMetadata(BaseModel):
         }
 
 
-class BaseSource(ABC):
+# NOTE: PipelineT is the pipeline mode as a type, passed on to the source's feeds, see BaseFeed's PipelineT
+class BaseSource[PipelineT: bool = Literal[False]](ABC):
     Feeds: ClassVar[dict[DataCategory, type[BaseFeed]]]
     metadata: ClassVar[SourceMetadata]
     # retries for the source's API, which errors are transient (e.g. timeouts, dropped connections) and how often to retry;
@@ -123,13 +124,31 @@ class BaseSource(ABC):
                 )
             Feed.DataSource = cls
 
+    @overload
+    def __init__(
+        self: BaseSource[Literal[False]],
+        pipeline_mode: Literal[False] = False,
+        num_workers: int | dict[DataCategory | str, int] | None = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self: BaseSource[Literal[True]],
+        pipeline_mode: Literal[True],
+        num_workers: int | dict[DataCategory | str, int] | None = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self: BaseSource[bool],
+        pipeline_mode: bool,
+        num_workers: int | dict[DataCategory | str, int] | None = None,
+    ) -> None: ...
     def __init__(
         self,
         pipeline_mode: bool = False,
         num_workers: int | dict[DataCategory | str, int] | None = None,
     ):
         self._api_key: str | None = self.api_access.get_key() if self.api_access else None
-        self._pipeline_mode: bool = pipeline_mode
+        self._pipeline_mode: PipelineT = cast("PipelineT", pipeline_mode)
         self._feeds: list[BaseFeed] = []
         if isinstance(num_workers, dict):
             num_workers = {DataCategory[k.upper()]: v for k, v in num_workers.items()}

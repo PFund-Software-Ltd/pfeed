@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     # NOTE: only for the type checker, so that it knows the mixin's self is a feed; at runtime the mixin inherits an empty class.
     # the type arguments are Any because a specific request type conflicts with the one the feed passes to MarketFeed,
     # e.g. BybitMarketFeed uses MarketFeedBaseRequest
-    _FeedBase = BaseFeed[Any, Any, Any]
+    _FeedBase = BaseFeed[Any, Any, Any, Any]
 else:
     # NOTE: not object, a generic class can't list object as a base, its MRO with Generic is inconsistent
     class _FeedBase: ...
@@ -127,16 +127,25 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
     def _set_user_callback(self, callback: Callable[[Message], Awaitable[None] | None]):
         # NOTE: a connection has only one callback, a different one would silently replace the existing one
         if self._user_callback and self._user_callback != callback:
+            import os
+
             from pfeed.utils import is_lambda
 
+            def _describe(func: Callable[..., Any]) -> str:
+                # NOTE: e.g. a functools.partial or a callable object has no __code__
+                if (code := getattr(func, "__code__", None)) is None:
+                    return repr(func)
+                return f"{getattr(func, '__qualname__', repr(func))} ({os.path.basename(code.co_filename)}:{code.co_firstlineno})"
+
             msg = (
-                f"streaming callback is already set, existing callback function: {self._user_callback}\n"
-                + f"new callback function: {callback}"
+                "a feed has one callback for all its streams, but this stream() got a different one\n"
+                + f"  existing: {_describe(self._user_callback)}\n"
+                + f"  new:      {_describe(callback)}"
             )
             if is_lambda(callback) or is_lambda(self._user_callback):
                 msg += (
-                    "\nNote: lambda functions are always distinct objects even with identical code, "
-                    + "consider using a named function (def) instead of a lambda to avoid this"
+                    "\nUse a named function (def) instead of a lambda, "
+                    + "a lambda is a new function every time it is created, even with the same code"
                 )
             raise ValueError(msg)
         self._user_callback = callback

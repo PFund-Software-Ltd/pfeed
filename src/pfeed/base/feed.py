@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -28,7 +28,7 @@ def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
 
     def decorator(func: F) -> F:
         @functools.wraps(func)
-        def wrapper(self: BaseFeed[Any, Any, Any], *args: Any, **kwargs: Any) -> Any:
+        def wrapper(self: BaseFeed[Any, Any, Any, Any], *args: Any, **kwargs: Any) -> Any:
             if not self._supports(verb):
                 raise NotImplementedError(f"{self.name} does not support {verb} for {self.data_domain}")
             return func(self, *args, **kwargs)
@@ -38,7 +38,14 @@ def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
     return decorator
 
 
-class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataModel](ABC):
+class BaseFeed[
+    SourceT: BaseSource[bool],
+    RequestT: BaseRequest,
+    DataModelT: BaseDataModel,
+    # NOTE: the source's pipeline mode as a type, so the type checker knows what the verbs return,
+    # e.g. download() returns the feed in pipeline mode and a RunResult otherwise, see MarketFeed's overloads
+    PipelineT: bool = Literal[False],
+](ABC):
     # set by the source that lists this feed in its Feeds, see BaseSource.__init_subclass__
     DataSource: ClassVar[type[BaseSource]]
     DataModel: ClassVar[type[BaseDataModel]]
@@ -98,7 +105,7 @@ class BaseFeed[SourceT: BaseSource, RequestT: BaseRequest, DataModelT: BaseDataM
             )
         self._data_source: SourceT = data_source
         self.logger: ColoredLogger = cast("ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}"))
-        self._pipeline_mode = pipeline_mode
+        self._pipeline_mode: PipelineT = cast("PipelineT", pipeline_mode)
         self._dataflows: dict[RequestT, list[DataFlow[RequestT, DataModelT]]] = {}
         self._requests: list[RequestT] = []
         self._num_workers: int | None = None

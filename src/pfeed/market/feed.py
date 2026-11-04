@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast, overload
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Iterator
+    from collections.abc import Awaitable, Callable
 
     from pfund_blocks.datas.bar_data import BarData
     from pfund_blocks.datas.market_data import MarketData
     from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund_blocks.typing import Message, ProductName
+    from pfund_blocks.typing import Message
 
     from pfeed.dataflow.result import RunResult
     from pfeed.market.requests.base_request import MarketFeedBaseRequest
@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from pfeed.streaming.mixin import StreamingMixin
 
 import datetime
-import time
 from abc import ABC
 
 import polars as pl
@@ -34,14 +33,14 @@ from pfeed.market.requests import (
     MarketFeedRetrieveRequest,
     MarketFeedStreamRequest,
 )
-from pfeed.utils.temporal import ns_to_seconds, seconds_to_ns
 
 
 class MarketFeed[
-    SourceT: BaseSource,
+    SourceT: BaseSource[bool],
     RequestT: MarketFeedBaseRequest = MarketFeedBaseRequest,
     DataModelT: MarketDataModel = MarketDataModel,
-](TimeBasedFeed[SourceT, RequestT, DataModelT], ABC):
+    PipelineT: bool = Literal[False],
+](TimeBasedFeed[SourceT, RequestT, DataModelT, PipelineT], ABC):
     class Requests:  # ty: ignore[invalid-attribute-override]
         """Request class per verb, a subclass sets a verb to None if it doesn't support it."""
 
@@ -262,6 +261,49 @@ class MarketFeed[
             end_date=end_date or start_date,
         )
 
+    # NOTE: the return type follows the pipeline mode, see BaseFeed's PipelineT
+    @overload
+    def download[F: MarketFeed[Any, Any, Any, Literal[True]]](
+        self: F,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str | None = None,
+        end_date: datetime.date | str | None = None,
+        data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        io: BaseIO | None = None,
+        **product_specs: Any,
+    ) -> F: ...
+    @overload
+    def download(
+        self: MarketFeed[Any, Any, Any, Literal[False]],
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str | None = None,
+        end_date: datetime.date | str | None = None,
+        data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        io: BaseIO | None = None,
+        **product_specs: Any,
+    ) -> RunResult: ...
+    @overload
+    def download[F: MarketFeed[Any, Any, Any, bool]](
+        self: F,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str | None = None,
+        end_date: datetime.date | str | None = None,
+        data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        io: BaseIO | None = None,
+        **product_specs: Any,
+    ) -> F | RunResult: ...
     @requires("download")
     def download(
         self,
@@ -383,6 +425,55 @@ class MarketFeed[
         )
         return default_transformations
 
+    # NOTE: the return type follows the pipeline mode, see BaseFeed's PipelineT
+    @overload
+    def retrieve[F: MarketFeed[Any, Any, Any, Literal[True]]](
+        self: F,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str | None = None,
+        end_date: datetime.date | str | None = None,
+        data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        env: Environment | str = Environment.BACKTEST,
+        dataflow_per_date: bool = False,
+        io: BaseIO | None = None,
+        **product_specs: Any,
+    ) -> F: ...
+    @overload
+    def retrieve(
+        self: MarketFeed[Any, Any, Any, Literal[False]],
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str | None = None,
+        end_date: datetime.date | str | None = None,
+        data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        env: Environment | str = Environment.BACKTEST,
+        dataflow_per_date: bool = False,
+        io: BaseIO | None = None,
+        **product_specs: Any,
+    ) -> RunResult: ...
+    @overload
+    def retrieve[F: MarketFeed[Any, Any, Any, bool]](
+        self: F,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str | None = None,
+        end_date: datetime.date | str | None = None,
+        data_origin: str = "",
+        data_layer: DataLayer | str = DataLayer.CLEANED,
+        env: Environment | str = Environment.BACKTEST,
+        dataflow_per_date: bool = False,
+        io: BaseIO | None = None,
+        **product_specs: Any,
+    ) -> F | RunResult: ...
     @requires("retrieve")
     def retrieve(
         self,
@@ -543,6 +634,61 @@ class MarketFeed[
             )
         return default_transformations
 
+    # NOTE: the return type follows the pipeline mode, see BaseFeed's PipelineT
+    @overload
+    def stream[F: MarketFeed[Any, Any, Any, Literal[True]]](
+        self: F,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str = "",
+        end_date: datetime.date | str = "",
+        data_origin: str = "",
+        io: BaseIO | None = None,
+        env: Environment | str = Environment.LIVE,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
+        replay_pace: float | None = 0,
+        store_incremental_bars: bool = False,
+        flush_interval: float = 100,
+        **product_specs: Any,
+    ) -> F: ...
+    @overload
+    def stream(
+        self: MarketFeed[Any, Any, Any, Literal[False]],
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str = "",
+        end_date: datetime.date | str = "",
+        data_origin: str = "",
+        io: BaseIO | None = None,
+        env: Environment | str = Environment.LIVE,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
+        replay_pace: float | None = 0,
+        store_incremental_bars: bool = False,
+        flush_interval: float = 100,
+        **product_specs: Any,
+    ) -> RunResult: ...
+    @overload
+    def stream[F: MarketFeed[Any, Any, Any, bool]](
+        self: F,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str = "",
+        end_date: datetime.date | str = "",
+        data_origin: str = "",
+        io: BaseIO | None = None,
+        env: Environment | str = Environment.LIVE,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
+        replay_pace: float | None = 0,
+        store_incremental_bars: bool = False,
+        flush_interval: float = 100,
+        **product_specs: Any,
+    ) -> F | RunResult: ...
     @requires("stream")
     def stream(
         self,

@@ -915,3 +915,95 @@ def test_resample_data_stock_dividends_and_splits(): ...
     reason="TODO: stock schema is a draft; test dividends/splits columns are kept once stable"
 )
 def test_filter_columns_stock_dividends_and_splits(): ...
+
+
+# 2023-11-14T22:14:00Z, aligned to 2m, so every 1s / 1m / 2m window below starts with a whole second / minute
+_T0 = 1_700_000_040 * 10**9
+_SECOND = 10**9
+_MINUTE = 60 * _SECOND
+
+
+def _resampling(product: BaseProduct, data_resolution: str, target_resolution: str) -> tuple[Any, Any, Resolution]:
+    """The resampler and data_bar as the streaming default transformations bind them."""
+    from pfund_blocks.datas.bar_data import BarData
+    from pfund_blocks.datas.tick_data import TickData
+
+    data_resol, target_resol = Resolution(data_resolution), Resolution(target_resolution)
+    data_bar = BarData(product=product, resolution=target_resol)
+    resampler = TickData(product, data_resol) if data_resol.is_tick() else BarData(product, data_resol)
+    data_bar.bind_resampler(resampler)
+    return resampler, data_bar, target_resol
+
+
+def _resample(product: BaseProduct, resampling: tuple[Any, Any, Resolution], data: Any) -> Any:
+    resampler, data_bar, target_resolution = resampling
+    message = cast("Any", {"product": product.name, "resolution": "1t", "received_at": _T0, "data": data})
+    out = MarketFeed._resample_streaming_message(
+        message=message, resampler=resampler, data_bar=data_bar, target_resolution=target_resolution,
+    )
+    assert out["resolution"] == repr(target_resolution)
+    return out["data"]
+
+
+def _tick(ts: int, price: float, volume: float = 1.0) -> Any:
+    from pfund_blocks.datas.tick_data import Tick
+
+    return Tick(ts=ts, price=price, volume=volume)
+
+
+def test_resample_streaming_message_single_tick(product: BaseProduct):
+    bar = _resample(product, _resampling(product, "1t", "1s"), _tick(_T0, 100.0))
+    assert (bar.start_ts, bar.close, bar.volume, bar.is_closed) == (_T0, 100.0, 1.0, False)
+
+
+def test_resample_streaming_message_ticks_in_one_window(product: BaseProduct):
+    """e.g. a Bybit trade message, several ticks in a list."""
+    ticks = [_tick(_T0, 100.0, 0.1), _tick(_T0 + 1, 102.0, 0.2), _tick(_T0 + 2, 99.0, 0.3)]
+    bar = _resample(product, _resampling(product, "1t", "1s"), ticks)
+    assert (bar.start_ts, bar.open, bar.high, bar.low, bar.close, bar.is_closed) == (_T0, 100.0, 102.0, 99.0, 99.0, False)
+    assert bar.volume == pytest.approx(0.6)
+
+
+def test_resample_streaming_message_ticks_across_windows_close_the_bar(product: BaseProduct):
+    """A tick in the next second closes the bar of the previous one, which is sent; the new bar is sent with the next update."""
+    resampling = _resampling(product, "1t", "1s")
+    ticks = [_tick(_T0, 100.0), _tick(_T0 + _SECOND // 2, 101.0), _tick(_T0 + _SECOND, 105.0)]
+    bar = _resample(product, resampling, ticks)
+    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (_T0, 100.0, 101.0, 2.0, True)
+    # the bar opened by the 105.0 tick, updated by the next message
+    bar = _resample(product, resampling, [_tick(_T0 + _SECOND + 1, 106.0)])
+    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (_T0 + _SECOND, 105.0, 106.0, 2.0, False)
+
+
+def test_resample_streaming_message_ticks_closing_two_bars_send_the_later(product: BaseProduct):
+    """Documented loss: a message closing two bars only sends the later one."""
+    ticks = [_tick(_T0, 100.0), _tick(_T0 + _SECOND, 101.0), _tick(_T0 + 2 * _SECOND, 102.0)]
+    bar = _resample(product, _resampling(product, "1t", "1s"), ticks)
+    assert (bar.start_ts, bar.close, bar.is_closed) == (_T0 + _SECOND, 101.0, True)
+
+
+def test_resample_streaming_message_bars_in_a_list(product: BaseProduct):
+    """e.g. a Bybit kline message, bars in a list; the 1m bar ending with the 2m window closes it."""
+    from pfund_blocks.datas.bar_data import Bar
+
+    resol = Resolution("1m")
+
+    def _bar(start_ts: int, close: float) -> Bar:
+        return Bar(
+            resolution=resol, start_ts=start_ts, end_ts=start_ts + _MINUTE, updated_ts=start_ts + _MINUTE,
+            open=close, high=close, low=close, close=close, volume=1.0, is_closed=True,
+        )
+
+    bar = _resample(product, _resampling(product, "1m", "2m"), [_bar(_T0, 100.0), _bar(_T0 + _MINUTE, 101.0)])
+    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (_T0, 100.0, 101.0, 2.0, True)
+
+
+def test_resample_streaming_message_unchanged_bar_is_none(product: BaseProduct):
+    """An unclosed finer bar doesn't change data_bar, the resampler keeps it until it closes."""
+    from pfund_blocks.datas.bar_data import Bar
+
+    unclosed = Bar(
+        resolution=Resolution("1m"), start_ts=_T0, end_ts=_T0 + _MINUTE, updated_ts=_T0 + 1,
+        open=100.0, high=100.0, low=100.0, close=100.0, volume=1.0, is_closed=False,
+    )
+    assert _resample(product, _resampling(product, "1m", "2m"), [unclosed]) is None

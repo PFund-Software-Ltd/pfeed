@@ -943,7 +943,6 @@ class MarketFeed[
                         resampler=resampler,
                         data_bar=data_bar,
                         target_resolution=target_resolution,
-                        # tick_counter=tick_counter,
                     )
                 )
             )
@@ -961,8 +960,16 @@ class MarketFeed[
         The data is None if the update didn't change data_bar, e.g. an unclosed finer bar, which the resampler keeps until it closes.
         """
         current_bar = data_bar.bar
+        data = message["data"]
+        # NOTE: a parsed message can hold several data points (e.g. Bybit sends a list), each is updated in order
+        data_points = data if isinstance(data, list) else [data]
         # finest first, so the resampler's own closed bars come before data_bar's
-        closed_bars = [bar for bar in resampler.update(message["data"]) if bar.resolution == target_resolution]
+        closed_bars = [
+            bar
+            for data_point in data_points
+            for bar in resampler.update(data_point)
+            if bar.resolution == target_resolution
+        ]
         # case 1: the update closed a bar, e.g. the 1m bar ending at 9:05 closes the 9:00 5m bar,
         # it is sent with its final state, the bar opened by the same update (if any) is sent with the next update
         # NOTE: if an update closes two bars, e.g. after a disconnection, only the later one is sent

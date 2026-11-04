@@ -556,6 +556,7 @@ def _retrieve_transformations(product: BaseProduct, *, data_layer: DataLayer) ->
         data_resolution=Resolution("1t"),
         target_resolution=Resolution("1m"),
         lock=threading.Lock(),
+        is_streamed_data=lambda: False,
     )
     transformations = feed._get_default_transformations_for_retrieve(cast("Any", request))
     return cast("list[FunctionType]", transformations)

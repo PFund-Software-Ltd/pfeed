@@ -42,8 +42,6 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         self._faucet: Faucet[RequestT, DataModelT] | None = faucet
         # NOTE: kept on the dataflow, not read from the faucet, since a stream worker's copy has no faucet, see __getstate__()
         self._extract_type: str = faucet.extract_type
-        self._is_streaming: bool = faucet.request.is_streaming()
-        self._is_replaying: bool = self._is_streaming and faucet.request.is_replaying()
         self._data_model: DataModelT = data_model
         self._default_transformations: list[Callable[..., Any]] = list(default_transformations or [])
         self._user_transformations: list[Callable[..., Any]] = []
@@ -60,7 +58,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         # and a Ray stream worker doesn't need it, it gets the messages from the faucet's ROUTER;
         # a batch worker runs the whole dataflow, extract included, so it keeps its faucet
         state = self.__dict__.copy()
-        if self._is_streaming:
+        if self.is_streaming():
             state["_faucet"] = None
         return state
 
@@ -87,11 +85,15 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             return f"{self._extract_type}:{self.data_model}"
         return f"{self.data_model.data_source}.{self._extract_type}"
 
-    def is_streaming(self) -> bool:
-        return self._is_streaming
-
-    def is_replaying(self) -> bool:
-        return self._is_replaying
+    def is_streaming(self, include_replay: bool = True) -> bool:
+        """
+        Args:
+            include_replay: whether a replay counts as streaming, by default it does,
+                since its messages go through the feed's callback and queues like a stream's
+        """
+        if include_replay:
+            return self._extract_type in ("stream", "replay")
+        return self._extract_type == "stream"
 
     def is_sealed(self) -> bool:
         return self._is_sealed
@@ -145,7 +147,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             raise ValueError(f"handler is already set for dataflow {self}")
         if self.is_sealed():
             raise ValueError(f"cannot set handler for sealed dataflow {self}")
-        is_storing_stream = self.is_streaming() and not self.is_replaying()
+        is_storing_stream = self.is_streaming(include_replay=False)
         self._handler = self._data_model.DataHandler(
             data_model=self._data_model,
             io=io,
@@ -299,12 +301,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         return data
 
     async def _run_stream_etl(self, queue: asyncio.Queue[Message]) -> None:
-        # Replay is read-only: the raw row already reached the user callback and the
-        # streaming queue in the faucet. Its storage is the READ source, so there is
-        # nothing to transform or load here — skip the whole ETL-to-storage step.
-        if self.is_replaying():
-            return
-        extract = self.faucet.open_stream(self.data_model)
+        extract = self.faucet.open_stream()
         try:
             while True:
                 msg = await queue.get()

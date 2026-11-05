@@ -17,8 +17,11 @@ class BaseStreamRequest(BaseRequest):
         description="Seconds between writes of the buffered streamed data to the io. Only used when storing streamed data.",
     )
 
-    def is_streaming(self) -> bool:
-        return True
+    @model_validator(mode="after")
+    def _check_env(self) -> Self:
+        if self.env not in (Environment.PAPER, Environment.LIVE):
+            raise ValueError(f"streaming is only supported in PAPER and LIVE, got {self.env}")
+        return self
 
     @model_validator(mode="after")
     def _check_data_layer(self) -> Self:

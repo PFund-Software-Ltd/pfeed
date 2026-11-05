@@ -174,7 +174,8 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
             stream_api.add_channel(request)
             # NOTE: with Ray, the workers parse the messages
             stream_api.set_callback(self._callback, skip_parse_message=self._is_using_ray())
-            self._create_queue(request)
+        # NOTE: in replay (BACKTEST), the feed's _replay_impl() calls _callback() itself, there is no stream API
+        self._create_queue(request)
 
         faucet = existing_faucet or self._create_faucet(request=request, extract_func=extract_func)
         default_transformations = self._get_default_transformations(request)

@@ -116,12 +116,11 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         from pfund_blocks.datas.bar_data import Bar
         if self._stream_buffer is None:
             raise ValueError(f'{self!r} is not set up for streaming, call setup_streaming() first')
-        data = cast("list[Bar | Tick] | Bar | Tick | None", msg['data'])
+        data_points = cast("list[Bar | Tick] | None", msg['data'])
         # e.g. a resampled message whose update didn't change the resampled bar
-        if data is None:
+        if data_points is None:
             return
         # NOTE: a parsed message can hold several data points (e.g. Bybit sends a list), a resampled one holds a single bar
-        data_points = data if isinstance(data, list) else [data]
         for data_point in data_points:
             if isinstance(data_point, Bar) and not data_point.is_closed and not self._store_incremental_bars:
                 continue

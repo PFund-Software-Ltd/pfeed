@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Concatenate, ParamSpec, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Coroutine
 
     from pfund_blocks.typing import Message
 
@@ -28,13 +28,14 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
     def __init__(
         self,
         request: RequestT,
-        extract_func: Callable[
-            Concatenate[RequestT, DataModelT, ExtractFuncParams], Any
-        ],  # e.g. _download_impl(), _stream_impl(), _retrieve_impl()
+        # NOTE: a batch extract fetches each dataflow's data model, e.g. _download_impl(), _retrieve_impl();
+        # a stream extract runs once for all dataflows, so it takes no data model, e.g. _stream_impl(), _replay_impl()
+        extract_func: Callable[Concatenate[RequestT, DataModelT, ExtractFuncParams], Any]
+        | Callable[[RequestT], Coroutine[Any, Any, None]],
     ):
         self._logger = logging.getLogger(f"pfeed.{request.data_source.name.lower()}")
         self._data_source: BaseSource = request.data_source
-        self._request = request
+        self._request = request  # NOTE: for streaming/replaying, this is always the first request
         self._extract_func = extract_func
         self._stream_task: asyncio.Task[None] | None = None
         self._msg_queue: ZeroMQ | None = None
@@ -68,10 +69,8 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             # - this only counts extract calls; a source making many requests per extract should acquire per request
             # - under Ray each worker gets its own limiter copy, so split the budget by num_workers (or use a Ray actor)
             try:
-                return cast(
-                    pl.LazyFrame | None,
-                    self._extract_func(self._request, data_model),
-                )
+                extract_func = cast("Callable[[RequestT, DataModelT], pl.LazyFrame | None]", self._extract_func)
+                return extract_func(self._request, data_model)
             except policy.retry_on as e:
                 if attempt == policy.max_retries:
                     e.add_note(f'{self.name} extraction of {data_model} failed, gave up after {policy.max_retries} retries')
@@ -84,10 +83,11 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
                 )
                 time.sleep(wait)
 
-    def open_stream(self, data_model: DataModelT) -> asyncio.Task[None]:
+    def open_stream(self) -> asyncio.Task[None]:
         # NOTE: streaming dataflows share the same faucet, so we only need to start the extraction once
         if self._stream_task is None:
-            self._stream_task = asyncio.create_task(self._extract_func(self._request, data_model))
+            extract_func = cast("Callable[[RequestT], Coroutine[Any, Any, None]]", self._extract_func)
+            self._stream_task = asyncio.create_task(extract_func(self._request))
         return self._stream_task
 
     def _register_zmq_route(self, dataflow: DataFlow[RequestT, DataModelT]):

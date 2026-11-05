@@ -54,12 +54,6 @@ class BaseRequest(BaseModel, ABC):
         """Whether to clean raw data using the default transformations (normalize, standardize columns, resample, etc.)."""
         return self.data_layer != DataLayer.RAW
 
-    def is_streaming(self) -> bool:
-        return False
-
-    def is_replaying(self) -> bool:
-        return False
-
     @field_validator("data_layer", mode="before")
     @classmethod
     def _validate_data_layer(cls, value: DataLayer | str) -> DataLayer:
@@ -87,6 +81,4 @@ class BaseRequest(BaseModel, ABC):
                 raise ValueError(f"cannot store {self.data_layer} data in a lower layer {data_layer}")
             if self.data_layer == DataLayer.RAW and data_layer != DataLayer.RAW:
                 raise ValueError(f"RAW data is not cleaned, it cannot be stored in the {data_layer} layer")
-            if self.is_streaming() and data_layer == DataLayer.RAW:
-                raise RuntimeError("Writing raw data in streaming is not supported")
         self.io = io

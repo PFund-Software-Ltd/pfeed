@@ -3,17 +3,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast, overload
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Hashable
 
-    from pfund_blocks.datas.bar_data import BarData
+    from pfund_blocks.datas.bar_data import Bar, BarData
     from pfund_blocks.datas.market_data import MarketData
+    from pfund_blocks.datas.tick_data import Tick
     from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund_blocks.typing import Message
+    from pfund_blocks.typing import Message, ProductName
 
     from pfeed.dataflow.result import RunResult
+    from pfeed.market.data_handler import MarketDataHandler
     from pfeed.market.requests.base_request import MarketFeedBaseRequest
     from pfeed.source import BaseSource
-    from pfeed.streaming.mixin import StreamingMixin
 
 import datetime
 from abc import ABC
@@ -30,9 +31,11 @@ from pfeed.io.base_io import BaseIO
 from pfeed.market.data_model import MarketDataModel
 from pfeed.market.requests import (
     MarketFeedDownloadRequest,
+    MarketFeedReplayRequest,
     MarketFeedRetrieveRequest,
     MarketFeedStreamRequest,
 )
+from pfeed.streaming.mixin import StreamingMixin
 
 
 class MarketFeed[
@@ -40,13 +43,14 @@ class MarketFeed[
     RequestT: MarketFeedBaseRequest = MarketFeedBaseRequest,
     DataModelT: MarketDataModel = MarketDataModel,
     PipelineT: bool = Literal[False],
-](TimeBasedFeed[SourceT, RequestT, DataModelT, PipelineT], ABC):
+](StreamingMixin, TimeBasedFeed[SourceT, RequestT, DataModelT, PipelineT], ABC):
     class Requests:  # ty: ignore[invalid-attribute-override]
         """Request class per verb, a subclass sets a verb to None if it doesn't support it."""
 
         download: ClassVar[type[MarketFeedDownloadRequest] | None] = MarketFeedDownloadRequest
         retrieve: ClassVar[type[MarketFeedRetrieveRequest] | None] = MarketFeedRetrieveRequest
         stream: ClassVar[type[MarketFeedStreamRequest] | None] = MarketFeedStreamRequest
+        replay: ClassVar[type[MarketFeedReplayRequest] | None] = MarketFeedReplayRequest
 
     DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel  # ty: ignore[invalid-mutable-override]
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
@@ -391,6 +395,8 @@ class MarketFeed[
                 return self._get_default_transformations_for_retrieve(request)
             case "stream":
                 return self._get_default_transformations_for_stream(request)
+            case "replay":
+                return self._get_default_transformations_for_replay(request)
             case _:
                 raise ValueError(f"Unknown extract type: {request.extract_type}")
 
@@ -649,14 +655,10 @@ class MarketFeed[
         product: str,
         resolution: Resolution | MarketDataType | str,
         *,
-        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
-        start_date: datetime.date | str = "",
-        end_date: datetime.date | str = "",
         data_origin: str = "",
         io: BaseIO | None = None,
-        env: Environment | str = Environment.LIVE,
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"] = Environment.LIVE,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
-        replay_pace: float | None = 0,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
         **product_specs: Any,
@@ -667,14 +669,10 @@ class MarketFeed[
         product: str,
         resolution: Resolution | MarketDataType | str,
         *,
-        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
-        start_date: datetime.date | str = "",
-        end_date: datetime.date | str = "",
         data_origin: str = "",
         io: BaseIO | None = None,
-        env: Environment | str = Environment.LIVE,
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"] = Environment.LIVE,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
-        replay_pace: float | None = 0,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
         **product_specs: Any,
@@ -685,14 +683,10 @@ class MarketFeed[
         product: str,
         resolution: Resolution | MarketDataType | str,
         *,
-        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
-        start_date: datetime.date | str = "",
-        end_date: datetime.date | str = "",
         data_origin: str = "",
         io: BaseIO | None = None,
-        env: Environment | str = Environment.LIVE,
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"] = Environment.LIVE,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
-        replay_pace: float | None = 0,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
         **product_specs: Any,
@@ -703,60 +697,36 @@ class MarketFeed[
         product: str,
         resolution: Resolution | MarketDataType | str,
         *,
-        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
-        start_date: datetime.date | str = "",
-        end_date: datetime.date | str = "",
         data_origin: str = "",
         io: BaseIO | None = None,
-        env: Environment | str = Environment.LIVE,
+        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"] = Environment.LIVE,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
-        replay_pace: float | None = 0,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
         **product_specs: Any,
     ) -> Self | RunResult:
-        """Stream data live from the data source, or replay stored data at the cleaned data layer.
+        """Stream data live from the data source, to replay stored data use replay().
 
         Args:
             product: Product basis, e.g. `'BTC_USDT_PERP'`, `'AAPL_USD_STK'`.
             resolution: Target resolution, e.g. `'1t'` (tick), `'1m'`, `'1d'`.
                 If the source doesn't stream it, a finer streamed resolution is used and resampled.
-            rollback_period: How far to roll back from today (UTC) when `start_date`
-                is empty, e.g. `'7d'` = the last 7 days up to yesterday.
-                Also accepts `'ytd'` (year to date) and `'max'` (all available data).
-                Only meaningful when env is BACKTEST.
-            start_date: First date (inclusive), e.g. `'2025-01-01'`.
-                Only meaningful when env is BACKTEST.
-            end_date: Last date (inclusive). If empty, defaults to yesterday (UTC).
-                Requires `start_date`. Only meaningful when env is BACKTEST.
             data_origin: Sub-label for data from the same source but different origins.
                 Defaults to the source name.
-            io: Where and how to store the data, its direction depends on env:
-                - PAPER/LIVE: where to store the streamed data. If None, data is not stored.
-                - BACKTEST: where to replay the data from. If None, uses `ParquetIO()`.
+            io: Where to store the streamed data. If None, data is not stored.
                 e.g. `ParquetIO(base_path='./data')`, `DuckLakeIO()`
-            env: Trading environment, `'BACKTEST'`, `'PAPER'` or `'LIVE'` (default).
-                PAPER/LIVE stream from the data source's websocket, BACKTEST replays the data from `io`.
+            env: Trading environment, `'PAPER'` or `'LIVE'` (default).
             callback: Sync or async callable called with each streamed `Message`, before it is transformed or stored.
-                `Message['data']` holds the parsed data, e.g. bars or ticks,
+                `Message['data']` holds the parsed data as a list, e.g. bars or ticks,
                 except when using Ray (see `set_num_workers()`), where the workers parse it and `Message['data']` is None.
                 It is awaited before the next message is read, so a slow callback delays every stream of the feed,
                 offload heavy work, e.g. to a task or a thread.
-            replay_pace: Pacing between row emissions when replaying (env=BACKTEST). Ignored otherwise.
-                - 0 (default): ASAP — no sleep between rows. Backtests process the whole
-                  range as fast as possible regardless of resolution or row count.
-                - >0: fixed cadence in seconds (e.g. 1.0 → one row per wall-second).
-                  Useful for watching a replay at a steady, human-readable rate.
-                - None: realistic — for bars, sleep one resolution period between rows;
-                  for ticks, sleep the timestamp difference between consecutive rows.
-                  Opt-in only: for fine resolutions or tick data a per-row sleep
-                  multiplied by row count can take hours, so it is not the default.
             store_incremental_bars: Whether to also store the updates of a bar before it closes,
                 e.g. for a venue that only streams such updates. If False (default), only closed bars are stored.
-                Only meaningful for bar resolutions when `io` is given and env is not BACKTEST.
+                Only meaningful for bar resolutions when `io` is given.
             flush_interval: Seconds between writes of the buffered streamed data to `io`.
                 Frequent writes create many small files, which slow down reads until the table is compacted.
-                Only meaningful when `io` is given and env is not BACKTEST.
+                Only meaningful when `io` is given.
             product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
                 futures. Leave them out to get an error listing the required ones.
 
@@ -765,43 +735,26 @@ class MarketFeed[
         """
         from pfund_kit.utils.temporal import get_utc_now
 
-        SUPPORTED_ENVS = (Environment.BACKTEST, Environment.PAPER, Environment.LIVE)
-        env = Environment(env.upper())
-        if env not in SUPPORTED_ENVS:
-            raise ValueError(f"streaming is only supported in envs {SUPPORTED_ENVS}")
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
-        is_replaying = (env == Environment.BACKTEST)
-        if is_replaying:
-            start_date, end_date = self._standardize_dates(
-                resolution, start_date, end_date, rollback_period
-            )
-        else:
-            start_date = end_date = get_utc_now().date()
+        start_date = end_date = get_utc_now().date()
 
         data_resolution = resolution
-        if not is_replaying:
-            if resolution.is_bar():
-                supported = self.data_source.get_stream_api(env).get_supported_resolutions(product)
-                if resolution not in supported:
-                    from pfund_blocks.datas.bar_data import BarData
+        if resolution.is_bar():
+            supported = self.data_source.get_stream_api(env).get_supported_resolutions(product)
+            if resolution not in supported:
+                from pfund_blocks.datas.bar_data import BarData
 
-                    target = BarData(product, resolution)
-                    candidates = [r for r in supported if target.can_resample_from(r)]
-                    if not candidates:
-                        raise ValueError(f"{resolution!r} is not supported in streaming by {self.name}")
-                    # the coarsest one that fits, e.g. 6m with [1m, 3m, 5m, 1t] -> 3m
-                    data_resolution = min(candidates)
-                    self.logger.warning(
-                        f"{product} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
-                    )
-        else:
-            # NOTE: in replay mode, io means loading data FROM storage, not TO storage, so it must exist
-            if io is None:
-                from pfeed.io.parquet_io import ParquetIO
-
-                io = ParquetIO()
+                target = BarData(product, resolution)
+                candidates = [r for r in supported if target.can_resample_from(r)]
+                if not candidates:
+                    raise ValueError(f"{resolution!r} is not supported in streaming by {self.name}")
+                # the coarsest one that fits, e.g. 6m with [1m, 3m, 5m, 1t] -> 3m
+                data_resolution = min(candidates)
+                self.logger.warning(
+                    f"{product} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
+                )
 
         request = cast("RequestT",
             cast("type[MarketFeedStreamRequest]", self.Requests.stream)(
@@ -815,23 +768,29 @@ class MarketFeed[
                 data_resolution=data_resolution,
                 start_date=start_date,
                 end_date=end_date,
-                replay_pace=replay_pace,
                 store_incremental_bars=store_incremental_bars,
                 flush_interval=flush_interval,
             )
         )
         self._append_request(request)
         data_model = cast("DataModelT", request.to_data_model())
-        # supporting stream guarantees StreamingMixin, see BaseFeed.__init_subclass__
-        cast("StreamingMixin", self)._create_stream_dataflow(
+        self._create_stream_dataflow(
             extract_func=self._stream_impl,
             data_model=data_model,
             callback=callback,
         )
         return self.run() if not self.is_pipeline() else self
 
+    @staticmethod
+    def _create_queue_key_from_request(request: RequestT) -> tuple[ProductName, str]:
+        return (request.product.name, repr(request.data_resolution))
+
+    @staticmethod
+    def _create_queue_key_from_message(message: Message) -> Hashable:
+        return (message["product"], message["resolution"])
+
     def _get_handler_kwargs(self, request: RequestT) -> dict[str, Any]:
-        if request.is_streaming():
+        if request.extract_type == "stream":
             return {"store_incremental_bars": cast("MarketFeedStreamRequest", request).store_incremental_bars}
         return {}
 
@@ -839,70 +798,20 @@ class MarketFeed[
     def _parse_streaming_message(msg: Message) -> Message:
         raise NotImplementedError
 
-    async def _stream_impl(self, request: RequestT, data_model: DataModelT):
-        from pfund_blocks.enums.env import Environment
-
-        if request.env in (Environment.PAPER, Environment.LIVE):
-            stream_api = self.data_source.get_stream_api(request.env)
+    async def _stream_impl(self, request: RequestT):
+        """Streams from the data source's stream API (env=PAPER/LIVE), replaying (env=BACKTEST) is _replay_impl()."""
+        stream_api = self.data_source.get_stream_api(cast("Literal[Environment.PAPER, Environment.LIVE]", request.env))
+        try:
+            await stream_api.connect()
+            # NOTE: connect() returns right away, this is what notices that the stream has stopped
+            await stream_api.wait_until_disconnected()
+        finally:
             try:
-                await stream_api.connect()
-                # NOTE: connect() returns right away, this is what notices that the stream has stopped
-                await stream_api.wait_until_disconnected()
+                # NOTE: cancelling wait_until_disconnected() doesn't disconnect the websockets
+                await stream_api.disconnect()
             finally:
-                try:
-                    # NOTE: cancelling wait_until_disconnected() doesn't disconnect the websockets
-                    await stream_api.disconnect()
-                finally:
-                    for queue in cast("StreamingMixin", self)._queues.values():
-                        queue.shutdown()
-        # TODO: replaying backtest data
-        elif is_replaying := request.env == Environment.BACKTEST:
-            req = cast("MarketFeedStreamRequest", request)
-            replay_pace = req.replay_pace
-#             import asyncio
-#
-#             assert handler is not None, "handler must be provided for replaying"
-#             data_source = data_model.data_source
-#             channel_key: ChannelKey = cast(
-#                 "ChannelKey", stream_api.add_channel(data_model)
-#             )
-#             start_date, end_date = data_model.start_date, data_model.end_date
-#             resolution = data_model.resolution
-#             prev_ts: float | None = None
-#             # the handler's data model covers start_date to end_date; collected one day at a time to bound memory
-#             lf, _ = handler.read()
-#             if lf is None:
-#                 self.logger.warning(f"No data to replay from {start_date} to {end_date}")
-#                 return
-#             for date in pl.date_range(
-#                 start=start_date, end=end_date, interval="1d", eager=True
-#             ):
-#                 df = lf.filter(pl.col("date").dt.date() == date).sort("date").collect()
-#                 if df.is_empty():
-#                     self.logger.debug(f"No data to replay on {date}")
-#                     continue
-#                 for row in df.iter_rows(named=True):
-#                     current_ts: float = row["date"].timestamp()
-#                     if replay_pace == 0:  # ASAP
-#                         delay = 0.0
-#                     elif replay_pace is not None:  # custom fixed cadence
-#                         delay = replay_pace if prev_ts is not None else 0.0
-#                     # realistic mode
-#                     else:
-#                         if (
-#                             resolution.is_tick()
-#                         ):  # ticks: use timestamp diff between consecutive rows
-#                             delay = current_ts - prev_ts if prev_ts is not None else 0.0
-#                         else:  # bars: use resolution period (insulates from data gaps like weekends)
-#                             delay = (
-#                                 resolution.to_seconds() if prev_ts is not None else 0.0
-#                             )
-#                     if delay > 0:
-#                         await asyncio.sleep(delay)
-#                     prev_ts = current_ts
-#                     await faucet_callback(data_source, row, channel_key)
-        else:
-            raise ValueError(f"streaming does not support env {request.env}")
+                for queue in self._queues.values():
+                    queue.shutdown()
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
     def _get_default_transformations_for_stream(self, request: RequestT) -> list[Callable[..., Any]]:
@@ -911,14 +820,7 @@ class MarketFeed[
 
         from pfeed.utils import lambda_with_name
 
-        default_transformations: list[Callable[..., Any]] = []
-
-        is_replaying = request.env == Environment.BACKTEST
-        # NOTE: replaying backtest data must be cleaned beforehand, no default transformations when env is BACKTEST
-        if is_replaying:
-            return default_transformations
-
-        default_transformations.append(self._parse_streaming_message)
+        default_transformations: list[Callable[..., Any]] = [self._parse_streaming_message]
 
         is_resampling = bool(request.target_resolution < request.data_resolution)
         if is_resampling:
@@ -968,9 +870,8 @@ class MarketFeed[
         The data is None if the update didn't change data_bar, e.g. an unclosed finer bar, which the resampler keeps until it closes.
         """
         current_bar = data_bar.bar
-        data = message["data"]
         # NOTE: a parsed message can hold several data points (e.g. Bybit sends a list), each is updated in order
-        data_points = data if isinstance(data, list) else [data]
+        data_points = cast("list[Bar | Tick]", message["data"])
         # finest first, so the resampler's own closed bars come before data_bar's
         closed_bars = [
             bar
@@ -990,4 +891,259 @@ class MarketFeed[
         # case 3: nothing changed, e.g. an unclosed 1m bar, or no 1m bar has closed since the stream started
         else:
             resampled_bar = None
-        return {**message, "resolution": repr(target_resolution), "data": resampled_bar}
+        return {**message, "resolution": repr(target_resolution), "data": [resampled_bar] if resampled_bar is not None else None}
+
+    # NOTE: the return type follows the pipeline mode, see BaseFeed's PipelineT
+    @overload
+    def replay[F: MarketFeed[Any, Any, Any, Literal[True]]](
+        self: F,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str = "",
+        end_date: datetime.date | str = "",
+        data_origin: str = "",
+        io: BaseIO | None = None,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
+        replay_pace: float | None = 0,
+        **product_specs: Any,
+    ) -> F: ...
+    @overload
+    def replay(
+        self: MarketFeed[Any, Any, Any, Literal[False]],
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str = "",
+        end_date: datetime.date | str = "",
+        data_origin: str = "",
+        io: BaseIO | None = None,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
+        replay_pace: float | None = 0,
+        **product_specs: Any,
+    ) -> RunResult: ...
+    @overload
+    def replay[F: MarketFeed[Any, Any, Any, bool]](
+        self: F,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str = "",
+        end_date: datetime.date | str = "",
+        data_origin: str = "",
+        io: BaseIO | None = None,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
+        replay_pace: float | None = 0,
+        **product_specs: Any,
+    ) -> F | RunResult: ...
+    @requires("replay")
+    def replay(
+        self,
+        product: str,
+        resolution: Resolution | MarketDataType | str,
+        *,
+        rollback_period: Resolution | str | Literal["ytd", "max"] = "1d",
+        start_date: datetime.date | str = "",
+        end_date: datetime.date | str = "",
+        data_origin: str = "",
+        io: BaseIO | None = None,
+        callback: Callable[[Message], Awaitable[None] | None] | None = None,
+        replay_pace: float | None = 0,
+        **product_specs: Any,
+    ) -> Self | RunResult:
+        """Replay stored data at the cleaned data layer as a stream, e.g. for backtesting.
+
+        Every replay of the feed is merged into one stream, ordered by when each message would have been received live,
+        i.e. a bar at its end, a tick at its timestamp.
+
+        Args:
+            product: Product basis, e.g. `'BTC_USDT_PERP'`, `'AAPL_USD_STK'`.
+            resolution: Resolution of the stored data to replay, e.g. `'1t'` (tick), `'1m'`, `'1d'`.
+            rollback_period: How far to roll back from today (UTC) when `start_date`
+                is empty, e.g. `'7d'` = the last 7 days up to yesterday.
+                Also accepts `'ytd'` (year to date) and `'max'` (all available data).
+            start_date: First date (inclusive), e.g. `'2025-01-01'`.
+            end_date: Last date (inclusive). If empty, defaults to yesterday (UTC).
+                Requires `start_date`.
+            data_origin: Sub-label for data from the same source but different origins.
+                Defaults to the source name.
+            io: Where to replay the data from. If None, uses `ParquetIO()`.
+                e.g. `ParquetIO(base_path='./data')`, `DuckLakeIO()`
+            callback: Sync or async callable called with each replayed `Message`, before it is transformed.
+                `Message['data']` holds a list with one closed bar or one tick, like a streamed message holds a list of them.
+                It is awaited before the next message is replayed, so a slow callback slows down the replay.
+            replay_pace: Pacing between messages.
+                - 0 (default): ASAP — no sleep between messages. Backtests process the whole
+                  range as fast as possible regardless of resolution or row count.
+                - >0: fixed cadence in seconds (e.g. 1.0 → one message per wall-second).
+                  Useful for watching a replay at a steady, human-readable rate.
+                - None: realistic — sleeps the time between consecutive messages, at most one bar period for bars,
+                  so data gaps (e.g. weekends) aren't slept through.
+                  Opt-in only: for fine resolutions or tick data this can take hours, so it is not the default.
+            product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
+                futures. Leave them out to get an error listing the required ones.
+
+        Returns:
+            `RunResult` once the replay ends, or `self` in pipeline mode.
+        """
+        from pfeed.io.parquet_io import ParquetIO
+
+        env = Environment.BACKTEST
+        setup_logging(env=env)
+        product: BaseProduct = self.data_source.create_product(product, **product_specs)
+        resolution = Resolution(resolution)
+        start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
+        request = cast("RequestT",
+            cast("type[MarketFeedReplayRequest]", self.Requests.replay)(
+                data_source=self.data_source,
+                data_origin=data_origin,
+                io_for_replay=io or ParquetIO(),
+                data_layer=DataLayer.CLEANED,
+                env=env,
+                product=product,
+                target_resolution=resolution,
+                # NOTE: replays the stored data as is, no resampling
+                data_resolution=resolution,
+                start_date=start_date,
+                end_date=end_date,
+                replay_pace=replay_pace,
+            )
+        )
+        self._append_request(request)
+        data_model = cast("DataModelT", request.to_data_model())
+        self._create_stream_dataflow(
+            extract_func=self._replay_impl,
+            data_model=data_model,
+            callback=callback,
+        )
+        return self.run() if not self.is_pipeline() else self
+
+    async def _replay_impl(self, request: RequestT):
+        """Replays the stored data of every stream request of the feed (env=BACKTEST), merged by the time each message would have been received live.
+
+        The extract function of replay(), like _stream_impl() is for stream().
+        """
+        import asyncio
+        from collections import defaultdict
+        from operator import itemgetter
+
+        from pfund_blocks.datas.bar_data import Bar
+        from pfund_blocks.datas.tick_data import Tick
+        from pfund_blocks.enums.side import Side
+        from pfund_blocks.utils.temporal import NS_PER_SECOND
+
+        from pfeed.schemas.bar_data_schema import CLOSE, HIGH, LOW, OPEN
+        from pfeed.schemas.market_data_schema import VOLUME
+        from pfeed.schemas.tick_data_schema import PRICE, SIDE
+        from pfeed.schemas.time_based_data_schema import DATE
+
+        replay_pace = cast("MarketFeedReplayRequest", request).replay_pace
+        # NOTE: all streams of a feed share one faucet, which runs this once with the first request;
+        # like a stream API holding every channel, replay reads every request and merges their data by time
+        requests = [cast("MarketFeedReplayRequest", req) for req in self._requests]
+
+        def _read_day(handlers: list[tuple[MarketFeedReplayRequest, MarketDataHandler]]) -> list[tuple[int, Message]]:
+            """Returns the day's messages of every request, each with the time it would have been received live, ordered by it."""
+            messages: list[tuple[int, Message]] = []
+            for req, handler in handlers:
+                lf, _ = handler.read()
+                if lf is None:
+                    continue
+                # NOTE: as int ns, iter_rows() would return a python datetime, which only has microseconds
+                df = lf.with_columns(pl.col(DATE).cast(pl.Int64)).collect()
+                resolution = req.data_resolution
+                for row in df.iter_rows(named=True):
+                    data: Bar | Tick
+                    if resolution.is_bar():
+                        # NOTE: a bar's date is its start, but it is only known once closed, so it is received at its end.
+                        # columns a Bar doesn't have are not replayed, e.g. a stock's dividends and splits
+                        start_ts: int = row[DATE]
+                        end_ts = start_ts + resolution.to_seconds() * NS_PER_SECOND
+                        data = Bar(
+                            resolution=resolution,
+                            start_ts=start_ts,
+                            end_ts=end_ts,
+                            updated_ts=end_ts,
+                            open=row[OPEN],
+                            high=row[HIGH],
+                            low=row[LOW],
+                            close=row[CLOSE],
+                            volume=row[VOLUME],
+                            is_closed=True,
+                        )
+                        received_at = end_ts
+                    else:
+                        side = row.get(SIDE)
+                        data = Tick(
+                            ts=row[DATE],
+                            price=row[PRICE],
+                            volume=row[VOLUME],
+                            side=Side(side) if side is not None else None,
+                        )
+                        received_at = data.ts
+                    message: Message = {
+                        "source": req.data_source.name,
+                        "account": None,
+                        "channel": None,
+                        "product": req.product.name,
+                        # NOTE: must match the queue key, see _create_queue_key_from_request()
+                        "resolution": repr(resolution),
+                        "received_at": received_at,
+                        "message": None,  # raw message as None
+                        # NOTE: a list, like a streamed message, which can hold several data points
+                        "data": [data],
+                        "error": None,
+                    }
+                    messages.append((received_at, message))
+            # NOTE: a stable sort, messages received at the same time stay in request order, then in stored order
+            messages.sort(key=itemgetter(0))
+            return messages
+
+        try:
+            handlers_per_date: dict[datetime.date, list[tuple[MarketFeedReplayRequest, MarketDataHandler]]] = defaultdict(list)
+            for req in requests:
+                if not (req.data_resolution.is_bar() or req.data_resolution.is_tick()):
+                    raise NotImplementedError(f"replaying {req.data_resolution!r} data is not supported yet")
+                replay_data_model = req.to_data_model()
+                if missing_dates := req.create_data_resolution_handler(replay_data_model).find_missing_dates_in_storage():
+                    self.logger.warning(
+                        f"{req.product} {req.data_resolution!r} data from {replay_data_model.start_date} to {replay_data_model.end_date} "
+                        + f"is missing {len(missing_dates)} dates in {req.io_for_replay!r}, they are skipped in the replay"
+                    )
+                for daily_data_model in replay_data_model.split_by_date():
+                    handlers_per_date[daily_data_model.date].append((req, req.create_data_resolution_handler(daily_data_model)))
+            prev_ts: int | None = None
+            # NOTE: one day at a time to bound memory
+            for date in sorted(handlers_per_date):
+                # NOTE: reading blocks, so it runs in a thread, the dataflows keep consuming their queues meanwhile
+                messages = await asyncio.to_thread(_read_day, handlers_per_date[date])
+                if not messages:
+                    self.logger.debug(f"No data to replay on {date}")
+                    continue
+                for received_at, message in messages:
+                    if replay_pace == 0 or prev_ts is None:  # ASAP, or the first message
+                        delay = 0.0
+                    elif replay_pace is not None:  # fixed cadence
+                        delay = replay_pace
+                    # realistic: the time between consecutive messages
+                    else:
+                        delay = (received_at - prev_ts) / NS_PER_SECOND
+                        # NOTE: at most one bar period, so data gaps (e.g. weekends) aren't slept through
+                        if isinstance(data := cast("list[Bar | Tick]", message["data"])[0], Bar):
+                            delay = min(delay, data.resolution.to_seconds())
+                    prev_ts = received_at
+                    # NOTE: also awaited when delay is 0, so the consumers run between messages; a sync callback never yields,
+                    # an ASAP replay would otherwise fill the iteration queue of __aiter__(), which drops the oldest message when full
+                    await asyncio.sleep(delay)
+                    await self._callback(message)
+        finally:
+            # NOTE: the replay has ended (or failed / was cancelled), ends the dataflows reading the queues
+            for queue in self._queues.values():
+                queue.shutdown()
+
+    def _get_default_transformations_for_replay(self, request: RequestT, /) -> list[Callable[..., Any]]:
+        # NOTE: the replayed data is already cleaned
+        return []

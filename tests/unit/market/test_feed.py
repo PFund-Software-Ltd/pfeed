@@ -942,7 +942,11 @@ def _resample(product: BaseProduct, resampling: tuple[Any, Any, Resolution], dat
         message=message, resampler=resampler, data_bar=data_bar, target_resolution=target_resolution,
     )
     assert out["resolution"] == repr(target_resolution)
-    return out["data"]
+    # NOTE: data is a list of data points, a resampled message holds a single bar, or None if data_bar didn't change
+    if out["data"] is None:
+        return None
+    assert len(out["data"]) == 1
+    return out["data"][0]
 
 
 def _tick(ts: int, price: float, volume: float = 1.0) -> Any:
@@ -952,7 +956,7 @@ def _tick(ts: int, price: float, volume: float = 1.0) -> Any:
 
 
 def test_resample_streaming_message_single_tick(product: BaseProduct):
-    bar = _resample(product, _resampling(product, "1t", "1s"), _tick(_T0, 100.0))
+    bar = _resample(product, _resampling(product, "1t", "1s"), [_tick(_T0, 100.0)])
     assert (bar.start_ts, bar.close, bar.volume, bar.is_closed) == (_T0, 100.0, 1.0, False)
 
 

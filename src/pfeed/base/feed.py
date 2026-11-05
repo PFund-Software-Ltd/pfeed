@@ -72,7 +72,8 @@ class BaseFeed[
                 # not defined at all, or still the default from a framework base class
                 if owner is None or ABC in owner.__bases__:
                     missing.append(method)
-            if verb == "stream" and not issubclass(cls, StreamingMixin):
+            # NOTE: a replay runs like a stream, through the mixin's callback and queues
+            if verb in ("stream", "replay") and not issubclass(cls, StreamingMixin):
                 missing.insert(0, "StreamingMixin as a base class")
             # downloaded data must be readable back, retrieve needs nothing from the feed, so leaving it out is a mistake
             if verb == "download" and hasattr(cls.Requests, "retrieve") and "retrieve" not in cls.capabilities():
@@ -136,7 +137,8 @@ class BaseFeed[
         return self._is_running
 
     def is_streaming(self) -> bool:
-        return any(request.is_streaming() for request in self._requests)
+        # NOTE: a replay runs like a stream, its messages go through the feed's callback and queues
+        return any(request.extract_type in ("stream", "replay") for request in self._requests)
 
     def _is_using_ray(self) -> bool:
         return bool(self._num_workers)
@@ -220,11 +222,12 @@ class BaseFeed[
         # single path based on whether streaming dataflows exist — batch and streaming
         # requests cannot be mixed in one feed run. Reject the mix at the source rather
         # than letting a batch faucet hit run_stream() (or vice versa) downstream.
+        is_streaming = request.extract_type in ("stream", "replay")
         if (
             self._requests
-            and request.is_streaming() != self._requests[-1].is_streaming()
+            and is_streaming != (self._requests[-1].extract_type in ("stream", "replay"))
         ):
-            mode, queued_mode = ("streaming", "batch") if request.is_streaming() else ("batch", "streaming")
+            mode, queued_mode = ("streaming", "batch") if is_streaming else ("batch", "streaming")
             raise ValueError(
                 "cannot mix streaming and batch requests in one pipeline: "
                 + f"{mode} request is incompatible with the queued {queued_mode} requests"
@@ -249,8 +252,11 @@ class BaseFeed[
         # fluent-chain entry point: always targets the request just created
         current_request = self._get_current_request()
         # NOTE: a stream is always stored as pfeed's CLEANED data, before the user's transformations, so only its io is configurable, see stream()
-        if current_request.is_streaming():
+        if current_request.extract_type == "stream":
             raise ValueError(f"load() is not supported after {self.name}'s stream(), pass io to stream() instead")
+        # NOTE: a replay reads stored data, it stores nothing
+        if current_request.extract_type == "replay":
+            raise ValueError(f"load() is not supported after {self.name}'s replay()")
         return self._load_for_request(request=current_request, io=io, data_layer=data_layer)
 
     def _load_for_request(

@@ -1,4 +1,4 @@
-"""StreamingMixin, through a real MarketFeed streaming from a fake stream API.
+"""StreamingMixin, through a real MarketFeed streaming from a fake stream API, or replaying data stored in a real ParquetIO.
 
 The data engine part (pushing the Ray workers' transformed data to the engine) is not covered here.
 """
@@ -16,16 +16,21 @@ if TYPE_CHECKING:
 
     from pfeed.base.requests.stream_request import BaseStreamRequest
     from pfeed.dataflow.dataflow import DataFlow
+    from pfeed.market.requests.replay_request import MarketFeedReplayRequest
 
 import asyncio
 import contextlib
+import datetime
 import json
 import logging
 import pickle
 import time
 from types import SimpleNamespace
 
+import polars as pl
 import pytest
+from pfund_blocks.datas.bar_data import Bar
+from pfund_blocks.enums.side import Side
 from pfund_blocks.resolution import Resolution
 
 from pfeed.config import get_config
@@ -36,7 +41,6 @@ from pfeed.io.parquet_io import ParquetIO
 from pfeed.market.feed import MarketFeed
 from pfeed.source import BaseSource
 from pfeed.streaming.latency_tracker import LatencyTracker
-from pfeed.streaming.market import MarketFeedStreamingMixin
 from pfeed.streaming.stream_api import BaseStreamAPI
 
 TICK, MINUTE = '1t', '1m'
@@ -90,7 +94,7 @@ class _StreamAPI(BaseStreamAPI):
         self.is_disconnected = True
 
 
-class _Feed(MarketFeedStreamingMixin, MarketFeed):
+class _Feed(MarketFeed):
     # module-level so cloudpickle pickles _parse_streaming_message by reference into the Ray workers
     class Requests(MarketFeed.Requests):  # ty: ignore[invalid-attribute-override]
         download = None
@@ -338,6 +342,12 @@ def test_streaming_different_envs_in_one_feed_raises(feed: _Feed, product: BaseP
     _ = _stream(feed, product, TICK, env='LIVE')
     with pytest.raises(ValueError, match='cannot stream PAPER and LIVE in the same feed'):
         _ = _stream(feed, product, MINUTE, env='PAPER')
+
+
+def test_streaming_backtest_raises(feed: _Feed, product: BaseProduct):
+    # stored data is replayed with replay()
+    with pytest.raises(ValueError, match='streaming is only supported in PAPER and LIVE'):
+        _ = _stream(feed, product, env=cast("Any", 'BACKTEST'))
 
 
 def test_stream_dataflow_is_pickled_without_its_faucet(feed: _Feed, product: BaseProduct, tmp_path: Path):
@@ -706,3 +716,171 @@ def test_ray_worker_not_stopping_in_time_fails_its_dataflows(
     assert not result.success
     assert isinstance(dataflow.result.error, TimeoutError)
     assert 'did not stop within' in str(dataflow.result.error)
+
+
+# --- replaying stored data ---
+
+
+D1, D2 = datetime.date(2025, 1, 1), datetime.date(2025, 1, 2)
+NS_PER_MINUTE = 60 * 1_000_000_000
+
+
+def _ns(date: datetime.date, minutes: float = 0) -> int:
+    midnight = datetime.datetime.combine(date, datetime.time(), tzinfo=datetime.UTC)
+    return int(midnight.timestamp()) * 1_000_000_000 + int(minutes * NS_PER_MINUTE)
+
+
+def _stored_bars(product: BaseProduct, starts: list[int]) -> pl.DataFrame:
+    """Cleaned 1m bars starting at the given ns timestamps, the close tells them apart."""
+    n = len(starts)
+    return pl.DataFrame({
+        'date': pl.Series(starts, dtype=pl.Int64).cast(pl.Datetime('ns')),
+        'product': [product.name] * n,
+        'resolution': [str(Resolution(MINUTE))] * n,
+        'open': [float(i) for i in range(n)],
+        'high': [float(i) + 1 for i in range(n)],
+        'low': [float(i) - 1 for i in range(n)],
+        'close': [float(i) for i in range(n)],
+        'volume': [1.0] * n,
+    })
+
+
+def _stored_ticks(product: BaseProduct, timestamps: list[int]) -> pl.DataFrame:
+    """Cleaned ticks at the given ns timestamps, the price tells them apart."""
+    n = len(timestamps)
+    return pl.DataFrame({
+        'date': pl.Series(timestamps, dtype=pl.Int64).cast(pl.Datetime('ns')),
+        'product': [product.name] * n,
+        'resolution': [str(Resolution(TICK))] * n,
+        'price': [float(i) for i in range(n)],
+        'volume': [1.0] * n,
+        'side': pl.Series([1] * n, dtype=pl.Int8),
+    })
+
+
+def _replay(feed: _Feed, product: BaseProduct, resolution: str, io: ParquetIO, stored: pl.DataFrame, **kwargs: Any) -> DataFlow:
+    """Replays from D1 to D2, after storing the given cleaned data where replay() reads it, per date, so a date without rows is missing."""
+    _ = feed.replay(str(product.basis), resolution, start_date=D1, end_date=D2, io=io, **kwargs)
+    request = cast("MarketFeedReplayRequest", feed._requests[-1])
+    for daily_data_model in request.to_data_model().split_by_date():
+        daily = stored.filter(pl.col('date').dt.date() == daily_data_model.date)
+        if not daily.is_empty():
+            request.create_data_resolution_handler(daily_data_model).write_batch(daily)
+    return feed.dataflows[-1]
+
+
+def _replayed(msg: Message) -> tuple[str | None, int, float]:
+    """(resolution, received_at, close or price) of a replayed message."""
+    [data] = cast("list[Any]", msg['data'])
+    return msg['resolution'], msg['received_at'], data.close if isinstance(data, Bar) else data.price
+
+
+def test_replay_merges_every_request_by_received_at(feed: _Feed, product: BaseProduct, tmp_path: Path):
+    io = ParquetIO(base_path=str(tmp_path))
+    received: list[tuple[str | None, int, float]] = []
+    minute_received: list[Any] = []
+    tick_received: list[Any] = []
+    # a bar is received at its end, e.g. the bar starting at 00:00 at 00:01
+    bars = _stored_bars(product, [_ns(D1, 0), _ns(D1, 1), _ns(D2, 0)])
+    ticks = _stored_ticks(product, [_ns(D1, 0.5), _ns(D1, 1), _ns(D1, 1.5)])
+    minute_dataflow = _replay(feed, product, MINUTE, io, bars, callback=lambda msg: received.append(_replayed(msg)))
+    _ = feed.transform(_record_into(minute_received))
+    tick_dataflow = _replay(feed, product, TICK, io, ticks)
+    _ = feed.transform(_record_into(tick_received))
+
+    result = feed.run()
+
+    assert result.success
+    assert minute_dataflow.result.success
+    assert tick_dataflow.result.success
+    minute, tick = repr(Resolution(MINUTE)), repr(Resolution(TICK))
+    assert received == [
+        (tick, _ns(D1, 0.5), 0.0),
+        # received at the same time, so in request order
+        (minute, _ns(D1, 1), 0.0),
+        (tick, _ns(D1, 1), 1.0),
+        (tick, _ns(D1, 1.5), 2.0),
+        (minute, _ns(D1, 2), 1.0),
+        (minute, _ns(D2, 1), 2.0),
+    ]
+    # each dataflow gets only its own messages, a closed bar or a tick in a list
+    [bar] = minute_received[0]
+    assert bar == Bar(
+        # NOTE: when the Bar object was created, not part of the data
+        created_at=bar.created_at,
+        resolution=Resolution(MINUTE),
+        start_ts=_ns(D1, 0),
+        end_ts=_ns(D1, 1),
+        updated_ts=_ns(D1, 1),
+        open=0.0,
+        high=1.0,
+        low=-1.0,
+        close=0.0,
+        volume=1.0,
+        is_closed=True,
+    )
+    assert len(minute_received) == 3
+    assert [tick.ts for [tick] in tick_received] == [_ns(D1, 0.5), _ns(D1, 1), _ns(D1, 1.5)]
+    assert all(tick.side == Side.BUY for [tick] in tick_received)
+    assert not feed.is_running()
+
+
+def test_replay_skips_missing_dates_with_a_warning(
+    feed: _Feed, product: BaseProduct, tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    received: list[Any] = []
+    # nothing stored on D1
+    _ = _replay(
+        feed, product, MINUTE, ParquetIO(base_path=str(tmp_path)), _stored_bars(product, [_ns(D2, 0)]),
+        callback=lambda msg: received.append(_replayed(msg)),
+    )
+
+    with _capture_feed_logs(caplog):
+        result = feed.run()
+
+    assert result.success
+    assert received == [(repr(Resolution(MINUTE)), _ns(D2, 1), 0.0)]
+    assert 'is missing 1 dates' in caplog.text
+
+
+@pytest.mark.parametrize(('replay_pace', 'delays'), [
+    # ASAP
+    (0, [0, 0, 0]),
+    # fixed cadence
+    (0.5, [0, 0.5, 0.5]),
+    # realistic: the time between the bars, at most one bar period, e.g. the 3-minute gap before the last bar sleeps 60s
+    (None, [0, 60, 60]),
+])
+def test_replay_pace(
+    mocker: MockerFixture, feed: _Feed, product: BaseProduct, tmp_path: Path, replay_pace: float | None, delays: list[float]
+):
+    sleep = asyncio.sleep
+    slept: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+        slept.append(delay)
+        await sleep(0)
+
+    _ = mocker.patch('asyncio.sleep', new=record_sleep)
+    bars = _stored_bars(product, [_ns(D1, 0), _ns(D1, 1), _ns(D1, 5)])
+    _ = _replay(feed, product, MINUTE, ParquetIO(base_path=str(tmp_path)), bars, replay_pace=replay_pace)
+
+    assert feed.run().success
+    assert slept == delays
+
+
+@pytest.mark.asyncio
+async def test_aiter_gets_every_replayed_message(mocker: MockerFixture, feed: _Feed, product: BaseProduct, tmp_path: Path):
+    # an ASAP replay still yields control between messages, so the iteration queue never fills up and drops them
+    mocker.patch.object(_Feed, 'QUEUE_MAXSIZE', 2)
+    bars = _stored_bars(product, [_ns(D1, i) for i in range(5)])
+    _ = _replay(feed, product, MINUTE, ParquetIO(base_path=str(tmp_path)), bars, callback=lambda msg: None)
+
+    assert [_replayed(msg)[2] async for msg in feed] == [0.0, 1.0, 2.0, 3.0, 4.0]
+    assert not feed.is_running()
+
+
+def test_replay_and_stream_in_one_feed_raises(feed: _Feed, product: BaseProduct, tmp_path: Path):
+    _ = _replay(feed, product, MINUTE, ParquetIO(base_path=str(tmp_path)), _stored_bars(product, []))
+    with pytest.raises(ValueError, match='cannot stream LIVE and BACKTEST in the same feed'):
+        _ = _stream(feed, product, TICK)

@@ -195,7 +195,11 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
         )
 
         async def _run_dataflow(dataflow: DataFlow[RequestT, DataModelT], queue: asyncio.Queue[Message]):
-            await dataflow.run_stream(queue=queue)
+            async for message in dataflow.run_stream(queue=queue):
+                # NOTE: without the data engine, the message is already stored, nothing else to do.
+                # the data engine handles its own failures, see DataEngine._emit()
+                if self._engine:
+                    await self._engine._forward_dataflow_message(dataflow, message)
             # NOTE: run_stream() records a failure instead of raising.
             # nothing reads this queue anymore, if it fills up, it would block the websocket reader shared with other dataflows
             if not dataflow.result.success:
@@ -255,6 +259,10 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                         sender_method="connect",
                         receiver_type=zmq.DEALER,
                     )
+                    # NOTE: e.g. a replayed market data message already holds Bars, decoded back into Bars instead of dicts
+                    for channel, dataflow in dataflows.items():
+                        data_model = dataflow.data_model
+                        msg_queue.register_codec(channel, data_model.StreamMessage, data_model.enc_hook, data_model.dec_hook)
                     try:
                         for port in engine_ports:
                             msg_queue.connect(msg_queue.sender, port)
@@ -281,6 +289,7 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                                 # NOTE: the same transformations and storing as in the main process, see DataFlow._run_stream_etl()
                                 data = dataflows[channel]._process_stream_message(data)
                                 if data is not None and engine_ports:
+                                    # NOTE: the engine decodes the data points back into Bar/Tick, see DataEngine._setup_worker_messaging()
                                     msg_queue.send(channel=channel, topic=topic, data=data)
                     except Exception:
                         logger.exception(f"Error in streaming Ray {worker_name}:")
@@ -317,9 +326,7 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                         # NOTE: stays empty when the feed runs without the data engine, workers then have nothing to push to
                         engine_ports: list[int] = []
                         if self._engine:
-                            engine_msg_queue = self._engine._msg_queue
-                            assert engine_msg_queue is not None, "data engine's messaging is not set up"
-                            engine_ports = engine_msg_queue.get_ports_in_use(engine_msg_queue.receiver)
+                            engine_ports = self._engine._get_worker_ports()
                         # NOTE: the keys are the dataflows' zmq channels, every message from Faucet.send_to_stream_worker() carries its channel
                         futures = [
                             ray_task.remote(

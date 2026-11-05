@@ -1039,11 +1039,16 @@ class MarketFeed[
         from pfeed.schemas.market_data_schema import VOLUME
         from pfeed.schemas.tick_data_schema import PRICE, SIDE
         from pfeed.schemas.time_based_data_schema import DATE
+        from pfeed.streaming.replay_clock import ReplayClock
 
-        replay_pace = cast("MarketFeedReplayRequest", request).replay_pace
         # NOTE: all streams of a feed share one faucet, which runs this once with the first request;
         # like a stream API holding every channel, replay reads every request and merges their data by time
         requests = [cast("MarketFeedReplayRequest", req) for req in self._requests]
+        # NOTE: with the data engine, its clock merges the replays of all its feeds by time, it has joined this feed already
+        clock = self._engine._replay_clock if self._engine else None
+        if clock is None:
+            clock = ReplayClock(cast("MarketFeedReplayRequest", request).replay_pace)
+            clock.join(self)
 
         def _read_day(handlers: list[tuple[MarketFeedReplayRequest, MarketDataHandler]]) -> list[tuple[int, Message]]:
             """Returns the day's messages of every request, each with the time it would have been received live, ordered by it."""
@@ -1096,6 +1101,7 @@ class MarketFeed[
                         # NOTE: a list, like a streamed message, which can hold several data points
                         "data": [data],
                         "error": None,
+                        "extra": {},
                     }
                     messages.append((received_at, message))
             # NOTE: a stable sort, messages received at the same time stay in request order, then in stored order
@@ -1115,7 +1121,6 @@ class MarketFeed[
                     )
                 for daily_data_model in replay_data_model.split_by_date():
                     handlers_per_date[daily_data_model.date].append((req, req.create_data_resolution_handler(daily_data_model)))
-            prev_ts: int | None = None
             # NOTE: one day at a time to bound memory
             for date in sorted(handlers_per_date):
                 # NOTE: reading blocks, so it runs in a thread, the dataflows keep consuming their queues meanwhile
@@ -1124,22 +1129,13 @@ class MarketFeed[
                     self.logger.debug(f"No data to replay on {date}")
                     continue
                 for received_at, message in messages:
-                    if replay_pace == 0 or prev_ts is None:  # ASAP, or the first message
-                        delay = 0.0
-                    elif replay_pace is not None:  # fixed cadence
-                        delay = replay_pace
-                    # realistic: the time between consecutive messages
-                    else:
-                        delay = (received_at - prev_ts) / NS_PER_SECOND
-                        # NOTE: at most one bar period, so data gaps (e.g. weekends) aren't slept through
-                        if isinstance(data := cast("list[Bar | Tick]", message["data"])[0], Bar):
-                            delay = min(delay, data.resolution.to_seconds())
-                    prev_ts = received_at
-                    # NOTE: also awaited when delay is 0, so the consumers run between messages; a sync callback never yields,
-                    # an ASAP replay would otherwise fill the iteration queue of __aiter__(), which drops the oldest message when full
-                    await asyncio.sleep(delay)
+                    data = cast("list[Bar | Tick]", message["data"])[0]
+                    # NOTE: at most one bar period for the realistic pace, so data gaps (e.g. weekends) aren't slept through
+                    max_delay = data.resolution.to_seconds() if isinstance(data, Bar) else None
+                    await clock.wait_until(self, received_at, max_delay=max_delay)
                     await self._callback(message)
         finally:
+            clock.leave(self)
             # NOTE: the replay has ended (or failed / was cancelled), ends the dataflows reading the queues
             for queue in self._queues.values():
                 queue.shutdown()

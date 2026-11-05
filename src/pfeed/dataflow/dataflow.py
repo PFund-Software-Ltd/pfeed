@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncGenerator, Callable
 
     from narwhals.typing import IntoFrame
     from pfund_blocks.typing import Message
@@ -276,44 +276,59 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
 
         return prefect_flow
 
-    def _process_stream_message(self, msg: Message) -> Any | None:
+    def _process_stream_message(self, msg: Message) -> Message | None:
         """Transforms and stores one streamed message, in the main process or in a Ray stream worker.
 
         Returns:
             The message transformed by the user's transformations, None if a transformation failed.
+            The user's transformations must return a Message too, e.g. with its data replaced or a field added.
         """
         # NOTE: stores the message as transformed by the feed (e.g. parsed, resampled), before the user's transformations,
-        # so the stored stream stays pfeed's standardized data whatever the user's transformations return
+        # so the stored stream stays pfeed's standardized data whatever the user's transformations change
         try:
-            data = self._transform(msg, self._default_transformations)
+            message = cast("Message", self._transform(msg, self._default_transformations))
         # e.g. a transformation can't handle this message
         except Exception:
             self._logger.exception(f"{self} transformation failed, skipping message: {msg}")
             return None
-        self._load(data)
+        self._load(message)
         try:
-            data = self._transform(data, self._user_transformations)
+            transformed = self._transform(message, self._user_transformations)
+            if not isinstance(transformed, dict):
+                raise TypeError(f"user transformations must return a Message (dict), got {type(transformed).__name__}")
         except Exception:
-            self._logger.exception(f"{self} user transformation failed, skipping message: {data}")
+            self._logger.exception(f"{self} user transformation failed, skipping message: {message}")
             return None
+        message = cast("Message", transformed)
         if self._latency_tracker and (latency_stats := self._latency_tracker.track(msg["received_at"])):
             self._logger.debug(f"{self} {latency_stats}")
-        return data
+        return message
 
-    async def _run_stream_etl(self, queue: asyncio.Queue[Message]) -> None:
+    async def _run_stream_etl(self, queue: asyncio.Queue[Message]) -> AsyncGenerator[Message]:
         extract = self.faucet.open_stream()
         try:
             while True:
                 msg = await queue.get()
                 if self.faucet.is_using_ray():
+                    # NOTE: the worker sends its output to the data engine itself
                     self.faucet.send_to_stream_worker(self, msg)
                     continue
-                _ = self._process_stream_message(msg)
+                if (message := self._process_stream_message(msg)) is not None:
+                    yield message
         except asyncio.QueueShutDown:
             pass
         await extract
 
-    async def run_stream(self, queue: asyncio.Queue[Message], flow_type: FlowType = FlowType.native) -> None:
+    async def run_stream(
+        self,
+        queue: asyncio.Queue[Message],
+        flow_type: FlowType = FlowType.native,
+    ) -> AsyncGenerator[Message]:
+        """Yields each message's output (transformed and stored), it must be iterated for the stream to run.
+
+        Yields nothing with Ray, where the workers send their output to the data engine.
+        A failure of the consumer (the code iterating it) is the consumer's to handle, it isn't recorded here.
+        """
         if not self.is_sealed():
             raise ValueError(f"cannot run stream on unsealed dataflow {self}")
 
@@ -325,7 +340,8 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         # a failed stream is recorded as the dataflow's result, so one failure doesn't stop the other dataflows;
         # cancellation (graceful shutdown) is not an Exception, it propagates and is not a failure
         try:
-            return await self._run_stream_etl(queue)
+            async for message in self._run_stream_etl(queue):
+                yield message
         except Exception as err:
             self._logger.exception(f"Error in running {self}:")
             self._result = DataFlowResult.failed(error=err)

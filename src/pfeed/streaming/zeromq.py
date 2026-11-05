@@ -3,10 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from pfund_blocks.entities.accounts.account_base import BaseAccount
-    from pfund_blocks.entities.products.product_base import BaseProduct
-    from pfund_blocks.enums.channel import PrivateChannel
-    from pfund_blocks.resolution import Resolution
+    from collections.abc import Callable
+
     from zmq import SocketType
 
 import logging
@@ -29,17 +27,6 @@ class SocketMethod(StrEnum):
 class ZeroMQDataChannel(StrEnum):
     signal = "signal"
     logging = "logging"
-
-    @staticmethod
-    def create_private_channel(account: BaseAccount, channel: PrivateChannel):
-        # NOTE: the trailing "." marks the end of the account name, see create_market_data_channel()
-        return f"{account.venue}.{channel}.{account.name}."
-
-    @staticmethod
-    def create_market_data_channel(product: BaseProduct, resolution: Resolution) -> str:
-        # NOTE: the trailing "." marks the end of the product name. A subscription matches any channel starting with it,
-        # without it, subscribing to "BYBIT.1m.BTC" would also receive "BYBIT.1m.BTC_USDT"
-        return f"{product.source}.{resolution!r}.{product.name}."
 
 
 class ZeroMQSignal(StrEnum):
@@ -78,6 +65,8 @@ class ZeroMQ:
             sender_type: Socket type of the sender (e.g. zmq.ROUTER), no sender is created if None.
             receiver_type: Socket type of the receiver (e.g. zmq.PULL), no receiver is created if None.
                 At least one of sender_type and receiver_type must be provided.
+
+        The data of a channel is encoded and decoded untyped, unless a codec is registered for it, see register_codec().
         """
         assert sender_type is not None or receiver_type is not None, (
             "Either sender_type or receiver_type must be provided"
@@ -92,6 +81,7 @@ class ZeroMQ:
         self._poller: zmq.Poller | None = None
         self._encoder = msgpack.Encoder()
         self._decoder = msgpack.Decoder()
+        self._codecs: dict[ZeroMQChannel, tuple[msgpack.Encoder, msgpack.Decoder[Any]]] = {}
 
         if sender_type is not None:
             self._sender = self._ctx.socket(sender_type)
@@ -228,8 +218,25 @@ class ZeroMQ:
         # terminate context
         self._ctx.term()
 
+    def register_codec(
+        self,
+        channel: ZeroMQChannel,
+        recv_type: Any = Any,
+        enc_hook: Callable[[Any], Any] | None = None,
+        dec_hook: Callable[[type, Any], Any] | None = None,
+    ) -> None:
+        """Sets how the data of a channel is encoded and decoded, e.g. with a data model's StreamMessage and hooks.
+
+        Args:
+            channel: The channel, e.g. a dataflow's, see BaseDataModel.to_zmq_route().
+            recv_type: Type the received data is decoded into, so that structs like Bar come back as structs instead of dicts.
+            enc_hook: msgspec's enc_hook, encodes the types msgpack doesn't support, e.g. a Bar's Resolution.
+            dec_hook: msgspec's dec_hook, decodes them back when decoding into recv_type.
+        """
+        self._codecs[channel] = (msgpack.Encoder(enc_hook=enc_hook), msgpack.Decoder(type=recv_type, dec_hook=dec_hook))
+
     def send(
-        self, channel: str, topic: str, data: Any, target_identity: str | None = None
+        self, channel: ZeroMQChannel, topic: ZeroMQTopic, data: Any, target_identity: str | None = None
     ) -> None:
         """
         Sends message to receivers
@@ -244,7 +251,7 @@ class ZeroMQ:
             msg = [
                 channel.encode(),
                 topic.encode(),
-                self._encoder.encode(data),
+                (self._codecs[channel][0] if channel in self._codecs else self._encoder).encode(data),
                 self._encoder.encode(msg_ts),
             ]
             if target_identity and self._is_sender_support_target_identity():
@@ -266,7 +273,7 @@ class ZeroMQ:
         except Exception:
             self._logger.exception(f"{self.sender_name} send() unhandled exception:")
 
-    def recv(self) -> tuple[str, str, Any, float] | None:
+    def recv(self) -> tuple[ZeroMQChannel, ZeroMQTopic, Any, float] | None:
         try:
             # REVIEW: blocks for 1ms to avoid busy-waiting and 100% CPU usage
             assert self._poller, "receiver is not initialized"
@@ -274,12 +281,10 @@ class ZeroMQ:
             if events:
                 msg = self.receiver.recv_multipart(zmq.NOBLOCK)
                 channel, topic, data, msg_ts = msg
-                return (
-                    channel.decode(),
-                    topic.decode(),
-                    self._decoder.decode(data),
-                    self._decoder.decode(msg_ts),
-                )
+                channel = channel.decode()
+                decoder = self._codecs[channel][1] if channel in self._codecs else self._decoder
+                decoded_data = decoder.decode(data)
+                return channel, topic.decode(), decoded_data, self._decoder.decode(msg_ts)
             else:
                 return None
         except (

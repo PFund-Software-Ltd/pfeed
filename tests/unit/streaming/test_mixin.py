@@ -192,6 +192,7 @@ def _stream_msg(product: BaseProduct, resolution: str, i: int, *, parsed: bool =
         'message': i,
         'data': i if parsed else None,
         'error': None,
+        'extra': {},
     }
 
 
@@ -222,6 +223,7 @@ def _error_msg(i: int) -> Message:
         'message': i,
         'data': i,
         'error': 'rejected',
+        'extra': {},
     }
 
 

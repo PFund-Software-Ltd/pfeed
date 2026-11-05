@@ -92,23 +92,16 @@ class Faucet[RequestT: BaseRequest, DataModelT: BaseDataModel]:
 
     def _register_zmq_route(self, dataflow: DataFlow[RequestT, DataModelT]):
         import zmq
-        from pfund_blocks.resolution import Resolution
 
-        from pfeed.market.data_model import MarketDataModel
-        from pfeed.streaming.zeromq import ZeroMQ, ZeroMQDataChannel
+        from pfeed.streaming.zeromq import ZeroMQ
 
         if self._msg_queue is None:
             self._msg_queue = ZeroMQ(name="Faucet", logger=self._logger, sender_type=zmq.ROUTER)
             self._msg_queue.bind(self._msg_queue.sender)
-
-        data_model: MarketDataModel = cast(MarketDataModel, dataflow.data_model)
-        resolution = Resolution(data_model.resolution)
-        zmq_channel = ZeroMQDataChannel.create_market_data_channel(
-            product=data_model.product,
-            resolution=resolution,
-        )
-        zmq_topic = resolution.to_channel()
-        self._zmq_routes[dataflow] = (zmq_channel, zmq_topic)
+        data_model = dataflow.data_model
+        self._zmq_routes[dataflow] = route = data_model.to_zmq_route()
+        # NOTE: e.g. a replayed market data message holds Bars
+        self._msg_queue.register_codec(route[0], data_model.StreamMessage, data_model.enc_hook, data_model.dec_hook)
 
     def add_stream_worker(self, dataflow: DataFlow[RequestT, DataModelT], worker_name: WorkerName):
         self._stream_workers[dataflow] = worker_name

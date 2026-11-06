@@ -3,10 +3,8 @@ from pfund_kit.cli.commands import config, docker_compose, remove
 
 from pfeed.cli.commands.data import data
 from pfeed.cli.commands.download import download
+from pfeed.cli.commands.stream import stream
 from pfeed.cli.commands.table_io import ducklake
-
-# TODO: rewrite stream
-# from pfeed.cli.commands.stream import stream
 
 # TODO
 # from pfund_kit.cli.commands import doc
@@ -28,4 +26,4 @@ pfeed_group.add_command(remove, name="rm")
 pfeed_group.add_command(ducklake)
 pfeed_group.add_command(data)
 pfeed_group.add_command(download)
-# pfeed_group.add_command(stream)
+pfeed_group.add_command(stream)

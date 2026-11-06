@@ -1,183 +1,137 @@
-import datetime
+"""`pfeed stream SOURCE PRODUCT RESOLUTION`: streams live market data, prints it and optionally stores it."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal, cast
+
+if TYPE_CHECKING:
+    from pfund_blocks.typing import Message
+
+    from pfeed.market.feed import MarketFeed
+
+from pathlib import Path
 
 import click
 from pfund_kit.cli.utils import cli_args_to_kwargs
 
-import pfeed as pe
-from pfeed import registry
-from pfeed.enums import DataCategory, DataLayer, DataStorage
-
-SUPPORTED_DATA_SOURCES = registry.list_sources()
-
-# streaming is only supported by market feeds, so unlike `download` there is no
-# --category flag — the command always targets the source's market feed.
-SUPPORTED_ENVS = ["BACKTEST", "PAPER", "LIVE"]
+from pfeed.cli.commands.download import (
+    _DOWNLOADABLE_SOURCES,
+    _IO_CLASS_PATHS,
+    _create_io,
+)
 
 
 @click.command(
-    context_settings=dict(
-        ignore_unknown_options=True,
-        allow_extra_args=True,
-    )
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True)
 )
-@click.pass_context
-@click.option(
-    "--data-source",
-    "--source",
-    "-d",
-    required=True,
-    type=click.Choice(SUPPORTED_DATA_SOURCES, case_sensitive=False),
-    help="Data source",
+@click.argument(
+    "source", type=click.Choice(_DOWNLOADABLE_SOURCES, case_sensitive=False)
 )
+@click.argument("product")
+@click.argument("resolution")
 @click.option(
-    "--product", "-p", required=True, help="trading product, e.g. BTC_USDT_PERP"
+    "--io",
+    "io_name",
+    type=click.Choice(list(_IO_CLASS_PATHS), case_sensitive=False),
+    default=None,
+    help="Where and how to store the streamed data, if not given, data is not stored",
 )
 @click.option(
-    "--resolution",
-    "-r",
-    required=True,
-    help='Data resolution (e.g. "1m" for 1 minute data) or data type (e.g. "tick")',
-)
-@click.option(
-    "--symbol",
-    help="Source-specific symbol. If omitted, it is derived from --product (the derivation may be wrong, in which case pass it explicitly)",
+    "--path",
+    type=click.Path(path_type=Path, file_okay=False),
+    default=None,
+    help="Directory to store the data under (default: pfeed's data path), only used with --io",
 )
 @click.option(
     "--env",
-    default="LIVE",
-    type=click.Choice(SUPPORTED_ENVS, case_sensitive=False),
-    help="Trading environment. LIVE connects to the live source via websocket; BACKTEST replays historical data from storage",
+    type=click.Choice(["paper", "live"], case_sensitive=False),
+    default="live",
+    show_default=True,
+    help="Trading environment",
 )
 @click.option(
-    "--rollback-period",
-    "--rb",
-    help='Rollback period from today (e.g. "1w", "ytd", or "max"), only used in BACKTEST replay when --start-date is not given',
-)
-@click.option(
-    "--start-date",
-    "-s",
-    type=click.DateTime(formats=["%Y-%m-%d"]),
-    help="Start date in YYYY-MM-DD format (BACKTEST replay range)",
-)
-@click.option(
-    "--end-date",
-    "-e",
-    type=click.DateTime(formats=["%Y-%m-%d"]),
-    help="End date in YYYY-MM-DD format (BACKTEST replay range)",
-)
-@click.option(
-    "--replay-pace",
-    type=float,
-    default=None,
-    help="BACKTEST only. Pacing between row emissions in seconds. Omit or 0 = ASAP (default), >0 = fixed cadence in seconds",
-)
-@click.option(
-    "--data-origin",
+    "--origin",
     default="",
-    help="Origin label used to distinguish data from different providers of the same source",
+    help="Sub-label for data from the same source but different origins",
 )
 @click.option(
-    "--data-layer",
-    "--layer",
-    default="CLEANED",
-    type=click.Choice([layer.name for layer in DataLayer], case_sensitive=False),
-    help='Data layer, e.g. "RAW", "CLEANED", or "CURATED". Only used when --to-storage is set (LIVE) or as the replay source layer (BACKTEST)',
+    "--flush-interval",
+    type=float,
+    default=100,
+    show_default=True,
+    help="Seconds between writes of the buffered data, only used with --io",
 )
 @click.option(
-    "--to-storage",
-    "--storage",
-    "--destination",
-    default=None,
-    type=click.Choice([storage.value for storage in DataStorage], case_sensitive=False),
-    help="LIVE: where to persist streamed data (omit to not persist). BACKTEST: where to read replay data from (defaults to LOCAL)",
-)
-@click.option(
-    "--data-path",
-    type=click.Path(exists=False),
-    help="Path to store/read streamed data",
-)
-@click.option(
-    "--clean-data/--no-clean-data",
-    default=True,
-    help="LIVE only. Whether to clean (normalize/standardize/resample) raw streamed data. Ignored in BACKTEST replay (replayed data is already cleaned)",
-)
-@click.option(
-    "--no-print",
+    "--incremental-bars",
     is_flag=True,
-    help="Do not echo incoming messages to the terminal",
+    help="Also store the updates of a bar before it closes, only used with --io",
 )
-@click.option(
-    "--debug",
-    is_flag=True,
-    help="if enabled, debug mode will be enabled where logs at DEBUG level will be printed",
-)
+@click.option("--quiet", is_flag=True, help="Do not print the streamed data")
+@click.pass_context
 def stream(
     ctx: click.Context,
-    data_source: str,
+    source: str,
     product: str,
     resolution: str,
-    symbol: str | None,
+    io_name: str | None,
+    path: Path | None,
     env: str,
-    rollback_period: str | None,
-    start_date: datetime.datetime | None,
-    end_date: datetime.datetime | None,
-    replay_pace: float | None,
-    data_origin: str,
-    data_layer: str,
-    to_storage: str | None,
-    data_path: str | None,
-    clean_data: bool,
-    no_print: bool,
-    debug: bool,
-):
-    """Stream market data live from a data source, or replay it from storage (BACKTEST)"""
-    from pfeed.storages.storage_config import StorageConfig
+    origin: str,
+    flush_interval: float,
+    incremental_bars: bool,
+    quiet: bool,
+) -> None:
+    """Stream live market data of PRODUCT at RESOLUTION from SOURCE, press Ctrl-C to stop.
 
-    pe.configure(data_path=data_path)
-    if debug:
-        pe.configure_logging(debug=debug)
-    env = env.upper()
-    is_replaying = env == "BACKTEST"
+    Product specs are passed as extra options, e.g. `--expiration 2025-12-26` for futures,
+    leave them out to get an error listing the required ones.
 
-    # LIVE: storage_config = where to persist (None ⇒ not persisted).
-    # BACKTEST: storage_config = where to read replay data FROM, so it must exist.
-    storage_config = None
-    if to_storage or is_replaying:
-        storage_config = StorageConfig(
-            storage=to_storage or DataStorage.LOCAL,
-            data_layer=data_layer,
-            # data_path=None lets StorageConfig fall back to the configured data_path above
-            data_path=data_path,
-        )
+    \b
+    Examples:
+        pfeed stream bybit BTC_USDT_PERP 1m
+        pfeed stream bybit BTC_USDT_PERP 1t --io ducklake
+        pfeed stream bybit BTC_USDT_PERP 1m --io parquet --path ~/data --quiet
+    """
+    import pfeed as pe
+    from pfeed.enums import DataCategory
 
-    def _print_message(websocket_name: str, msg: dict) -> None:
-        click.echo(f"[{websocket_name}] {msg}")
-
-    kwargs = {
-        "product": product,
-        "resolution": resolution,
-        "env": env,
-        "data_origin": data_origin,
-        "storage_config": storage_config,
-        "clean_data": clean_data,
-        "callback": None if no_print else _print_message,
-    }
-    if symbol:
-        kwargs["symbol"] = symbol
-    if rollback_period:
-        kwargs["rollback_period"] = rollback_period
-    if start_date:
-        kwargs["start_date"] = start_date.date().strftime("%Y-%m-%d")
-    if end_date:
-        kwargs["end_date"] = end_date.date().strftime("%Y-%m-%d")
-    if replay_pace is not None:
-        kwargs["replay_pace"] = replay_pace
-    # extra data-source-specific product specs, e.g. --strike-price 10000
+    io = None
+    if io_name:
+        path = (path or ctx.obj["config"].data_path).expanduser()
+        io = _create_io(io_name.lower(), path)
     product_specs = cli_args_to_kwargs(ctx.args)
-    for k, v in product_specs.items():
-        kwargs[k] = v
 
-    # feed.stream() handles both live websocket (LIVE) and historical replay
-    # (BACKTEST, incl. replay_pace) natively — no manual replay loop needed here.
-    feed = pe.get_feed(data_source, DataCategory.MARKET_DATA)
-    feed.stream(**kwargs)
+    def _print_message(message: Message) -> None:
+        # NOTE: data is None for error messages, or when the data is parsed by Ray workers
+        for item in message["data"] or []:
+            click.echo(
+                f"{message['received_at']} {message['product']} {message['resolution']} {item}"
+            )
+
+    # only the market feed has stream()
+    feed = cast("MarketFeed", pe.get_feed(source, DataCategory.MARKET_DATA))
+    stored = f", stored in {io_name} under {path}" if io else ""
+    try:
+        result = feed.stream(
+            product,
+            resolution,
+            data_origin=origin,
+            io=io,
+            env=cast('Literal["PAPER", "LIVE"]', env.upper()),
+            callback=None if quiet else _print_message,
+            store_incremental_bars=incremental_bars,
+            flush_interval=flush_interval,
+            **product_specs,
+        )
+    except KeyboardInterrupt:
+        # NOTE: only reached if Ctrl-C comes before the streams start,
+        # once they run, stream() catches the cancellation, flushes the buffered data to io and returns
+        click.echo(f"Stopped streaming {product} {resolution} from {source}")
+        return
+    click.echo(f"Stopped streaming {product} {resolution} from {source}{stored}")
+    if result.failed:
+        for error in result.errors:
+            click.echo(f"  {type(error).__name__}: {error}", err=True)
+        raise click.ClickException(
+            f"{len(result.failed)} of {len(result.dataflows)} dataflow(s) failed"
+        )

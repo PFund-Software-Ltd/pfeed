@@ -1,158 +1,150 @@
+"""`pfeed download SOURCE PRODUCT RESOLUTION`: downloads historical market data and stores it."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    import polars as pl
+
+    from pfeed.io.base_io import BaseIO
+    from pfeed.market.feed import MarketFeed
+
 import datetime
+import importlib
+from pathlib import Path
 
 import click
 from pfund_kit.cli.utils import cli_args_to_kwargs
 
-import pfeed as pe
 from pfeed import registry
-from pfeed.enums import DataCategory, DataLayer, DataStorage
 
-SUPPORTED_DATA_SOURCES = registry.list_sources()
+# imported only when the command runs, to keep the CLI startup light
+_IO_CLASS_PATHS = {
+    "parquet": "pfeed.io.parquet_io:ParquetIO",
+    "ducklake": "pfeed.io.ducklake_io:DuckLakeIO",
+}
 
-# a data source exposes one feed per data category; "download" picks the feed of
-# the requested category via pfeed.get_feed. Not every category has a
-# downloadable feed — get_feed raises a clear error if it doesn't.
-SUPPORTED_CATEGORIES = [category.value for category in DataCategory]
+# pfund and alphafund are special-case sources, not vendors to download data from
+_DOWNLOADABLE_SOURCES = [
+    source
+    for source in registry.list_sources()
+    if source.lower() not in ("pfund", "alphafund")
+]
+
+
+def _create_io(io_name: str, path: Path) -> BaseIO:
+    module_name, class_name = _IO_CLASS_PATHS[io_name].split(":")
+    io_class = getattr(importlib.import_module(module_name), class_name)
+    # --path is the data root, i.e. pfeed's config data_path, NOT the IO's base_path:
+    # the IO's base_path is derived from it as <path>/<IO's DEFAULT_DIR_NAME>, e.g. <path>/parquet
+    return io_class(base_path=str(path / io_class.DEFAULT_DIR_NAME))
 
 
 @click.command(
-    context_settings=dict(
-        ignore_unknown_options=True,
-        allow_extra_args=True,
-    )
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True)
+)
+@click.argument(
+    "source", type=click.Choice(_DOWNLOADABLE_SOURCES, case_sensitive=False)
+)
+@click.argument("product")
+@click.argument("resolution")
+@click.option(
+    "--start",
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="First date (inclusive), YYYY-MM-DD",
+)
+@click.option(
+    "--end",
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Last date (inclusive), YYYY-MM-DD, defaults to yesterday (UTC)",
+)
+@click.option(
+    "--rollback",
+    default="1d",
+    show_default=True,
+    help='How far to roll back from today (UTC) when --start is not given, e.g. "7d", "ytd" or "max"',
+)
+@click.option(
+    "--layer",
+    type=click.Choice(["raw", "cleaned"], case_sensitive=False),
+    default="cleaned",
+    show_default=True,
+    help="Data layer to download and store the data in",
+)
+@click.option(
+    "--io",
+    "io_name",
+    type=click.Choice(list(_IO_CLASS_PATHS), case_sensitive=False),
+    default="parquet",
+    show_default=True,
+    help="Where and how to store the data",
+)
+@click.option(
+    "--path",
+    type=click.Path(path_type=Path, file_okay=False),
+    default=None,
+    help="Directory to store the data under (default: pfeed's data path)",
+)
+@click.option(
+    "--origin",
+    default="",
+    help="Sub-label for data from the same source but different origins",
 )
 @click.pass_context
-@click.option(
-    "--data-source",
-    "--source",
-    "-d",
-    required=True,
-    type=click.Choice(SUPPORTED_DATA_SOURCES, case_sensitive=False),
-    help="Data source",
-)
-@click.option(
-    "--category",
-    "-c",
-    default=DataCategory.MARKET_DATA.value,
-    type=click.Choice(SUPPORTED_CATEGORIES, case_sensitive=False),
-    help="Which feed of the data source to download from (a source has one feed per data category)",
-)
-@click.option("--product", "-p", help="trading product, e.g. BTC_USDT_PERP")
-@click.option(
-    "--symbol",
-    help="Source-specific symbol. If omitted, it is derived from --product (the derivation may be wrong, in which case pass it explicitly)",
-)
-@click.option(
-    "--resolution",
-    "-r",
-    help=f'Data resolution (e.g. "1m" for 1 minute data) or data type (e.g. "tick"). Required for --category {DataCategory.MARKET_DATA.value}',
-)
-@click.option(
-    "--rollback-period",
-    "--rb",
-    help='Rollback period from today (e.g. "1w" for 1 week of data, "ytd", or "max"), only used when --start-date is not given',
-)
-@click.option(
-    "--start-date",
-    "-s",
-    type=click.DateTime(formats=["%Y-%m-%d"]),
-    help="Start date in YYYY-MM-DD format",
-)
-@click.option(
-    "--end-date",
-    "-e",
-    type=click.DateTime(formats=["%Y-%m-%d"]),
-    help="End date in YYYY-MM-DD format",
-)
-@click.option(
-    "--data-origin",
-    default="",
-    help="Origin label used to distinguish data from different providers of the same source",
-)
-@click.option(
-    "--data-layer",
-    "--layer",
-    default="CLEANED",
-    type=click.Choice([layer.name for layer in DataLayer], case_sensitive=False),
-    help='Data layer, e.g. "RAW", "CLEANED", or "CURATED"',
-)
-@click.option(
-    "--to-storage",
-    "--storage",
-    "--destination",
-    default="LOCAL",
-    type=click.Choice([storage.value for storage in DataStorage], case_sensitive=False),
-    help="Storage destination to persist downloaded data to",
-)
-@click.option(
-    "--data-path", type=click.Path(exists=False), help="Path to store downloaded data"
-)
-@click.option(
-    "--debug",
-    is_flag=True,
-    help="if enabled, debug mode will be enabled where logs at DEBUG level will be printed",
-)
 def download(
     ctx: click.Context,
-    data_source: str,
-    category: str,
-    product: str | None,
-    symbol: str | None,
-    resolution: str | None,
-    rollback_period: str | None,
-    start_date: datetime.datetime | None,
-    end_date: datetime.datetime | None,
-    data_origin: str,
-    data_layer: str,
-    to_storage: str,
-    data_path: str | None,
-    debug: bool,
-):
-    """Download historical data from a data source"""
-    from pfeed.storages.storage_config import StorageConfig
+    source: str,
+    product: str,
+    resolution: str,
+    start: datetime.datetime | None,
+    end: datetime.datetime | None,
+    rollback: str,
+    layer: str,
+    io_name: str,
+    path: Path | None,
+    origin: str,
+) -> None:
+    """Download historical market data of PRODUCT at RESOLUTION from SOURCE and store it.
 
-    pe.configure(data_path=data_path)
-    if debug:
-        pe.configure_logging(debug=debug)
-    data_category = DataCategory[category.upper()]
-    is_market = data_category == DataCategory.MARKET_DATA
+    Product specs are passed as extra options, e.g. `--expiration 2025-12-26` for futures,
+    leave them out to get an error listing the required ones.
 
-    if is_market and not resolution:
-        raise click.UsageError(
-            f"--resolution is required for --category {DataCategory.MARKET_DATA.value}"
-        )
-    if is_market and not product:
-        raise click.UsageError(
-            f"--product is required for --category {DataCategory.MARKET_DATA.value}"
-        )
+    \b
+    Examples:
+        pfeed download bybit BTC_USDT_PERP 1m --start 2025-01-01 --end 2025-01-31
+        pfeed download bybit BTC_USDT_PERP 1t --rollback 7d --io ducklake
+    """
+    import pfeed as pe
+    from pfeed.enums import DataCategory
 
-    # always build a StorageConfig: download() persists nothing when it is None.
-    storage_config = StorageConfig(
-        storage=to_storage,
-        data_layer=data_layer,
-        # data_path=None lets StorageConfig fall back to the configured data_path above
-        data_path=data_path,
-    )
-
-    kwargs = {
-        "product": product,
-        "data_origin": data_origin,
-        "storage_config": storage_config,
-    }
-    if is_market:
-        kwargs["resolution"] = resolution
-    if symbol:
-        kwargs["symbol"] = symbol
-    if rollback_period:
-        kwargs["rollback_period"] = rollback_period
-    if start_date:
-        kwargs["start_date"] = start_date.date().strftime("%Y-%m-%d")
-    if end_date:
-        kwargs["end_date"] = end_date.date().strftime("%Y-%m-%d")
-    # extra data-source-specific product specs, e.g. --strike-price 10000
+    path = (path or ctx.obj["config"].data_path).expanduser()
+    io = _create_io(io_name.lower(), path)
     product_specs = cli_args_to_kwargs(ctx.args)
-    for k, v in product_specs.items():
-        kwargs[k] = v
+    # only the market feed has download()
+    feed = cast("MarketFeed", pe.get_feed(source, DataCategory.MARKET_DATA))
+    result = feed.download(
+        product,
+        resolution,
+        rollback_period=rollback,
+        start_date=start.date() if start else None,
+        end_date=end.date() if end else None,
+        data_origin=origin,
+        data_layer=layer,
+        io=io,
+        **product_specs,
+    )
+    num_rows = 0
+    if result.data is not None:
+        import polars as pl
 
-    feed = pe.get_feed(data_source, data_category)
-    feed.download(**kwargs)
+        num_rows = cast("pl.LazyFrame", result.data).select(pl.len()).collect().item()
+    click.echo(
+        f"Downloaded {num_rows} rows of {product} {resolution} from {source}, stored in {io_name} under {path}"
+    )
+    if result.failed:
+        for error in result.errors:
+            click.echo(f"  {type(error).__name__}: {error}", err=True)
+        raise click.ClickException(
+            f"{len(result.failed)} of {len(result.dataflows)} dataflow(s) failed"
+        )

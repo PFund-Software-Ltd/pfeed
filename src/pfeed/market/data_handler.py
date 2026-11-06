@@ -120,7 +120,7 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         # e.g. a resampled message whose update didn't change the resampled bar
         if data_points is None:
             return
-        # NOTE: a parsed message can hold several data points (e.g. Bybit sends a list), a resampled one holds a single bar
+        # NOTE: a parsed message can hold several data points (e.g. Bybit sends a list), so can a resampled one, e.g. several closed bars
         for data_point in data_points:
             if isinstance(data_point, Bar) and not data_point.is_closed and not self._store_incremental_bars:
                 continue

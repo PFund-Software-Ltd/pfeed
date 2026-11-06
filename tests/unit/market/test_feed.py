@@ -935,18 +935,24 @@ def _resampling(product: BaseProduct, data_resolution: str, target_resolution: s
     return resampler, data_bar, target_resol
 
 
-def _resample(product: BaseProduct, resampling: tuple[Any, Any, Resolution], data: Any) -> Any:
+def _resample_bars(product: BaseProduct, resampling: tuple[Any, Any, Resolution], data: Any) -> Any:
     resampler, data_bar, target_resolution = resampling
     message = cast("Any", {"product": product.name, "resolution": "1t", "received_at": _T0, "data": data})
     out = MarketFeed._resample_streaming_message(
         message=message, resampler=resampler, data_bar=data_bar, target_resolution=target_resolution,
     )
     assert out["resolution"] == repr(target_resolution)
-    # NOTE: data is a list of data points, a resampled message holds a single bar, or None if data_bar didn't change
-    if out["data"] is None:
+    # NOTE: data is the closed bars, or the changed open bar, or None if data_bar didn't change
+    return out["data"]
+
+
+def _resample(product: BaseProduct, resampling: tuple[Any, Any, Resolution], data: Any) -> Any:
+    """For updates expected to resample into a single bar."""
+    bars = _resample_bars(product, resampling, data)
+    if bars is None:
         return None
-    assert len(out["data"]) == 1
-    return out["data"][0]
+    assert len(bars) == 1
+    return bars[0]
 
 
 def _tick(ts: int, price: float, volume: float = 1.0) -> Any:
@@ -979,11 +985,14 @@ def test_resample_streaming_message_ticks_across_windows_close_the_bar(product: 
     assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (_T0 + _SECOND, 105.0, 106.0, 2.0, False)
 
 
-def test_resample_streaming_message_ticks_closing_two_bars_send_the_later(product: BaseProduct):
-    """Documented loss: a message closing two bars only sends the later one."""
+def test_resample_streaming_message_ticks_closing_two_bars_send_both(product: BaseProduct):
+    """e.g. a batch of trades spanning seconds, every bar it closes is sent in time order."""
     ticks = [_tick(_T0, 100.0), _tick(_T0 + _SECOND, 101.0), _tick(_T0 + 2 * _SECOND, 102.0)]
-    bar = _resample(product, _resampling(product, "1t", "1s"), ticks)
-    assert (bar.start_ts, bar.close, bar.is_closed) == (_T0 + _SECOND, 101.0, True)
+    bars = _resample_bars(product, _resampling(product, "1t", "1s"), ticks)
+    assert [(bar.start_ts, bar.close, bar.is_closed) for bar in bars] == [
+        (_T0, 100.0, True),
+        (_T0 + _SECOND, 101.0, True),
+    ]
 
 
 def test_resample_streaming_message_bars_in_a_list(product: BaseProduct):

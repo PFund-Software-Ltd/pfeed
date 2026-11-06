@@ -865,9 +865,10 @@ class MarketFeed[
         data_bar: BarData,
         target_resolution: Resolution,
     ) -> Message:
-        """Updates the resampler with the message's data point, returns the message with data_bar's bar as its data.
+        """Updates the resampler with the message's data points, returns the message with data_bar's bars as its data.
 
-        The data is None if the update didn't change data_bar, e.g. an unclosed finer bar, which the resampler keeps until it closes.
+        The data is every bar closed by the update in time order, or data_bar's open bar if it changed but nothing closed.
+        It is None if the update didn't change data_bar, e.g. an unclosed finer bar, which the resampler keeps until it closes.
         """
         current_bar = data_bar.bar
         # NOTE: a parsed message can hold several data points (e.g. Bybit sends a list), each is updated in order
@@ -879,19 +880,19 @@ class MarketFeed[
             for bar in resampler.update(data_point)
             if bar.resolution == target_resolution
         ]
-        # case 1: the update closed a bar, e.g. the 1m bar ending at 9:05 closes the 9:00 5m bar,
-        # it is sent with its final state, the bar opened by the same update (if any) is sent with the next update
-        # NOTE: if an update closes two bars, e.g. after a disconnection, only the later one is sent
+        # case 1: the update closed bars, e.g. the 1m bar ending at 9:05 closes the 9:00 5m bar,
+        # they are sent with their final states, the bar opened by the same update (if any) is sent with the next update
+        # NOTE: a message with several data points can close several bars, e.g. a batch of trades spanning seconds
         if closed_bars:
-            resampled_bar = closed_bars[-1]
+            resampled_bars = closed_bars
         # case 2: the update changed the open bar, e.g. the 9:01 1m bar closes and is merged into the open 9:00 5m bar
         # Bar is immutable, so a changed data_bar has a new bar object
         elif data_bar.bar is not current_bar:
-            resampled_bar = data_bar.bar
+            resampled_bars = [data_bar.bar]
         # case 3: nothing changed, e.g. an unclosed 1m bar, or no 1m bar has closed since the stream started
         else:
-            resampled_bar = None
-        return {**message, "resolution": repr(target_resolution), "data": [resampled_bar] if resampled_bar is not None else None}
+            resampled_bars = None
+        return {**message, "resolution": repr(target_resolution), "data": resampled_bars}
 
     # NOTE: the return type follows the pipeline mode, see BaseFeed's PipelineT
     @overload

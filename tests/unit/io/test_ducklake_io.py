@@ -246,3 +246,21 @@ def test_catalog_options(tmp_path: Path, date_data: pa.Table):
     assert files
     for file in files:
         assert pq.read_metadata(file).row_group(0).column(0).compression == 'ZSTD'
+
+
+@pytest.mark.parametrize('partition_by', [(), ('product',), ('date', 'product')])
+def test_key_with_different_partition_by_raises(io: DuckLakeIO, data: pa.Table, partition_by: tuple[str, ...]):
+    """A key partitioning the dataset differently than it is stored raises on write and read, and deletes nothing,
+    e.g. a replace with partition_by=() would otherwise delete every row of the dataset.
+    """
+    io.write(KEY, data, partitions={('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}})
+    wrong_key = DatasetKey(namespace=KEY.namespace, name=KEY.name, partition_by=partition_by)
+
+    with pytest.raises(ValueError, match='is partitioned by'):
+        io.write(wrong_key, data.schema.empty_table(), partitions={tuple({'product': 'BTC', 'date': D1}[col] for col in partition_by): {}})
+    with pytest.raises(ValueError, match='is partitioned by'):
+        io.read(wrong_key)
+    lf, metadata = io.read(KEY)
+    assert lf is not None
+    assert lf.collect().height == 3
+    assert metadata == {('BTC', D1): {'version': 1}, ('BTC', D2): {'version': 1}}

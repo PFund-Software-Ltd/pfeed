@@ -151,6 +151,16 @@ class DuckLakeIO(TableIO):
                 )
         return any(found_table is not None for _, found_table in found)
 
+    def _check_partition_columns(self, cursor: duckdb.DuckDBPyConnection, metadata_ref: str, key: DatasetKey) -> None:
+        """Raises ValueError if `key` partitions the dataset differently than it is stored,
+        e.g. a key with no partition levels would make a replace delete every row of the dataset.
+
+        The metadata table's columns are the stored partition columns (+ METADATA_COLUMN).
+        """
+        stored = [row[0] for row in cursor.execute(f'DESCRIBE {metadata_ref}').fetchall() if row[0] != self.METADATA_COLUMN]
+        if stored != key.partition_columns:
+            raise ValueError(f'{key} is partitioned by {stored}, but the key has {key.partition_columns}')
+
     @staticmethod
     def _in_partitions(key: DatasetKey, partitions: list[Partition]) -> tuple[str, list[PartitionValue]]:
         """Returns a WHERE clause matching rows in `partitions`, with its query params.
@@ -211,6 +221,7 @@ class DuckLakeIO(TableIO):
                     cursor.execute(f'ALTER TABLE {data_ref} SET PARTITIONED BY ({", ".join(cols)})')
                 cursor.execute(f'CREATE TABLE {metadata_ref} AS SELECT * FROM _partition_metadata LIMIT 0')
             else:
+                self._check_partition_columns(cursor, metadata_ref, key)
                 # schema drift: add new columns, missing ones are null-filled by INSERT BY NAME
                 existing_types = {row[0]: row[1] for row in cursor.execute(f'DESCRIBE {data_ref}').fetchall()}
                 for col, dtype, *_ in cursor.execute('DESCRIBE SELECT * FROM _data').fetchall():
@@ -256,6 +267,7 @@ class DuckLakeIO(TableIO):
         try:
             if not self._table_exists(cursor, schema, table):
                 return None, {}
+            self._check_partition_columns(cursor, metadata_ref, key)
             ((snapshot_id,),) = cursor.execute(f'SELECT id FROM {self._CATALOG_ALIAS}.current_snapshot()').fetchall()
             predicate, params = self._in_partitions(key, partitions) if partitions is not None else ('', [])
             cols = ', '.join([*(_quote(col) for col in key.partition_columns), self.METADATA_COLUMN])

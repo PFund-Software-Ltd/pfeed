@@ -192,3 +192,9 @@ def test_date_partition_dir_name_clash_raises(tmp_path: Path):
 
     with pytest.raises(ValueError):
         io.write(key, data, partitions={(2025, D1): {}})
+
+
+def test_dataset_key_shared_namespace_and_name_field_raises():
+    """A field in both namespace and name raises, e.g. ParquetIO's path would otherwise keep only the name's value."""
+    with pytest.raises(ValueError, match="cannot share fields, got \\['resolution'\\]"):
+        DatasetKey(namespace={'resolution': '1d'}, name={'resolution': '1m'})

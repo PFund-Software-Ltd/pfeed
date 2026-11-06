@@ -138,6 +138,16 @@ def test_write_batch_cleaned_validates_schema(io: ParquetIO, product: BaseProduc
     assert handler.read() == (None, {})
 
 
+def test_write_batch_cleaned_wrong_resolution_raises(io: ParquetIO, product: BaseProduct):
+    """Valid bars of another resolution than the handler's raise and nothing is written."""
+    handler = _create_handler(io, product, resolution='1d')
+    df = _cleaned_df(product, [D1, D2, D3]).with_columns(pl.lit('1_MINUTE').alias('resolution'))
+
+    with pytest.raises(ValueError, match="expected '1_DAY'"):
+        handler.write_batch(df)
+    assert handler.read() == (None, {})
+
+
 def test_write_batch_stores_days_without_rows(io: ParquetIO, product: BaseProduct):
     """Every day in the date range gets a partition, e.g. a holiday isn't re-downloaded."""
     handler = _create_handler(io, product)

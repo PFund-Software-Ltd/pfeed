@@ -79,8 +79,15 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         from pfeed.schemas.market_data_schema import get_market_data_schema
 
         resolution = cast('Resolution', self._data_model.resolution)
+        from pfeed.schemas.market_data_schema import RESOLUTION
+
         schema = get_market_data_schema(self._data_model.product, resolution)
-        return schema.validate(df)
+        df = schema.validate(df)
+        # the schema only checks the resolution is valid and unique, it must also be the dataset's (in its name)
+        # NOTE: product doesn't need this, a row of another product is outside the partitions and the IO raises
+        if not df.is_empty() and (row_resolution := df[RESOLUTION][0]) != str(resolution):
+            raise ValueError(f'data has resolution {row_resolution!r}, expected {str(resolution)!r}')
+        return df
 
     def write_batch(self, df: pl.DataFrame) -> None:
         """Replaces the data model's partitions with `df`.

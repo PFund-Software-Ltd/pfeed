@@ -58,6 +58,11 @@ class DatasetKey:
     name: dict[str, str]
     partition_by: tuple[PartitionLevel, ...] = field(default=())
 
+    def __post_init__(self) -> None:
+        # e.g. ParquetIO merges namespace and name into one path, so a shared field would silently overwrite the other
+        if shared := self.namespace.keys() & self.name.keys():
+            raise ValueError(f'namespace and name cannot share fields, got {sorted(shared)}')
+
     @property
     def partition_columns(self) -> list[str]:
         """The data columns the partition values are read or computed from."""

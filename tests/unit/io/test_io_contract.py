@@ -398,6 +398,23 @@ def test_schema_drift(io: BaseIO, data: pa.Table):
     assert_frame_equal(lf.collect(), expected.filter(pl.col('date') == D2), check_column_order=False)
 
 
+def test_schema_drift_replace_keeps_column(io: BaseIO, data: pa.Table):
+    """Replacing the only partition that has a column with data without it keeps the column (as nulls),
+    and its type is still enforced: a later write with a different type raises TypeError.
+    """
+    d1 = data.filter(pc.field('date') == D1)
+    io.write(KEY, d1.append_column('RPI', pa.array([True, False])), partitions={('BTC', D1): {'version': 1}})
+    io.write(KEY, d1, partitions={('BTC', D1): {'version': 2}})
+
+    lf, _ = io.read(KEY)
+    assert lf is not None
+    df = lf.collect()
+    assert df.schema['RPI'] == pl.Boolean
+    assert df['RPI'].to_list() == [None, None]
+    with pytest.raises(TypeError):
+        io.write(KEY, d1.append_column('RPI', pa.array(['x', 'y'])), partitions={('BTC', D1): {'version': 3}})
+
+
 def test_schema_drift_append(io: BaseIO, data: pa.Table):
     """Schema drift works the same when appending: a new column is added, a missing one is null.
 

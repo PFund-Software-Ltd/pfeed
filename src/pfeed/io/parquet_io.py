@@ -40,7 +40,11 @@ class ParquetIO(BaseIO):
     - partition columns are kept inside the file too, so their types survive the round-trip;
         a DatePartition's date is only in the dirs, it is computed from its column, not stored
     - an empty partition is a 0-row file carrying its metadata
-    - replace is atomic per partition: write to a temp file, then rename over part-0.parquet
+    - replace is atomic per partition: write to a temp file, then rename over part-0.parquet;
+        a multi-partition write is not atomic as a whole, its partitions are committed one by one
+    - every file has all the dataset's columns (missing ones as nulls), so a replace never drops a column
+    - a read is not a snapshot: its metadata is read right away, but its LazyFrame reads the files when collected,
+        so a write in between can make the data newer than the metadata; use DuckLakeIO for concurrent read/write
     - no append: a parquet file is immutable, appending means multi-file state, use DeltaLakeIO/DuckLakeIO
     """
 
@@ -195,7 +199,14 @@ class ParquetIO(BaseIO):
         dumped_metadata = {partition: self._dump_metadata(md) for partition, md in partitions.items()}
         # schema drift: new/missing columns are fine, a column changing type isn't
         existing_files = self._find_partitions(key)
-        self._dataset_schema([fm.schema.to_arrow_schema() for _, fm in existing_files.values()] + [data.schema])
+        dataset_schema = self._dataset_schema([fm.schema.to_arrow_schema() for _, fm in existing_files.values()] + [data.schema])
+        # every written file carries all the dataset's columns (missing ones as nulls),
+        # so replacing the last file that had a column doesn't drop the column from the dataset
+        dataset_schema = pa.schema([field.with_nullable(True) for field in dataset_schema])
+        data = pa.table({
+            field.name: data[field.name] if field.name in data.column_names else pa.nulls(len(data), field.type)
+            for field in dataset_schema
+        }).cast(dataset_schema.with_metadata(data.schema.metadata))
 
         for partition, partition_metadata in dumped_metadata.items():
             file_path = file_paths[partition]

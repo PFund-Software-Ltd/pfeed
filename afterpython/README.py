@@ -3,6 +3,20 @@
 # dependencies = [
 #     "marimo==0.25.2",
 #     "pfeed[bybit]==0.0.23",
+#     # pin the transitive deps too: micropip resolves `>=` at every page load, so they'd drift
+#     # your packages: the download/retrieve path itself
+#     "pfeed-bybit==0.0.1",
+#     "pfund-bybit==0.0.1",
+#     "pfund-kit==0.1.23",
+#     "pfund-blocks==0.0.3",
+#     # patched in the emscripten cell: internals they rely on can change in any release
+#     "httpx2==2.16.0",
+#     "rich==15.0.0",
+#     "tqdm==4.70.1",
+#     # validates the schema on download
+#     "pandera==0.35.0",
+#     # NOT pinned: compiled packages (polars, pyarrow, pydantic, msgspec) come from Pyodide's builds,
+#     # which are fixed by the marimo version
 # ]
 # requires-python = ">=3.13"
 #
@@ -21,7 +35,7 @@ async def _():
     if sys.platform == "emscripten":
         import micropip
 
-        await micropip.install(["polars", "websockets", "pyarrow"])
+        await micropip.install(["polars", "websockets==17.4", "pyarrow"])
 
         def _import_skipping_pyodide_preload(module: str):
             """Import `module` without marimo preloading Pyodide's own (older) build of it.

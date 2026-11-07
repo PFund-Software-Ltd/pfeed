@@ -47,6 +47,9 @@
 #                           built from its inline `# /// script` deps. Name only,
 #                           no ext, relative to cwd.  e.g. cd tutorial && just run algo_101
 #
+#   just marimo wasm [args]       export README.py to WASM in ../build/README_py/ (see marimo.just)
+#   just marimo serve [--port N]  serve that build on localhost and open it in the browser
+#
 # PER-NOTEBOOK DEPENDENCIES (juv)
 #   To give a notebook its own deps without touching the project venv, write a
 #   PEP 723 block by hand in the .md as its own code-cell — the .md stays your
@@ -69,6 +72,9 @@
 base     := justfile_directory()
 jupytext := "jupytext"
 formats  := "ipynb,md:myst"
+
+# test README.py (marimo) as WASM locally before `ap build`: `just marimo wasm`, `just marimo serve`
+mod marimo
 
 # List available recipes
 default:

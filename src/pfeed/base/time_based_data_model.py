@@ -37,11 +37,9 @@ class TimeBasedDataModel(BaseDataModel):
 
     @property
     def dates(self) -> list[datetime.date]:
-        import polars as pl
-
-        return pl.date_range(
-            self.start_date, self.end_date, interval="1d", eager=True
-        ).to_list()
+        # NOTE: not pl.date_range, its 1-day interval (in microseconds) overflows the 32-bit usize in WASM (Pyodide)
+        num_days = (self.end_date - self.start_date).days
+        return [self.start_date + datetime.timedelta(days=i) for i in range(num_days + 1)]
 
     def is_date_range(self) -> bool:
         return self.start_date != self.end_date

@@ -4,15 +4,12 @@ channels = ["conda-forge"]
 name = "pfeed"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64", "win-64"]
 # NOTE: should match with setup-pixi in ci.yml
-requires-pixi = ">=0.83.0"
+requires-pixi = ">=0.84.1"
 # FIXME: set it back to "14 days" when the package is stable
 exclude-newer = "0d"
 
-[pypi-exclude-newer]
-afterpython = "0d"
-uv_build = "0d"
-pfund-blocks = "0d"
-pfund-kit = "0d"
+[workspace.pypi-exclude-newer]
+exemptions = { afterpython = "*", uv_build = "*", pfund-blocks = "*", pfund-kit = "*" }
 
 [tasks]
 
@@ -33,15 +30,15 @@ just = ">=1.59.0"
 [pypi-dependencies]
 pfund-blocks = ">=0.0.2"
 pfund-kit = ">=0.1.22"
-pyarrow = ">=26.0.0"
-polars = ">=2.0.0"
+pyarrow = ">=26.0.1"
+polars = ">=2.1.0"
 duckdb = ">=2.0.0"
-pandera = ">=0.34.1"
+pandera = ">=0.35.0"
 msgspec = ">=0.22.0"
-pydantic = ">=2.14.1"
-narwhals = ">=2.27.1"
+pydantic = ">=2.14.3"
+narwhals = ">=2.28.0"
 beautifulsoup4 = ">=4.15.0"
-pyzmq = ">=27.2.0"
+pyzmq = ">=27.3.0"
 
 [environments]
 default = ["py313", "dev", "test", "optional"]
@@ -60,10 +57,10 @@ libpq = ">=18.4"  # for postgresql
 
 [feature.optional.pypi-dependencies]
 # TODO: remove the env-markers when ray supports python 3.15
-ray = { version = ">=2.59.0", extras = ["default"], env-markers = "python_version < '3.15'" }
-huggingface-hub = ">=2.2.0"
-prefect = ">=3.8.8"
-lancedb = ">=0.40.0"
+ray = { version = ">=2.60.0", extras = ["default"], env-markers = "python_full_version < '3.15'" }
+huggingface-hub = ">=2.4.0"
+prefect = ">=3.9.2"
+lancedb = ">=0.41.0"
 # Data Sources:
 # NOTE: data sources are plugins, each one is a separate package named `pfeed-xxx`.
 # An extra exists here only for an OFFICIALLY SUPPORTED data source, and it pins a verified version:
@@ -78,6 +75,7 @@ lancedb = ">=0.40.0"
 pfeed = { path = ".", editable = true }
 pfund-plot = { version = ">=0.0.5", extras = ["marimo"] }
 # afterpython = ">=0.4.1"
+juv = ">=0.5.0"
 # TEMP
 afterpython = { path ="../../afterpython.org/afterpython", editable = true }  # TEMP
 pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
@@ -101,10 +99,10 @@ pfund-bybit = { path = "../pfund/venues/pfund-bybit", editable = true }
 pfeed-pfund = { path = "sources/pfeed-pfund", editable = true }
 pfund-blocks = { path = "../pfund-blocks", editable = true }
 pfund-kit = { path = "../pfund-kit", editable = true }
-pytest = ">=9.1.1"
-pytest-mock = ">=3.16.0"
+pytest = ">=9.2.0"
+pytest-mock = ">=3.17.0"
 pytest-xdist = ">=3.8.0"
-pytest-asyncio = ">=1.4.0"
+pytest-asyncio = ">=1.4.1"
 # pytest-cov = ">=7.1.0"
 # pytest-markdown-docs = ">=0.9.2"
 # testcontainers = ">=4.14.2"

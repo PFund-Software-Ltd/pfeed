@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import sys
+
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
     import pfund_plot as plot
@@ -22,6 +24,16 @@ if TYPE_CHECKING:
     from pfeed.market.feed import MarketFeed
 
 from pfeed.config import configure, configure_logging, get_config
+
+# pdoc only documents names already in the module, not ones from __getattr__
+if "pdoc" in sys.modules:
+    import pfund_plot as plot
+
+    from pfeed.base import get_feed
+    from pfeed.engine import DataEngine
+    from pfeed.io.ducklake_io import DuckLakeIO
+    from pfeed.io.parquet_io import ParquetIO
+    from pfeed.market.feed import MarketFeed
 
 
 def __getattr__(name: str):

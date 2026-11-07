@@ -29,21 +29,21 @@ dependencies = [
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
-    "pyarrow>=26.0.0 ; sys_platform != 'emscripten'",
-    "polars>=2.0.0 ; sys_platform != 'emscripten'",
+    "pyarrow>=26.0.1 ; sys_platform != 'emscripten'",
+    "polars>=2.1.0 ; sys_platform != 'emscripten'",
     "duckdb>=2.0.0 ; sys_platform != 'emscripten'",
-    "pandera>=0.34.1",
+    "pandera>=0.35.0",
     "msgspec>=0.22.0 ; sys_platform != 'emscripten'",
-    "pydantic>=2.14.1 ; sys_platform != 'emscripten'",
-    "narwhals>=2.27.1 ; sys_platform != 'emscripten'",
+    "pydantic>=2.14.3 ; sys_platform != 'emscripten'",
+    "narwhals>=2.28.0 ; sys_platform != 'emscripten'",
     "beautifulsoup4>=4.15.0",
-    "pyzmq>=27.2.0 ; sys_platform != 'emscripten'",
+    "pyzmq>=27.3.0 ; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]
-ray = ["ray[default]>=2.59.0; python_version < '3.15'"]
-huggingface = ["huggingface-hub>=2.2.0"]
-prefect = ["prefect>=3.8.8"]
+ray = ["ray[default]>=2.60.0; python_version < '3.15'"]
+huggingface = ["huggingface-hub>=2.4.0"]
+prefect = ["prefect>=3.9.2"]
 # kafka = ["confluent-kafka>=2.8.2"]
 # Data Sources:
 # NOTE: data sources are plugins, each one is a separate package named `pfeed-xxx`.
@@ -59,7 +59,7 @@ prefect = ["prefect>=3.8.8"]
 # massive = ["massive>=2.2.0"]  # previously "polygon"
 # ---
 # IOs:
-lancedb = ["lancedb>=0.40.0"]
+lancedb = ["lancedb>=0.41.0"]
 # deltalake = ["deltalake>=1.6.6"]
 # iceberg = ["pyiceberg[sql-sqlite,pyiceberg-core]>=0.12.0"]
 # s3 = ["minio>=7.2.20", "cloudpathlib[s3]>=0.24.0"]
@@ -78,7 +78,7 @@ repository = "https://github.com/PFund-Software-Ltd/pfeed"
 documentation = "https://pfeed.pfund.ai/doc"
 
 [build-system]
-requires = ["uv_build>=0.13.5,<0.14.0"]
+requires = ["uv_build>=0.13.7,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv]

@@ -2,12 +2,10 @@
 # /// script
 # dependencies = [
 #     "marimo==0.25.2",
-#     "pfeed==0.0.20",
+#     "pfeed==0.0.21",
 # ]
 # requires-python = ">=3.13"
 #
-# [tool.uv.sources]
-# pfeed = { path = "../dist/pfeed-0.0.20-py3-none-any.whl" }
 # ///
 
 import marimo

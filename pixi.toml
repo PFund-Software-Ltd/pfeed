@@ -64,7 +64,7 @@ lancedb = ">=0.41.0"
 # An extra exists here only for an OFFICIALLY SUPPORTED data source, and it pins a verified version:
 #   pip install "pfeed[bybit]"  # official, installs `pfeed-bybit`
 #   pip install pfeed-xxx       # 3rd party, not maintained or verified by pfeed
-# pfeed-bybit = ">=0.0.1.dev1"
+pfeed-bybit = ">=0.0.1"
 # pfeed-pfund = ">=0.0.1.dev1"
 # IOs
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
@@ -75,9 +75,9 @@ pfund-plot = { version = ">=0.0.5", extras = ["marimo"] }
 afterpython = ">=0.4.1"
 juv = ">=0.5.0"
 # TEMP
-pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
-pfund-bybit = { path = "../pfund/venues/pfund-bybit", editable = true }
-pfeed-pfund = { path = "sources/pfeed-pfund", editable = true }
+# pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
+# pfund-bybit = { path = "../pfund/venues/pfund-bybit", editable = true }
+# pfeed-pfund = { path = "sources/pfeed-pfund", editable = true }
 # used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
 deltalake = ">=1.6.6"
 pyiceberg = { version = ">=0.12.0", extras = ["sql-sqlite", "pyiceberg-core"] }
@@ -89,9 +89,9 @@ pyiceberg = { version = ">=0.12.0", extras = ["sql-sqlite", "pyiceberg-core"] }
 [feature.test.pypi-dependencies]
 pfeed = { path = ".", editable = true }
 # TEMP
-pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
-pfund-bybit = { path = "../pfund/venues/pfund-bybit", editable = true }
-pfeed-pfund = { path = "sources/pfeed-pfund", editable = true }
+# pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
+# pfund-bybit = { path = "../pfund/venues/pfund-bybit", editable = true }
+# pfeed-pfund = { path = "sources/pfeed-pfund", editable = true }
 pytest = ">=9.2.0"
 pytest-mock = ">=3.17.0"
 pytest-xdist = ">=3.8.0"

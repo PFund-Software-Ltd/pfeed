@@ -28,14 +28,12 @@ just = ">=1.59.0"
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
-pfund-blocks = ">=0.0.2"
-pfund-kit = ">=0.1.22"
+pfund-blocks = ">=0.0.3"
+pfund-kit = ">=0.1.23"
 pyarrow = ">=26.0.1"
 polars = ">=2.1.0"
 duckdb = ">=2.0.0"
 pandera = ">=0.35.0"
-msgspec = ">=0.22.0"
-pydantic = ">=2.14.3"
 narwhals = ">=2.28.0"
 beautifulsoup4 = ">=4.15.0"
 pyzmq = ">=27.3.0"
@@ -74,15 +72,12 @@ lancedb = ">=0.41.0"
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
 pfund-plot = { version = ">=0.0.5", extras = ["marimo"] }
-# afterpython = ">=0.4.1"
+afterpython = ">=0.4.1"
 juv = ">=0.5.0"
 # TEMP
-afterpython = { path ="../../afterpython.org/afterpython", editable = true }  # TEMP
 pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
 pfund-bybit = { path = "../pfund/venues/pfund-bybit", editable = true }
 pfeed-pfund = { path = "sources/pfeed-pfund", editable = true }
-pfund-blocks = { path = "../pfund-blocks", editable = true }
-pfund-kit = { path = "../pfund-kit", editable = true }
 # used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
 deltalake = ">=1.6.6"
 pyiceberg = { version = ">=0.12.0", extras = ["sql-sqlite", "pyiceberg-core"] }
@@ -97,8 +92,6 @@ pfeed = { path = ".", editable = true }
 pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
 pfund-bybit = { path = "../pfund/venues/pfund-bybit", editable = true }
 pfeed-pfund = { path = "sources/pfeed-pfund", editable = true }
-pfund-blocks = { path = "../pfund-blocks", editable = true }
-pfund-kit = { path = "../pfund-kit", editable = true }
 pytest = ">=9.2.0"
 pytest-mock = ">=3.17.0"
 pytest-xdist = ">=3.8.0"

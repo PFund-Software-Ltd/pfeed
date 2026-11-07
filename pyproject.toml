@@ -24,8 +24,8 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "pfund-blocks>=0.0.2",
-    "pfund-kit>=0.1.22",
+    "pfund-blocks>=0.0.3",
+    "pfund-kit>=0.1.23",
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
@@ -33,8 +33,6 @@ dependencies = [
     "polars>=2.1.0 ; sys_platform != 'emscripten'",
     "duckdb>=2.0.0 ; sys_platform != 'emscripten'",
     "pandera>=0.35.0",
-    "msgspec>=0.22.0 ; sys_platform != 'emscripten'",
-    "pydantic>=2.14.3 ; sys_platform != 'emscripten'",
     "narwhals>=2.28.0 ; sys_platform != 'emscripten'",
     "beautifulsoup4>=4.15.0",
     "pyzmq>=27.3.0 ; sys_platform != 'emscripten'",

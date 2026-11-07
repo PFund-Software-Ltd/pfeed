@@ -1197,6 +1197,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/3d/2e4bc4fd1ef9770871669adb348d612a6e4786b303a23f9935b81c48dd60/httpx2-2.16.0-py3-none-any.whl", hash = "sha256:fd2c5d7909e8d86fe92d53020c310ca0e4e431b838c207c5754b9bbf0308d49a", size = 97880, upload-time = "2026-10-21T07:09:44.01Z" },
 ]
 
+[package.optional-dependencies]
+http2 = [
+    { name = "h2" },
+]
+
 [[package]]
 name = "httpx2-jsfetch"
 version = "1.0"
@@ -2039,14 +2044,12 @@ source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "duckdb", marker = "sys_platform != 'emscripten'" },
-    { name = "msgspec", marker = "sys_platform != 'emscripten'" },
     { name = "narwhals", marker = "sys_platform != 'emscripten'" },
     { name = "pandera" },
     { name = "pfund-blocks" },
     { name = "pfund-kit" },
     { name = "polars", marker = "sys_platform != 'emscripten'" },
     { name = "pyarrow", marker = "sys_platform != 'emscripten'" },
-    { name = "pydantic", marker = "sys_platform != 'emscripten'" },
     { name = "pyzmq", marker = "sys_platform != 'emscripten'" },
 ]
 
@@ -2070,15 +2073,13 @@ requires-dist = [
     { name = "duckdb", marker = "sys_platform != 'emscripten'", specifier = ">=2.0.0" },
     { name = "huggingface-hub", marker = "extra == 'huggingface'", specifier = ">=2.4.0" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.41.0" },
-    { name = "msgspec", marker = "sys_platform != 'emscripten'", specifier = ">=0.22.0" },
     { name = "narwhals", marker = "sys_platform != 'emscripten'", specifier = ">=2.28.0" },
     { name = "pandera", specifier = ">=0.35.0" },
-    { name = "pfund-blocks", specifier = ">=0.0.2" },
-    { name = "pfund-kit", specifier = ">=0.1.22" },
+    { name = "pfund-blocks", specifier = ">=0.0.3" },
+    { name = "pfund-kit", specifier = ">=0.1.23" },
     { name = "polars", marker = "sys_platform != 'emscripten'", specifier = ">=2.1.0" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.9.2" },
     { name = "pyarrow", marker = "sys_platform != 'emscripten'", specifier = ">=26.0.1" },
-    { name = "pydantic", marker = "sys_platform != 'emscripten'", specifier = ">=2.14.3" },
     { name = "pyzmq", marker = "sys_platform != 'emscripten'", specifier = ">=27.3.0" },
     { name = "ray", extras = ["default"], marker = "python_full_version < '3.15' and extra == 'ray'", specifier = ">=2.60.0" },
 ]
@@ -2086,21 +2087,23 @@ provides-extras = ["ray", "huggingface", "prefect", "lancedb"]
 
 [[package]]
 name = "pfund-blocks"
-version = "0.0.2"
+version = "0.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "httpx2", extra = ["http2"] },
     { name = "msgspec" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "websockets", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/25/f4/5a9d1883b2343f72f47a3551491c07f5ae9299b631bda9d612e9a79daaf3/pfund_blocks-0.0.2.tar.gz", hash = "sha256:5db83ea69fe05a7f9b39f57eedd23e601a9ce0ea1e71218c9db97604f8a85ed8", size = 34117, upload-time = "2026-10-28T07:43:07.819Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/32/4a95c9bdafc72d3e254d9c0b3c36a1ef5d2c1f26bef39e6400a617944005/pfund_blocks-0.0.3.tar.gz", hash = "sha256:36466118a2317b6c6473cbb3c4f676b97291f51a5ee3befb8f007dee66be5a08", size = 47556, upload-time = "2026-11-07T18:04:40.221Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/cb/b0787a39fa42a546a2bce3bb039559dac049b1d97dac294afa716cf78403/pfund_blocks-0.0.2-py3-none-any.whl", hash = "sha256:f89f6826ac402ba8e288d2260cea49217ec3e3e1da655f2749929bbf5d7b66bc", size = 50299, upload-time = "2026-10-28T07:43:06.877Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/55/a85d7af2e58d08d9536691bb34e14eaea0bf5dbfde9eeb8ab6db4f4bc83d/pfund_blocks-0.0.3-py3-none-any.whl", hash = "sha256:0884a630c0efa7a8596cc507ccf42c5c02871d345fc9fca1d47ba180cef03f5d", size = 68673, upload-time = "2026-11-07T18:04:39.058Z" },
 ]
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.22"
+version = "0.1.23"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -2114,9 +2117,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6c/48/f42b34f1d1527d1269cb8980d79dce14126c2b11f079cce7554367a31636/pfund_kit-0.1.22.tar.gz", hash = "sha256:359a359ae5584cdd51cb0048bbc1652c10f04ce039be6494b1bfc72ef01ad397", size = 51812, upload-time = "2026-10-25T06:06:08.295Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/20/cfbe9e32ab2f13ff15b9b30f762785877220f49d2a8e7247d2e523a44156/pfund_kit-0.1.23.tar.gz", hash = "sha256:0482d24a3696007f238c137c989cde12ed132777c528e88a686f62414e30a568", size = 51841, upload-time = "2026-11-07T18:05:24.445Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/94/77f9b69151be72af180f432c7541d40e96e23870de9f1603d903e441a58e/pfund_kit-0.1.22-py3-none-any.whl", hash = "sha256:5c129031a182e550cfff74a723f94ddd7a7381fc19fc2907c0480dfa4ee5a5bb", size = 66407, upload-time = "2026-10-25T06:06:07.202Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/41/6455899a0d759e2e546b26a2785ccf6113d6fcaf5edeb19ba6f774283ea6/pfund_kit-0.1.23-py3-none-any.whl", hash = "sha256:1223ffd473959cfcf01626e2063745849f761cd77c823a1c782e8f2daff1cc6b", size = 66406, upload-time = "2026-11-07T18:05:23.363Z" },
 ]
 
 [[package]]

@@ -35,7 +35,7 @@ async def _():
     if sys.platform == "emscripten":
         import micropip
 
-        await micropip.install(["polars", "websockets==17.4", "pyarrow"])
+        await micropip.install(["polars", "pyarrow"])
 
         def _import_skipping_pyodide_preload(module: str):
             """Import `module` without marimo preloading Pyodide's own (older) build of it.

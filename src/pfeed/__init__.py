@@ -11,9 +11,9 @@ if TYPE_CHECKING:
     # third-party sources are NOT exposed as pe.<Source>, use either:
     #   from pfeed_xxx import XXX
     #   pe.get_feed("xxx", ...)
+    from pfeed_alphafund import AlphaFund as AlphaFund
     from pfeed_bybit import Bybit as Bybit
     from pfeed_pfund import PFund as PFund
-    from pfeed_alphafund import AlphaFund as AlphaFund
 
     from pfeed.base import get_feed
     from pfeed.engine import DataEngine

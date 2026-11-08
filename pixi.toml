@@ -71,9 +71,7 @@ pfeed-bybit = ">=0.0.1"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-pfund-plot = { version = ">=0.0.5", extras = ["marimo"] }
-afterpython = ">=0.4.1"
-juv = ">=0.5.0"
+afterpython = { version = ">=0.4.3", extras = ["marimo"] }
 # TEMP
 # pfeed-bybit = { path = "sources/pfeed-bybit", editable = true }
 # pfund-bybit = { path = "../pfund/venues/pfund-bybit", editable = true }

@@ -6,8 +6,6 @@ import sys
 
 if TYPE_CHECKING:
     # need these imports to support IDE hints:
-    import pfund_plot as plot
-
     # NOTE: data sources (plugins), for IDE hints of pe.<Source> only, never executed at runtime.
     # pe.<Source> is reserved for OFFICIAL sources, only they are listed here and in __getattr__.
     # third-party sources are NOT exposed as pe.<Source>, use either:
@@ -27,8 +25,6 @@ from pfeed.config import configure, configure_logging, get_config
 
 # pdoc only documents names already in the module, not ones from __getattr__
 if "pdoc" in sys.modules:
-    import pfund_plot as plot
-
     from pfeed.base import get_feed
     from pfeed.engine import DataEngine
     from pfeed.io.ducklake_io import DuckLakeIO
@@ -41,10 +37,6 @@ def __getattr__(name: str):
         from importlib.metadata import version
 
         return version("pfeed")
-    elif name == "plot":
-        import pfund_plot as plot
-
-        return plot
     elif name == "ParquetIO":
         from pfeed.io.parquet_io import ParquetIO
 

@@ -11,9 +11,9 @@ if TYPE_CHECKING:
     # third-party sources are NOT exposed as pe.<Source>, use either:
     #   from pfeed_xxx import XXX
     #   pe.get_feed("xxx", ...)
-    from pfeed_alphafund import AlphaFund as AlphaFund
+    from alphafund._pfeed_source import AlphaFund as AlphaFund  # ty: ignore[import-not-found]
     from pfeed_bybit import Bybit as Bybit
-    from pfeed_pfund import PFund as PFund
+    from pfund._pfeed_source import PFund as PFund  # ty: ignore[import-not-found]
 
     from pfeed.base import get_feed
     from pfeed.engine import DataEngine
@@ -61,10 +61,10 @@ def __getattr__(name: str):
         return _import_official_source("pfeed_bybit", "Bybit")
 
     elif name == "PFund":
-        return _import_official_source("pfeed_pfund", "PFund")
+        return _get_official_source("PFund", install="pfund")
 
     elif name == "AlphaFund":
-        return _import_official_source("pfeed_alphafund", "AlphaFund")
+        return _get_official_source("AlphaFund", install="alphafund")
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
@@ -73,6 +73,21 @@ def _import_official_source(module: str, source: str):
     from pfund_kit.plugins import import_official_plugin
 
     return import_official_plugin(module, source, label=f"pe.{source}")
+
+
+def _get_official_source(source: str, install: str):
+    """Loads an official data source class (e.g. pe.PFund) via its "pfeed.sources" entry point.
+
+    Used for sources shipped inside another package (e.g. pfund), so pfeed doesn't hardcode
+    their (private) module path, the package registering the entry point owns it.
+    """
+    from pfeed.registry import get_entry_points, get_source
+
+    if source.upper() not in get_entry_points():
+        raise ModuleNotFoundError(
+            f"pe.{source} requires '{install}', install it with: pip install {install}"
+        )
+    return get_source(source)
 
 
 __all__ = (  # noqa: RUF022

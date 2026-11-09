@@ -1,9 +1,12 @@
 """Registry of data sources, discovered via the "pfeed.sources" entry points.
 
-Every data source is a plugin package `pfeed-xxx` (e.g. pfeed-bybit), registering
-an entry point named after the source, pointing at its source class:
+Every data source is registered by a package as an entry point named after the source,
+pointing at its source class. Usually it's a plugin package `pfeed-xxx` (e.g. pfeed-bybit):
     [project.entry-points."pfeed.sources"]
     bybit = "pfeed_bybit:Bybit"
+or a package shipping its own source inside (e.g. pfund):
+    [project.entry-points."pfeed.sources"]
+    pfund = "pfund._pfeed_source:PFund"
 """
 
 from __future__ import annotations

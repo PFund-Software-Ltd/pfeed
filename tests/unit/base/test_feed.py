@@ -2,6 +2,7 @@
 
 Streaming (stream requests, run_stream etc.) is not covered here.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -37,7 +38,11 @@ from pfeed.io.base_io import DatasetKey, IOCapabilities
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.source import BaseSource, SourceMetadata
 
-KEY = DatasetKey(namespace={'data_source': 'TEST'}, name={'dataset': 'test'}, partition_by=('product',))
+KEY = DatasetKey(
+    namespace={"data_source": "TEST"},
+    name={"dataset": "test"},
+    partition_by=("product",),
+)
 
 
 class _Handler(BaseDataHandler[BaseDataModel, BaseDataMetadata]):
@@ -50,7 +55,13 @@ class _Handler(BaseDataHandler[BaseDataModel, BaseDataMetadata]):
         return df
 
     def write_batch(self, df: pl.DataFrame) -> None:
-        self._write(df, {(product,): self._create_metadata() for product in df.get_column('product').unique()})
+        self._write(
+            df,
+            {
+                (product,): self._create_metadata()
+                for product in df.get_column("product").unique()
+            },
+        )
 
     def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, BaseDataMetadata]]:
         return self._read()
@@ -63,8 +74,8 @@ class _DataModel(BaseDataModel):
 class _Source(BaseSource):
     Feeds: ClassVar[dict[DataCategory, type[BaseFeed]]] = {}
     metadata = SourceMetadata(
-        name='TEST',
-        url=HttpUrl('https://example.com'),
+        name="TEST",
+        url=HttpUrl("https://example.com"),
         data_categories={},
         provider_type=DataProviderType.VENUE,
         access_type=DataAccessType.FREE,
@@ -72,18 +83,18 @@ class _Source(BaseSource):
 
 
 class _DownloadRequest(BaseRequest):
-    extract_type: ClassVar[str] = 'download'
+    extract_type: ClassVar[str] = "download"
 
     def to_data_model(self) -> BaseDataModel:
         return _DataModel(data_source=self.data_source.name)
 
 
 class _RetrieveRequest(_DownloadRequest):
-    extract_type: ClassVar[str] = 'retrieve'
+    extract_type: ClassVar[str] = "retrieve"
 
 
 class _StreamRequest(_DownloadRequest):
-    extract_type: ClassVar[str] = 'stream'
+    extract_type: ClassVar[str] = "stream"
 
     def is_streaming(self) -> bool:
         return True
@@ -91,15 +102,15 @@ class _StreamRequest(_DownloadRequest):
 
 def _extract(request: BaseRequest, data_model: BaseDataModel) -> pl.LazyFrame | None:
     """One row per data model, its product is the data model's data_origin. Origin 'FAIL' raises, 'EMPTY' has no data."""
-    if data_model.data_origin == 'FAIL':
-        raise RuntimeError('extract failed')
-    if data_model.data_origin == 'EMPTY':
+    if data_model.data_origin == "FAIL":
+        raise RuntimeError("extract failed")
+    if data_model.data_origin == "EMPTY":
         return None
-    return pl.LazyFrame({'product': [data_model.data_origin], 'price': [1.0]})
+    return pl.LazyFrame({"product": [data_model.data_origin], "price": [1.0]})
 
 
 def _add_one(df: pl.LazyFrame) -> pl.LazyFrame:
-    return df.with_columns(pl.col('price') + 1)
+    return df.with_columns(pl.col("price") + 1)
 
 
 class _FeedBase(BaseFeed[_Source, BaseRequest, _DataModel], ABC):
@@ -109,51 +120,67 @@ class _FeedBase(BaseFeed[_Source, BaseRequest, _DataModel], ABC):
     DataModel = _DataModel
     data_domain = DataCategory.MARKET_DATA
     _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
-        'download': ('_download_impl',),
-        'stream': ('_stream_impl',),
+        "download": ("_download_impl",),
+        "stream": ("_stream_impl",),
     }
 
-    class Requests:
+    class Requests:  # ty: ignore[invalid-attribute-override]
         download: ClassVar[type[BaseRequest] | None] = _DownloadRequest
         retrieve: ClassVar[type[BaseRequest] | None] = _RetrieveRequest
         stream: ClassVar[type[BaseRequest] | None] = None
 
-    def _download_impl(self, request: BaseRequest, data_model: BaseDataModel) -> pl.LazyFrame | None:
+    def _download_impl(
+        self, request: BaseRequest, data_model: BaseDataModel
+    ) -> pl.LazyFrame | None:
         raise NotImplementedError
 
     @classmethod
     def create_data_model(cls, *args: Any, **kwargs: Any) -> BaseDataModel:
-        return _DataModel(data_source='TEST')
+        return _DataModel(data_source="TEST")
 
-    def _get_default_transformations(self, request: BaseRequest, /) -> list[Callable[..., Any]]:
+    def _get_default_transformations(
+        self, request: BaseRequest, /
+    ) -> list[Callable[..., Any]]:
         return []
 
     def run(self, use_prefect: bool = False, **prefect_kwargs: Any) -> list[DataFlow]:
         return self._run_batch_dataflows(use_prefect, prefect_kwargs)
 
-    @requires('download')
+    @requires("download")
     def download(
-        self, *data_origins: str, io: BaseIO | None = None, data_layer: DataLayer | str = DataLayer.CLEANED
+        self,
+        *data_origins: str,
+        io: BaseIO | None = None,
+        data_layer: DataLayer | str = DataLayer.CLEANED,
     ) -> _FeedBase:
         """Creates a download request with one dataflow per data origin."""
-        request = _DownloadRequest(data_source=self.data_source, io=io, data_layer=data_layer)
+        request = _DownloadRequest(
+            data_source=self.data_source, io=io, data_layer=data_layer
+        )
         self._append_request(request)
-        data_models = [_DataModel(data_source='TEST', data_origin=origin) for origin in data_origins]
+        data_models = [
+            _DataModel(data_source="TEST", data_origin=origin)
+            for origin in data_origins
+        ]
         self._create_batch_dataflows(extract_func=_extract, data_models=data_models)
         return self
 
-    @requires('retrieve')
+    @requires("retrieve")
     def retrieve(self) -> str:
-        return 'retrieved'
+        return "retrieved"
 
 
 class _Feed(_FeedBase):
-    def _download_impl(self, request: BaseRequest, data_model: BaseDataModel) -> pl.LazyFrame | None:
+    def _download_impl(
+        self, request: BaseRequest, data_model: BaseDataModel
+    ) -> pl.LazyFrame | None:
         return _extract(request, data_model)
 
 
 class _NoConcurrentWritesIO(ParquetIO):
-    CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities(append=False, concurrent_partition_writes=False)
+    CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities(
+        append=False, concurrent_partition_writes=False
+    )
 
 
 @pytest.fixture
@@ -170,29 +197,31 @@ def io(tmp_path: Path) -> ParquetIO:
 
 
 def test_requires_runs_supported_verb(feed: _Feed):
-    assert feed.retrieve() == 'retrieved'
+    assert feed.retrieve() == "retrieved"
 
 
 def test_requires_rejects_unsupported_verb_before_running_the_body():
     called = []
 
     class Feed(_Feed):
-        class Requests(_Feed.Requests):
+        class Requests(_Feed.Requests):  # ty: ignore[invalid-attribute-override]
             retrieve = None
             download = None
 
-        @requires('retrieve')
+        @requires("retrieve")
         def retrieve(self) -> str:
             called.append(1)
-            return 'retrieved'
+            return "retrieved"
 
-    with pytest.raises(NotImplementedError, match='TEST does not support retrieve for MARKET_DATA'):
+    with pytest.raises(
+        NotImplementedError, match="TEST does not support retrieve for MARKET_DATA"
+    ):
         Feed(_Source()).retrieve()
     assert called == []
 
 
 def test_requires_keeps_the_wrapped_function_name():
-    assert _Feed.download.__name__ == 'download'
+    assert _Feed.download.__name__ == "download"
 
 
 # --- __init_subclass__ ---
@@ -201,21 +230,28 @@ def test_requires_keeps_the_wrapped_function_name():
 def test_framework_base_is_not_checked():
     # _FeedBase only has the default _download_impl, it would fail the check if it were checked
     class Base(_FeedBase, ABC):
-        _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {'download': ('_missing',)}
+        _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
+            "download": ("_missing",)
+        }
 
-    assert Base.capabilities() == ['download', 'retrieve']
+    assert Base.capabilities() == ["download", "retrieve"]
 
 
 def test_concrete_feed_missing_required_method():
     with pytest.raises(TypeError, match="'download' needs _missing") as exc_info:
+
         class Feed(_Feed):
-            _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {'download': ('_download_impl', '_missing')}
-    assert 'Feed supports' in str(exc_info.value)
-    assert 'set the verbs to None in Feed.Requests' in str(exc_info.value)
+            _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
+                "download": ("_download_impl", "_missing")
+            }
+
+    assert "Feed supports" in str(exc_info.value)
+    assert "set the verbs to None in Feed.Requests" in str(exc_info.value)
 
 
 def test_default_from_framework_base_counts_as_missing():
     with pytest.raises(TypeError, match="'download' needs _download_impl"):
+
         class Feed(_FeedBase):
             pass
 
@@ -224,46 +260,52 @@ def test_required_method_inherited_from_concrete_feed_is_enough():
     class Feed(_Feed):
         pass
 
-    assert Feed.capabilities() == ['download', 'retrieve']
+    assert Feed.capabilities() == ["download", "retrieve"]
 
 
 def test_unsupported_verb_needs_nothing():
     # download is off, so its required _download_impl isn't needed
     class Feed(_FeedBase):
-        class Requests(_FeedBase.Requests):
+        class Requests(_FeedBase.Requests):  # ty: ignore[invalid-attribute-override]
             download = None
 
-    assert Feed.capabilities() == ['retrieve']
+    assert Feed.capabilities() == ["retrieve"]
 
 
 def test_stream_needs_streaming_feed_mixin():
-    with pytest.raises(TypeError, match="'stream' needs StreamingMixin as a base class, _stream_impl"):
+    with pytest.raises(
+        TypeError, match="'stream' needs StreamingMixin as a base class, _stream_impl"
+    ):
+
         class Feed(_Feed):
-            class Requests(_Feed.Requests):
+            class Requests(_Feed.Requests):  # ty: ignore[invalid-attribute-override]
                 stream = _StreamRequest
 
 
 def test_download_needs_retrieve():
     with pytest.raises(TypeError, match=r"'download' needs Requests\.retrieve"):
+
         class Feed(_Feed):
-            class Requests(_Feed.Requests):
+            class Requests(_Feed.Requests):  # ty: ignore[invalid-attribute-override]
                 retrieve = None
 
 
 def test_download_without_retrieve_verb_in_requests_is_allowed():
     # a feed family without a retrieve verb at all, e.g. an engine feed, isn't required to have it
     class Feed(_Feed):
-        class Requests:
+        class Requests:  # ty: ignore[invalid-attribute-override]
             download: ClassVar[type[BaseRequest] | None] = _DownloadRequest
 
-    assert Feed.capabilities() == ['download']
+    assert Feed.capabilities() == ["download"]
 
 
 def test_all_errors_are_reported_together():
     with pytest.raises(TypeError) as exc_info:
+
         class Feed(_FeedBase):
-            class Requests(_FeedBase.Requests):
+            class Requests(_FeedBase.Requests):  # ty: ignore[invalid-attribute-override]
                 stream = _StreamRequest
+
     msg = str(exc_info.value)
     assert "'download' needs _download_impl" in msg
     assert "'stream' needs StreamingMixin as a base class, _stream_impl" in msg
@@ -273,9 +315,9 @@ def test_all_errors_are_reported_together():
 
 
 def test_attributes(feed: _Feed):
-    assert feed.name == 'TEST'
+    assert feed.name == "TEST"
     assert isinstance(feed.data_source, _Source)
-    assert feed.logger.name == 'pfeed.test'
+    assert feed.logger.name == "pfeed.test"
     assert not feed.is_pipeline()
     assert not feed.is_running()
     assert not feed._is_using_ray()
@@ -293,46 +335,48 @@ def test_init_rejects_other_source():
         Feeds: ClassVar[dict[DataCategory, type[BaseFeed]]] = {}
         metadata = _Source.metadata
 
-    with pytest.raises(TypeError, match='_Feed belongs to _Source, got OtherSource'):
-        _Feed(cast('_Source', OtherSource()))
+    with pytest.raises(TypeError, match="_Feed belongs to _Source, got OtherSource"):
+        _Feed(cast("_Source", OtherSource()))
 
 
 def test_capabilities_are_sorted_and_skip_none_and_private():
     class Feed(_Feed):
-        class Requests(_Feed.Requests):
+        class Requests(_Feed.Requests):  # ty: ignore[invalid-attribute-override]
             _private = _DownloadRequest
             stream = None
 
-    assert Feed.capabilities() == ['download', 'retrieve']
-    assert Feed(_Source())._supports('download')
-    assert not Feed(_Source())._supports('stream')
+    assert Feed.capabilities() == ["download", "retrieve"]
+    assert Feed(_Source())._supports("download")
+    assert not Feed(_Source())._supports("stream")
 
 
 # --- set_num_workers / running state ---
 
 
-@pytest.mark.parametrize('num_workers', [None, 1, 64])
+@pytest.mark.parametrize("num_workers", [None, 1, 64])
 def test_set_num_workers(feed: _Feed, num_workers: int | None):
     feed.set_num_workers(num_workers)
     assert feed._num_workers == num_workers
     assert feed._is_using_ray() is (num_workers is not None)
 
 
-@pytest.mark.parametrize('num_workers', [0, -1])
+@pytest.mark.parametrize("num_workers", [0, -1])
 def test_set_num_workers_must_be_positive(feed: _Feed, num_workers: int):
-    with pytest.raises(ValueError, match='num_workers must be greater than 0'):
+    with pytest.raises(ValueError, match="num_workers must be greater than 0"):
         feed.set_num_workers(num_workers)
 
 
 def test_set_num_workers_while_running(feed: _Feed):
     feed._set_running(True)
-    with pytest.raises(RuntimeError, match='cannot set num_workers while TEST is running'):
+    with pytest.raises(
+        RuntimeError, match="cannot set num_workers while TEST is running"
+    ):
         feed.set_num_workers(2)
 
 
 def test_set_num_workers_after_verb_raises(feed: _Feed):
-    feed.download('A')
-    with pytest.raises(RuntimeError, match='cannot set num_workers after calling'):
+    feed.download("A")
+    with pytest.raises(RuntimeError, match="cannot set num_workers after calling"):
         feed.set_num_workers(2)
     # allowed again once the requests are cleared, e.g. after a run
     feed._cleanup_after_run()
@@ -342,7 +386,7 @@ def test_set_num_workers_after_verb_raises(feed: _Feed):
 
 def test_set_running_twice_raises(feed: _Feed):
     feed._set_running(True)
-    with pytest.raises(RuntimeError, match='already running'):
+    with pytest.raises(RuntimeError, match="already running"):
         feed._set_running(True)
     feed._set_running(False)
     assert not feed.is_running()
@@ -352,22 +396,30 @@ def test_set_running_twice_raises(feed: _Feed):
 
 
 def test_get_current_request_without_request(feed: _Feed):
-    with pytest.raises(AssertionError, match='No current request found'):
+    with pytest.raises(AssertionError, match="No current request found"):
         feed._get_current_request()
 
 
 def test_current_request_is_the_latest(feed: _Feed):
-    feed.download('A').download('B')
+    feed.download("A").download("B")
     first, second = feed._requests
     assert feed._get_current_request() is second
     assert first is not second
 
 
 @pytest.mark.parametrize(
-    ('first', 'second', 'match'),
+    ("first", "second", "match"),
     [
-        (_DownloadRequest, _StreamRequest, 'streaming request is incompatible with the queued batch requests'),
-        (_StreamRequest, _DownloadRequest, 'batch request is incompatible with the queued streaming requests'),
+        (
+            _DownloadRequest,
+            _StreamRequest,
+            "streaming request is incompatible with the queued batch requests",
+        ),
+        (
+            _StreamRequest,
+            _DownloadRequest,
+            "batch request is incompatible with the queued streaming requests",
+        ),
     ],
 )
 def test_cannot_mix_streaming_and_batch_requests(
@@ -383,12 +435,12 @@ def test_cannot_mix_streaming_and_batch_requests(
 
 
 def test_create_batch_dataflows(feed: _Feed, mocker: MockerFixture):
-    mocker.patch.object(feed, '_get_default_transformations', return_value=[_add_one])
-    feed.download('A', 'B')
+    mocker.patch.object(feed, "_get_default_transformations", return_value=[_add_one])
+    feed.download("A", "B")
     request = feed._get_current_request()
     dataflows = feed._dataflows[request]
 
-    assert [df.data_model.data_origin for df in dataflows] == ['A', 'B']
+    assert [df.data_model.data_origin for df in dataflows] == ["A", "B"]
     assert feed.dataflows == dataflows
     # one faucet per request, shared by its dataflows
     assert dataflows[0].faucet is dataflows[1].faucet
@@ -398,15 +450,15 @@ def test_create_batch_dataflows(feed: _Feed, mocker: MockerFixture):
 
 
 def test_dataflows_across_requests(feed: _Feed):
-    feed.download('A').download('B', 'C')
-    assert [df.data_model.data_origin for df in feed.dataflows] == ['A', 'B', 'C']
+    feed.download("A").download("B", "C")
+    assert [df.data_model.data_origin for df in feed.dataflows] == ["A", "B", "C"]
 
 
 # --- transform ---
 
 
 def test_transform_targets_the_current_request_only(feed: _Feed):
-    feed.download('A').download('B')
+    feed.download("A").download("B")
     first, second = feed.dataflows
 
     assert feed.transform(_add_one, _add_one) is feed
@@ -415,7 +467,7 @@ def test_transform_targets_the_current_request_only(feed: _Feed):
 
 
 def test_transform_without_request(feed: _Feed):
-    with pytest.raises(AssertionError, match='No current request found'):
+    with pytest.raises(AssertionError, match="No current request found"):
         feed.transform(_add_one)
 
 
@@ -423,7 +475,7 @@ def test_transform_without_request(feed: _Feed):
 
 
 def test_load_sets_up_handlers(feed: _Feed, io: ParquetIO):
-    feed.download('A', 'B')
+    feed.download("A", "B")
     assert feed.load(io) is feed
     request = feed._get_current_request()
 
@@ -432,23 +484,25 @@ def test_load_sets_up_handlers(feed: _Feed, io: ParquetIO):
         assert dataflow.handler is not None
         assert dataflow.handler.io is io
         assert dataflow.handler._data_layer == DataLayer.CLEANED
-        assert dataflow.handler._data_domain == 'MARKET_DATA'
+        assert dataflow.handler._data_domain == "MARKET_DATA"
 
 
 def test_load_defaults_to_the_requests_io(feed: _Feed, io: ParquetIO):
-    feed.download('A', io=io).load()
+    feed.download("A", io=io).load()
     assert all(df.handler is not None and df.handler.io is io for df in feed.dataflows)
 
 
 def test_load_without_any_io_stores_nothing(feed: _Feed):
-    feed.download('A').load()
+    feed.download("A").load()
     assert feed._get_current_request().io is None
     assert not any(df.has_handler() for df in feed.dataflows)
 
 
-@pytest.mark.parametrize('data_layer', ['curated', 'CURATED', DataLayer.CURATED])
-def test_load_to_a_higher_data_layer(feed: _Feed, io: ParquetIO, data_layer: DataLayer | str):
-    feed.download('A').load(io, data_layer=data_layer)
+@pytest.mark.parametrize("data_layer", ["curated", "CURATED", DataLayer.CURATED])
+def test_load_to_a_higher_data_layer(
+    feed: _Feed, io: ParquetIO, data_layer: DataLayer | str
+):
+    feed.download("A").load(io, data_layer=data_layer)
     request = feed._get_current_request()
     handler = feed.dataflows[0].handler
     assert handler is not None
@@ -458,33 +512,37 @@ def test_load_to_a_higher_data_layer(feed: _Feed, io: ParquetIO, data_layer: Dat
 
 
 def test_load_to_a_lower_data_layer(feed: _Feed, io: ParquetIO):
-    feed.download('A')
-    with pytest.raises(ValueError, match='cannot store CLEANED data in a lower layer RAW'):
-        feed.load(io, data_layer='raw')
+    feed.download("A")
+    with pytest.raises(
+        ValueError, match="cannot store CLEANED data in a lower layer RAW"
+    ):
+        feed.load(io, data_layer="raw")
 
 
 def test_load_targets_the_current_request_only(feed: _Feed, io: ParquetIO):
-    feed.download('A').download('B').load(io)
+    feed.download("A").download("B").load(io)
     first, second = feed.dataflows
     assert not first.has_handler()
     assert second.has_handler()
 
 
 def test_load_twice_raises(feed: _Feed, io: ParquetIO):
-    feed.download('A').load(io)
-    with pytest.raises(ValueError, match='handler is already set'):
+    feed.download("A").load(io)
+    with pytest.raises(ValueError, match="handler is already set"):
         feed.load(io)
 
 
 # --- prepare / finalize run ---
 
 
-def test_finalize_run_loads_and_seals_every_request(feed: _Feed, io: ParquetIO, tmp_path: Path):
-    other_io = ParquetIO(base_path=str(tmp_path / 'other'))
+def test_finalize_run_loads_and_seals_every_request(
+    feed: _Feed, io: ParquetIO, tmp_path: Path
+):
+    other_io = ParquetIO(base_path=str(tmp_path / "other"))
     # first request: load() not called, falls back to the request's io
     # second request: loaded explicitly
     # third request: no io anywhere
-    feed.download('A', io=io).download('B').load(other_io).download('C')
+    feed.download("A", io=io).download("B").load(other_io).download("C")
     feed._finalize_run()
     a, b, c = feed.dataflows
 
@@ -495,25 +553,28 @@ def test_finalize_run_loads_and_seals_every_request(feed: _Feed, io: ParquetIO, 
 
 
 def test_validate_io_for_ray(feed: _Feed, tmp_path: Path):
-    feed.download('A').load(_NoConcurrentWritesIO(base_path=str(tmp_path)))
+    feed.download("A").load(_NoConcurrentWritesIO(base_path=str(tmp_path)))
     # without Ray, any io is fine
     feed._validate_io_for_ray()
 
     feed._cleanup_after_run()
     feed.set_num_workers(2)
-    feed.download('A').load(_NoConcurrentWritesIO(base_path=str(tmp_path)))
-    with pytest.raises(RuntimeError, match='does not support concurrent partition writes, cannot be used with Ray'):
+    feed.download("A").load(_NoConcurrentWritesIO(base_path=str(tmp_path)))
+    with pytest.raises(
+        RuntimeError,
+        match="does not support concurrent partition writes, cannot be used with Ray",
+    ):
         feed._validate_io_for_ray()
 
 
 def test_validate_io_for_ray_skips_dataflows_without_handler(feed: _Feed):
     feed.set_num_workers(2)
-    feed.download('A')
+    feed.download("A")
     feed._validate_io_for_ray()
 
 
 def test_prepare_before_run(feed: _Feed, io: ParquetIO):
-    feed.download('A', io=io)
+    feed.download("A", io=io)
     feed._prepare_before_run()
     assert feed.is_running()
     assert feed.dataflows[0].is_sealed()
@@ -521,8 +582,8 @@ def test_prepare_before_run(feed: _Feed, io: ParquetIO):
 
 def test_prepare_before_run_failure_drops_queued_requests(feed: _Feed, tmp_path: Path):
     feed.set_num_workers(2)
-    feed.download('A', io=_NoConcurrentWritesIO(base_path=str(tmp_path)))
-    with pytest.raises(RuntimeError, match='cannot be used with Ray'):
+    feed.download("A", io=_NoConcurrentWritesIO(base_path=str(tmp_path)))
+    with pytest.raises(RuntimeError, match="cannot be used with Ray"):
         feed._prepare_before_run()
     # otherwise every later run would fail again on the same requests
     assert feed._requests == []
@@ -531,9 +592,9 @@ def test_prepare_before_run_failure_drops_queued_requests(feed: _Feed, tmp_path:
 
 
 def test_prepare_before_run_while_running_keeps_the_runs_state(feed: _Feed):
-    feed.download('A')
+    feed.download("A")
     feed._set_running(True)
-    with pytest.raises(RuntimeError, match='already running'):
+    with pytest.raises(RuntimeError, match="already running"):
         feed._prepare_before_run()
     # the other run's requests are untouched
     assert len(feed._requests) == 1
@@ -544,15 +605,18 @@ def test_prepare_before_run_while_running_keeps_the_runs_state(feed: _Feed):
 
 
 def test_run(feed: _Feed, io: ParquetIO):
-    dataflows = feed.download('A', 'B', io=io).transform(_add_one).run()
+    dataflows = feed.download("A", "B", io=io).transform(_add_one).run()
 
-    assert [df.data_model.data_origin for df in dataflows] == ['A', 'B']
+    assert [df.data_model.data_origin for df in dataflows] == ["A", "B"]
     assert all(df.result.success for df in dataflows)
     # the data is written to io, then read back lazily from it
     for dataflow in dataflows:
         data = dataflow.result.data
         assert isinstance(data, pl.LazyFrame)
-        assert sorted(data.collect().select('product', 'price').rows()) == [('A', 2.0), ('B', 2.0)]
+        assert sorted(data.collect().select("product", "price").rows()) == [
+            ("A", 2.0),
+            ("B", 2.0),
+        ]
     # state is torn down after the run, the feed can run again
     assert not feed.is_running()
     assert feed._requests == []
@@ -560,48 +624,53 @@ def test_run(feed: _Feed, io: ParquetIO):
 
 
 def test_run_without_io_returns_the_extracted_data(feed: _Feed):
-    (dataflow,) = feed.download('A').transform(_add_one).run()
+    (dataflow,) = feed.download("A").transform(_add_one).run()
     data = dataflow.result.data
     assert dataflow.result.success
     assert isinstance(data, pl.LazyFrame)
-    assert data.collect().rows() == [('A', 2.0)]
+    assert data.collect().rows() == [("A", 2.0)]
 
 
 def test_run_with_failed_dataflows_warns(feed: _Feed, caplog: pytest.LogCaptureFixture):
-    with caplog.at_level(logging.WARNING, logger='pfeed.test'):
-        dataflows = feed.download('A', 'FAIL', 'EMPTY').run()
+    with caplog.at_level(logging.WARNING, logger="pfeed.test"):
+        dataflows = feed.download("A", "FAIL", "EMPTY").run()
 
     assert [df.result.success for df in dataflows] == [True, False, False]
-    assert 'TEST has 2 failed dataflows' in caplog.text
+    assert "TEST has 2 failed dataflows" in caplog.text
 
 
-def test_run_without_failures_does_not_warn(feed: _Feed, caplog: pytest.LogCaptureFixture):
-    with caplog.at_level(logging.WARNING, logger='pfeed.test'):
-        feed.download('A').run()
-    assert 'failed dataflows' not in caplog.text
+def test_run_without_failures_does_not_warn(
+    feed: _Feed, caplog: pytest.LogCaptureFixture
+):
+    with caplog.at_level(logging.WARNING, logger="pfeed.test"):
+        feed.download("A").run()
+    assert "failed dataflows" not in caplog.text
 
 
 def test_run_cleans_up_when_a_dataflow_raises(feed: _Feed, mocker: MockerFixture):
-    mocker.patch.object(DataFlow, 'run_batch', side_effect=KeyboardInterrupt)
-    feed.download('A')
+    mocker.patch.object(DataFlow, "run_batch", side_effect=KeyboardInterrupt)
+    feed.download("A")
     with pytest.raises(KeyboardInterrupt):
         feed.run()
     assert not feed.is_running()
     assert feed._requests == []
 
 
-@pytest.mark.parametrize(('use_prefect', 'flow_type'), [(False, FlowType.native), (True, FlowType.prefect)])
+@pytest.mark.parametrize(
+    ("use_prefect", "flow_type"), [(False, FlowType.native), (True, FlowType.prefect)]
+)
 def test_run_passes_flow_type_and_prefect_kwargs(
     feed: _Feed, mocker: MockerFixture, use_prefect: bool, flow_type: FlowType
 ):
-    run_batch = mocker.patch.object(DataFlow, 'run_batch', autospec=True)
-    feed.download('A', 'B')
+    run_batch = mocker.patch.object(DataFlow, "run_batch", autospec=True)
+    feed.download("A", "B")
     dataflows = feed.dataflows
 
     feed.run(use_prefect=use_prefect, retries=1)
 
     assert run_batch.call_args_list == [
-        mocker.call(dataflow, flow_type=flow_type, prefect_kwargs={'retries': 1}) for dataflow in dataflows
+        mocker.call(dataflow, flow_type=flow_type, prefect_kwargs={"retries": 1})
+        for dataflow in dataflows
     ]
 
 
@@ -609,11 +678,15 @@ def test_run_with_prefect_not_installed(feed: _Feed, mocker: MockerFixture):
     from importlib.util import find_spec
 
     mocker.patch(
-        'importlib.util.find_spec',
-        side_effect=lambda name, *args: None if name == 'prefect' else find_spec(name, *args),
+        "importlib.util.find_spec",
+        side_effect=lambda name, *args: (
+            None if name == "prefect" else find_spec(name, *args)
+        ),
     )
-    feed.download('A')
-    with pytest.raises(ImportError, match='use_prefect=True but `prefect` is not installed'):
+    feed.download("A")
+    with pytest.raises(
+        ImportError, match="use_prefect=True but `prefect` is not installed"
+    ):
         feed.run(use_prefect=True)
     # raised before the run started, the queued request is kept
     assert not feed.is_running()
@@ -621,11 +694,11 @@ def test_run_with_prefect_not_installed(feed: _Feed, mocker: MockerFixture):
 
 
 def test_run_with_ray(feed: _Feed, io: ParquetIO, caplog: pytest.LogCaptureFixture):
-    pytest.importorskip('ray')
+    pytest.importorskip("ray")
     # more dataflows than workers, so the sliding window submits new tasks as old ones finish
-    origins = ['A', 'FAIL', 'B', 'C', 'D']
+    origins = ["A", "FAIL", "B", "C", "D"]
     feed.set_num_workers(2)
-    with caplog.at_level(logging.WARNING, logger='pfeed.test'):
+    with caplog.at_level(logging.WARNING, logger="pfeed.test"):
         dataflows = feed.download(*origins, io=io).run()
 
     # results come back in submission order, whatever order the workers finish in
@@ -636,6 +709,6 @@ def test_run_with_ray(feed: _Feed, io: ParquetIO, caplog: pytest.LogCaptureFixtu
         if dataflow.result.success:
             data = dataflow.result.data
             assert isinstance(data, pl.LazyFrame)
-            assert sorted(data.collect()['product'].to_list()) == ['A', 'B', 'C', 'D']
-    assert 'TEST has 1 failed dataflows' in caplog.text
+            assert sorted(data.collect()["product"].to_list()) == ["A", "B", "C", "D"]
+    assert "TEST has 1 failed dataflows" in caplog.text
     assert not feed.is_running()

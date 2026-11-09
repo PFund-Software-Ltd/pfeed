@@ -104,7 +104,9 @@ def is_empty_dataframe(df: Any) -> bool:
     return nwdf.is_empty()
 
 
-def convert_dataframe(df: Any, data_tool: DataTool | str = DataTool.polars) -> IntoFrame:
+def convert_dataframe(
+    df: Any, data_tool: DataTool | str = DataTool.polars
+) -> IntoFrame:
     """Convert `df` to the native dataframe type of `data_tool`.
 
     Polars output is always returned as a LazyFrame; Only pandas returns eager.
@@ -120,7 +122,7 @@ def convert_dataframe(df: Any, data_tool: DataTool | str = DataTool.polars) -> I
         return nwdf.to_pandas()
 
     if data_tool == DataTool.pandas:
-        import pandas as pd
+        import pandas as pd  # ty: ignore[import-not-found]  # optional, not in the dev env
 
         return df if isinstance(df, pd.DataFrame) else _to_pandas()
     elif data_tool == DataTool.polars:

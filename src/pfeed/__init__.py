@@ -11,7 +11,9 @@ if TYPE_CHECKING:
     # third-party sources are NOT exposed as pe.<Source>, use either:
     #   from pfeed_xxx import XXX
     #   pe.get_feed("xxx", ...)
-    from alphafund._pfeed_source import AlphaFund as AlphaFund  # ty: ignore[import-not-found]
+    from alphafund._pfeed_source import (  # ty: ignore[import-not-found]
+        AlphaFund as AlphaFund,
+    )
     from pfeed_bybit import Bybit as Bybit
     from pfund._pfeed_source import PFund as PFund  # ty: ignore[import-not-found]
 
@@ -91,7 +93,9 @@ def _get_official_source(source: str, install: str):
 
 
 __all__ = (  # noqa: RUF022
-    "get_config", "configure", "configure_logging",
+    "get_config",
+    "configure",
+    "configure_logging",
     "plot",
     "DataEngine",
     "get_feed",

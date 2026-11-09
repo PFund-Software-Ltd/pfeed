@@ -1,13 +1,13 @@
+from typing import Annotated, Any, ClassVar, Literal, cast, get_args, get_origin
+
 import json
 from types import NoneType
-from typing import Annotated, Any, ClassVar, Literal, cast, get_args, get_origin
 from uuid import UUID
 
 import polars as pl
 from pydantic import model_validator
 
 from pfeed.base.data_model import BaseDataModel
-from pfeed.enums import IOFormat
 
 _POLARS_DTYPES: dict[Any, pl.DataType] = {
     bool: pl.Boolean(),
@@ -59,8 +59,8 @@ def _resolve_dtype(annotation: Any) -> pl.DataType:
 class BaseTableDataModel(BaseDataModel):
     table_name: ClassVar[str]
     table_sql: ClassVar[str] = ""
-    index_sql: ClassVar[dict[IOFormat, tuple[str, ...]]] = {}
-    insert_sql: ClassVar[dict[IOFormat, str]] = {}
+    index_sql: ClassVar[dict[str, tuple[str, ...]]] = {}
+    insert_sql: ClassVar[dict[str, str]] = {}
 
     @model_validator(mode="before")
     @classmethod

@@ -23,6 +23,33 @@ repos:
   - id: check-added-large-files
     stages:
     - pre-commit
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.16.9
+  hooks:
+  - id: ruff-check
+    stages:
+    - pre-commit
+  - id: ruff-format
+    stages:
+    - pre-commit
+- repo: local
+  # not the official hook (astral-sh/ty-pre-commit), at least for now: it runs `uv check`,
+  # which always type checks against its own environment built from pyproject.toml,
+  # so packages only installed by e.g. pixi (like pytest in a pixi feature) can't be found.
+  # `ap check` uses the project's own environment and ty version, like the editor does.
+  # It type checks the whole project (like the official hook), not only the staged files,
+  # since a change in one file can break types in another.
+  hooks:
+  - id: ty
+    name: ty
+    entry: sh -c 'PATH="$PWD/.venv/bin:$PWD/.venv/Scripts:$PATH" exec ap check'
+    language: system
+    types_or: [python, pyi, jupyter]
+    pass_filenames: false
+    always_run: true
+    require_serial: true
+    stages:
+    - pre-commit
 - repo: local
   hooks:
   # same id twice so that SKIP=ap-commit skips both

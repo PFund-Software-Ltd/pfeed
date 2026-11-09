@@ -1,9 +1,15 @@
 # Ruff configuration
 # See More: https://docs.astral.sh/ruff/configuration/
+#
+# NOTE: relative paths in this file are resolved from afterpython/, not the
+# project root, e.g. use "../tests/*" to target the project's tests/ folder.
+
+# where your own (first-party) packages live, used by import sorting:
+# ".." = project root (flat layout), "../src" = src layout
+src = ["..", "../src"]
 
 line-length = 88
 target-version = "py313"
-extend-exclude = ["docs_OLD"]
 
 [lint]
 # ruff default rules:
@@ -38,11 +44,6 @@ section-order = ["future", "typing", "standard-library", "third-party", "first-p
 
 [lint.isort.sections]
 typing = ["typing", "typing_extensions"]
-
-[lint.pyflakes]
-# generic classes whose quoted type args (e.g. Handler["Model"]) ruff should treat as type references,
-# so TYPE_CHECKING imports used only there aren't flagged unused
-extend-generics = ["pfeed.base.time_based_data_handler.TimeBasedDataHandler"]
 
 [format]
 quote-style = "double"  # double quotes for strings

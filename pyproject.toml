@@ -97,3 +97,6 @@ markers = [
 strict_markers = true
 addopts = ["--no-header", "--import-mode=importlib"]
 testpaths = ["tests"]
+
+[tool.ruff]
+extend = "afterpython/ruff.toml"

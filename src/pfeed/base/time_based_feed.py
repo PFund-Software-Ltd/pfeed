@@ -6,8 +6,8 @@ if TYPE_CHECKING:
     from narwhals.typing import IntoFrame
     from pfund_blocks.resolution import Resolution
 
-    from pfeed.base.time_based_data_model import TimeBasedDataModel
     from pfeed.base.requests.time_based_request import TimeBasedFeedBaseRequest
+    from pfeed.base.time_based_data_model import TimeBasedDataModel
     from pfeed.dataflow.result import DataFlowResult, RunResult
     from pfeed.source import BaseSource
 
@@ -33,7 +33,9 @@ class TimeBasedFeed[
     download_dataflow_per_date: ClassVar[bool]
 
     @classmethod
-    def _standardize_date_column(cls, df: pl.LazyFrame, is_raw_data: bool) -> pl.LazyFrame:
+    def _standardize_date_column(
+        cls, df: pl.LazyFrame, is_raw_data: bool
+    ) -> pl.LazyFrame:
         """Materialize a uniform datetime column for downstream filtering and dedup.
 
         Sources expose their date under different column names (e.g. Bybit: 'timestamp',
@@ -92,12 +94,19 @@ class TimeBasedFeed[
         if date_dtype == pl.String:
             # time_zone="UTC" converts offset strings to UTC and takes offset-less ones as UTC
             df = df.with_columns(
-                pl.col(date_col).str.to_datetime(time_zone="UTC").dt.replace_time_zone(None)
+                pl.col(date_col)
+                .str.to_datetime(time_zone="UTC")
+                .dt.replace_time_zone(None)
             )
         elif date_dtype.is_numeric():
-            min_ts, max_ts = df.select(
-                pl.col(date_col).min().alias("min"), pl.col(date_col).max().alias("max")
-            ).collect().row(0)
+            min_ts, max_ts = (
+                df.select(
+                    pl.col(date_col).min().alias("min"),
+                    pl.col(date_col).max().alias("max"),
+                )
+                .collect()
+                .row(0)
+            )
             # empty or all-null column: nothing to infer from, any unit converts it
             ts_unit = infer_ts_unit(min_ts) if min_ts is not None else "ns"
             if max_ts is not None and infer_ts_unit(max_ts) != ts_unit:
@@ -110,19 +119,27 @@ class TimeBasedFeed[
         elif isinstance(date_dtype, pl.Datetime):
             if date_dtype.time_zone is not None:
                 df = df.with_columns(
-                    pl.col(date_col).dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+                    pl.col(date_col)
+                    .dt.convert_time_zone("UTC")
+                    .dt.replace_time_zone(None)
                 )
         elif date_dtype == pl.Date:
             df = df.with_columns(pl.col(date_col).cast(pl.Datetime("ns")))
         else:
-            raise ValueError(f"unsupported dtype {date_dtype} for date column {date_col}")
+            raise ValueError(
+                f"unsupported dtype {date_dtype} for date column {date_col}"
+            )
 
         # Cleaned-data contract: nanosecond precision (lossless upcast from us/ms, and the
         # native precision of pandas-sourced data via pl.from_pandas).
-        return df.with_columns(pl.col(date_col).dt.cast_time_unit("ns")).sort(date_col, maintain_order=True)
+        return df.with_columns(pl.col(date_col).dt.cast_time_unit("ns")).sort(
+            date_col, maintain_order=True
+        )
 
     @classmethod
-    def _max_date_range(cls, resolution: Resolution) -> tuple[datetime.date, datetime.date]:
+    def _max_date_range(
+        cls, resolution: Resolution
+    ) -> tuple[datetime.date, datetime.date]:
         """Resolve rollback_period='max' into the source's full available history.
 
         By default, the range runs from the data source's `metadata.start_date` to yesterday,
@@ -203,10 +220,12 @@ class TimeBasedFeed[
 
         result_dfs: list[IntoFrame] = []
 
-        dataflows = self._run_batch_dataflows(use_prefect=use_prefect, prefect_kwargs=prefect_kwargs)
+        dataflows = self._run_batch_dataflows(
+            use_prefect=use_prefect, prefect_kwargs=prefect_kwargs
+        )
         for dataflow in dataflows:
             result: DataFlowResult = dataflow.result
-            _df: IntoFrame | None = cast("IntoFrame | None", result.data)
+            _df: IntoFrame | None = result.data
             if _df is not None:
                 result_dfs.append(_df)
 
@@ -221,7 +240,11 @@ class TimeBasedFeed[
             # raw data keeps the source schema (which may have its own 'date' column in any format) plus '_pfeed_date',
             # so '_pfeed_date' goes first, cleaned data only has 'date'
             date_col = next(
-                (col for col in (self.DataModel.DATE_COL_IN_RAW_DATA, DATE) if col in schema),
+                (
+                    col
+                    for col in (self.DataModel.DATE_COL_IN_RAW_DATA, DATE)
+                    if col in schema
+                ),
                 None,
             )
             if date_col is not None and schema[date_col].is_temporal():

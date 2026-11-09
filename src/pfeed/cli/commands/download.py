@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
-    import polars as pl
-
     from pfeed.io.base_io import BaseIO
     from pfeed.market.feed import MarketFeed
 
@@ -138,7 +136,7 @@ def download(
     if result.data is not None:
         import polars as pl
 
-        num_rows = cast("pl.LazyFrame", result.data).select(pl.len()).collect().item()
+        num_rows = result.data.select(pl.len()).collect().item()
     click.echo(
         f"Downloaded {num_rows} rows of {product} {resolution} from {source}, stored in {io_name} under {path}"
     )

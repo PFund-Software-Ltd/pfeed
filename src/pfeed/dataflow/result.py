@@ -31,16 +31,16 @@ class DataFlowResult:
 
     success: bool = False
     error: BaseException | None = None
-    _data: IntoFrame | bytes | None = None
-    _loader: Callable[[], pl.LazyFrame | bytes | None] | None = None
+    _data: IntoFrame | None = None
+    _loader: Callable[[], pl.LazyFrame | None] | None = None
 
     @classmethod
-    def materialized(cls, data: IntoFrame | bytes | None) -> DataFlowResult:
+    def materialized(cls, data: IntoFrame | None) -> DataFlowResult:
         # NOTE: an empty dataframe still counts as success — the source returned a valid (empty) answer.
         return cls(success=data is not None, _data=data)
 
     @classmethod
-    def lazy(cls, loader: Callable[[], pl.LazyFrame | bytes | None]) -> DataFlowResult:
+    def lazy(cls, loader: Callable[[], pl.LazyFrame | None]) -> DataFlowResult:
         return cls(success=True, _loader=loader)
 
     @classmethod
@@ -52,7 +52,7 @@ class DataFlowResult:
         return cls(success=False, error=error)
 
     @property
-    def data(self) -> IntoFrame | bytes | None:
+    def data(self) -> IntoFrame | None:
         """Lazy-loads data from storage on first access.
 
         Data is only read from disk when this property is accessed, not when the
@@ -72,7 +72,7 @@ class RunResult:
     can introspect failures programmatically instead of relying on log output.
     """
 
-    data: IntoFrame | bytes | None
+    data: pl.LazyFrame | None
     dataflows: list[DataFlow]
 
     @property

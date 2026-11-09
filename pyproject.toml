@@ -49,7 +49,7 @@ prefect = ["prefect>=3.9.2"]
 #   pip install "pfeed[bybit]"  # official, installs `pfeed-bybit`
 #   pip install pfeed-xxx       # 3rd party, not maintained or verified by pfeed
 bybit = ["pfeed-bybit>=0.0.1"]
-# pfund = ["pfeed-pfund>=0.0.1.dev1"]
+# hyperliquid = ["pfeed-hyperliquid>=0.0.1"]
 # yfinance = ["yfinance>=1.7.0"]
 # edgartools = ["edgartools>=5.60.0"]
 # fmp = ["fmp-api-client>=0.0.1"]

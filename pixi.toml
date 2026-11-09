@@ -78,7 +78,7 @@ pfeed-bybit = ">=0.0.1"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-afterpython = { version = ">=0.4.3", extras = ["marimo"] }
+afterpython = { version = ">=0.4.5", extras = ["marimo"] }
 # used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
 deltalake = ">=1.6.6"
 pyiceberg = { version = ">=0.12.0", extras = ["sql-sqlite", "pyiceberg-core"] }

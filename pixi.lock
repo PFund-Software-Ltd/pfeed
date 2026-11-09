@@ -308,7 +308,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ed/74/08e6c1faf26ee2732023a3828787ba535557122774f4a386b1f715cbd8e0/propcache-0.5.4-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ee/5d/f7e0c4e1b26ba87dbc59646c2e3de2700c1b72aeb699d7247015a86a127f/arro3_core-0.9.1-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/f0/9f/35c3e3d50775293c7c325b7fb42f5853ecf61922fc8a4cbdb62bd182da13/afterpython-0.4.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f4/63/454e6faad68ac903e7669932db8d0a91c95dfca829ec9476e52045b17684/openai-3.46.0-py3-none-any.whl
@@ -318,6 +317,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fb/0f/92f936855b76d36325b69483df5d0ba75c6567998d68c680a6dcfe2d0ba1/pyroaring-1.2.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/fb/76/641ae371508676492379f16e2fa48f4e2c11741bd63c48be4b12a6b09cba/aiosignal-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/be/35261223d9416a0751cdff1c7b4a6f881387218a12d439fe22fefebc8c04/textual-8.2.8-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fc/93/01806dffa4f606327901ac6823b0edef68b38b1bc91255218c32e9473bb3/afterpython-0.4.5-py3-none-any.whl
       linux-aarch64:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/_openmp_mutex-4.5-20_gnu.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/bzip2-1.0.8-h4777abc_10.conda
@@ -600,7 +600,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/eb/a3/b69efbf4143b5b9859b977770bbbabcc2796b702fa69dc40271e45cd5a56/prometheus_client-0.26.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/eb/c3/58187858df41354a11e6a55b421e7af9059798abdab3a384cc51b8567c38/greenlet-3.5.6-cp313-cp313-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/f0/9f/35c3e3d50775293c7c325b7fb42f5853ecf61922fc8a4cbdb62bd182da13/afterpython-0.4.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f0/f4/c28e36d5e01ba79649016767d3829eb980e16876e6615eb3331fdfc09cb2/regex-2026.11.7-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
@@ -609,6 +608,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fa/1b/9cc07718d1dee8ed5e89a265801d565bc0f15ead435ccb198f9c7bf92574/msgspec-0.22.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/fb/76/641ae371508676492379f16e2fa48f4e2c11741bd63c48be4b12a6b09cba/aiosignal-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/be/35261223d9416a0751cdff1c7b4a6f881387218a12d439fe22fefebc8c04/textual-8.2.8-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fc/93/01806dffa4f606327901ac6823b0edef68b38b1bc91255218c32e9473bb3/afterpython-0.4.5-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.10.23-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.13-9_cp313.conda
@@ -883,13 +883,13 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e9/8b/2fb9b2522b7e1e7534a72fec0040bbf3d273129ec0a98316e7d37b09aa35/wrapt-2.5.2-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/eb/a3/b69efbf4143b5b9859b977770bbbabcc2796b702fa69dc40271e45cd5a56/prometheus_client-0.26.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/f0/9f/35c3e3d50775293c7c325b7fb42f5853ecf61922fc8a4cbdb62bd182da13/afterpython-0.4.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/a1/e720a38852366c589e1a46cf570b886507ad2cf591050c203365638baab0/greenlet-3.5.6-cp313-cp313-macosx_11_0_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f4/63/454e6faad68ac903e7669932db8d0a91c95dfca829ec9476e52045b17684/openai-3.46.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/76/641ae371508676492379f16e2fa48f4e2c11741bd63c48be4b12a6b09cba/aiosignal-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/be/35261223d9416a0751cdff1c7b4a6f881387218a12d439fe22fefebc8c04/textual-8.2.8-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fc/93/01806dffa4f606327901ac6823b0edef68b38b1bc91255218c32e9473bb3/afterpython-0.4.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fe/38/07066430ac655a8cab2f9e96ea1fec6ca1f20ec47844afe117662d43ace0/polars_runtime_32-2.1.0-cp311-abi3-macosx_11_0_arm64.whl
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.10.23-h4c7d964_0.conda
@@ -1158,7 +1158,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/eb/a3/b69efbf4143b5b9859b977770bbbabcc2796b702fa69dc40271e45cd5a56/prometheus_client-0.26.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ee/46/0a4e92f4310da644b28595b22ef2fff1ffd3dab84953dc8b4c5eef72b764/asyncpg-0.32.0-cp313-cp313-win_amd64.whl
-      - pypi: https://files.pythonhosted.org/packages/f0/9f/35c3e3d50775293c7c325b7fb42f5853ecf61922fc8a4cbdb62bd182da13/afterpython-0.4.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f2/06/92f745af6b0164478b91acbaf48f8d01839c627b27ac1159f56dcae41310/arro3_core-0.9.1-cp311-abi3-win_amd64.whl
@@ -1170,6 +1169,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fb/76/641ae371508676492379f16e2fa48f4e2c11741bd63c48be4b12a6b09cba/aiosignal-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/be/35261223d9416a0751cdff1c7b4a6f881387218a12d439fe22fefebc8c04/textual-8.2.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/f8/bcfc50b4ab851c4f9c0ee62f52bf3b28f0bcd0d9fe08e0ad98d4585148db/orjson-3.13.0-cp313-cp313-win_amd64.whl
+      - pypi: https://files.pythonhosted.org/packages/fc/93/01806dffa4f606327901ac6823b0edef68b38b1bc91255218c32e9473bb3/afterpython-0.4.5-py3-none-any.whl
   py313:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -14021,29 +14021,6 @@ packages:
   version: 3.13.0
   sha256: a7bfc7db961c7d96cb75889dc6a1e4ae1e91d87ee61da564f582bd742b8dfeef
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/f0/9f/35c3e3d50775293c7c325b7fb42f5853ecf61922fc8a4cbdb62bd182da13/afterpython-0.4.3-py3-none-any.whl
-  name: afterpython
-  version: 0.4.3
-  sha256: 34186bcf9dfc4fd00652c21961547a076d94e980e4a42d0ed9b03e48c65576ee
-  requires_dist:
-  - click>=8.5.1
-  - trogon>=0.6.0
-  - httpx2>=2.16.0
-  - tomlkit>=0.15.2
-  - ruamel-yaml>=0.19.1
-  - gitpython>=3.2.1
-  - python-dotenv>=1.2.4
-  - pyproject-metadata>=0.12.1
-  - jupytext>=1.19.6
-  - mystmd>=1.12.0
-  - pdoc>=16.0.0
-  - ruff>=0.17.4
-  - prek>=0.5.10
-  - ty>=0.0.99
-  - git-cliff>=2.14.2
-  - questionary>=2.1.1
-  - marimo[recommended,lsp]>=0.25.2 ; extra == 'marimo'
-  requires_python: '>=3.13'
 - pypi: https://files.pythonhosted.org/packages/f0/f4/c28e36d5e01ba79649016767d3829eb980e16876e6615eb3331fdfc09cb2/regex-2026.11.7-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
   name: regex
   version: 2026.11.7
@@ -14570,6 +14547,29 @@ packages:
   version: 3.13.0
   sha256: 4ee06e53b998c71ce3eb93b86222912fdd9dcced685ac64d4525d36fac338ea4
   requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/fc/93/01806dffa4f606327901ac6823b0edef68b38b1bc91255218c32e9473bb3/afterpython-0.4.5-py3-none-any.whl
+  name: afterpython
+  version: 0.4.5
+  sha256: e4e1154c742014baf0eb2ace63aee11baec2070fe8f308144370b65c2422b188
+  requires_dist:
+  - click>=8.5.1
+  - trogon>=0.6.0
+  - httpx2>=2.16.0
+  - tomlkit>=0.15.2
+  - ruamel-yaml>=0.19.1
+  - gitpython>=3.2.1
+  - python-dotenv>=1.2.4
+  - pyproject-metadata>=0.12.1
+  - jupytext>=1.19.6
+  - mystmd>=1.12.0
+  - pdoc>=16.0.0
+  - ruff>=0.17.4
+  - prek>=0.5.10
+  - ty>=0.0.99
+  - git-cliff>=2.14.2
+  - questionary>=2.1.1
+  - marimo[recommended,lsp]>=0.25.2 ; extra == 'marimo'
+  requires_python: '>=3.13'
 - pypi: https://files.pythonhosted.org/packages/fe/38/07066430ac655a8cab2f9e96ea1fec6ca1f20ec47844afe117662d43ace0/polars_runtime_32-2.1.0-cp311-abi3-macosx_11_0_arm64.whl
   name: polars-runtime-32
   version: 2.1.0

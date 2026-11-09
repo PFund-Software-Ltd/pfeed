@@ -47,7 +47,6 @@ repos:
     language: system
     types_or: [python, pyi, jupyter]
     pass_filenames: false
-    always_run: true
     require_serial: true
     stages:
     - pre-commit

@@ -1,17 +1,17 @@
 # Extra information that pyproject.toml doesn't support should be stored in afterpython.toml
 [company]
-name = ""  # used in myst.yml's venue.title
-url = ""  # used in myst.yml's venue.url
+name = "PFund.ai"  # used in myst.yml's venue.title
+url = "https://pfund.ai"  # used in myst.yml's venue.url
 
 [website]
-url = ""
-favicon = "favicon.ico"
+url = "https://pfeed.pfund.ai"
+favicon = "favicon.svg"
 logo = "logo.svg"
-logo_dark = "logo.svg"
+logo_dark = "logo-dark.svg"
 thumbnail = "thumbnail.png"  # thumbnail for the website, also used as default thumbnail for all content types, e.g. blog posts, tutorials, examples, and guides
 announcement = ""
 readme_py = "wasm"  # marimo html export format: "wasm" or "static"
-execute_readme_py = false  # execute README.py cells at build time and embed outputs as a preview (wasm mode only)
+execute_readme_py = true  # execute README.py cells at build time and embed outputs as a preview (wasm mode only)
 api_reference = false  # set to true to enable the pdoc-generated API reference
 # api_reference_docformat = "google"  # docstring format for pdoc: "google", "numpy", "restructuredtext" or "markdown"
 

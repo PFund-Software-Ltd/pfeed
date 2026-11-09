@@ -5,6 +5,8 @@
 mod? bybit 'sources/pfeed-bybit'
 mod? hyperliquid 'sources/pfeed-hyperliquid'
 mod? hl 'sources/pfeed-hyperliquid'
+mod? binance 'sources/pfeed-binance'
+mod? okx 'sources/pfeed-okx'
 
 # upgrade one package in uv.lock and pixi.lock, bypassing cached PyPI metadata
 # (pixi has no per-package refresh, so its whole PyPI cache is cleaned to see a new release)

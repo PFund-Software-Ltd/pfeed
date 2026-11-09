@@ -45,6 +45,12 @@ py313 = ["py313", "test", "optional"]
 py314 = ["py314", "test", "optional"]
 py315 = ["py315", "test", "optional"]
 
+# links .venv -> .pixi/envs/default on activation, so that ty and afterpython's hooks
+# (which look for the project environment in .venv/) use pixi's default environment,
+# also in git GUIs where no pixi environment is active. See scripts/link-venv.sh
+[target.unix.activation]
+scripts = ["scripts/link-venv.sh"]
+
 [activation.env]
 # JAVA_HOME = "$CONDA_PREFIX/lib/jvm"
 # JDK_HOME  = "$JAVA_HOME"

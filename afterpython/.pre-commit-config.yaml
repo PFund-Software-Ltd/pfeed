@@ -1,5 +1,6 @@
 default_install_hook_types:
 - pre-commit
+- prepare-commit-msg
 - commit-msg
 - pre-push
 exclude: ^afterpython/_website/
@@ -22,29 +23,19 @@ repos:
   - id: check-added-large-files
     stages:
     - pre-commit
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.12
+- repo: local
   hooks:
-  # TODO: re-enable it when ready (currently lots of outdated code will fail, e.g. NewsFeed)
-  # - id: ruff-check
-  #   stages:
-  #   - pre-commit
-  #   args:
-  #   - --config
-  #   - ./afterpython/ruff.toml
-  - id: ruff-format
+  # same id twice so that SKIP=ap-commit skips both
+  # git GUIs run hooks with a minimal PATH (no uv/venv), so put the project venv on PATH ourselves
+  - id: ap-commit
+    name: commit message template
+    entry: sh -c 'PATH="$PWD/.venv/bin:$PWD/.venv/Scripts:$PATH" exec ap commit-msg --template "$@"' --
+    language: system
     stages:
-    - pre-commit
-    args:
-    - --config
-    - ./afterpython/ruff.toml
-# NOTE: buggy commitizen, skip it, not useful anyways
-# - repo: https://github.com/commitizen-tools/commitizen
-#   rev: v4.16.0
-#   hooks:
-#   - id: commitizen
-#     stages:
-#     - commit-msg
-#   - id: commitizen-branch
-#     stages:
-#     - pre-push
+    - prepare-commit-msg
+  - id: ap-commit
+    name: check commit message
+    entry: sh -c 'PATH="$PWD/.venv/bin:$PWD/.venv/Scripts:$PATH" exec ap commit-msg "$@"' --
+    language: system
+    stages:
+    - commit-msg

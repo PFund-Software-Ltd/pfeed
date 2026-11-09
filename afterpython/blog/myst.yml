@@ -1,7 +1,7 @@
 # See docs at: https://mystmd.org/guide/frontmatter
 version: 1
 project:
-  id: 004e4d33-7638-4d03-9a4a-b1e2d0681480
+  id: 438bfe92-4d73-4d89-9943-03b954d442c2
   # title:
   # description:
   # keywords: []
@@ -13,10 +13,10 @@ project:
   authors:
   - stephen_yau
   venue:
-    title: 'PFund.ai'
-    url: 'https://pfund.ai'
-  copyright: © PFund.ai 2026. All rights reserved.
-  title: ''
+    title: ''
+    url: ''
+  copyright: © pfeed 2026. All rights reserved.
+  title: Blog
   description: Data pipeline for algo-trading, getting and storing both real-time and historical data made easy.
   keywords:
   - trading
@@ -31,9 +31,8 @@ project:
   - data streaming
   - data engineering
   thumbnail: ../static/thumbnail.png
-  toc: []
 site:
-  template: book-theme
+  template: article-theme
   # options:
   #   favicon: favicon.ico
   #   logo: site_logo.png
@@ -42,9 +41,9 @@ site:
     analytics_google: '{{ GOOGLE_ANALYTICS_ID }}'
     favicon: ../static/favicon.ico
     logo: ../static/logo.svg
-    logo_dark: ../static/logo-dark.svg
+    logo_dark: ../static/logo.svg
     logo_text: pfeed
-    logo_url: 'https://pfeed.pfund.ai'
+    logo_url: ''
   title: pfeed's Blog
   actions:
   - title: ⭐ Star

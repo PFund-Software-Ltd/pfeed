@@ -31,7 +31,7 @@
 <div class="flex min-h-screen flex-col bg-bg50">
 	<nav class="container mx-auto py-3 text-base font-medium text-tx50">
 		<div class="flex items-center">
-			<Logo size="sm" text={data.name} logo={data.logo} logoDark={data.logo_dark} />
+			<Logo size="md" text={data.name} logo={data.logo} logoDark={data.logo_dark} />
 			<ul class="flex flex-1 justify-center gap-18">
 				{#if devContentUrl('doc') || data.contentTypes?.doc}
 					<li>

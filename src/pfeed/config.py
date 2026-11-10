@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
+
+import os
+from pathlib import Path
 
 from pfund_blocks.enums.env import Environment
 from pfund_kit import logging as kit_logging
@@ -30,7 +32,9 @@ def setup_logging(env: Environment | str | None = None, reset: bool = False) -> 
     # derive a logger (i.e. a log file) per installed data source, e.g. "pfeed.bybit", unless logging.yaml has it
     for source in list_sources():
         loggers.setdefault(f"pfeed.{source.lower()}", dict(loggers["pfeed"]))
-    kit_logging.setup_logging(get_config(), env=env, reset=reset, logging_config=logging_config)
+    kit_logging.setup_logging(
+        get_config(), env=env, reset=reset, logging_config=logging_config
+    )
 
 
 def get_config() -> PFeedConfig:
@@ -105,13 +109,17 @@ class PFeedConfig(Configuration):
     def __init__(self):
         from pfund_kit.utils import load_env_file
 
-        _ = load_env_file(verbose=False, override=False)
+        # opt-out for apps embedding pfeed, since loading .env modifies os.environ for the whole process
+        if os.environ.get("PFEED_LOAD_DOTENV", "1").lower() not in ("0", "false"):
+            _ = load_env_file(verbose=False, override=False)
         super().__init__(project_name=project_name, source_file=__file__)
 
     def _initialize_from_data(self):
         """Initialize PFeedConfig-specific attributes from config data."""
         self.show_progress_bar = self._data.get("show_progress_bar", True)
-        self.allow_timestamp_precision_loss = self._data.get("allow_timestamp_precision_loss", False)
+        self.allow_timestamp_precision_loss = self._data.get(
+            "allow_timestamp_precision_loss", False
+        )
         self.stream_latency_log_interval = self._data.get("stream_latency_log_interval")
         self.stream_optimize_interval = self._data.get("stream_optimize_interval", 1800)
 

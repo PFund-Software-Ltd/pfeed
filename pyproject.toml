@@ -64,6 +64,11 @@ lancedb = ["lancedb>=0.41.0"]
 # postgresql = ["psycopg[binary,pool]>=3.3.3"]
 # vortex = ["vortex-data>=0.55.0"]
 
+[dependency-groups]
+dev = [
+    "afterpython[marimo]>=0.4.8",
+]
+
 [project.scripts]
 pfeed = "pfeed.__main__:run_cli"
 
@@ -104,8 +109,3 @@ timeout_method = "thread"
 
 [tool.ruff]
 extend = "afterpython/ruff.toml"
-
-[dependency-groups]
-dev = [
-    "afterpython[marimo]>=0.4.7",
-]

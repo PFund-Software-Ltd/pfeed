@@ -1,0 +1,66 @@
+- question: Where is my data saved, and what happens if I download the same day twice?
+  answer: |
+    By default, data is saved under `~/.pfeed/data/`, e.g. `~/.pfeed/data/parquet/` for `ParquetIO` and `~/.pfeed/data/ducklake/` for `DuckLakeIO`.
+
+    To change it, run `pe.configure(data_path="path/to/data", persist=True)` in Python, or `pfeed config set --data path/to/data` from the command line.
+
+    Downloading the same day again **replaces** that day's data instead of adding duplicates, so re-running a download is always safe.
+
+- question: Do I need to pay or sign up for an API key?
+  answer: |
+    `pfeed` itself is free. It is a framework for getting the data that data providers (sources) offer, and it charges nothing. Whether you need to pay or sign up depends only on your data source:
+
+    - **Free sources**: nothing to pay, and usually no account or API key needed.
+    - **Paid sources**: you need an account and an API key from the provider, and you pay the provider directly.
+
+    Check which sources are free and which are paid on the [Supported Sources](https://pfeed.pfund.ai/doc/supported/) page; paid ones are marked with `*`.
+
+- question: I only asked for 1-minute data. Why is the download so slow and so large?
+  answer: |
+    Some data providers don't offer 1-minute bars at all, only raw **tick (trade) data**. Bybit is one example. If you ask for `1m` from one of these providers, `pfeed` downloads the full tick data for each day and resamples it into 1-minute bars for you. So even a small 1-minute dataset can mean downloading a lot of ticks.
+
+    If you'll need several resolutions, store the tick data once:
+    ```python
+    feed.download(product="BTC_USDT_PERP", resolution="1tick", start_date="2026-01-01", io=pe.ParquetIO())
+    ```
+    After that, `retrieve()` can build `1m`, `1h` or `1d` bars from the stored ticks without downloading again.
+
+- question: I called download() and then retrieve(), but retrieve() found nothing. Why?
+  answer: |
+    `download()` only stores data when you give it an `io`. Without one (`io=None`, the default), it just returns the data to you:
+    ```python
+    feed.download(..., io=pe.ParquetIO())  # stored, retrieve() can find it later
+    ```
+    Two more things to check:
+
+    - `retrieve()` reads from `ParquetIO()` by default. If you stored with `DuckLakeIO()`, pass `io=pe.DuckLakeIO()` to `retrieve()` too.
+    - `retrieve()` never downloads missing dates. It logs a warning that lists the missing dates instead.
+
+- question: How do I write the product name? Is it BTCUSDT?
+  answer: |
+    `pfeed` uses its own product format, `BASE_QUOTE_TYPE`, so the same name works across data sources:
+
+    - `BTC_USDT_PERP`: BTC/USDT perpetual (`BTCUSDT` on Bybit)
+    - `BTC_USDT_CRYPTO`: BTC/USDT spot
+    - `BTC_USD_IPERP`: BTC/USD inverse perpetual
+
+    Futures and options need extra specifications, e.g. `expiration="2025-12-26"`. If you leave them out, the error tells you which ones are required.
+
+    See [Product](https://pfund.pfund.ai/doc/product) for the full naming rules.
+
+- question: Why can't I download today's data? What time zone are the dates in?
+  answer: |
+    All dates are in **UTC**. `start_date` and `end_date` are both inclusive, and `end_date` defaults to **yesterday (UTC)**. The timestamps in the `date` column are UTC too.
+
+    When a day's historical data becomes available depends on the data provider. Many providers only publish a day's data after it ends, so today's data usually isn't there yet. For the latest data, use `feed.stream()`.
+
+- question: Should I use ParquetIO or DuckLakeIO?
+  answer: |
+    - **`ParquetIO`**: plain Parquet files on your disk, readable by any tool, e.g. Polars, DuckDB or pandas. The simplest choice.
+    - **`DuckLakeIO`**: a [DuckLake](https://ducklake.select/) lakehouse on top of Parquet files, adding SQL access, ACID transactions and snapshots. It is also currently the only IO that can store **streamed** data.
+
+    To browse what you've stored, run `pfeed data parquet` or `pfeed data ducklake`.
+
+- question: Can I get stock or forex data, e.g. AAPL?
+  answer: |
+    It depends on the data sources `pfeed` supports. Check the [Supported Sources](https://pfeed.pfund.ai/doc/supported/) page for a source that provides the data you need, e.g. stocks or forex.

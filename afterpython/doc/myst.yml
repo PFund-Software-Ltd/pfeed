@@ -71,6 +71,8 @@ site:
     url: https://pfeed.pfund.ai/example
   - title: API Reference
     url: https://pfeed.pfund.ai/api_reference/pfeed.html
+  - title: FAQs
+    url: https://pfeed.pfund.ai/faq
   actions:
   - title: ⭐ Star
     url: https://github.com/PFund-Software-Ltd/pfeed

@@ -107,5 +107,5 @@ extend = "afterpython/ruff.toml"
 
 [dependency-groups]
 dev = [
-    "afterpython[marimo]>=0.4.6",
+    "afterpython[marimo]>=0.4.7",
 ]

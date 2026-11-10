@@ -19,17 +19,16 @@ project:
   title: Blog
   description: Data pipeline for algo-trading, getting and storing both real-time and historical data made easy.
   keywords:
-  - trading
   - algo-trading
   - data pipeline
-  - ETL
   - data lake
-  - data warehouse
-  - data integration
+  - ducklake
+  - data lakehouse
+  - trading data
+  - financial data
   - historical data
   - live data
-  - data streaming
-  - data engineering
+  - streaming data
   thumbnail: ../static/thumbnail.png
   toc: []
 site:

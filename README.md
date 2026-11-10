@@ -41,8 +41,9 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 - [Installation](#installation)
 - [Quick Start](#quick-start)
     - [Download Historical Data](#1-download-historical-data)
-    - [Retrieve Downloaded Data](#2-retrieve-downloaded-data)
+    - [Retrieve Stored Data](#2-retrieve-stored-data)
     - [Stream Live Data](#3-stream-live-data)
+    - [Replay Stored Data as a Stream](#4-replay-stored-data-as-a-stream)
 - [Supported Data Sources](#supported-data-sources)
 - [Supported IOs](#supported-ios)
 - [Related Projects](#related-projects)
@@ -104,6 +105,22 @@ Get streaming data
 feed.stream(
     product="BTC_USDT_CRYPTO",
     resolution="1tick",  # or just 'tick' for tick data
+    # only DuckLake supports storing streamed data for now, set it to None to skip storing
+    io=pe.DuckLakeIO(),
+    callback=lambda msg: print(msg),
+)
+```
+
+
+### 4. Replay Stored Data as a Stream
+Replay stored data message by message, like a live stream
+```python
+feed.replay(
+    product="BTC_USDT_PERP",
+    resolution="1m",
+    start_date="2026-01-01",
+    end_date="2026-01-01",
+    io=pe.ParquetIO(),  # where the data was stored
     callback=lambda msg: print(msg),
 )
 ```

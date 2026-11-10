@@ -24,7 +24,9 @@ class MarketFeedReplayRequest(BaseReplayRequest, MarketFeedBaseRequest):
             raise ValueError(f"only BACKTEST data can be replayed, got {self.env}")
         return self
 
-    def create_data_resolution_handler(self, data_model: MarketDataModel | None = None) -> MarketDataHandler:
+    def create_data_resolution_handler(
+        self, data_model: MarketDataModel | None = None
+    ) -> MarketDataHandler:
         """Handler reading this request's data from storage at data_resolution, see MarketFeedRetrieveRequest.create_data_resolution_handler().
 
         Args:
@@ -33,7 +35,9 @@ class MarketFeedReplayRequest(BaseReplayRequest, MarketFeedBaseRequest):
         """
         from pfeed.enums import DataCategory
 
-        data_model = (data_model or self.to_data_model()).model_copy(update={"resolution": self.data_resolution})
+        data_model = (data_model or self.to_data_model()).model_copy(
+            update={"resolution": self.data_resolution}
+        )
         return data_model.DataHandler(
             data_model=data_model,
             io=self.io_for_replay,

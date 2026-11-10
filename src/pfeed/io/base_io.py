@@ -61,12 +61,17 @@ class DatasetKey:
     def __post_init__(self) -> None:
         # e.g. ParquetIO merges namespace and name into one path, so a shared field would silently overwrite the other
         if shared := self.namespace.keys() & self.name.keys():
-            raise ValueError(f'namespace and name cannot share fields, got {sorted(shared)}')
+            raise ValueError(
+                f"namespace and name cannot share fields, got {sorted(shared)}"
+            )
 
     @property
     def partition_columns(self) -> list[str]:
         """The data columns the partition values are read or computed from."""
-        return [level.column if isinstance(level, DatePartition) else level for level in self.partition_by]
+        return [
+            level.column if isinstance(level, DatePartition) else level
+            for level in self.partition_by
+        ]
 
 
 @dataclass(frozen=True)
@@ -111,7 +116,9 @@ class BaseIO(ABC):
         """
         dumped = json.dumps(metadata)
         if json.loads(dumped) != metadata:
-            raise TypeError(f'metadata is not JSON-safe, it would not round-trip exactly: {metadata!r}')
+            raise TypeError(
+                f"metadata is not JSON-safe, it would not round-trip exactly: {metadata!r}"
+            )
         return dumped
 
     @staticmethod
@@ -124,7 +131,7 @@ class BaseIO(ABC):
         import pyarrow as pa
 
         if missing_cols := set(key.partition_columns) - set(data.column_names):
-            raise ValueError(f'data is missing partition columns {missing_cols}')
+            raise ValueError(f"data is missing partition columns {missing_cols}")
         arrays = []
         for level in key.partition_by:
             if isinstance(level, DatePartition):
@@ -133,14 +140,18 @@ class BaseIO(ABC):
                     # dropping the time zone keeps the UTC instant, so the date is the UTC date
                     column = column.cast(pa.timestamp(column.type.unit))
                 elif not pa.types.is_date(column.type):
-                    raise TypeError(f'{level} needs a timestamp/date column, got {column.type}')
+                    raise TypeError(
+                        f"{level} needs a timestamp/date column, got {column.type}"
+                    )
                 arrays.append(column.cast(pa.date32()))
             else:
                 arrays.append(data[level].combine_chunks())
         return arrays
 
     @classmethod
-    def _data_partitions(cls, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata]) -> set[Partition]:
+    def _data_partitions(
+        cls, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata]
+    ) -> set[Partition]:
         """Returns the partitions that have rows in data, checking write()'s `data` and `partitions` requirements.
 
         Raises ValueError if data is missing a partition column or has a partition not in `partitions`.
@@ -150,12 +161,21 @@ class BaseIO(ABC):
         arrays = cls._partition_value_arrays(key, data)
         if key.partition_by:
             levels = [str(i) for i in range(len(arrays))]
-            unique_rows = pa.table(dict(zip(levels, arrays, strict=True))).group_by(levels).aggregate([]).to_pylist()
-            data_partitions = {tuple(row[level] for level in levels) for row in unique_rows}
+            unique_rows = (
+                pa.table(dict(zip(levels, arrays, strict=True)))
+                .group_by(levels)
+                .aggregate([])
+                .to_pylist()
+            )
+            data_partitions = {
+                tuple(row[level] for level in levels) for row in unique_rows
+            }
         else:
             data_partitions = {()} if data.num_rows else set()
         if not_in_partitions := data_partitions - partitions.keys():
-            raise ValueError(f'partitions {not_in_partitions} in data are not in `partitions`')
+            raise ValueError(
+                f"partitions {not_in_partitions} in data are not in `partitions`"
+            )
         return data_partitions
 
     @abstractmethod
@@ -165,7 +185,7 @@ class BaseIO(ABC):
         data: pa.Table,
         *,
         partitions: dict[Partition, Metadata],
-        mode: Literal['replace', 'append'] = 'replace',
+        mode: Literal["replace", "append"] = "replace",
     ) -> None:
         """Write data and its per-partition metadata to the dataset.
 

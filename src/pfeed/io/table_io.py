@@ -63,12 +63,14 @@ class TableIO(BaseIO):
     (e.g. one daily bar per file), which compaction can't merge across partitions.
     """
 
-    CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities(append=True, concurrent_partition_writes=True)
+    CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities(
+        append=True, concurrent_partition_writes=True
+    )
     DEFAULT_DIR_NAME: ClassVar[str]
     # '__' instead of '_', since key values like 'market_data' contain '_'
-    NAME_SEPARATOR: ClassVar[str] = '__'
-    METADATA_COLUMN: ClassVar[str] = 'pfeed_metadata'
-    IS_METADATA_COLUMN: ClassVar[str] = 'pfeed_is_metadata'
+    NAME_SEPARATOR: ClassVar[str] = "__"
+    METADATA_COLUMN: ClassVar[str] = "pfeed_metadata"
+    IS_METADATA_COLUMN: ClassVar[str] = "pfeed_is_metadata"
     # same as Delta Lake's default
     DEFAULT_VACUUM_RETENTION: ClassVar[datetime.timedelta] = datetime.timedelta(days=7)
     # retries of a write/maintenance transaction that conflicted with a concurrent one,
@@ -89,9 +91,11 @@ class TableIO(BaseIO):
             from pfeed.config import get_config
 
             base_path = str(get_config().data_path / self.DEFAULT_DIR_NAME)
-        if urlparse(base_path).scheme not in ('', 'file'):
-            raise NotImplementedError(f'only local paths are supported for now, got {base_path!r}')
-        self._base_path = os.path.abspath(base_path.removeprefix('file://'))
+        if urlparse(base_path).scheme not in ("", "file"):
+            raise NotImplementedError(
+                f"only local paths are supported for now, got {base_path!r}"
+            )
+        self._base_path = os.path.abspath(base_path.removeprefix("file://"))
 
     def _table_names(self, key: DatasetKey) -> tuple[str, str]:
         """Returns (schema, table) of the dataset.
@@ -102,7 +106,13 @@ class TableIO(BaseIO):
         """
         sep = self.NAME_SEPARATOR
         for value in [*key.namespace.values(), *key.name.values()]:
-            if not value or sep in value or value.startswith(('_', '.')) or value.endswith('_') or '/' in value:
+            if (
+                not value
+                or sep in value
+                or value.startswith(("_", "."))
+                or value.endswith("_")
+                or "/" in value
+            ):
                 raise ValueError(
                     f'key value {value!r} must be non-empty, not contain {sep!r} or "/", '
                     'not start with "_" or "." and not end with "_"'
@@ -114,18 +124,24 @@ class TableIO(BaseIO):
         """Raises ValueError if `name` differs only by case from one of `existing_names`."""
         for existing_name in existing_names:
             if existing_name != name and existing_name.lower() == name.lower():
-                raise ValueError(f'{name!r} differs only by case from existing {existing_name!r}, names are case-insensitive')
+                raise ValueError(
+                    f"{name!r} differs only by case from existing {existing_name!r}, names are case-insensitive"
+                )
 
     @staticmethod
     def _check_partition_values(partitions: list[Partition]) -> None:
         for partition in partitions:
             for value in partition:
                 # a datetime is a date, but would be silently truncated to one
-                if isinstance(value, datetime.datetime) or not isinstance(value, (str, int, datetime.date)):
-                    raise TypeError(f'unsupported partition value {value!r}')
+                if isinstance(value, datetime.datetime) or not isinstance(
+                    value, (str, int, datetime.date)
+                ):
+                    raise TypeError(f"unsupported partition value {value!r}")
 
     @staticmethod
-    def _partition_arrays(key: DatasetKey, data: pa.Table, partitions: list[Partition]) -> list[pa.Array]:
+    def _partition_arrays(
+        key: DatasetKey, data: pa.Table, partitions: list[Partition]
+    ) -> list[pa.Array]:
         """Returns each partition level's values, one per partition, typed like data's column,
         or as dates for a DatePartition level.
 
@@ -135,12 +151,16 @@ class TableIO(BaseIO):
             return [
                 pa.array(
                     [partition[i] for partition in partitions],
-                    type=pa.date32() if isinstance(level, DatePartition) else data.schema.field(level).type,
+                    type=pa.date32()
+                    if isinstance(level, DatePartition)
+                    else data.schema.field(level).type,
                 )
                 for i, level in enumerate(key.partition_by)
             ]
         except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
-            raise TypeError(f'partition values do not match the types of data\'s partition columns: {e}') from e
+            raise TypeError(
+                f"partition values do not match the types of data's partition columns: {e}"
+            ) from e
 
     def _cast_ns_timestamps_to_us(self, data: pa.Table) -> pa.Table:
         """Casts data's nanosecond timestamp columns to microseconds, for table formats that store up to microseconds.
@@ -152,22 +172,24 @@ class TableIO(BaseIO):
         from pfeed.config import get_config
 
         for i, col in enumerate(data.schema):
-            if pa.types.is_timestamp(col.type) and col.type.unit == 'ns':
-                us_type = pa.timestamp('us', tz=col.type.tz)
+            if pa.types.is_timestamp(col.type) and col.type.unit == "ns":
+                us_type = pa.timestamp("us", tz=col.type.tz)
                 column = data.column(i)
                 try:
                     us_column = column.cast(us_type)
                 except pa.ArrowInvalid:
                     if not get_config().allow_timestamp_precision_loss:
                         raise TypeError(
-                            f'column {col.name!r} has sub-microsecond timestamps, but {type(self).__name__} stores microseconds; '
-                            + 'use an IO that stores nanoseconds (e.g. DuckLakeIO, ParquetIO), '
-                            + 'or allow truncating them with pfeed.configure(allow_timestamp_precision_loss=True, persist=True)'
+                            f"column {col.name!r} has sub-microsecond timestamps, but {type(self).__name__} stores microseconds; "
+                            + "use an IO that stores nanoseconds (e.g. DuckLakeIO, ParquetIO), "
+                            + "or allow truncating them with pfeed.configure(allow_timestamp_precision_loss=True, persist=True)"
                         ) from None
                     us_column = column.cast(us_type, safe=False)
-                    num_truncated = (pl.Series(column).dt.nanosecond() % 1000 != 0).sum()
+                    num_truncated = (
+                        pl.Series(column).dt.nanosecond() % 1000 != 0
+                    ).sum()
                     warnings.warn(
-                        f'{type(self).__name__} truncated {num_truncated} timestamps of column {col.name!r} from ns to us',
+                        f"{type(self).__name__} truncated {num_truncated} timestamps of column {col.name!r} from ns to us",
                         RuntimeWarning,
                         stacklevel=2,
                     )
@@ -179,9 +201,18 @@ class TableIO(BaseIO):
 
         Only the column levels, a DatePartition level is logical only (see the class docstring).
         """
-        return [*(level for level in key.partition_by if not isinstance(level, DatePartition)), self.IS_METADATA_COLUMN]
+        return [
+            *(
+                level
+                for level in key.partition_by
+                if not isinstance(level, DatePartition)
+            ),
+            self.IS_METADATA_COLUMN,
+        ]
 
-    def _add_marker_rows(self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata]) -> pa.Table:
+    def _add_marker_rows(
+        self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata]
+    ) -> pa.Table:
         """Returns data plus one marker row per partition, so metadata is written in the same transaction as data.
 
         A marker row has the partition's values in the partition columns, its metadata (JSON) in
@@ -198,35 +229,52 @@ class TableIO(BaseIO):
         Raises TypeError if a partition value doesn't fit its column.
         """
         # marker rows are null in the data columns, so every column has to be nullable
-        schema = pa.schema([
-            *(field.with_nullable(True) for field in data.schema),
-            pa.field(self.METADATA_COLUMN, pa.string()),
-            pa.field(self.IS_METADATA_COLUMN, pa.bool_()),
-        ])
+        schema = pa.schema(
+            [
+                *(field.with_nullable(True) for field in data.schema),
+                pa.field(self.METADATA_COLUMN, pa.string()),
+                pa.field(self.IS_METADATA_COLUMN, pa.bool_()),
+            ]
+        )
         partition_arrays = {
-            col: values.cast(data.schema.field(col).type)  # a DatePartition's dates to midnight (UTC)
-            for col, values in zip(key.partition_columns, self._partition_arrays(key, data, list(partitions)), strict=True)
+            col: values.cast(
+                data.schema.field(col).type
+            )  # a DatePartition's dates to midnight (UTC)
+            for col, values in zip(
+                key.partition_columns,
+                self._partition_arrays(key, data, list(partitions)),
+                strict=True,
+            )
         }
         markers = pa.table(
             [
                 *(
-                    partition_arrays[field.name] if field.name in partition_arrays else pa.nulls(len(partitions), field.type)
+                    partition_arrays[field.name]
+                    if field.name in partition_arrays
+                    else pa.nulls(len(partitions), field.type)
                     for field in data.schema
                 ),
-                pa.array([self._dump_metadata(md) for md in partitions.values()], pa.string()),
+                pa.array(
+                    [self._dump_metadata(md) for md in partitions.values()], pa.string()
+                ),
                 pa.array([True] * len(partitions)),
             ],
             schema=schema,
         )
         data = (
-            data.append_column(self.METADATA_COLUMN, pa.nulls(data.num_rows, pa.string()))
+            data.append_column(
+                self.METADATA_COLUMN, pa.nulls(data.num_rows, pa.string())
+            )
             .append_column(self.IS_METADATA_COLUMN, pa.array([False] * data.num_rows))
             .cast(schema)
         )
         return pa.concat_tables([data, markers])
 
     def _read_marker_rows(
-        self, key: DatasetKey, lf: pl.LazyFrame, partitions: list[Partition] | None,
+        self,
+        key: DatasetKey,
+        lf: pl.LazyFrame,
+        partitions: list[Partition] | None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
         """Splits a table written with _add_marker_rows() into (data, metadata), as returned by read().
 
@@ -240,27 +288,46 @@ class TableIO(BaseIO):
                 if isinstance(level, DatePartition):
                     assert isinstance(value, datetime.date)
                     col, dtype = pl.col(level.column), schema[level.column]
-                    start = datetime.datetime.combine(value, datetime.time(), tzinfo=datetime.UTC)
+                    start = datetime.datetime.combine(
+                        value, datetime.time(), tzinfo=datetime.UTC
+                    )
                     end = start + datetime.timedelta(days=1)
-                    predicates.append((col >= pl.lit(start).cast(dtype)) & (col < pl.lit(end).cast(dtype)))
+                    predicates.append(
+                        (col >= pl.lit(start).cast(dtype))
+                        & (col < pl.lit(end).cast(dtype))
+                    )
                 else:
                     predicates.append(pl.col(level) == pl.lit(value))
             return reduce(operator.and_, predicates)
 
         if partitions is not None and key.partition_by:
-            lf = lf.filter(reduce(operator.or_, [in_partition(partition) for partition in partitions]))
+            lf = lf.filter(
+                reduce(
+                    operator.or_, [in_partition(partition) for partition in partitions]
+                )
+            )
         # a DatePartition's marker row has the day's midnight (UTC), see _add_marker_rows()
         partition_values = [
-            pl.col(level.column).cast(pl.Date) if isinstance(level, DatePartition) else pl.col(level)
+            pl.col(level.column).cast(pl.Date)
+            if isinstance(level, DatePartition)
+            else pl.col(level)
             for level in key.partition_by
         ]
-        markers = lf.filter(pl.col(self.IS_METADATA_COLUMN)).select(*partition_values, self.METADATA_COLUMN).collect()
-        metadata: dict[Partition, Metadata] = {tuple(row[:-1]): json.loads(row[-1]) for row in markers.iter_rows()}
+        markers = (
+            lf.filter(pl.col(self.IS_METADATA_COLUMN))
+            .select(*partition_values, self.METADATA_COLUMN)
+            .collect()
+        )
+        metadata: dict[Partition, Metadata] = {
+            tuple(row[:-1]): json.loads(row[-1]) for row in markers.iter_rows()
+        }
         if not metadata:
             return None, {}
         # no need to filter the data by the partitions with metadata (commit marker),
         # since a write adds a partition's data rows and its marker row in one transaction
-        data = lf.filter(~pl.col(self.IS_METADATA_COLUMN)).drop(self.METADATA_COLUMN, self.IS_METADATA_COLUMN)
+        data = lf.filter(~pl.col(self.IS_METADATA_COLUMN)).drop(
+            self.METADATA_COLUMN, self.IS_METADATA_COLUMN
+        )
         if data.head(1).collect().is_empty():
             return None, metadata
         return data, metadata
@@ -271,15 +338,17 @@ class TableIO(BaseIO):
         data: pa.Table,
         *,
         partitions: dict[Partition, Metadata],
-        mode: Literal['replace', 'append'] = 'replace',
+        mode: Literal["replace", "append"] = "replace",
     ) -> None:
         """See BaseIO.write(). Append also requires metadata, which replaces the given partitions' metadata.
 
         data cannot have the columns METADATA_COLUMN and IS_METADATA_COLUMN, they are reserved.
         """
         self._data_partitions(key, data, partitions)
-        if reserved := {self.METADATA_COLUMN, self.IS_METADATA_COLUMN} & set(data.column_names):
-            raise ValueError(f'columns {reserved} are reserved for pfeed\'s metadata')
+        if reserved := {self.METADATA_COLUMN, self.IS_METADATA_COLUMN} & set(
+            data.column_names
+        ):
+            raise ValueError(f"columns {reserved} are reserved for pfeed's metadata")
         if not partitions:
             return  # nothing to write; also, an empty filter would match every row of an unpartitioned dataset
         self._check_partition_values(list(partitions))
@@ -287,7 +356,11 @@ class TableIO(BaseIO):
 
     @abstractmethod
     def _write(
-        self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],
+        self,
+        key: DatasetKey,
+        data: pa.Table,
+        partitions: dict[Partition, Metadata],
+        mode: Literal["replace", "append"],
     ) -> None:
         """write() after validating its args; `partitions` is non-empty."""
 
@@ -305,7 +378,9 @@ class TableIO(BaseIO):
 
     @abstractmethod
     def _read(
-        self, key: DatasetKey, partitions: list[Partition] | None,
+        self,
+        key: DatasetKey,
+        partitions: list[Partition] | None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
         """read() after validating its args; `partitions` is None or non-empty."""
 
@@ -318,17 +393,21 @@ class TableIO(BaseIO):
             except self._RETRY_ON as e:
                 if attempt == self.MAX_RETRIES:
                     e.add_note(
-                        f'{description} kept conflicting with concurrent writes, gave up after {self.MAX_RETRIES} retries'
+                        f"{description} kept conflicting with concurrent writes, gave up after {self.MAX_RETRIES} retries"
                     )
                     raise
                 # jitter so the conflicting writers don't retry in lockstep
-                time.sleep(self.RETRY_WAIT * self.RETRY_BACKOFF**attempt * random.uniform(0.5, 1.5))
+                time.sleep(
+                    self.RETRY_WAIT
+                    * self.RETRY_BACKOFF**attempt
+                    * random.uniform(0.5, 1.5)
+                )
                 attempt += 1
 
     @staticmethod
     def _check_retention(retention: datetime.timedelta) -> None:
         if retention < datetime.timedelta(0):
-            raise ValueError(f'retention must not be negative, got {retention!r}')
+            raise ValueError(f"retention must not be negative, got {retention!r}")
 
     @abstractmethod
     def optimize(self) -> None:
@@ -339,7 +418,10 @@ class TableIO(BaseIO):
 
     @abstractmethod
     def vacuum(
-        self, *, retention: datetime.timedelta = DEFAULT_VACUUM_RETENTION, dry_run: bool = True,
+        self,
+        *,
+        retention: datetime.timedelta = DEFAULT_VACUUM_RETENTION,
+        dry_run: bool = True,
     ) -> VacuumResult:
         """Deletes the history older than `retention`, run after optimize() so the files it replaced are deleted too.
 

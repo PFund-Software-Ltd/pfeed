@@ -26,7 +26,7 @@ class StreamBuffer:
                 Frequent flushes write many small files, which slows down reads until the table is compacted.
         """
         if flush_interval <= 0:
-            raise ValueError(f'flush_interval must be positive, got {flush_interval}')
+            raise ValueError(f"flush_interval must be positive, got {flush_interval}")
         self._schema = schema
         self._flush_interval = flush_interval
         self._rows: list[dict[str, Any]] = []
@@ -46,13 +46,19 @@ class StreamBuffer:
 
     def is_due(self) -> bool:
         """True if there are rows and flush_interval has passed since the last flush."""
-        return bool(self._rows) and time.monotonic() - self._last_flush >= self._flush_interval
+        return (
+            bool(self._rows)
+            and time.monotonic() - self._last_flush >= self._flush_interval
+        )
 
     def to_dataframe(self, rows: list[dict[str, Any]]) -> pl.DataFrame:
         """The rows, e.g. from drain(), as a dataframe with the buffer's schema."""
         import pyarrow as pa
 
-        return cast('pl.DataFrame', pl.from_arrow(pa.Table.from_pylist(rows, schema=self._schema)))
+        return cast(
+            "pl.DataFrame",
+            pl.from_arrow(pa.Table.from_pylist(rows, schema=self._schema)),
+        )
 
     def drain(self) -> list[dict[str, Any]]:
         """Removes and returns the buffered rows to be written, and restarts the flush interval.
@@ -71,4 +77,4 @@ class StreamBuffer:
         return len(self._rows)
 
     def __repr__(self) -> str:
-        return f'{type(self).__name__}(flush_interval={self._flush_interval}, rows={len(self._rows)})'
+        return f"{type(self).__name__}(flush_interval={self._flush_interval}, rows={len(self._rows)})"

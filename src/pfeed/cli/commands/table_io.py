@@ -1,4 +1,5 @@
 """`pfeed ducklake|deltalake|iceberg optimize|vacuum`: the same maintenance commands for every TableIO."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -18,8 +19,10 @@ from pathlib import Path
 import click
 from pfund_kit.style import RichColor, TextStyle, cprint
 
-_BASE_PATH_CONTEXT_KEY = 'pfeed.table_io.base_path'
-_DEFAULT_RETENTION_HOURS = 7 * 24  # TableIO.DEFAULT_VACUUM_RETENTION, not imported to keep the CLI startup light
+_BASE_PATH_CONTEXT_KEY = "pfeed.table_io.base_path"
+_DEFAULT_RETENTION_HOURS = (
+    7 * 24
+)  # TableIO.DEFAULT_VACUUM_RETENTION, not imported to keep the CLI startup light
 
 
 def _resolve_pfeed_base_path(dir_name: str, **_: Any) -> Path:
@@ -51,12 +54,18 @@ def create_table_io_command(
     """
 
     def load_io_class() -> type[TableIO]:
-        module_name, class_name = io_class_path.split(':')
+        module_name, class_name = io_class_path.split(":")
         try:
             module = importlib.import_module(module_name)
         except ImportError as e:
-            install = f", install it with: pip install 'pfeed[{install_extra}]'" if install_extra else ''
-            raise click.ClickException(f'{title} is not installed ({e}){install}') from None
+            install = (
+                f", install it with: pip install 'pfeed[{install_extra}]'"
+                if install_extra
+                else ""
+            )
+            raise click.ClickException(
+                f"{title} is not installed ({e}){install}"
+            ) from None
         return getattr(module, class_name)
 
     def get_io(ctx: click.Context) -> TableIO:
@@ -64,24 +73,28 @@ def create_table_io_command(
         io_class = load_io_class()
         base_path, resolver_kwargs = ctx.meta[_BASE_PATH_CONTEXT_KEY]
         if base_path is None:
-            base_path = base_path_resolver(dir_name=io_class.DEFAULT_DIR_NAME, **resolver_kwargs)
+            base_path = base_path_resolver(
+                dir_name=io_class.DEFAULT_DIR_NAME, **resolver_kwargs
+            )
         # the IO would create an empty lake, which maintaining is pointless
         if not os.path.isdir(base_path):
-            raise click.ClickException(f'No {title} tables found under {base_path}')
+            raise click.ClickException(f"No {title} tables found under {base_path}")
         return io_class(base_path=str(base_path))
 
-    def group_callback(ctx: click.Context, base_path: Path | None, **resolver_kwargs: Any) -> None:
+    def group_callback(
+        ctx: click.Context, base_path: Path | None, **resolver_kwargs: Any
+    ) -> None:
         ctx.meta[_BASE_PATH_CONTEXT_KEY] = (base_path, resolver_kwargs)
 
     callback: Callable[..., Any] = click.pass_context(group_callback)
     callback = click.option(
-        '--base-path',
+        "--base-path",
         type=click.Path(path_type=Path, file_okay=False),
-        help=f'Override the {title} base path (default: <data_path>/{name})',
+        help=f"Override the {title} base path (default: <data_path>/{name})",
     )(callback)
     for option in extra_options:
         callback = option(callback)
-    group = click.group(name=name, help=f'Maintain the {title} tables.')(callback)
+    group = click.group(name=name, help=f"Maintain the {title} tables.")(callback)
 
     @group.command()
     @click.pass_context
@@ -93,19 +106,19 @@ def create_table_io_command(
         - `vacuum` then deletes them once they are older than the retention period.
         """
         io = get_io(ctx)
-        cprint(f'Optimizing {title}...', style=TextStyle.BOLD + RichColor.YELLOW)
+        cprint(f"Optimizing {title}...", style=TextStyle.BOLD + RichColor.YELLOW)
         io.optimize()
-        cprint(f'Optimized {title}', style=TextStyle.BOLD + RichColor.GREEN)
+        cprint(f"Optimized {title}", style=TextStyle.BOLD + RichColor.GREEN)
 
     @group.command()
-    @click.option('--no-dry-run', '-n', is_flag=True, help='Actually delete files')
+    @click.option("--no-dry-run", "-n", is_flag=True, help="Actually delete files")
     @click.option(
-        '--retention-hours',
-        '-h',
+        "--retention-hours",
+        "-h",
         type=click.IntRange(min=0),
         default=_DEFAULT_RETENTION_HOURS,
         show_default=True,
-        help='Number of hours of history to keep',
+        help="Number of hours of history to keep",
     )
     @click.pass_context
     def vacuum(ctx: click.Context, no_dry_run: bool, retention_hours: int):
@@ -124,24 +137,38 @@ def create_table_io_command(
         dry_run = not no_dry_run
         if dry_run:
             cprint(
-                'This is a dry run. NOTHING will actually be deleted. To turn it off, use the --no-dry-run/-n flag.',
+                "This is a dry run. NOTHING will actually be deleted. To turn it off, use the --no-dry-run/-n flag.",
                 style=TextStyle.BOLD + RichColor.YELLOW,
             )
-        result = io.vacuum(retention=datetime.timedelta(hours=retention_hours), dry_run=dry_run)
+        result = io.vacuum(
+            retention=datetime.timedelta(hours=retention_hours), dry_run=dry_run
+        )
         color = RichColor.RED if dry_run else RichColor.GREEN
-        expire, delete = ('Going to expire', 'Going to delete') if dry_run else ('Expired', 'Deleted')
+        expire, delete = (
+            ("Going to expire", "Going to delete")
+            if dry_run
+            else ("Expired", "Deleted")
+        )
         for verb, noun, items in (
-            (expire, 'snapshot(s)', result.expired_snapshots), (delete, 'file(s)', result.deleted_paths),
+            (expire, "snapshot(s)", result.expired_snapshots),
+            (delete, "file(s)", result.deleted_paths),
         ):
-            cprint(f'{verb} {len(items)} {noun}', style=TextStyle.BOLD + color)
+            cprint(f"{verb} {len(items)} {noun}", style=TextStyle.BOLD + color)
             for item in items:
-                cprint(f'  {item}', style=color)
+                cprint(f"  {item}", style=color)
 
     return group
 
 
-ducklake = create_table_io_command('ducklake', 'pfeed.io.ducklake_io:DuckLakeIO', title='DuckLake')
-deltalake = create_table_io_command(
-    'deltalake', 'pfeed.io.deltalake_io:DeltaLakeIO', title='Delta Lake', install_extra='deltalake',
+ducklake = create_table_io_command(
+    "ducklake", "pfeed.io.ducklake_io:DuckLakeIO", title="DuckLake"
 )
-iceberg = create_table_io_command('iceberg', 'pfeed.io.iceberg_io:IcebergIO', title='Iceberg', install_extra='iceberg')
+deltalake = create_table_io_command(
+    "deltalake",
+    "pfeed.io.deltalake_io:DeltaLakeIO",
+    title="Delta Lake",
+    install_extra="deltalake",
+)
+iceberg = create_table_io_command(
+    "iceberg", "pfeed.io.iceberg_io:IcebergIO", title="Iceberg", install_extra="iceberg"
+)

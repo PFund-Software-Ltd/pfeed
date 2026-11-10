@@ -43,7 +43,9 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         # NOTE: kept on the dataflow, not read from the faucet, since a stream worker's copy has no faucet, see __getstate__()
         self._extract_type: str = faucet.extract_type
         self._data_model: DataModelT = data_model
-        self._default_transformations: list[Callable[..., Any]] = list(default_transformations or [])
+        self._default_transformations: list[Callable[..., Any]] = list(
+            default_transformations or []
+        )
         self._user_transformations: list[Callable[..., Any]] = []
         self._handler: BaseDataHandler | None = None
         self._result = DataFlowResult()
@@ -51,7 +53,11 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         self._is_sealed = False
         # NOTE: created here in the main process, a Ray stream worker's config doesn't have the values set by pfeed.configure()
         latency_log_interval = get_config().stream_latency_log_interval
-        self._latency_tracker = LatencyTracker(latency_log_interval) if latency_log_interval is not None else None
+        self._latency_tracker = (
+            LatencyTracker(latency_log_interval)
+            if latency_log_interval is not None
+            else None
+        )
 
     def __getstate__(self) -> dict[str, Any]:
         # NOTE: a stream's faucet holds the live stream (e.g. its zmq ROUTER, extract task and stream API), which can't be pickled,
@@ -69,7 +75,9 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
     @property
     def faucet(self) -> Faucet[RequestT, DataModelT]:
         if self._faucet is None:
-            raise RuntimeError(f"{self} has no faucet, e.g. a copy in a Ray stream worker")
+            raise RuntimeError(
+                f"{self} has no faucet, e.g. a copy in a Ray stream worker"
+            )
         return self._faucet
 
     @property
@@ -103,12 +111,14 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
 
     def add_user_transformations(self, funcs: list[Callable[..., Any]]):
         if self.is_sealed():
-            raise ValueError(
-                f"cannot add transformations to sealed dataflow {self}"
-            )
+            raise ValueError(f"cannot add transformations to sealed dataflow {self}")
         self._user_transformations.extend(funcs)
 
-    def _transform(self, data: IntoFrame | Message, transformations: list[Callable[..., Any]] | None = None) -> Any:
+    def _transform(
+        self,
+        data: IntoFrame | Message,
+        transformations: list[Callable[..., Any]] | None = None,
+    ) -> Any:
         """Runs the transformations on data, all of them (default then user) if None."""
         if transformations is None:
             transformations = self._default_transformations + self._user_transformations
@@ -129,14 +139,18 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
                     data: IntoFrame = cast("IntoFrame", transform(data))
             func_name = getattr(transform, "__name__", repr(transform))
             if data is None:
-                raise TypeError(f"transform function '{func_name}' should return transformed data, but got None")
+                raise TypeError(
+                    f"transform function '{func_name}' should return transformed data, but got None"
+                )
             self._logger.debug(f"transformed {self.data_model} data by '{func_name}'")
         return data
 
     def has_handler(self) -> bool:
         return self._handler is not None
 
-    def _setup_handler(self, io: BaseIO, data_layer: DataLayer, data_domain: str, **handler_kwargs: Any):
+    def _setup_handler(
+        self, io: BaseIO, data_layer: DataLayer, data_domain: str, **handler_kwargs: Any
+    ):
         """Creates the data handler that loads the data to io, from the dataflow's own data model.
 
         Args:
@@ -176,7 +190,9 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
                     from prefect import task
                     from prefect.cache_policies import NO_CACHE
 
-                    write = task(name=self._handler.name, cache_policy=NO_CACHE)(self._handler.write_batch)
+                    write = task(name=self._handler.name, cache_policy=NO_CACHE)(
+                        self._handler.write_batch
+                    )
                 else:
                     write = self._handler.write_batch
                 write(df)
@@ -185,7 +201,9 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         except Exception:
             # Re-raise so the batch runner marks the dataflow failed; a write
             # error must surface in RunResult, not only in the log.
-            self._logger.exception(f"failed to load {self.data_model} data to {self._handler}:")
+            self._logger.exception(
+                f"failed to load {self.data_model} data to {self._handler}:"
+            )
             raise
 
     def _run_batch_etl(self) -> DataFlowResult:
@@ -200,18 +218,24 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             from prefect import task
             from prefect.cache_policies import NO_CACHE
 
-            extract = task(name=self.faucet.name, cache_policy=NO_CACHE)(self.faucet.open_batch)
+            extract = task(name=self.faucet.name, cache_policy=NO_CACHE)(
+                self.faucet.open_batch
+            )
         else:
             extract = self.faucet.open_batch
 
         extracted_data: pl.LazyFrame | None = extract(data_model=self.data_model)
         if extracted_data is None:
-            self._logger.debug(f"no {self.data_model} data extracted by {self.faucet.name}")
+            self._logger.debug(
+                f"no {self.data_model} data extracted by {self.faucet.name}"
+            )
             # retrieve reads storage, where missing data is a valid answer, the feed reports the missing dates
             if self.faucet.extract_type == "retrieve":
                 self._result = DataFlowResult.no_data()
             else:
-                self._result = DataFlowResult.failed(error=ValueError(f"{self} produced no data"))
+                self._result = DataFlowResult.failed(
+                    error=ValueError(f"{self} produced no data")
+                )
             return self._result
         self._logger.debug(f"extracted {self.data_model} data by {self.faucet.name}")
         is_empty = is_dataframe(extracted_data) and is_empty_dataframe(extracted_data)
@@ -226,11 +250,15 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             self._result = DataFlowResult.materialized(data=data)
         return self._result
 
-    def run_batch(self, flow_type: FlowType = FlowType.native, prefect_kwargs: dict | None = None) -> DataFlowResult:
+    def run_batch(
+        self, flow_type: FlowType = FlowType.native, prefect_kwargs: dict | None = None
+    ) -> DataFlowResult:
         if not self.is_sealed():
             raise ValueError(f"cannot run batch on unsealed dataflow {self}")
 
-        self._logger.debug(f"{self} to {self.handler!r}" if self.handler else f"{self} (no storage)")
+        self._logger.debug(
+            f"{self} to {self.handler!r}" if self.handler else f"{self} (no storage)"
+        )
         self._flow_type = FlowType[flow_type.lower()]
 
         # a failed run is recorded as the dataflow's result, so one failure doesn't stop the other dataflows
@@ -253,7 +281,9 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         """
         from prefect import flow
 
-        kwargs.setdefault("log_prints", True)  # captures print() in user transformations
+        kwargs.setdefault(
+            "log_prints", True
+        )  # captures print() in user transformations
         kwargs.setdefault("name", str(self))
         kwargs.setdefault("flow_run_name", str(self.data_model))
 
@@ -265,7 +295,11 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             # send the data source's logs (e.g. "pfeed.bybit") to the prefect UI, like PREFECT_LOGGING_EXTRA_LOGGERS,
             # which prefect only applies at import time; "pfeed.<source>" doesn't propagate, so attach to it directly.
             # Only during the run, outside a flow run prefect's API handler warns on every log
-            added_handlers = [h for h in logging.getLogger("prefect.extra").handlers if h not in self._logger.handlers]
+            added_handlers = [
+                h
+                for h in logging.getLogger("prefect.extra").handlers
+                if h not in self._logger.handlers
+            ]
             for handler in added_handlers:
                 self._logger.addHandler(handler)
             try:
@@ -286,25 +320,37 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         # NOTE: stores the message as transformed by the feed (e.g. parsed, resampled), before the user's transformations,
         # so the stored stream stays pfeed's standardized data whatever the user's transformations change
         try:
-            message = cast("Message", self._transform(msg, self._default_transformations))
+            message = cast(
+                "Message", self._transform(msg, self._default_transformations)
+            )
         # e.g. a transformation can't handle this message
         except Exception:
-            self._logger.exception(f"{self} transformation failed, skipping message: {msg}")
+            self._logger.exception(
+                f"{self} transformation failed, skipping message: {msg}"
+            )
             return None
         self._load(message)
         try:
             transformed = self._transform(message, self._user_transformations)
             if not isinstance(transformed, dict):
-                raise TypeError(f"user transformations must return a Message (dict), got {type(transformed).__name__}")
+                raise TypeError(
+                    f"user transformations must return a Message (dict), got {type(transformed).__name__}"
+                )
         except Exception:
-            self._logger.exception(f"{self} user transformation failed, skipping message: {message}")
+            self._logger.exception(
+                f"{self} user transformation failed, skipping message: {message}"
+            )
             return None
         message = cast("Message", transformed)
-        if self._latency_tracker and (latency_stats := self._latency_tracker.track(msg["received_at"])):
+        if self._latency_tracker and (
+            latency_stats := self._latency_tracker.track(msg["received_at"])
+        ):
             self._logger.debug(f"{self} {latency_stats}")
         return message
 
-    async def _run_stream_etl(self, queue: asyncio.Queue[Message]) -> AsyncGenerator[Message]:
+    async def _run_stream_etl(
+        self, queue: asyncio.Queue[Message]
+    ) -> AsyncGenerator[Message]:
         extract = self.faucet.open_stream()
         try:
             while True:
@@ -332,7 +378,9 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         if not self.is_sealed():
             raise ValueError(f"cannot run stream on unsealed dataflow {self}")
 
-        self._logger.info(f"{self} to {self.handler!r}" if self.handler else f"{self} (no storage)")
+        self._logger.info(
+            f"{self} to {self.handler!r}" if self.handler else f"{self} (no storage)"
+        )
         self._flow_type = FlowType[flow_type.lower()]
         # a stream has no final data, its result only reports whether it failed,
         # so it stays successful unless an error below overwrites it

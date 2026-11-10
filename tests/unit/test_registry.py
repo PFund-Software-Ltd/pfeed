@@ -33,7 +33,9 @@ class MismatchedSource:
 
 
 def _ep(name: str, attr: str = "FakeSource") -> EntryPoint:
-    return EntryPoint(name=name, value=f"{FAKE_MODULE}:{attr}", group=registry.ENTRY_POINT_GROUP)
+    return EntryPoint(
+        name=name, value=f"{FAKE_MODULE}:{attr}", group=registry.ENTRY_POINT_GROUP
+    )
 
 
 @pytest.fixture
@@ -45,7 +47,11 @@ def install_plugins(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setitem(sys.modules, FAKE_MODULE, module)
 
     def _install(*eps: EntryPoint):
-        monkeypatch.setattr(plugins, "entry_points", lambda group: [ep for ep in eps if ep.group == group])
+        monkeypatch.setattr(
+            plugins,
+            "entry_points",
+            lambda group: [ep for ep in eps if ep.group == group],
+        )
         registry.plugin_registry.cache_clear()
 
     yield _install
@@ -97,7 +103,9 @@ def test_get_source_rejects_mismatched_source_name(install_plugins):
         registry.get_source("fake")
 
 
-@pytest.mark.parametrize("data_category", [DataCategory.MARKET_DATA, "market_data", "MARKET_DATA"])
+@pytest.mark.parametrize(
+    "data_category", [DataCategory.MARKET_DATA, "market_data", "MARKET_DATA"]
+)
 def test_get_feed(install_plugins, data_category):
     install_plugins(_ep("fake"))
     assert registry.get_feed("fake", data_category) is FakeMarketFeed

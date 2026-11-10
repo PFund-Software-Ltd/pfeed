@@ -77,14 +77,17 @@ class SourceMetadata(BaseModel):
     @field_validator("data_categories", mode="after")
     @classmethod
     def _convert_asset_types(
-        cls, data_categories: dict[DataCategory, dict[DataType, list[ProductType | str]]]
+        cls,
+        data_categories: dict[DataCategory, dict[DataType, list[ProductType | str]]],
     ) -> dict[DataCategory, dict[DataType, list[ProductType | str]]]:
         # pydantic keeps a str as str since it matches `str` exactly, convert it here so that aliases are expanded too,
         # e.g. "IPERP" -> "INVERSE-PERPETUAL"
         return {
             data_category: {
                 data_type: [
-                    ProductType.model_validate(asset_type) if isinstance(asset_type, str) else asset_type
+                    ProductType.model_validate(asset_type)
+                    if isinstance(asset_type, str)
+                    else asset_type
                     for asset_type in asset_types
                 ]
                 for data_type, asset_types in data_types.items()
@@ -147,7 +150,9 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
         pipeline_mode: bool = False,
         num_workers: int | dict[DataCategory | str, int] | None = None,
     ):
-        self._api_key: str | None = self.api_access.get_key() if self.api_access else None
+        self._api_key: str | None = (
+            self.api_access.get_key() if self.api_access else None
+        )
         self._pipeline_mode: PipelineT = cast("PipelineT", pipeline_mode)
         self._feeds: list[BaseFeed] = []
         if isinstance(num_workers, dict):
@@ -168,7 +173,9 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
         return self.metadata.name
 
     @property
-    def data_categories(self) -> dict[DataCategory, dict[DataType, list[ProductType | str]]]:
+    def data_categories(
+        self,
+    ) -> dict[DataCategory, dict[DataType, list[ProductType | str]]]:
         return self.metadata.data_categories
 
     @property
@@ -189,7 +196,11 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
                 if isinstance(self._num_workers, dict)
                 else self._num_workers
             )
-            feed: BaseFeed = Feed(data_source=self, pipeline_mode=self._pipeline_mode, num_workers=num_workers)
+            feed: BaseFeed = Feed(
+                data_source=self,
+                pipeline_mode=self._pipeline_mode,
+                num_workers=num_workers,
+            )
             if feed not in self._feeds:
                 self._feeds.append(feed)
             # dynamically set attributes e.g. self.market_feed
@@ -201,7 +212,9 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
     def get_batch_api(self) -> Any:
         raise NotImplementedError(f"{self.name} has no batch API")
 
-    def get_stream_api(self, env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"]) -> BaseStreamAPI:
+    def get_stream_api(
+        self, env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"]
+    ) -> BaseStreamAPI:
         raise NotImplementedError(f"{self.name} has no stream API")
 
     # NOTE: with Ray, the source is pickled into the worker together with any API it has created,
@@ -228,7 +241,13 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
         # the adapter is passed via the validation context, so that the product derives its symbol and name
         # with the source's conventions once its specs are validated (e.g. expiration as a date)
         product = Product.model_validate(
-            {"source": cls.metadata.name, "basis": basis, "symbol": symbol, "name": name, **specs},
+            {
+                "source": cls.metadata.name,
+                "basis": basis,
+                "symbol": symbol,
+                "name": name,
+                **specs,
+            },
             context={"adapter": cls.adapter},
         )
         if cls.adapter is not None:

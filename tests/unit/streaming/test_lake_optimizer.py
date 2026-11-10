@@ -41,39 +41,53 @@ class _TableIO(TableIO):
 
 
 def test_only_table_ios_are_kept(tmp_path: Path):
-    io = _TableIO(str(tmp_path / 'lake'))
+    io = _TableIO(str(tmp_path / "lake"))
 
-    optimizer = LakeOptimizer([io, ParquetIO(str(tmp_path / 'parquet'))], interval=0, logger=logger)
+    optimizer = LakeOptimizer(
+        [io, ParquetIO(str(tmp_path / "parquet"))], interval=0, logger=logger
+    )
 
     assert optimizer.table_ios == [io]
 
 
 def test_one_io_per_catalog(tmp_path: Path):
-    io, same_catalog_io, other_catalog_io = (_TableIO(str(tmp_path / name)) for name in ('lake', 'lake', 'other'))
+    io, same_catalog_io, other_catalog_io = (
+        _TableIO(str(tmp_path / name)) for name in ("lake", "lake", "other")
+    )
 
-    optimizer = LakeOptimizer([io, same_catalog_io, other_catalog_io], interval=0, logger=logger)
+    optimizer = LakeOptimizer(
+        [io, same_catalog_io, other_catalog_io], interval=0, logger=logger
+    )
     optimizer.optimize()
 
     # optimize() compacts the whole catalog, so the same catalog is optimized once
     assert optimizer.table_ios == [io, other_catalog_io]
-    assert (io.optimize_calls, same_catalog_io.optimize_calls, other_catalog_io.optimize_calls) == (1, 0, 1)
+    assert (
+        io.optimize_calls,
+        same_catalog_io.optimize_calls,
+        other_catalog_io.optimize_calls,
+    ) == (1, 0, 1)
 
 
-def test_failed_optimize_is_logged_and_the_others_still_run(tmp_path: Path, caplog: pytest.LogCaptureFixture):
-    failing_io = _TableIO(str(tmp_path / 'lake'), error=RuntimeError('database is locked'))
-    io = _TableIO(str(tmp_path / 'other'))
+def test_failed_optimize_is_logged_and_the_others_still_run(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    failing_io = _TableIO(
+        str(tmp_path / "lake"), error=RuntimeError("database is locked")
+    )
+    io = _TableIO(str(tmp_path / "other"))
 
     with caplog.at_level(logging.ERROR, logger=logger.name):
         LakeOptimizer([failing_io, io], interval=0, logger=logger).optimize()
 
     assert io.optimize_calls == 1
-    assert 'failed to optimize' in caplog.text
-    assert 'database is locked' in caplog.text
+    assert "failed to optimize" in caplog.text
+    assert "database is locked" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_run_optimizes_every_interval_until_cancelled(tmp_path: Path):
-    io = _TableIO(str(tmp_path / 'lake'))
+    io = _TableIO(str(tmp_path / "lake"))
     optimizer = LakeOptimizer([io], interval=0.01, logger=logger)
 
     task = asyncio.create_task(optimizer.run())
@@ -86,9 +100,13 @@ async def test_run_optimizes_every_interval_until_cancelled(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('interval', [0, 60])
-async def test_run_returns_without_an_interval_or_table_ios(tmp_path: Path, interval: float):
-    ios = [] if interval else [_TableIO(str(tmp_path / 'lake'))]
+@pytest.mark.parametrize("interval", [0, 60])
+async def test_run_returns_without_an_interval_or_table_ios(
+    tmp_path: Path, interval: float
+):
+    ios = [] if interval else [_TableIO(str(tmp_path / "lake"))]
 
     # returns right away instead of sleeping until cancelled
-    await asyncio.wait_for(LakeOptimizer(ios, interval=interval, logger=logger).run(), timeout=1)
+    await asyncio.wait_for(
+        LakeOptimizer(ios, interval=interval, logger=logger).run(), timeout=1
+    )

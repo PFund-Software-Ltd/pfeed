@@ -19,7 +19,11 @@ def test_import_time_within_budget():
     code = "import time; t = time.perf_counter(); import pfeed; print(time.perf_counter() - t)"
     # min() filters out noise, e.g. the first run compiling .pyc files or a busy machine
     import_time = min(
-        float(subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout)
+        float(
+            subprocess.run(
+                [sys.executable, "-c", code], capture_output=True, text=True, check=True
+            ).stdout
+        )
         for _ in range(NUM_RUNS)
     )
     assert import_time < IMPORT_TIME_BUDGET, (

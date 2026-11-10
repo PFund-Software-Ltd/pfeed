@@ -16,8 +16,8 @@ from types import SimpleNamespace
 
 import polars as pl
 import pytest
-from pfund_blocks.resolution import Resolution
 from pfund_blocks.enums.env import Environment
+from pfund_blocks.resolution import Resolution
 from polars.testing import assert_frame_equal
 
 from pfeed.enums import DataCategory, DataLayer, MarketDataType as DataType

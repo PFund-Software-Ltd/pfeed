@@ -43,23 +43,29 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
         is_streaming: bool = False,
         store_incremental_bars: bool = False,
     ):
-        super().__init__(data_model, io, data_domain=data_domain, data_layer=data_layer, is_streaming=is_streaming)
+        super().__init__(
+            data_model,
+            io,
+            data_domain=data_domain,
+            data_layer=data_layer,
+            is_streaming=is_streaming,
+        )
         self._store_incremental_bars = store_incremental_bars
 
     def _create_namespace(self) -> dict[str, str]:
         data_model = self._data_model
         return {
-            'env': str(data_model.env),
-            'data_layer': str(self._data_layer),
-            'data_domain': self._data_domain,
-            'data_source': data_model.data_source,
-            'data_origin': str(data_model.data_origin),
+            "env": str(data_model.env),
+            "data_layer": str(self._data_layer),
+            "data_domain": self._data_domain,
+            "data_source": data_model.data_source,
+            "data_origin": str(data_model.data_origin),
         }
 
     def _create_name(self) -> dict[str, str]:
         return {
-            'product_type': str(self._data_model.product.product_type),
-            'resolution': str(self._data_model.resolution),
+            "product_type": str(self._data_model.product.product_type),
+            "resolution": str(self._data_model.resolution),
         }
 
     def _partition_prefix(self) -> dict[str, PartitionValue]:
@@ -72,21 +78,29 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
             from pfeed.schemas.streaming.bar_message_schema import START_TS
             from pfeed.schemas.streaming.tick_message_schema import TS
 
-            return START_TS if cast('Resolution', self._data_model.resolution).is_bar() else TS
+            return (
+                START_TS
+                if cast("Resolution", self._data_model.resolution).is_bar()
+                else TS
+            )
         return super()._get_date_col()
 
     def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
         from pfeed.schemas.market_data_schema import get_market_data_schema
 
-        resolution = cast('Resolution', self._data_model.resolution)
+        resolution = cast("Resolution", self._data_model.resolution)
         from pfeed.schemas.market_data_schema import RESOLUTION
 
         schema = get_market_data_schema(self._data_model.product, resolution)
         df = schema.validate(df)
         # the schema only checks the resolution is valid and unique, it must also be the dataset's (in its name)
         # NOTE: product doesn't need this, a row of another product is outside the partitions and the IO raises
-        if not df.is_empty() and (row_resolution := df[RESOLUTION][0]) != str(resolution):
-            raise ValueError(f'data has resolution {row_resolution!r}, expected {str(resolution)!r}')
+        if not df.is_empty() and (row_resolution := df[RESOLUTION][0]) != str(
+            resolution
+        ):
+            raise ValueError(
+                f"data has resolution {row_resolution!r}, expected {str(resolution)!r}"
+            )
         return df
 
     def write_batch(self, df: pl.DataFrame) -> None:
@@ -100,39 +114,58 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
 
         if self._data_layer == DataLayer.RAW:
             if PRODUCT in df.columns:
-                raise ValueError(f'raw data already has column {PRODUCT!r}, it is reserved for partitioning')
+                raise ValueError(
+                    f"raw data already has column {PRODUCT!r}, it is reserved for partitioning"
+                )
             df = df.with_columns(pl.lit(self._data_model.product.name).alias(PRODUCT))
         else:
             df = self._validate_schema(df)
-        self._write(df, {partition: self._create_metadata() for partition in self._partitions()}, mode='replace')
+        self._write(
+            df,
+            {partition: self._create_metadata() for partition in self._partitions()},
+            mode="replace",
+        )
 
     def _build_streaming_schema(self) -> pa.Schema:
         from pfeed.schemas.streaming.bar_message_schema import BarMessageSchema
         from pfeed.schemas.streaming.tick_message_schema import TickMessageSchema
 
-        resolution = cast('Resolution', self._data_model.resolution)
+        resolution = cast("Resolution", self._data_model.resolution)
         if resolution.is_tick():
             message_schema = TickMessageSchema
         elif resolution.is_bar():
             message_schema = BarMessageSchema
         else:
-            raise NotImplementedError(f'streaming {resolution} data is not supported yet')
+            raise NotImplementedError(
+                f"streaming {resolution} data is not supported yet"
+            )
         return message_schema.build()
 
     def write_stream(self, msg: Message) -> None:
         from pfund_blocks.datas.bar_data import Bar
+
         if self._stream_buffer is None:
-            raise ValueError(f'{self!r} is not set up for streaming, call setup_streaming() first')
-        data_points = cast("list[Bar | Tick] | None", msg['data'])
+            raise ValueError(
+                f"{self!r} is not set up for streaming, call setup_streaming() first"
+            )
+        data_points = cast("list[Bar | Tick] | None", msg["data"])
         # e.g. a resampled message whose update didn't change the resampled bar
         if data_points is None:
             return
         # NOTE: a parsed message can hold several data points (e.g. Bybit sends a list), so can a resampled one, e.g. several closed bars
         for data_point in data_points:
-            if isinstance(data_point, Bar) and not data_point.is_closed and not self._store_incremental_bars:
+            if (
+                isinstance(data_point, Bar)
+                and not data_point.is_closed
+                and not self._store_incremental_bars
+            ):
                 continue
             # columns not in the streaming schema (e.g. resolution) are dropped when the buffer builds its dataframe
-            row = {'product': msg['product'], 'received_at': msg['received_at'], **data_point.to_dict()}
+            row = {
+                "product": msg["product"],
+                "received_at": msg["received_at"],
+                **data_point.to_dict(),
+            }
             self._stream_buffer.append(row)
         self.flush_if_due()
 

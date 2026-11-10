@@ -12,8 +12,14 @@ from pfeed import config, registry
 
 @pytest.fixture
 def fake_source(monkeypatch: pytest.MonkeyPatch):
-    ep = EntryPoint(name="fake", value="fake_pfeed_plugin:FakeClient", group=registry.ENTRY_POINT_GROUP)
-    monkeypatch.setattr(plugins, "entry_points", lambda group: [ep] if group == ep.group else [])
+    ep = EntryPoint(
+        name="fake",
+        value="fake_pfeed_plugin:FakeClient",
+        group=registry.ENTRY_POINT_GROUP,
+    )
+    monkeypatch.setattr(
+        plugins, "entry_points", lambda group: [ep] if group == ep.group else []
+    )
     registry.plugin_registry.cache_clear()
     original = copy.deepcopy(config.get_logging_config())
     yield

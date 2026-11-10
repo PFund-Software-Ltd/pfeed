@@ -20,11 +20,15 @@ class BaseStreamRequest(BaseRequest):
     @model_validator(mode="after")
     def _check_env(self) -> Self:
         if self.env not in (Environment.PAPER, Environment.LIVE):
-            raise ValueError(f"streaming is only supported in PAPER and LIVE, got {self.env}")
+            raise ValueError(
+                f"streaming is only supported in PAPER and LIVE, got {self.env}"
+            )
         return self
 
     @model_validator(mode="after")
     def _check_data_layer(self) -> Self:
         if self.data_layer == DataLayer.RAW:
-            raise ValueError("streamed data is parsed by the source, it cannot be in the RAW data layer")
+            raise ValueError(
+                "streamed data is parsed by the source, it cannot be in the RAW data layer"
+            )
         return self

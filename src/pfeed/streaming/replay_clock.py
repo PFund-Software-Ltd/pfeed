@@ -63,7 +63,9 @@ class ReplayClock:
         earliest = min(self._next_ts, key=lambda p: (self._next_ts[p], order[p]))
         return earliest == participant
 
-    async def wait_until(self, participant: Hashable, ts: int, max_delay: float | None = None) -> None:
+    async def wait_until(
+        self, participant: Hashable, ts: int, max_delay: float | None = None
+    ) -> None:
         """Waits until the participant's message at ts (int ns) is the next one of the replay, then sleeps the pace.
 
         Args:
@@ -77,7 +79,9 @@ class ReplayClock:
             waiter = asyncio.get_running_loop().create_future()
             self._waiters.append(waiter)
             await waiter
-        if self._replay_pace == 0 or self._prev_ts is None:  # ASAP, or the first message
+        if (
+            self._replay_pace == 0 or self._prev_ts is None
+        ):  # ASAP, or the first message
             delay = 0.0
         elif self._replay_pace is not None:  # fixed cadence
             delay = self._replay_pace

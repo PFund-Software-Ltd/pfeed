@@ -9,4 +9,6 @@ from pfeed.market.requests.base_request import MarketFeedBaseRequest
 class MarketFeedDownloadRequest(MarketFeedBaseRequest):
     extract_type: ClassVar[str] = "download"
     # a download calls the source's API, so it retries with the source's retry policy by default
-    retry_policy: RetryPolicy = Field(default_factory=lambda data: data["data_source"].retry_policy)
+    retry_policy: RetryPolicy = Field(
+        default_factory=lambda data: data["data_source"].retry_policy
+    )

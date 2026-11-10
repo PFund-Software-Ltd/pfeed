@@ -39,14 +39,18 @@ class TimeBasedDataModel(BaseDataModel):
     def dates(self) -> list[datetime.date]:
         # NOTE: not pl.date_range, its 1-day interval (in microseconds) overflows the 32-bit usize in WASM (Pyodide)
         num_days = (self.end_date - self.start_date).days
-        return [self.start_date + datetime.timedelta(days=i) for i in range(num_days + 1)]
+        return [
+            self.start_date + datetime.timedelta(days=i) for i in range(num_days + 1)
+        ]
 
     def is_date_range(self) -> bool:
         return self.start_date != self.end_date
 
     def split_by_date(self) -> list[Self]:
         """Splits the date range into single-date copies of this data model"""
-        return [self.model_copy(update={"start_date": d, "end_date": d}) for d in self.dates]
+        return [
+            self.model_copy(update={"start_date": d, "end_date": d}) for d in self.dates
+        ]
 
     def __str__(self) -> str:
         if self.is_date_range():

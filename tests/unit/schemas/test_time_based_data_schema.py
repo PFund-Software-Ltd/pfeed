@@ -14,8 +14,14 @@ import pytest
 from pfeed.schemas.time_based_data_schema import DATE, TimeBasedDataSchema
 
 
-def _df(dates: list[datetime.datetime], time_unit: TimeUnit = "ns", time_zone: str | None = None) -> pl.DataFrame:
-    return pl.DataFrame({DATE: pl.Series(dates, dtype=pl.Datetime(time_unit, time_zone))})
+def _df(
+    dates: list[datetime.datetime],
+    time_unit: TimeUnit = "ns",
+    time_zone: str | None = None,
+) -> pl.DataFrame:
+    return pl.DataFrame(
+        {DATE: pl.Series(dates, dtype=pl.Datetime(time_unit, time_zone))}
+    )
 
 
 DATES = [
@@ -34,7 +40,9 @@ class TestTimeBasedDataSchema:
         TimeBasedDataSchema.validate(_df([DATES[0], DATES[0], DATES[1]]))
 
     def test_decreasing_dates_fail(self):
-        with pytest.raises(pandera.errors.SchemaError, match="date is not monotonic increasing"):
+        with pytest.raises(
+            pandera.errors.SchemaError, match="date is not monotonic increasing"
+        ):
             TimeBasedDataSchema.validate(_df([DATES[1], DATES[0], DATES[2]]))
 
     def test_wrong_time_unit_fails(self):

@@ -25,7 +25,9 @@ class MarketMessageSchema:
     _COMMON_FIELDS: ClassVar[list[pa.Field]] = [
         # the partition column, see MarketDataHandler._partition_prefix()
         pa.field(PRODUCT, pa.string(), nullable=False),
-        pa.field(RECEIVED_AT, pa.timestamp("ns", tz="UTC"), nullable=False),  # Message["received_at"]
+        pa.field(
+            RECEIVED_AT, pa.timestamp("ns", tz="UTC"), nullable=False
+        ),  # Message["received_at"]
     ]
     # BaseDataPoint fields
     _DATA_POINT_FIELDS: ClassVar[list[pa.Field]] = [
@@ -40,4 +42,6 @@ class MarketMessageSchema:
 
     @classmethod
     def build(cls) -> pa.Schema:
-        return pa.schema([*cls._COMMON_FIELDS, *cls._message_fields(), *cls._DATA_POINT_FIELDS])
+        return pa.schema(
+            [*cls._COMMON_FIELDS, *cls._message_fields(), *cls._DATA_POINT_FIELDS]
+        )

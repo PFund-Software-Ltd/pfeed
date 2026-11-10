@@ -6,8 +6,12 @@ from pfeed.schemas.bar_data_schema import BarDataSchema
 from pfeed.schemas.tick_data_schema import TickDataSchema
 
 # column names of cleaned stock data, typed as str for code referring to them
-DIVIDENDS: Final = "dividends"  # cash dividend per share on the ex-dividend date, 0 = none
-SPLITS: Final = "splits"  # split ratio on the split date, e.g. 4.0 for a 4-for-1 split, 1.0 = none
+DIVIDENDS: Final = (
+    "dividends"  # cash dividend per share on the ex-dividend date, 0 = none
+)
+SPLITS: Final = (
+    "splits"  # split ratio on the split date, e.g. 4.0 for a 4-for-1 split, 1.0 = none
+)
 
 
 class StockDataSchemaMixin(pa.DataFrameModel):

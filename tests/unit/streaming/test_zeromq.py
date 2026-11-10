@@ -32,7 +32,11 @@ def make(logger) -> Iterator[Callable[..., ZeroMQ]]:
     def _make(name: str = "test", **kwargs) -> ZeroMQ:
         instance = ZeroMQ(name, logger, **kwargs)
         # NOTE: stored separately since a test can replace instance._sender with a mock
-        sockets = [socket for socket in (instance._sender, instance._receiver) if socket is not None]
+        sockets = [
+            socket
+            for socket in (instance._sender, instance._receiver)
+            if socket is not None
+        ]
         instances.append((instance, sockets))
         return instance
 
@@ -53,7 +57,9 @@ def _recv(receiver: ZeroMQ) -> tuple | None:
     return None
 
 
-def _make_router_and_dealer(make: Callable[..., ZeroMQ], identity: str = "worker") -> tuple[ZeroMQ, ZeroMQ]:
+def _make_router_and_dealer(
+    make: Callable[..., ZeroMQ], identity: str = "worker"
+) -> tuple[ZeroMQ, ZeroMQ]:
     router = make("router", sender_type=zmq.ROUTER)
     router.bind(router.sender)
     dealer = make("dealer", receiver_type=zmq.DEALER)
@@ -206,7 +212,11 @@ class TestSendAndRecv:
         msg = _recv(pull)
         assert msg is not None
         channel, topic, data, msg_ts = msg
-        assert (channel, topic, data) == ("channel", "topic", {"price": 1.5, "items": [1, 2]})
+        assert (channel, topic, data) == (
+            "channel",
+            "topic",
+            {"price": 1.5, "items": [1, 2]},
+        )
         assert isinstance(msg_ts, float)
         logger.exception.assert_not_called()
 
@@ -250,7 +260,9 @@ class TestSendAndRecv:
         assert exc_info.value.errno == zmq.EHOSTUNREACH
 
     def test_again_logs_channel_and_topic_but_not_the_message(self, make, logger):
-        push = make(sender_type=zmq.PUSH, sender_method="connect")  # no peer, so zmq.Again
+        push = make(
+            sender_type=zmq.PUSH, sender_method="connect"
+        )  # no peer, so zmq.Again
 
         push.send("channel", "topic", "secret-payload")
 
@@ -301,7 +313,9 @@ class TestSendAndRecv:
             (zmq.ZMQError(zmq.EFAULT), "exception"),
         ],
     )
-    def test_recv_logs_zmq_errors_and_returns_none(self, make, logger, mocker: MockerFixture, error, log_method):
+    def test_recv_logs_zmq_errors_and_returns_none(
+        self, make, logger, mocker: MockerFixture, error, log_method
+    ):
         zeromq = make(receiver_type=zmq.PULL, receiver_method="bind")
         zeromq._poller = mocker.Mock(poll=mocker.Mock(side_effect=error))
 
@@ -372,7 +386,9 @@ class TestTerminate:
         assert pull.recv() is None
 
     def test_unbinds_and_closes_everything(self, make):
-        zeromq = make(sender_type=zmq.XPUB, receiver_type=zmq.PULL, receiver_method="bind")
+        zeromq = make(
+            sender_type=zmq.XPUB, receiver_type=zmq.PULL, receiver_method="bind"
+        )
         zeromq.bind(zeromq.sender)
         zeromq.bind(zeromq.receiver)
         sender, receiver = zeromq.sender, zeromq.receiver

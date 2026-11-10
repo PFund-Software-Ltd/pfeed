@@ -16,5 +16,4 @@ class TimeBasedFeedBaseRequest(BaseRequest):
     end_date: datetime.date
 
     @abstractmethod
-    def to_data_model(self) -> TimeBasedDataModel:
-        ...
+    def to_data_model(self) -> TimeBasedDataModel: ...

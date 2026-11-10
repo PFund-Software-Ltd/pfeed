@@ -81,7 +81,9 @@ class ZeroMQ:
         self._poller: zmq.Poller | None = None
         self._encoder = msgpack.Encoder()
         self._decoder = msgpack.Decoder()
-        self._codecs: dict[ZeroMQChannel, tuple[msgpack.Encoder, msgpack.Decoder[Any]]] = {}
+        self._codecs: dict[
+            ZeroMQChannel, tuple[msgpack.Encoder, msgpack.Decoder[Any]]
+        ] = {}
 
         if sender_type is not None:
             self._sender = self._ctx.socket(sender_type)
@@ -110,7 +112,9 @@ class ZeroMQ:
 
     @property
     def receiver_name(self) -> str:
-        return ".".join([self.name, zmq.SocketType(self.receiver.type).name, "receiver"])
+        return ".".join(
+            [self.name, zmq.SocketType(self.receiver.type).name, "receiver"]
+        )
 
     @property
     def sender(self) -> zmq.Socket:
@@ -185,7 +189,9 @@ class ZeroMQ:
     def terminate(self, target_identities: list[str] | None = None):
         # send STOP signal to notice listeners, which probably have a while True loop running
         if self._sender:
-            has_targets = target_identities and self._is_sender_support_target_identity()
+            has_targets = (
+                target_identities and self._is_sender_support_target_identity()
+            )
             for target_identity in target_identities if has_targets else [None]:
                 try:
                     self.send(
@@ -196,7 +202,9 @@ class ZeroMQ:
                     )
                 # NOTE: send() raises this when the target is gone, there is nothing left to stop, the sockets below must still be closed
                 except zmq.ZMQError as err:
-                    self._logger.warning(f"{self.sender_name} can't send STOP to {target_identity} (errno={err.errno})")
+                    self._logger.warning(
+                        f"{self.sender_name} can't send STOP to {target_identity} (errno={err.errno})"
+                    )
 
         if self._poller and self._receiver:
             self._poller.unregister(self._receiver)
@@ -233,10 +241,17 @@ class ZeroMQ:
             enc_hook: msgspec's enc_hook, encodes the types msgpack doesn't support, e.g. a Bar's Resolution.
             dec_hook: msgspec's dec_hook, decodes them back when decoding into recv_type.
         """
-        self._codecs[channel] = (msgpack.Encoder(enc_hook=enc_hook), msgpack.Decoder(type=recv_type, dec_hook=dec_hook))
+        self._codecs[channel] = (
+            msgpack.Encoder(enc_hook=enc_hook),
+            msgpack.Decoder(type=recv_type, dec_hook=dec_hook),
+        )
 
     def send(
-        self, channel: ZeroMQChannel, topic: ZeroMQTopic, data: Any, target_identity: str | None = None
+        self,
+        channel: ZeroMQChannel,
+        topic: ZeroMQTopic,
+        data: Any,
+        target_identity: str | None = None,
     ) -> None:
         """
         Sends message to receivers
@@ -251,7 +266,11 @@ class ZeroMQ:
             msg = [
                 channel.encode(),
                 topic.encode(),
-                (self._codecs[channel][0] if channel in self._codecs else self._encoder).encode(data),
+                (
+                    self._codecs[channel][0]
+                    if channel in self._codecs
+                    else self._encoder
+                ).encode(data),
                 self._encoder.encode(msg_ts),
             ]
             if target_identity and self._is_sender_support_target_identity():
@@ -282,9 +301,18 @@ class ZeroMQ:
                 msg = self.receiver.recv_multipart(zmq.NOBLOCK)
                 channel, topic, data, msg_ts = msg
                 channel = channel.decode()
-                decoder = self._codecs[channel][1] if channel in self._codecs else self._decoder
+                decoder = (
+                    self._codecs[channel][1]
+                    if channel in self._codecs
+                    else self._decoder
+                )
                 decoded_data = decoder.decode(data)
-                return channel, topic.decode(), decoded_data, self._decoder.decode(msg_ts)
+                return (
+                    channel,
+                    topic.decode(),
+                    decoded_data,
+                    self._decoder.decode(msg_ts),
+                )
             else:
                 return None
         except (

@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pfeed.market.data_model import MarketDataModel
 
-from pfund_blocks.resolution import Resolution
 from pfund_blocks.entities.products.product_base import BaseProduct
 from pfund_blocks.enums.env import Environment
+from pfund_blocks.resolution import Resolution
 from pydantic import Field, field_validator, model_validator
 
 from pfeed.base.requests.time_based_request import TimeBasedFeedBaseRequest
@@ -43,7 +43,10 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
                 + f"target_resolution ({self.target_resolution}) for resampling"
             )
         # raw data is not resampled, e.g. 1minute raw data cannot be produced from a 1tick source/storage
-        if self.data_layer == DataLayer.RAW and self.target_resolution < self.data_resolution:
+        if (
+            self.data_layer == DataLayer.RAW
+            and self.target_resolution < self.data_resolution
+        ):
             raise ValueError(
                 f"Cannot {self.extract_type} {self.target_resolution} raw data from {self.data_resolution} data"
             )

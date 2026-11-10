@@ -21,5 +21,7 @@ class DataLayer(IntEnum):
             try:
                 return cls[value.upper()]
             except KeyError:
-                raise ValueError(f"invalid data layer '{value}', must be one of {[dl.name for dl in cls]}") from None
+                raise ValueError(
+                    f"invalid data layer '{value}', must be one of {[dl.name for dl in cls]}"
+                ) from None
         return value

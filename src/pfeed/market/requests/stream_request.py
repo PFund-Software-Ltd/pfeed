@@ -9,4 +9,3 @@ class MarketFeedStreamRequest(BaseStreamRequest, MarketFeedBaseRequest):
         default=False,
         description="Whether to also store the updates of a bar before it closes. Only used when storing streamed bars.",
     )
-

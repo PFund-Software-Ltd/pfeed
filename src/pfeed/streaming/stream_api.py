@@ -40,7 +40,12 @@ class BaseStreamAPI(ABC):
         """Adds the product's market data channel, must be called before connect()."""
         ...
 
-    def set_callback(self, callback: Callable[[Message], Awaitable[None] | None], *, skip_parse_message: bool = False) -> None:
+    def set_callback(
+        self,
+        callback: Callable[[Message], Awaitable[None] | None],
+        *,
+        skip_parse_message: bool = False,
+    ) -> None:
         """Sets callback function that receives messages from the streaming api (e.g. websocket API).
 
         Message["message"] must be decoded. Message["data"] is None if not parsed.

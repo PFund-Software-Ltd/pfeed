@@ -29,7 +29,9 @@ class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
 
         return self.env in (Environment.PAPER, Environment.LIVE)
 
-    def create_data_resolution_handler(self, data_model: MarketDataModel | None = None) -> MarketDataHandler:
+    def create_data_resolution_handler(
+        self, data_model: MarketDataModel | None = None
+    ) -> MarketDataHandler:
         """Handler reading this request's data from storage at data_resolution.
 
         The data is stored at data_resolution, e.g. '1t', and resampled to target_resolution, e.g. '1m',
@@ -41,7 +43,9 @@ class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
         """
         from pfeed.enums import DataCategory
 
-        data_model = (data_model or self.to_data_model()).model_copy(update={"resolution": self.data_resolution})
+        data_model = (data_model or self.to_data_model()).model_copy(
+            update={"resolution": self.data_resolution}
+        )
         return data_model.DataHandler(
             data_model=data_model,
             io=self.io_for_retrieval,

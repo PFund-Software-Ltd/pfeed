@@ -28,8 +28,12 @@ def _is_str_resolution(value: str) -> bool:
 
 
 class MarketDataSchema(TimeBasedDataSchema):
-    product: str = pa.Field(alias=PRODUCT, description="product.name, e.g. 'BYBIT_BTC_USDT_PERPETUAL'")
-    resolution: str = pa.Field(alias=RESOLUTION, description="str(Resolution), e.g. '1_MINUTE'")
+    product: str = pa.Field(
+        alias=PRODUCT, description="product.name, e.g. 'BYBIT_BTC_USDT_PERPETUAL'"
+    )
+    resolution: str = pa.Field(
+        alias=RESOLUTION, description="str(Resolution), e.g. '1_MINUTE'"
+    )
 
     @pa.check(PRODUCT)
     @classmethod
@@ -41,16 +45,24 @@ class MarketDataSchema(TimeBasedDataSchema):
     def validate_unique_resolution(cls, data: pa.PolarsData) -> pl.LazyFrame:
         return data.lazyframe.select(pl.col(data.key).n_unique() <= 1)
 
-    @pa.check(RESOLUTION, error="resolution is not in the form of str(Resolution), e.g. '1_MINUTE'")
+    @pa.check(
+        RESOLUTION,
+        error="resolution is not in the form of str(Resolution), e.g. '1_MINUTE'",
+    )
     @classmethod
     def validate_resolution(cls, data: pa.PolarsData) -> pl.LazyFrame:
         # parse in Python only the unique values, normally one since validate_unique_resolution requires it
         return data.lazyframe.select(
-            pl.col(data.key).unique().map_elements(_is_str_resolution, return_dtype=pl.Boolean).all()
+            pl.col(data.key)
+            .unique()
+            .map_elements(_is_str_resolution, return_dtype=pl.Boolean)
+            .all()
         )
 
 
-def get_market_data_schema(product: BaseProduct, resolution: Resolution) -> type[MarketDataSchema]:
+def get_market_data_schema(
+    product: BaseProduct, resolution: Resolution
+) -> type[MarketDataSchema]:
     """The schema of cleaned market data, by the product's asset type and the resolution's data type.
 
     Takes the product instead of its asset type, so schemas can later depend on its specs (e.g. options).

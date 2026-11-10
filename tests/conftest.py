@@ -8,9 +8,9 @@ if TYPE_CHECKING:
 import os
 
 import pytest
+from pfund_kit.utils.ray import shutdown_ray
 
 import pfeed as pe
-from pfund_kit.utils.ray import shutdown_ray
 from pfeed.config import setup_logging
 
 
@@ -25,8 +25,12 @@ def pytest_addoption(parser: pytest.Parser):
 
 def pytest_configure(config: pytest.Config):
     # xdist workers would compete to rotate the same log files in the real log_path
-    if config.getoption("keep_log_path") and config.getoption("numprocesses", default=None):
-        raise pytest.UsageError("--keep-log-path can't be used with -n (workers would share log files)")
+    if config.getoption("keep_log_path") and config.getoption(
+        "numprocesses", default=None
+    ):
+        raise pytest.UsageError(
+            "--keep-log-path can't be used with -n (workers would share log files)"
+        )
 
 
 # TODO: add more products (e.g. stocks) to params once they are supported
@@ -36,12 +40,16 @@ def product(request: pytest.FixtureRequest) -> BaseProduct:
         from pfund_blocks.entities.products.product_factory import ProductFactory
 
         basis = "BTC_USDT_PERP"
-        return ProductFactory(basis).model_validate({"source": "BYBIT", "basis": basis, "symbol": "BTCUSDT"})
+        return ProductFactory(basis).model_validate(
+            {"source": "BYBIT", "basis": basis, "symbol": "BTCUSDT"}
+        )
     raise ValueError(f"unknown product param: {request.param}")
 
 
 @pytest.fixture(scope="session", autouse=True)
-def configure_test_env(request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory):
+def configure_test_env(
+    request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
+):
     # disable this warning: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default).
     os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
     # redirect log files to a temp dir; xdist gives each worker its own basetemp,

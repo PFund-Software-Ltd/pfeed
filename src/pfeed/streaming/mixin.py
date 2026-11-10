@@ -25,6 +25,7 @@ else:
     # NOTE: not object, a generic class can't list object as a base, its MRO with Generic is inconsistent
     class _FeedBase: ...
 
+
 import asyncio
 import contextlib
 import inspect
@@ -33,7 +34,9 @@ import time
 from pfund_blocks.enums.env import Environment
 
 
-class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel](_FeedBase):
+class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel](
+    _FeedBase
+):
     QUEUE_MAXSIZE: ClassVar[int] = 1000
     WORKER_READY_TIMEOUT: ClassVar[float] = 60  # seconds
     WORKER_STOP_TIMEOUT: ClassVar[float] = 60  # seconds
@@ -118,7 +121,9 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                 _ = iter_queue.get_nowait()
             iter_queue.put_nowait(message)
         # NOTE: error messages can have no product/resolution, so they have no queue
-        if (queue := self._queues.get(self._create_queue_key_from_message(message))) is not None:
+        if (
+            queue := self._queues.get(self._create_queue_key_from_message(message))
+        ) is not None:
             # NOTE: the queue is shut down when its dataflow has failed, drop the message, otherwise every new message raises here
             with contextlib.suppress(asyncio.QueueShutDown):
                 await queue.put(message)
@@ -161,10 +166,16 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
         request = cast("RequestT", self._get_current_request())
         existing_dataflow = self.dataflows[0] if self.dataflows else None
         existing_faucet = existing_dataflow.faucet if existing_dataflow else None
-        existing_request = cast("RequestT", existing_faucet.request) if existing_faucet else None
+        existing_request = (
+            cast("RequestT", existing_faucet.request) if existing_faucet else None
+        )
         if existing_request and request.env != existing_request.env:
-            raise ValueError(f"cannot stream {request.env} and {existing_request.env} in the same feed")
-        self.logger.debug(f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN)
+            raise ValueError(
+                f"cannot stream {request.env} and {existing_request.env} in the same feed"
+            )
+        self.logger.debug(
+            f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
+        )
 
         if callback:
             self._set_user_callback(callback)
@@ -173,13 +184,21 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
             stream_api = self.data_source.get_stream_api(request.env)
             stream_api.add_channel(request)
             # NOTE: with Ray, the workers parse the messages
-            stream_api.set_callback(self._callback, skip_parse_message=self._is_using_ray())
+            stream_api.set_callback(
+                self._callback, skip_parse_message=self._is_using_ray()
+            )
         # NOTE: in replay (BACKTEST), the feed's _replay_impl() calls _callback() itself, there is no stream API
         self._create_queue(request)
 
-        faucet = existing_faucet or self._create_faucet(request=request, extract_func=extract_func)
+        faucet = existing_faucet or self._create_faucet(
+            request=request, extract_func=extract_func
+        )
         default_transformations = self._get_default_transformations(request)
-        dataflow = self._create_dataflow(faucet=faucet, data_model=data_model, default_transformations=default_transformations)
+        dataflow = self._create_dataflow(
+            faucet=faucet,
+            data_model=data_model,
+            default_transformations=default_transformations,
+        )
         self._dataflows[request] = [dataflow]
         return dataflow
 
@@ -189,12 +208,18 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
 
         self._prepare_before_run()
         optimizer = LakeOptimizer(
-            [dataflow.handler.io for dataflow in self.dataflows if dataflow.handler is not None],
+            [
+                dataflow.handler.io
+                for dataflow in self.dataflows
+                if dataflow.handler is not None
+            ],
             interval=get_config().stream_optimize_interval,
             logger=self.logger,
         )
 
-        async def _run_dataflow(dataflow: DataFlow[RequestT, DataModelT], queue: asyncio.Queue[Message]):
+        async def _run_dataflow(
+            dataflow: DataFlow[RequestT, DataModelT], queue: asyncio.Queue[Message]
+        ):
             async for message in dataflow.run_stream(queue=queue):
                 # NOTE: without the data engine, the message is already stored, nothing else to do.
                 # the data engine handles its own failures, see DataEngine._emit()
@@ -207,7 +232,9 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
 
         async def _run_dataflows():
             runs = [
-                _run_dataflow(dataflow, self._queues[self._create_queue_key_from_request(request)])
+                _run_dataflow(
+                    dataflow, self._queues[self._create_queue_key_from_request(request)]
+                )
                 for request, dataflows in self._dataflows.items()
                 for dataflow in dataflows
             ]
@@ -217,7 +244,9 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                 # gather() starts them in order, and a dataflow's run_stream() reaches connect() before its first wait
                 await asyncio.gather(*runs, return_exceptions=True)
             except asyncio.CancelledError:
-                self.logger.warning(f"{self.name} dataflows were cancelled, ending streams...")
+                self.logger.warning(
+                    f"{self.name} dataflows were cancelled, ending streams..."
+                )
             finally:
                 _ = optimizing.cancel()
                 _ = await asyncio.wait([optimizing])
@@ -262,7 +291,12 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                     # NOTE: e.g. a replayed market data message already holds Bars, decoded back into Bars instead of dicts
                     for channel, dataflow in dataflows.items():
                         data_model = dataflow.data_model
-                        msg_queue.register_codec(channel, data_model.StreamMessage, data_model.enc_hook, data_model.dec_hook)
+                        msg_queue.register_codec(
+                            channel,
+                            data_model.StreamMessage,
+                            data_model.enc_hook,
+                            data_model.dec_hook,
+                        )
                     try:
                         for port in engine_ports:
                             msg_queue.connect(msg_queue.sender, port)
@@ -272,7 +306,9 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                             msg_queue.sender.poll(flags=zmq.POLLOUT)
                         # NOTE: must be set before connect(); the identity is the name the ROUTER sends to,
                         # the probe tells the ROUTER this worker is routable, the main process waits for it before streaming
-                        msg_queue.receiver.setsockopt(zmq.IDENTITY, worker_name.encode())
+                        msg_queue.receiver.setsockopt(
+                            zmq.IDENTITY, worker_name.encode()
+                        )
                         msg_queue.receiver.setsockopt(zmq.PROBE_ROUTER, 1)
                         for port in router_ports:
                             msg_queue.connect(msg_queue.receiver, port)
@@ -283,14 +319,18 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                             channel, topic, data, _msg_ts = msg
                             if channel == ZeroMQDataChannel.signal:
                                 if data == ZeroMQSignal.STOP:
-                                    logger.debug(f"Ray {worker_name} received STOP signal, terminating...")
+                                    logger.debug(
+                                        f"Ray {worker_name} received STOP signal, terminating..."
+                                    )
                                     break
                             else:
                                 # NOTE: the same transformations and storing as in the main process, see DataFlow._run_stream_etl()
                                 data = dataflows[channel]._process_stream_message(data)
                                 if data is not None and engine_ports:
                                     # NOTE: the engine decodes the data points back into Bar/Tick, see DataEngine._setup_worker_messaging()
-                                    msg_queue.send(channel=channel, topic=topic, data=data)
+                                    msg_queue.send(
+                                        channel=channel, topic=topic, data=data
+                                    )
                     except Exception:
                         logger.exception(f"Error in streaming Ray {worker_name}:")
                         raise
@@ -309,14 +349,20 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                 num_cpus = max(1, int(ray.available_resources().get("CPU", 1)))
                 num_workers = min(self._num_workers, len(dataflows), num_cpus)
                 # NOTE: a dataflow stays on one worker, so its messages stay in order and its stateful transformations stay in one process
-                dataflows_per_worker: dict[WorkerName, list[DataFlow[RequestT, DataModelT]]] = {
-                    f"worker-{i + 1}": dataflows[i::num_workers] for i in range(num_workers)
+                dataflows_per_worker: dict[
+                    WorkerName, list[DataFlow[RequestT, DataModelT]]
+                ] = {
+                    f"worker-{i + 1}": dataflows[i::num_workers]
+                    for i in range(num_workers)
                 }
 
                 with ray_logging_context(self.logger) as log_queue:
                     futures: list[ray.ObjectRef] = []
                     try:
-                        for worker_name, worker_dataflows in dataflows_per_worker.items():
+                        for (
+                            worker_name,
+                            worker_dataflows,
+                        ) in dataflows_per_worker.items():
                             for dataflow in worker_dataflows:
                                 dataflow.faucet.add_stream_worker(dataflow, worker_name)
                         # NOTE: all dataflows share one faucet, so there is only one ROUTER to connect to
@@ -334,7 +380,10 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                                 log_queue,
                                 worker_name,
                                 # NOTE: pickled without their faucet, see DataFlow.__getstate__()
-                                {dataflow.faucet.get_zmq_channel(dataflow): dataflow for dataflow in worker_dataflows},
+                                {
+                                    dataflow.faucet.get_zmq_channel(dataflow): dataflow
+                                    for dataflow in worker_dataflows
+                                },
                                 router_ports,
                                 engine_ports,
                             )
@@ -347,22 +396,38 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                         while missing_workers:
                             remaining_ms = int((deadline - time.monotonic()) * 1000)
                             if remaining_ms <= 0 or not router.poll(remaining_ms):
-                                raise TimeoutError(f"{msg_queue.sender_name} timed out waiting for workers: {sorted(missing_workers)}")
+                                raise TimeoutError(
+                                    f"{msg_queue.sender_name} timed out waiting for workers: {sorted(missing_workers)}"
+                                )
                             identity, *_ = router.recv_multipart()
                             missing_workers.discard(identity.decode())
                         await _run_dataflows()
                     finally:
                         # NOTE: end_stream() must run for every dataflow for proper teardown, it records its own errors, so one bad teardown doesn't skip the rest
-                        await asyncio.gather(*[dataflow.end_stream() for dataflow in self.dataflows])
+                        await asyncio.gather(
+                            *[dataflow.end_stream() for dataflow in self.dataflows]
+                        )
                         # NOTE: end_stream() has sent STOP, wait for the workers to flush their handlers and exit before killing them
-                        finished, _ = ray.wait(futures, num_returns=len(futures), timeout=self.WORKER_STOP_TIMEOUT) if futures else ([], [])
-                        for future, (worker_name, worker_dataflows) in zip(futures, dataflows_per_worker.items(), strict=False):
+                        finished, _ = (
+                            ray.wait(
+                                futures,
+                                num_returns=len(futures),
+                                timeout=self.WORKER_STOP_TIMEOUT,
+                            )
+                            if futures
+                            else ([], [])
+                        )
+                        for future, (worker_name, worker_dataflows) in zip(
+                            futures, dataflows_per_worker.items(), strict=False
+                        ):
                             try:
                                 if future in finished:
                                     # NOTE: if the worker function raised, ray.get() re-raises its exception here; returns None if it exited normally
                                     ray.get(future)
                                 else:
-                                    raise TimeoutError(f"Ray {worker_name} did not stop within {self.WORKER_STOP_TIMEOUT}s, its buffered rows may be lost")
+                                    raise TimeoutError(
+                                        f"Ray {worker_name} did not stop within {self.WORKER_STOP_TIMEOUT}s, its buffered rows may be lost"
+                                    )
                             except Exception as err:
                                 for dataflow in worker_dataflows:
                                     dataflow._result = DataFlowResult.failed(error=err)
@@ -373,12 +438,12 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                     await _run_dataflows()
                 finally:
                     # NOTE: end_stream() must run for every dataflow for proper teardown, it records its own errors, so one bad teardown doesn't skip the rest
-                    await asyncio.gather(*[dataflow.end_stream() for dataflow in self.dataflows])
+                    await asyncio.gather(
+                        *[dataflow.end_stream() for dataflow in self.dataflows]
+                    )
 
             if failed := [
-                dataflow
-                for dataflow in self.dataflows
-                if not dataflow.result.success
+                dataflow for dataflow in self.dataflows if not dataflow.result.success
             ]:
                 self.logger.warning(
                     f"{self.name} has {len(failed)} failed dataflows, check {self.logger.name}.log for more details",

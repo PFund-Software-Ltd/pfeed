@@ -46,19 +46,24 @@ class DuckLakeIO(TableIO):
         conflicts per table), so a conflicting transaction is retried as a whole.
     """
 
-    DEFAULT_DIR_NAME: ClassVar[str] = 'ducklake'
-    CATALOG_FILE_NAME: ClassVar[str] = 'pfeed.db'
-    DATA_DIR_NAME: ClassVar[str] = 'data'
-    METADATA_TABLE_SUFFIX: ClassVar[str] = '__metadata'
+    DEFAULT_DIR_NAME: ClassVar[str] = "ducklake"
+    CATALOG_FILE_NAME: ClassVar[str] = "pfeed.db"
+    DATA_DIR_NAME: ClassVar[str] = "data"
+    METADATA_TABLE_SUFFIX: ClassVar[str] = "__metadata"
     _RETRY_ON: ClassVar[tuple[type[Exception], ...]] = (duckdb.TransactionException,)
-    _CATALOG_ALIAS: ClassVar[str] = 'lake'
+    _CATALOG_ALIAS: ClassVar[str] = "lake"
     # stored in the catalog, so they apply to every table:
     # - parquet_compression: DuckLake defaults to snappy; zstd made Bybit tick data ~40% smaller
     #     at about the same read speed, and matches ParquetIO's default
     # - hive_file_pattern: no partition dirs (e.g. product=BTC/), see the class docstring
-    CATALOG_OPTIONS: ClassVar[dict[str, str | bool]] = {'parquet_compression': 'zstd', 'hive_file_pattern': False}
+    CATALOG_OPTIONS: ClassVar[dict[str, str | bool]] = {
+        "parquet_compression": "zstd",
+        "hive_file_pattern": False,
+    }
 
-    def __init__(self, base_path: str | None = None, data_inlining_row_limit: int | None = None):
+    def __init__(
+        self, base_path: str | None = None, data_inlining_row_limit: int | None = None
+    ):
         """
         Args:
             base_path: root directory of the catalog and data files. Local paths only for now.
@@ -70,7 +75,9 @@ class DuckLakeIO(TableIO):
         if data_inlining_row_limit is not None and (
             not isinstance(data_inlining_row_limit, int) or data_inlining_row_limit < 0
         ):
-            raise ValueError(f'data_inlining_row_limit must be an int >= 0, got {data_inlining_row_limit!r}')
+            raise ValueError(
+                f"data_inlining_row_limit must be an int >= 0, got {data_inlining_row_limit!r}"
+            )
         super().__init__(base_path)
         self._data_inlining_row_limit = data_inlining_row_limit
         self._conn: duckdb.DuckDBPyConnection | None = None
@@ -79,8 +86,10 @@ class DuckLakeIO(TableIO):
         self._connect().close()
         # WAL keeps catalog reads from waiting on a concurrent write (in 1s busy waits),
         # which made concurrent writes ~5x slower and sometimes fail with "database is locked"
-        with contextlib.closing(sqlite3.connect(os.path.join(self._base_path, self.CATALOG_FILE_NAME))) as conn:
-            conn.execute('PRAGMA journal_mode=WAL')
+        with contextlib.closing(
+            sqlite3.connect(os.path.join(self._base_path, self.CATALOG_FILE_NAME))
+        ) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
         self._set_catalog_options()
 
     def _set_catalog_options(self) -> None:
@@ -90,17 +99,25 @@ class DuckLakeIO(TableIO):
         """
         cursor = self._connect()
         try:
-            current = dict(cursor.execute(f'SELECT option_name, value FROM {self._CATALOG_ALIAS}.options()').fetchall())
+            current = dict(
+                cursor.execute(
+                    f"SELECT option_name, value FROM {self._CATALOG_ALIAS}.options()"
+                ).fetchall()
+            )
             for name, value in self.CATALOG_OPTIONS.items():
                 # options() returns every value as a string, e.g. 'false', but set_option() needs its real type
-                if current.get(name) != (str(value).lower() if isinstance(value, bool) else value):
-                    cursor.execute(f'CALL {self._CATALOG_ALIAS}.set_option(?, ?)', [name, value])
+                if current.get(name) != (
+                    str(value).lower() if isinstance(value, bool) else value
+                ):
+                    cursor.execute(
+                        f"CALL {self._CATALOG_ALIAS}.set_option(?, ?)", [name, value]
+                    )
         finally:
             cursor.close()
 
     def __getstate__(self) -> dict:
         # a connection can't be pickled (e.g. sent to a Ray worker), each process opens its own
-        return self.__dict__ | {'_conn': None, '_conn_pid': None}
+        return self.__dict__ | {"_conn": None, "_conn_pid": None}
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
         """Returns a new cursor on this process's connection, attaching the catalog on first use.
@@ -109,17 +126,23 @@ class DuckLakeIO(TableIO):
         """
         if self._conn is None or self._conn_pid != os.getpid():
             os.makedirs(self._base_path, exist_ok=True)
-            catalog_path = os.path.join(self._base_path, self.CATALOG_FILE_NAME).replace("'", "''")
-            data_path = os.path.join(self._base_path, self.DATA_DIR_NAME, '').replace("'", "''")
+            catalog_path = os.path.join(
+                self._base_path, self.CATALOG_FILE_NAME
+            ).replace("'", "''")
+            data_path = os.path.join(self._base_path, self.DATA_DIR_NAME, "").replace(
+                "'", "''"
+            )
             options = f"DATA_PATH '{data_path}'"
             # not stored in the catalog, so it has to be passed on every attach
             if self._data_inlining_row_limit is not None:
-                options += f', DATA_INLINING_ROW_LIMIT {self._data_inlining_row_limit}'
+                options += f", DATA_INLINING_ROW_LIMIT {self._data_inlining_row_limit}"
             conn = duckdb.connect()
             # otherwise timestamps with a time zone are returned in the machine's local time zone;
             # GLOBAL, so the cursors (new connections) have it too
             conn.execute("SET GLOBAL TimeZone = 'UTC'")
-            conn.execute(f"ATTACH 'ducklake:sqlite:{catalog_path}' AS {self._CATALOG_ALIAS} ({options})")
+            conn.execute(
+                f"ATTACH 'ducklake:sqlite:{catalog_path}' AS {self._CATALOG_ALIAS} ({options})"
+            )
             self._conn, self._conn_pid = conn, os.getpid()
         return self._conn.cursor()
 
@@ -127,10 +150,14 @@ class DuckLakeIO(TableIO):
         """Returns (schema, table, metadata table) of the dataset, see TableIO._table_names()."""
         schema, table = self._table_names(key)
         if table.endswith(self.METADATA_TABLE_SUFFIX):
-            raise ValueError(f'dataset name {table!r} cannot end with {self.METADATA_TABLE_SUFFIX!r}, it is reserved')
+            raise ValueError(
+                f"dataset name {table!r} cannot end with {self.METADATA_TABLE_SUFFIX!r}, it is reserved"
+            )
         return schema, table, table + self.METADATA_TABLE_SUFFIX
 
-    def _table_exists(self, cursor: duckdb.DuckDBPyConnection, schema: str, table: str) -> bool:
+    def _table_exists(
+        self, cursor: duckdb.DuckDBPyConnection, schema: str, table: str
+    ) -> bool:
         """Checks if the table exists, raising ValueError if its schema/table exists under a different case."""
         found = cursor.execute(
             """
@@ -144,25 +171,37 @@ class DuckLakeIO(TableIO):
             [table, self._CATALOG_ALIAS, schema],
         ).fetchall()
         for found_schema, found_table in found:
-            if found_schema != schema or (found_table is not None and found_table != table):
+            if found_schema != schema or (
+                found_table is not None and found_table != table
+            ):
                 raise ValueError(
-                    f'{schema}.{table} differs only by case from existing {found_schema}.{found_table}, '
-                    'DuckDB names are case-insensitive'
+                    f"{schema}.{table} differs only by case from existing {found_schema}.{found_table}, "
+                    "DuckDB names are case-insensitive"
                 )
         return any(found_table is not None for _, found_table in found)
 
-    def _check_partition_columns(self, cursor: duckdb.DuckDBPyConnection, metadata_ref: str, key: DatasetKey) -> None:
+    def _check_partition_columns(
+        self, cursor: duckdb.DuckDBPyConnection, metadata_ref: str, key: DatasetKey
+    ) -> None:
         """Raises ValueError if `key` partitions the dataset differently than it is stored,
         e.g. a key with no partition levels would make a replace delete every row of the dataset.
 
         The metadata table's columns are the stored partition columns (+ METADATA_COLUMN).
         """
-        stored = [row[0] for row in cursor.execute(f'DESCRIBE {metadata_ref}').fetchall() if row[0] != self.METADATA_COLUMN]
+        stored = [
+            row[0]
+            for row in cursor.execute(f"DESCRIBE {metadata_ref}").fetchall()
+            if row[0] != self.METADATA_COLUMN
+        ]
         if stored != key.partition_columns:
-            raise ValueError(f'{key} is partitioned by {stored}, but the key has {key.partition_columns}')
+            raise ValueError(
+                f"{key} is partitioned by {stored}, but the key has {key.partition_columns}"
+            )
 
     @staticmethod
-    def _in_partitions(key: DatasetKey, partitions: list[Partition]) -> tuple[str, list[PartitionValue]]:
+    def _in_partitions(
+        key: DatasetKey, partitions: list[Partition]
+    ) -> tuple[str, list[PartitionValue]]:
         """Returns a WHERE clause matching rows in `partitions`, with its query params.
 
         Works on both the data and the metadata table: a DatePartition level matches its column
@@ -171,116 +210,194 @@ class DuckLakeIO(TableIO):
         filter wouldn't).
         """
         if not key.partition_by:
-            return '', []  # one partition, every row is in it
+            return "", []  # one partition, every row is in it
         conditions: list[str] = []
         params: list[PartitionValue] = []
         for partition in partitions:
             level_conditions: list[str] = []
             for level, value in zip(key.partition_by, partition, strict=True):
                 if isinstance(level, DatePartition):
-                    if isinstance(value, datetime.datetime) or not isinstance(value, datetime.date):
-                        raise TypeError(f'{level} partition value must be a date, got {value!r}')
-                    level_conditions.append(f'{_quote(level.column)} >= ? AND {_quote(level.column)} < ?')
+                    if isinstance(value, datetime.datetime) or not isinstance(
+                        value, datetime.date
+                    ):
+                        raise TypeError(
+                            f"{level} partition value must be a date, got {value!r}"
+                        )
+                    level_conditions.append(
+                        f"{_quote(level.column)} >= ? AND {_quote(level.column)} < ?"
+                    )
                     params += [value, value + datetime.timedelta(days=1)]
                 else:
-                    level_conditions.append(f'{_quote(level)} = ?')
+                    level_conditions.append(f"{_quote(level)} = ?")
                     params.append(value)
-            conditions.append('(' + ' AND '.join(level_conditions) + ')')
-        return 'WHERE ' + ' OR '.join(conditions), params
+            conditions.append("(" + " AND ".join(level_conditions) + ")")
+        return "WHERE " + " OR ".join(conditions), params
 
     def _write(
-        self, key: DatasetKey, data: pa.Table, partitions: dict[Partition, Metadata], mode: Literal['replace', 'append'],
+        self,
+        key: DatasetKey,
+        data: pa.Table,
+        partitions: dict[Partition, Metadata],
+        mode: Literal["replace", "append"],
     ) -> None:
         # one row per partition: its values (typed like data's partition columns, a DatePartition's as dates,
         # so the filters match both tables) + metadata
-        partition_metadata_table = pa.table({
-            **dict(zip(key.partition_columns, self._partition_arrays(key, data, list(partitions)), strict=True)),
-            self.METADATA_COLUMN: [self._dump_metadata(md) for md in partitions.values()],
-        })
+        partition_metadata_table = pa.table(
+            {
+                **dict(
+                    zip(
+                        key.partition_columns,
+                        self._partition_arrays(key, data, list(partitions)),
+                        strict=True,
+                    )
+                ),
+                self.METADATA_COLUMN: [
+                    self._dump_metadata(md) for md in partitions.values()
+                ],
+            }
+        )
 
         self._with_retries(
-            lambda: self._write_transaction(key, data, list(partitions), partition_metadata_table, mode), f'write to {key}'
+            lambda: self._write_transaction(
+                key, data, list(partitions), partition_metadata_table, mode
+            ),
+            f"write to {key}",
         )
 
     def _write_transaction(
-        self, key: DatasetKey, data: pa.Table, partitions: list[Partition], partition_metadata_table: pa.Table, mode: str,
+        self,
+        key: DatasetKey,
+        data: pa.Table,
+        partitions: list[Partition],
+        partition_metadata_table: pa.Table,
+        mode: str,
     ) -> None:
         schema, table, metadata_table = self._dataset_tables(key)
-        data_ref = f'{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(table)}'
-        metadata_ref = f'{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(metadata_table)}'
+        data_ref = f"{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(table)}"
+        metadata_ref = (
+            f"{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(metadata_table)}"
+        )
         cursor = self._connect()
-        cursor.register('_data', data)
-        cursor.register('_partition_metadata', partition_metadata_table)
-        cursor.execute('BEGIN')
+        cursor.register("_data", data)
+        cursor.register("_partition_metadata", partition_metadata_table)
+        cursor.execute("BEGIN")
         try:
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS {self._CATALOG_ALIAS}.{_quote(schema)}')
+            cursor.execute(
+                f"CREATE SCHEMA IF NOT EXISTS {self._CATALOG_ALIAS}.{_quote(schema)}"
+            )
             if not self._table_exists(cursor, schema, table):
-                cursor.execute(f'CREATE TABLE {data_ref} AS SELECT * FROM _data LIMIT 0')
+                cursor.execute(
+                    f"CREATE TABLE {data_ref} AS SELECT * FROM _data LIMIT 0"
+                )
                 # only the column levels, a DatePartition level is logical only (see the class docstring)
-                if cols := [_quote(level) for level in key.partition_by if not isinstance(level, DatePartition)]:
-                    cursor.execute(f'ALTER TABLE {data_ref} SET PARTITIONED BY ({", ".join(cols)})')
-                cursor.execute(f'CREATE TABLE {metadata_ref} AS SELECT * FROM _partition_metadata LIMIT 0')
+                if cols := [
+                    _quote(level)
+                    for level in key.partition_by
+                    if not isinstance(level, DatePartition)
+                ]:
+                    cursor.execute(
+                        f"ALTER TABLE {data_ref} SET PARTITIONED BY ({', '.join(cols)})"
+                    )
+                cursor.execute(
+                    f"CREATE TABLE {metadata_ref} AS SELECT * FROM _partition_metadata LIMIT 0"
+                )
             else:
                 self._check_partition_columns(cursor, metadata_ref, key)
                 # schema drift: add new columns, missing ones are null-filled by INSERT BY NAME
-                existing_types = {row[0]: row[1] for row in cursor.execute(f'DESCRIBE {data_ref}').fetchall()}
-                for col, dtype, *_ in cursor.execute('DESCRIBE SELECT * FROM _data').fetchall():
+                existing_types = {
+                    row[0]: row[1]
+                    for row in cursor.execute(f"DESCRIBE {data_ref}").fetchall()
+                }
+                for col, dtype, *_ in cursor.execute(
+                    "DESCRIBE SELECT * FROM _data"
+                ).fetchall():
                     if col not in existing_types:
-                        cursor.execute(f'ALTER TABLE {data_ref} ADD COLUMN {_quote(col)} {dtype}')
+                        cursor.execute(
+                            f"ALTER TABLE {data_ref} ADD COLUMN {_quote(col)} {dtype}"
+                        )
                     elif existing_types[col] != dtype:
-                        raise TypeError(f'column {col!r} is {dtype}, but {existing_types[col]} in the dataset')
+                        raise TypeError(
+                            f"column {col!r} is {dtype}, but {existing_types[col]} in the dataset"
+                        )
             predicate, params = self._in_partitions(key, partitions)
-            if mode == 'replace':
-                cursor.execute(f'DELETE FROM {data_ref} {predicate}', params)
-                cursor.execute(f'INSERT INTO {data_ref} BY NAME SELECT * FROM _data')
-                cursor.execute(f'DELETE FROM {metadata_ref} {predicate}', params)
-                cursor.execute(f'INSERT INTO {metadata_ref} BY NAME SELECT * FROM _partition_metadata')
+            if mode == "replace":
+                cursor.execute(f"DELETE FROM {data_ref} {predicate}", params)
+                cursor.execute(f"INSERT INTO {data_ref} BY NAME SELECT * FROM _data")
+                cursor.execute(f"DELETE FROM {metadata_ref} {predicate}", params)
+                cursor.execute(
+                    f"INSERT INTO {metadata_ref} BY NAME SELECT * FROM _partition_metadata"
+                )
             else:
-                cursor.execute(f'INSERT INTO {data_ref} BY NAME SELECT * FROM _data')
+                cursor.execute(f"INSERT INTO {data_ref} BY NAME SELECT * FROM _data")
                 # only the partitions without metadata, existing ones keep theirs
                 # (both tables have a DatePartition's values as dates, so they compare by equality)
-                same_partition = ' AND '.join(
-                    [f'm.{_quote(col)} IS NOT DISTINCT FROM p.{_quote(col)}' for col in key.partition_columns]
-                ) or 'TRUE'
-                cursor.execute(
-                    f'INSERT INTO {metadata_ref} BY NAME SELECT * FROM _partition_metadata p '
-                    + f'WHERE NOT EXISTS (SELECT 1 FROM {metadata_ref} m WHERE {same_partition})'
+                same_partition = (
+                    " AND ".join(
+                        [
+                            f"m.{_quote(col)} IS NOT DISTINCT FROM p.{_quote(col)}"
+                            for col in key.partition_columns
+                        ]
+                    )
+                    or "TRUE"
                 )
-            cursor.execute('COMMIT')
+                cursor.execute(
+                    f"INSERT INTO {metadata_ref} BY NAME SELECT * FROM _partition_metadata p "
+                    + f"WHERE NOT EXISTS (SELECT 1 FROM {metadata_ref} m WHERE {same_partition})"
+                )
+            cursor.execute("COMMIT")
         except BaseException:
             # a failed COMMIT has already rolled back, then ROLLBACK raises and would hide the original error
             with contextlib.suppress(duckdb.TransactionException):
-                cursor.execute('ROLLBACK')
+                cursor.execute("ROLLBACK")
             raise
         finally:
             cursor.close()
 
     def _read(
-        self, key: DatasetKey, partitions: list[Partition] | None,
+        self,
+        key: DatasetKey,
+        partitions: list[Partition] | None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, Metadata]]:
         schema, table, metadata_table = self._dataset_tables(key)
-        data_ref = f'{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(table)}'
-        metadata_ref = f'{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(metadata_table)}'
+        data_ref = f"{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(table)}"
+        metadata_ref = (
+            f"{self._CATALOG_ALIAS}.{_quote(schema)}.{_quote(metadata_table)}"
+        )
         cursor = self._connect()
         # metadata and snapshot id from the same transaction, so the data can be pinned to that snapshot
-        cursor.execute('BEGIN')
+        cursor.execute("BEGIN")
         try:
             if not self._table_exists(cursor, schema, table):
                 return None, {}
             self._check_partition_columns(cursor, metadata_ref, key)
-            ((snapshot_id,),) = cursor.execute(f'SELECT id FROM {self._CATALOG_ALIAS}.current_snapshot()').fetchall()
-            predicate, params = self._in_partitions(key, partitions) if partitions is not None else ('', [])
-            cols = ', '.join([*(_quote(col) for col in key.partition_columns), self.METADATA_COLUMN])
-            rows = cursor.execute(f'SELECT {cols} FROM {metadata_ref} {predicate}', params).fetchall()
+            ((snapshot_id,),) = cursor.execute(
+                f"SELECT id FROM {self._CATALOG_ALIAS}.current_snapshot()"
+            ).fetchall()
+            predicate, params = (
+                self._in_partitions(key, partitions)
+                if partitions is not None
+                else ("", [])
+            )
+            cols = ", ".join(
+                [*(_quote(col) for col in key.partition_columns), self.METADATA_COLUMN]
+            )
+            rows = cursor.execute(
+                f"SELECT {cols} FROM {metadata_ref} {predicate}", params
+            ).fetchall()
         finally:
-            cursor.execute('COMMIT')
-        metadata: dict[Partition, Metadata] = {tuple(row[:-1]): json.loads(row[-1]) for row in rows}
+            cursor.execute("COMMIT")
+        metadata: dict[Partition, Metadata] = {
+            tuple(row[:-1]): json.loads(row[-1]) for row in rows
+        }
         if not metadata:
             return None, {}
 
         # only rows of the partitions with metadata (commit marker)
         predicate, params = self._in_partitions(key, list(metadata))
-        relation = cursor.sql(f'SELECT * FROM {data_ref} AT (VERSION => {snapshot_id}) {predicate}', params=params)
+        relation = cursor.sql(
+            f"SELECT * FROM {data_ref} AT (VERSION => {snapshot_id}) {predicate}",
+            params=params,
+        )
         if not relation.limit(1).fetchall():
             return None, metadata
         return relation.pl(lazy=True), metadata
@@ -294,16 +411,25 @@ class DuckLakeIO(TableIO):
         """
         cursor = self._connect()
         try:
-            for function in ('ducklake_flush_inlined_data', 'ducklake_rewrite_data_files', 'ducklake_merge_adjacent_files'):
+            for function in (
+                "ducklake_flush_inlined_data",
+                "ducklake_rewrite_data_files",
+                "ducklake_merge_adjacent_files",
+            ):
                 self._with_retries(
-                    lambda function=function: cursor.execute(f'CALL {function}(?)', [self._CATALOG_ALIAS]),
+                    lambda function=function: cursor.execute(
+                        f"CALL {function}(?)", [self._CATALOG_ALIAS]
+                    ),
                     function,
                 )
         finally:
             cursor.close()
 
     def vacuum(
-        self, *, retention: datetime.timedelta = TableIO.DEFAULT_VACUUM_RETENTION, dry_run: bool = True,
+        self,
+        *,
+        retention: datetime.timedelta = TableIO.DEFAULT_VACUUM_RETENTION,
+        dry_run: bool = True,
     ) -> VacuumResult:
         """See TableIO.vacuum().
 
@@ -319,15 +445,20 @@ class DuckLakeIO(TableIO):
         try:
             snapshot_ids = self._with_retries(
                 lambda: cursor.execute(
-                    'SELECT snapshot_id FROM ducklake_expire_snapshots(?, older_than => ?, dry_run => ?)', params
+                    "SELECT snapshot_id FROM ducklake_expire_snapshots(?, older_than => ?, dry_run => ?)",
+                    params,
                 ).fetchall(),
-                'ducklake_expire_snapshots',
+                "ducklake_expire_snapshots",
             )
             paths = []
-            for function in ('ducklake_cleanup_old_files', 'ducklake_delete_orphaned_files'):
+            for function in (
+                "ducklake_cleanup_old_files",
+                "ducklake_delete_orphaned_files",
+            ):
                 paths += self._with_retries(
                     lambda function=function: cursor.execute(
-                        f'SELECT path FROM {function}(?, older_than => ?, dry_run => ?)', params
+                        f"SELECT path FROM {function}(?, older_than => ?, dry_run => ?)",
+                        params,
                     ).fetchall(),
                     function,
                 )

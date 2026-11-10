@@ -25,7 +25,7 @@ class BaseDataMetadata(BaseModel):
     e.g. data_source is in the key's namespace, so it isn't repeated here.
     """
 
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra="ignore")
 
 
 class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](ABC):
@@ -66,12 +66,14 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
 
     @property
     def name(self) -> str:
-        return ".".join([
-            self._data_model.data_source,
-            self._data_domain,
-            str(self._data_layer),
-            str(self._io),
-        ])
+        return ".".join(
+            [
+                self._data_model.data_source,
+                self._data_domain,
+                str(self._data_layer),
+                str(self._io),
+            ]
+        )
 
     @property
     def io(self) -> BaseIO:
@@ -111,25 +113,28 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
 
     def _build_streaming_schema(self) -> pa.Schema:
         """The schema of the sink's buffered rows; override to support streaming."""
-        raise NotImplementedError(f'{type(self).__name__} does not support streaming')
+        raise NotImplementedError(f"{type(self).__name__} does not support streaming")
 
     def _stream_partitions(self, df: pl.DataFrame) -> dict[Partition, MetadataT]:
         """The partitions of the streamed rows in `df`, each with its metadata; override to support streaming."""
-        raise NotImplementedError(f'{type(self).__name__} does not support streaming')
+        raise NotImplementedError(f"{type(self).__name__} does not support streaming")
 
     def setup_streaming(self, flush_interval: float):
         from pfeed.streaming.buffer import StreamBuffer
 
         if not self._is_streaming:
-            raise ValueError(f'{self!r} is not for streamed data, create it with is_streaming=True')
+            raise ValueError(
+                f"{self!r} is not for streamed data, create it with is_streaming=True"
+            )
         if self._data_layer == DataLayer.RAW:
-            raise NotImplementedError('storing streamed raw data is not supported yet')
+            raise NotImplementedError("storing streamed raw data is not supported yet")
         if not self._io.CAPABILITIES.append:
-            raise ValueError(f'{self._io!r} does not support append, it cannot store streamed data')
+            raise ValueError(
+                f"{self._io!r} does not support append, it cannot store streamed data"
+            )
         # built up front, so a handler that doesn't support streaming raises here, not at the first flush
         self._stream_buffer = StreamBuffer(
-            schema=self._build_streaming_schema(),
-            flush_interval=flush_interval
+            schema=self._build_streaming_schema(), flush_interval=flush_interval
         )
 
     def teardown_streaming(self) -> None:
@@ -152,7 +157,7 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         rows = self._stream_buffer.drain()
         try:
             df = self._stream_buffer.to_dataframe(rows)
-            self._write(df, self._stream_partitions(df), mode='append')
+            self._write(df, self._stream_partitions(df), mode="append")
         except Exception:
             self._stream_buffer.restore(rows)
             raise
@@ -186,28 +191,34 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         Args:
             kwargs: handler-specific options, see e.g. MarketDataHandler.write_stream().
         """
-        raise NotImplementedError(f'{type(self).__name__} does not support streaming')
+        raise NotImplementedError(f"{type(self).__name__} does not support streaming")
 
     def _write(
         self,
         df: pl.DataFrame,
         partitions: dict[Partition, MetadataT],
-        mode: Literal['replace', 'append'] = 'replace',
+        mode: Literal["replace", "append"] = "replace",
     ) -> None:
         """Writes df to this handler's dataset, metadata serialized to JSON-safe dicts."""
         self._io.write(
             self._dataset_key,
             df.to_arrow(),
-            partitions={partition: md.model_dump(mode='json') for partition, md in partitions.items()},
+            partitions={
+                partition: md.model_dump(mode="json")
+                for partition, md in partitions.items()
+            },
             mode=mode,
         )
 
     def _read(
-        self, partitions: list[Partition] | None = None,
+        self,
+        partitions: list[Partition] | None = None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, MetadataT]]:
         """Reads this handler's dataset, metadata parsed by _parse_metadata()."""
         lf, metadata = self._io.read(self._dataset_key, partitions=partitions)
-        return lf, {partition: self._parse_metadata(md) for partition, md in metadata.items()}
+        return lf, {
+            partition: self._parse_metadata(md) for partition, md in metadata.items()
+        }
 
     def __repr__(self) -> str:
-        return f'{type(self).__name__}(data_model={self._data_model}, io={self._io!r}, key={self._dataset_key})'
+        return f"{type(self).__name__}(data_model={self._data_model}, io={self._io!r}, key={self._dataset_key})"

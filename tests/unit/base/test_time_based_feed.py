@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -139,7 +139,7 @@ def _fake_feed_with_date_cols(
 
     class FakeFeed(TimeBasedFeed[Any, Any, Any]):
         DataModel = TimeBasedDataModel
-        downloaded_data_date_cols = list(date_cols)
+        downloaded_data_date_cols: ClassVar[list[str]] = list(date_cols)
 
     return FakeFeed
 
@@ -195,7 +195,15 @@ def test_standardize_date_column_uses_first_present_candidate() -> None:
         ([JAN_1], [JAN_1]),
         ([JAN_1_NOON.replace(tzinfo=datetime.UTC)], [JAN_1_NOON]),
         (
-            [datetime.datetime(2025, 1, 1, 20, tzinfo=datetime.timezone(datetime.timedelta(hours=8)))],
+            [
+                datetime.datetime(
+                    2025,
+                    1,
+                    1,
+                    20,
+                    tzinfo=datetime.timezone(datetime.timedelta(hours=8)),
+                )
+            ],
             [JAN_1_NOON],
         ),
         # dates, midnight of that date

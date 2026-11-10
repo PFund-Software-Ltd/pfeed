@@ -37,8 +37,7 @@ class BaseRequest(BaseModel, ABC):
     )
 
     @abstractmethod
-    def to_data_model(self) -> BaseDataModel:
-        ...
+    def to_data_model(self) -> BaseDataModel: ...
 
     def __hash__(self) -> int:
         return hash(id(self))
@@ -78,7 +77,11 @@ class BaseRequest(BaseModel, ABC):
         """
         if io:
             if data_layer < self.data_layer:
-                raise ValueError(f"cannot store {self.data_layer} data in a lower layer {data_layer}")
+                raise ValueError(
+                    f"cannot store {self.data_layer} data in a lower layer {data_layer}"
+                )
             if self.data_layer == DataLayer.RAW and data_layer != DataLayer.RAW:
-                raise ValueError(f"RAW data is not cleaned, it cannot be stored in the {data_layer} layer")
+                raise ValueError(
+                    f"RAW data is not cleaned, it cannot be stored in the {data_layer} layer"
+                )
         self.io = io

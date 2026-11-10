@@ -17,5 +17,7 @@ def get_feed(
 
     Feed = registry.get_feed(data_source, data_category)
     # feeds are only created by their source, so build the source and return its feed
-    source = registry.get_source(data_source)(pipeline_mode=pipeline_mode, num_workers=num_workers)
+    source = registry.get_source(data_source)(
+        pipeline_mode=pipeline_mode, num_workers=num_workers
+    )
     return getattr(source, Feed.data_domain.feed_name)

@@ -31,6 +31,18 @@ project:
   - data streaming
   - data engineering
   thumbnail: ../static/thumbnail.png
+  toc:
+    - file: overview.md
+    - file: installation.md
+    - file: quickstart.md
+    - file: concepts.md
+    - file: pipeline_mode.md
+    - file: integrations.md
+    - file: supported_sources.md
+    - file: supported_ios.md
+    - file: commands.md
+    - file: config.md
+    - file: CONTRIBUTING.md
 site:
   template: book-theme
   # options:
@@ -42,9 +54,23 @@ site:
     favicon: ../static/favicon.ico
     logo: ../static/logo.svg
     logo_dark: ../static/logo-dark.svg
-    logo_text: pfeed
+    logo_text: Democratize AI Trading
     logo_url: 'https://pfeed.pfund.ai'
-  title: pfeed's Doc
+    style: ../static/custom.css
+  title: pfeed's Documentation
+  nav:
+  - title: PFund.ai
+    url: https://pfund.ai
+  - title: Tutorials
+    url: https://pfeed.pfund.ai/tutorial
+  - title: Blogs
+    url: https://pfeed.pfund.ai/blog
+  - title: Guides
+    url: https://pfeed.pfund.ai/guide
+  - title: Examples
+    url: https://pfeed.pfund.ai/example
+  - title: API Reference
+    url: https://pfeed.pfund.ai/reference
   actions:
   - title: ⭐ Star
     url: https://github.com/PFund-Software-Ltd/pfeed

@@ -18,12 +18,13 @@ def init_context(ctx):
 
 
 pfeed_group = create_cli_group("pfeed", init_context=init_context)
-pfeed_group.add_command(config)
-pfeed_group.add_command(docker_compose)
-pfeed_group.add_command(docker_compose, name="compose")
-pfeed_group.add_command(remove)
-pfeed_group.add_command(remove, name="rm")
-pfeed_group.add_command(ducklake)
-pfeed_group.add_command(data)
+# NOTE: the order in which commands are added also determines their order in pfund-shell
 pfeed_group.add_command(download)
 pfeed_group.add_command(stream)
+pfeed_group.add_command(ducklake)
+pfeed_group.add_command(data)
+pfeed_group.add_command(config)
+pfeed_group.add_command(remove)
+pfeed_group.add_command(remove, name="rm")
+pfeed_group.add_command(docker_compose)
+pfeed_group.add_command(docker_compose, name="compose")

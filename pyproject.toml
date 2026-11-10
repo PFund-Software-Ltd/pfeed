@@ -24,8 +24,8 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "pfund-blocks>=0.0.3",
-    "pfund-kit>=0.1.23",
+    "pfund-blocks>=0.0.4",
+    "pfund-kit>=0.1.24",
     # NOTE: for some important packages (e.g. polars, pydantic) that can benefit pfeed from using the latest version
     # even Pyodide supports them, still add sys_platform != 'emscripten', meaning that
     # let pfeed WASM use the default versions on Pyodide with NO compatibility guarantee.
@@ -48,7 +48,7 @@ prefect = ["prefect>=3.9.2"]
 # An extra exists here only for an OFFICIALLY SUPPORTED data source, and it pins a verified version:
 #   pip install "pfeed[bybit]"  # official, installs `pfeed-bybit`
 #   pip install pfeed-xxx       # 3rd party, not maintained or verified by pfeed
-bybit = ["pfeed-bybit>=0.0.1"]
+bybit = ["pfeed-bybit>=0.0.2"]
 # hyperliquid = ["pfeed-hyperliquid>=0.0.1"]
 # yfinance = ["yfinance>=1.7.0"]
 # edgartools = ["edgartools>=5.60.0"]
@@ -97,6 +97,10 @@ markers = [
 strict_markers = true
 addopts = ["--no-header", "--import-mode=importlib"]
 testpaths = ["tests"]
+# pytest-timeout: last-resort kill for hanging tests (e.g. deadlocked Ray/ZeroMQ), dumps all thread stacks;
+# "thread" because "signal" can't interrupt code blocked in C; it os._exit()s the xdist worker (no teardown)
+timeout = "300"
+timeout_method = "thread"
 
 [tool.ruff]
 extend = "afterpython/ruff.toml"

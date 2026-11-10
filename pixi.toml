@@ -29,8 +29,8 @@ just = ">=1.59.0"
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
-pfund-blocks = ">=0.0.3"
-pfund-kit = ">=0.1.23"
+pfund-blocks = ">=0.0.4"
+pfund-kit = ">=0.1.24"
 pyarrow = ">=26.0.1"
 polars = ">=2.1.0"
 duckdb = ">=2.0.0"
@@ -71,14 +71,14 @@ lancedb = ">=0.41.0"
 # An extra exists here only for an OFFICIALLY SUPPORTED data source, and it pins a verified version:
 #   pip install "pfeed[bybit]"  # official, installs `pfeed-bybit`
 #   pip install pfeed-xxx       # 3rd party, not maintained or verified by pfeed
-pfeed-bybit = ">=0.0.1"
+pfeed-bybit = ">=0.0.2"
 # pfeed-hyperliquid = ">=0.0.1"
 # IOs
 # psycopg = { version = ">=3.3.3", extras = ["binary", "pool"] }
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-afterpython = { version = ">=0.4.5", extras = ["marimo"] }
+afterpython = { version = ">=0.4.6", extras = ["marimo"] }
 # used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
 deltalake = ">=1.6.6"
 pyiceberg = { version = ">=0.12.0", extras = ["sql-sqlite", "pyiceberg-core"] }
@@ -89,10 +89,14 @@ pyiceberg = { version = ">=0.12.0", extras = ["sql-sqlite", "pyiceberg-core"] }
 
 [feature.test.pypi-dependencies]
 pfeed = { path = ".", editable = true }
+# used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
+deltalake = ">=1.6.6"
+pyiceberg = { version = ">=0.12.0", extras = ["sql-sqlite", "pyiceberg-core"] }
 pytest = ">=9.2.0"
 pytest-mock = ">=3.17.0"
 pytest-xdist = ">=3.8.0"
 pytest-asyncio = ">=1.4.1"
+pytest-timeout = ">=2.4.0"
 # pytest-cov = ">=7.1.0"
 # pytest-markdown-docs = ">=0.9.2"
 # testcontainers = ">=4.14.2"

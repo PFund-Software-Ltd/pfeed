@@ -5,10 +5,10 @@
 #     "pfeed==0.0.23",
 #     # pin the transitive deps too: micropip resolves `>=` at every page load, so they'd drift
 #     # your packages: the download/retrieve path itself
-#     "pfeed-bybit==0.0.1",
-#     "pfund-bybit==0.0.1",
-#     "pfund-kit==0.1.23",
-#     "pfund-blocks==0.0.3",
+#     "pfeed-bybit==0.0.2",
+#     "pfund-bybit==0.0.3",
+#     "pfund-kit==0.1.24",
+#     "pfund-blocks==0.0.4",
 #     # patched in the emscripten cell: internals they rely on can change in any release
 #     "httpx2==2.16.0",
 #     "rich==15.0.0",
@@ -89,7 +89,9 @@ async def _():
             str_cols = [col for col, dtype in self.schema.items() if dtype == pl.String]
             table = _orig_to_arrow(self.drop(str_cols), *args, **kwargs)
             for col in str_cols:
-                table = table.append_column(col, pa.array(self[col].to_list(), pa.large_string()))
+                table = table.append_column(
+                    col, pa.array(self[col].to_list(), pa.large_string())
+                )
             return table.select(self.columns)  # restore the original column order
 
         pl.DataFrame.to_arrow = _to_arrow
@@ -103,10 +105,17 @@ async def _():
             sources = source if isinstance(source, list) else [source]
             # pq.ParquetFile, not pq.read_table: read_table infers hive partitions from the path (e.g. resolution=1m/),
             # clashing with the file's own columns
-            df = pl.concat([pl.from_arrow(pq.ParquetFile(s).read()) for s in sources], how="diagonal_relaxed")
-            if schema is not None:  # pfeed passes the dataset schema, missing columns become nulls
+            df = pl.concat(
+                [pl.from_arrow(pq.ParquetFile(s).read()) for s in sources],
+                how="diagonal_relaxed",
+            )
+            if (
+                schema is not None
+            ):  # pfeed passes the dataset schema, missing columns become nulls
                 df = df.select(
-                    pl.col(col).cast(dtype) if col in df.columns else pl.lit(None, dtype).alias(col)
+                    pl.col(col).cast(dtype)
+                    if col in df.columns
+                    else pl.lit(None, dtype).alias(col)
                     for col, dtype in schema.items()
                 )
             return df.lazy()

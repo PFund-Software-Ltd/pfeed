@@ -31,6 +31,8 @@ project:
   - data streaming
   - data engineering
   thumbnail: ../static/thumbnail.png
+  toc:
+  - file: index.md
 site:
   template: article-theme
   # options:

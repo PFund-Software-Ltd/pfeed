@@ -54,6 +54,14 @@ feed.run()  # runs all the queued streams
 
 To store the streamed data, pass `io` to `stream()`, which must support appending, e.g. `io=pe.DuckLakeIO()` (currently the only supported one). `load()` is not supported after `stream()`, since a stream is always stored as `CLEANED` data.
 
+```{note} Running in a Jupyter/Marimo notebook?
+:class: dropdown
+A notebook already runs an event loop, so `stream()` in the default mode raises
+`RuntimeError: Cannot call feed.run() from within a running event loop`.
+Create the source with `pipeline_mode=True`, then run the streams with
+`async for` (way 1) or `await feed.run_async()` (way 2) above; both work in a notebook cell.
+```
+
 ---
 
 ## Replaying in Pipeline Mode

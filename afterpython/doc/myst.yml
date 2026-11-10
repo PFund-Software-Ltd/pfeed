@@ -70,7 +70,7 @@ site:
   - title: Examples
     url: https://pfeed.pfund.ai/example
   - title: API Reference
-    url: https://pfeed.pfund.ai/reference
+    url: https://pfeed.pfund.ai/api_reference/pfeed.html
   actions:
   - title: ⭐ Star
     url: https://github.com/PFund-Software-Ltd/pfeed

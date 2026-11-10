@@ -37,9 +37,9 @@ project:
     - file: quickstart.md
     - file: concepts.md
     - file: pipeline_mode.md
+    - file: streaming.md
     - file: integrations.md
-    - file: supported_sources.md
-    - file: supported_ios.md
+    - file: supported.md
     - file: commands.md
     - file: config.md
     - file: CONTRIBUTING.md

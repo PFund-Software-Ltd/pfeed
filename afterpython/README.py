@@ -7,7 +7,7 @@
 #     # your packages: the download/retrieve path itself
 #     "pfeed-bybit==0.0.2",
 #     "pfund-bybit==0.0.3",
-#     "pfund-kit==0.1.24",
+#     "pfund-kit==0.1.25",
 #     "pfund-blocks==0.0.4",
 #     # patched in the emscripten cell: internals they rely on can change in any release
 #     "httpx2==2.16.0",

@@ -2756,7 +2756,7 @@ requires-dist = [
     { name = "pandera", specifier = ">=0.35.0" },
     { name = "pfeed-bybit", marker = "extra == 'bybit'", specifier = ">=0.0.2" },
     { name = "pfund-blocks", specifier = ">=0.0.4" },
-    { name = "pfund-kit", specifier = ">=0.1.24" },
+    { name = "pfund-kit", specifier = ">=0.1.25" },
     { name = "polars", marker = "sys_platform != 'emscripten'", specifier = ">=2.1.0" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.9.2" },
     { name = "pyarrow", marker = "sys_platform != 'emscripten'", specifier = ">=26.0.1" },
@@ -2811,7 +2811,7 @@ wheels = [
 
 [[package]]
 name = "pfund-kit"
-version = "0.1.24"
+version = "0.1.25"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -2826,9 +2826,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "trogon", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/f9/8804a686e30c85755cf804c796d924233b296188c47cd40d34122369f022/pfund_kit-0.1.24.tar.gz", hash = "sha256:509b84f69587ae2d6b68605b8bf6807fec3bc13548c0e0465f4a185047314d79", size = 54814, upload-time = "2026-11-10T00:02:19.948Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/10/f0/086ddb273c159123f99bb882d11266531b63e4ed92c96d429bad2aef0086/pfund_kit-0.1.25.tar.gz", hash = "sha256:f0d615fad7dbcd6cfbffc4db66611440e22c9a174362142fc90e249bdf89b775", size = 54795, upload-time = "2026-11-10T04:52:49.78Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/1b/06a0f97e042f304578806bb65b3f5e0faa27892e7ca5fe6dadf72aa13318/pfund_kit-0.1.24-py3-none-any.whl", hash = "sha256:d1338dfdeca9225e82fd3cf33b5245934ed334af16977001a571981467172215", size = 69419, upload-time = "2026-11-10T00:02:18.874Z" },
+    { url = "https://files.pythonhosted.org/packages/79/2d/e819986fd232b1dd32ed514df129d02bf39e68cab7e3dd925ea42770cee1/pfund_kit-0.1.25-py3-none-any.whl", hash = "sha256:8f0543fec59b179d10411ffe2cfe460a5292f249cafb82101d20717df4818cd6", size = 69417, upload-time = "2026-11-10T04:52:48.638Z" },
 ]
 
 [[package]]

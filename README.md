@@ -17,8 +17,6 @@
 
 <!--<img alt="PFeed Architecture" src="afterpython/static/pfeed.png">-->
 
-> For illustration purposes only, not everything shown is currently supported.
-
 ## Problem
 Starting algo-trading requires reliable and clean data, but traders often **work in silos**, each writing **duplicated code** to clean the same datasets—wasting time and effort. Accessing clean, ready-to-use data is a challenge, forcing traders to handle tedious data tasks before they can even start trading.
 

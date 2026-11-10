@@ -22,6 +22,10 @@ result = feed.download(
 )
 df = result.data.collect()
 ```
+
+```{note}
+To download multiple products in one batch, see [Combining Calls into One Run](pipeline_mode.md#combining-calls-into-one-run).
+```
 ---
 
 ### 2. Retrieve Stored Data
@@ -42,12 +46,28 @@ df = result.data.collect()
 feed.stream(
     product="BTC_USDT_CRYPTO",
     resolution="1tick",  # or just 'tick' for tick data
+    # only DuckLake supports storing streamed data for now, set it to None to skip storing
+    io=pe.DuckLakeIO(),
+    callback=lambda msg: print(msg),
+)
+```
+---
+
+### 4. Replay Stored Data as a Stream
+```python
+feed.replay(
+    product="BTC_USDT_PERP",
+    resolution="1m",
+    start_date="2026-01-01",
+    end_date="2026-01-01",
+    io=pe.ParquetIO(),  # where the data was stored
     callback=lambda msg: print(msg),
 )
 ```
 ---
 
 ```{tip} Learn More
-- For more advanced usage, see the [Tutorials](https://pfeed.pfund.ai/tutorial).
+- To learn `pfeed` step by step, see the [Tutorials](https://pfeed.pfund.ai/tutorial).
+- For more examples, see the [Examples](https://pfeed.pfund.ai/example).
 - For how to write a `product` and `resolution`, see [Product](https://pfund.pfund.ai/doc/product) and [Resolution](https://pfund.pfund.ai/doc/resolution) in the `pfund` docs.
 ```

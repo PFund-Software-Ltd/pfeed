@@ -30,7 +30,7 @@ just = ">=1.59.0"
 
 [pypi-dependencies]
 pfund-blocks = ">=0.0.4"
-pfund-kit = ">=0.1.24"
+pfund-kit = ">=0.1.25"
 pyarrow = ">=26.0.1"
 polars = ">=2.1.0"
 duckdb = ">=2.0.0"

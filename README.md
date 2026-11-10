@@ -35,7 +35,7 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 
 ---
 
-<details>
+<details open>
 <summary>Table of Contents</summary>
 
 - [Installation](#installation)

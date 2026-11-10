@@ -24,7 +24,8 @@ df = result.data.collect()
 ```
 
 ```{note}
-To download multiple products in one batch, see [Combining Calls into One Run](pipeline_mode.md#combining-calls-into-one-run).
+- To download multiple products in one batch, see [Combining Calls into One Run](pipeline_mode.md#combining-calls-into-one-run).
+- If the source doesn't offer the requested resolution, pfeed resamples it for you. For example, Bybit only provides tick data, so `"1second"` or `"1minute"` bars are built from ticks.
 ```
 ---
 

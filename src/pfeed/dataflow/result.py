@@ -51,6 +51,18 @@ class DataFlowResult:
     def failed(cls, error: BaseException | None = None) -> DataFlowResult:
         return cls(success=False, error=error)
 
+    def collect(self) -> None:
+        """Collects materialized data that is still a lazy plan, so the data itself is held.
+
+        Used in Ray workers before the result is sent back: a lazy plan would only be run later in the main process,
+        and some can't be pickled at all, e.g. DuckDB's holds the worker's connection.
+        A lazy result's loader is kept, it reads from storage in the main process.
+        """
+        import polars as pl
+
+        if isinstance(self._data, pl.LazyFrame):
+            self._data = self._data.collect()
+
     @property
     def data(self) -> IntoFrame | None:
         """Lazy-loads data from storage on first access.

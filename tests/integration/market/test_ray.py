@@ -52,3 +52,35 @@ def test_ray_download_and_retrieve_match_without_ray(io: BaseIO):
     assert_frame_equal(cast("pl.LazyFrame", ray_retrieved.data).collect(), expected_df)
     # every date's partition was written
     assert_frame_equal(cast("pl.LazyFrame", retrieved.data).collect(), expected_df)
+
+
+def test_ray_retrieve_resamples_per_date_in_the_workers(io: BaseIO):
+    feed = FakeSource().market_feed
+    downloaded = feed.download(
+        "BTC_USDT_PERP", "1t", start_date=START_DATE, end_date=END_DATE, io=io
+    )
+    # only ticks are stored, so every date is resampled to 1d bars
+    ray_retrieved = FakeSource(num_workers=2).market_feed.retrieve(
+        "BTC_USDT_PERP",
+        "1d",
+        start_date=START_DATE,
+        end_date=END_DATE,
+        dataflow_per_date=True,
+        io=io,
+    )
+    expected = feed.retrieve(
+        "BTC_USDT_PERP", "1d", start_date=START_DATE, end_date=END_DATE, io=io
+    )
+
+    assert downloaded.success, downloaded.errors
+    assert ray_retrieved.success, ray_retrieved.errors
+    assert expected.success, expected.errors
+    assert_frame_equal(
+        cast("pl.LazyFrame", ray_retrieved.data).collect(),
+        cast("pl.LazyFrame", expected.data).collect(),
+    )
+    # the workers sent back the resampled data, not a lazy plan for the main process to run
+    assert all(
+        isinstance(dataflow.result.data, pl.DataFrame)
+        for dataflow in ray_retrieved.dataflows
+    )

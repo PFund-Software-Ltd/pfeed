@@ -28,9 +28,13 @@ def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:
 
     def decorator(func: F) -> F:
         @functools.wraps(func)
-        def wrapper(self: BaseFeed[Any, Any, Any, Any], *args: Any, **kwargs: Any) -> Any:
+        def wrapper(
+            self: BaseFeed[Any, Any, Any, Any], *args: Any, **kwargs: Any
+        ) -> Any:
             if not self._supports(verb):
-                raise NotImplementedError(f"{self.name} does not support {verb} for {self.data_domain}")
+                raise NotImplementedError(
+                    f"{self.name} does not support {verb} for {self.data_domain}"
+                )
             return func(self, *args, **kwargs)
 
         return cast("F", wrapper)
@@ -76,7 +80,11 @@ class BaseFeed[
             if verb in ("stream", "replay") and not issubclass(cls, StreamingMixin):
                 missing.insert(0, "StreamingMixin as a base class")
             # downloaded data must be readable back, retrieve needs nothing from the feed, so leaving it out is a mistake
-            if verb == "download" and hasattr(cls.Requests, "retrieve") and "retrieve" not in cls.capabilities():
+            if (
+                verb == "download"
+                and hasattr(cls.Requests, "retrieve")
+                and "retrieve" not in cls.capabilities()
+            ):
                 missing.insert(0, "Requests.retrieve")
             if missing:
                 errors.append(f"'{verb}' needs {', '.join(missing)}")
@@ -87,7 +95,12 @@ class BaseFeed[
                 + f"\nImplement them, or set the verbs to None in {cls.__name__}.Requests"
             )
 
-    def __init__(self, data_source: SourceT, pipeline_mode: bool = False, num_workers: int | None = None):
+    def __init__(
+        self,
+        data_source: SourceT,
+        pipeline_mode: bool = False,
+        num_workers: int | None = None,
+    ):
         """
         Args:
             data_source: the source that owns this feed, shared by all of its feeds
@@ -105,7 +118,9 @@ class BaseFeed[
                 f"got {type(data_source).__name__}"
             )
         self._data_source: SourceT = data_source
-        self.logger: ColoredLogger = cast("ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}"))
+        self.logger: ColoredLogger = cast(
+            "ColoredLogger", logging.getLogger(f"pfeed.{self.name.lower()}")
+        )
         self._pipeline_mode: PipelineT = cast("PipelineT", pipeline_mode)
         self._dataflows: dict[RequestT, list[DataFlow[RequestT, DataModelT]]] = {}
         self._requests: list[RequestT] = []
@@ -119,7 +134,9 @@ class BaseFeed[
         pass
 
     @abstractmethod
-    def _get_default_transformations(self, request: RequestT, /) -> list[Callable[..., Any]]:
+    def _get_default_transformations(
+        self, request: RequestT, /
+    ) -> list[Callable[..., Any]]:
         pass
 
     @abstractmethod
@@ -138,7 +155,9 @@ class BaseFeed[
 
     def is_streaming(self) -> bool:
         # NOTE: a replay runs like a stream, its messages go through the feed's callback and queues
-        return any(request.extract_type in ("stream", "replay") for request in self._requests)
+        return any(
+            request.extract_type in ("stream", "replay") for request in self._requests
+        )
 
     def _is_using_ray(self) -> bool:
         return bool(self._num_workers)
@@ -147,7 +166,8 @@ class BaseFeed[
     def capabilities(cls) -> list[str]:
         """Verbs this feed supports, i.e. the Requests attributes not set to None."""
         return sorted(
-            verb for verb in dir(cls.Requests)
+            verb
+            for verb in dir(cls.Requests)
             if not verb.startswith("_") and getattr(cls.Requests, verb) is not None
         )
 
@@ -178,7 +198,9 @@ class BaseFeed[
             raise RuntimeError(f"cannot set num_workers while {self.name} is running")
         # NOTE: the dataflows are set up for Ray or not when created, e.g. whether the stream API parses the messages
         if self._requests:
-            raise RuntimeError(f"cannot set num_workers after calling {self.name}'s download()/retrieve()/stream(), set it before")
+            raise RuntimeError(
+                f"cannot set num_workers after calling {self.name}'s download()/retrieve()/stream(), set it before"
+            )
         if num_workers is not None and num_workers <= 0:
             raise ValueError("num_workers must be greater than 0")
         self._num_workers = num_workers
@@ -196,10 +218,16 @@ class BaseFeed[
     ) -> DataFlow[RequestT, DataModelT]:
         from pfeed.dataflow.dataflow import DataFlow
 
-        dataflow = DataFlow(faucet=faucet, data_model=data_model, default_transformations=default_transformations)
+        dataflow = DataFlow(
+            faucet=faucet,
+            data_model=data_model,
+            default_transformations=default_transformations,
+        )
         return dataflow
 
-    def _create_faucet(self, request: RequestT, extract_func: Callable[..., Any]) -> Faucet[RequestT, DataModelT]:
+    def _create_faucet(
+        self, request: RequestT, extract_func: Callable[..., Any]
+    ) -> Faucet[RequestT, DataModelT]:
         """
         Args:
             request: the request the faucet extracts data for
@@ -223,11 +251,12 @@ class BaseFeed[
         # requests cannot be mixed in one feed run. Reject the mix at the source rather
         # than letting a batch faucet hit run_stream() (or vice versa) downstream.
         is_streaming = request.extract_type in ("stream", "replay")
-        if (
-            self._requests
-            and is_streaming != (self._requests[-1].extract_type in ("stream", "replay"))
+        if self._requests and is_streaming != (
+            self._requests[-1].extract_type in ("stream", "replay")
         ):
-            mode, queued_mode = ("streaming", "batch") if is_streaming else ("batch", "streaming")
+            mode, queued_mode = (
+                ("streaming", "batch") if is_streaming else ("batch", "streaming")
+            )
             raise ValueError(
                 "cannot mix streaming and batch requests in one pipeline: "
                 + f"{mode} request is incompatible with the queued {queued_mode} requests"
@@ -240,7 +269,9 @@ class BaseFeed[
             dataflow.add_user_transformations(list(funcs))
         return self
 
-    def load(self, io: BaseIO | None = None, data_layer: DataLayer | str | None = None) -> Self:
+    def load(
+        self, io: BaseIO | None = None, data_layer: DataLayer | str | None = None
+    ) -> Self:
         """Store the data of the request just created.
 
         Args:
@@ -253,11 +284,15 @@ class BaseFeed[
         current_request = self._get_current_request()
         # NOTE: a stream is always stored as pfeed's CLEANED data, before the user's transformations, so only its io is configurable, see stream()
         if current_request.extract_type == "stream":
-            raise ValueError(f"load() is not supported after {self.name}'s stream(), pass io to stream() instead")
+            raise ValueError(
+                f"load() is not supported after {self.name}'s stream(), pass io to stream() instead"
+            )
         # NOTE: a replay reads stored data, it stores nothing
         if current_request.extract_type == "replay":
             raise ValueError(f"load() is not supported after {self.name}'s replay()")
-        return self._load_for_request(request=current_request, io=io, data_layer=data_layer)
+        return self._load_for_request(
+            request=current_request, io=io, data_layer=data_layer
+        )
 
     def _load_for_request(
         self,
@@ -269,10 +304,19 @@ class BaseFeed[
         # no io anywhere, nothing to store
         if io is None:
             return self
-        data_layer = request.data_layer if data_layer is None else DataLayer[str(data_layer).upper()]
+        data_layer = (
+            request.data_layer
+            if data_layer is None
+            else DataLayer[str(data_layer).upper()]
+        )
         request.finalize_load_config(io, data_layer)
         for dataflow in self._dataflows[request]:
-            dataflow._setup_handler(io, data_layer, str(self.data_domain), **self._get_handler_kwargs(request))
+            dataflow._setup_handler(
+                io,
+                data_layer,
+                str(self.data_domain),
+                **self._get_handler_kwargs(request),
+            )
         return self
 
     def _get_handler_kwargs(self, request: RequestT) -> dict[str, Any]:
@@ -300,7 +344,9 @@ class BaseFeed[
         if not self._is_using_ray():
             return
         for dataflow in self.dataflows:
-            if (handler := dataflow.handler) is not None and not handler.io.CAPABILITIES.concurrent_partition_writes:
+            if (
+                handler := dataflow.handler
+            ) is not None and not handler.io.CAPABILITIES.concurrent_partition_writes:
                 raise RuntimeError(
                     f"{handler.io} does not support concurrent partition writes, cannot be used with Ray"
                 )
@@ -321,7 +367,9 @@ class BaseFeed[
         self._dataflows = {}
         self._set_running(False)
 
-    def _create_batch_dataflows(self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]) -> list[DataFlow[RequestT, DataModelT]]:
+    def _create_batch_dataflows(
+        self, *, extract_func: Callable[..., Any], data_models: list[DataModelT]
+    ) -> list[DataFlow[RequestT, DataModelT]]:
         """Creates batch dataflows for the current request, one per data model
 
         Args:
@@ -331,17 +379,25 @@ class BaseFeed[
         from pfund_kit.style import RichColor, TextStyle
 
         request = self._get_current_request()
-        self.logger.debug(f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN)
+        self.logger.debug(
+            f"{request.name}:\n{request}\n", style=TextStyle.BOLD + RichColor.GREEN
+        )
         faucet = self._create_faucet(request=request, extract_func=extract_func)
         default_transformations = self._get_default_transformations(request)
         dataflows = [
-            self._create_dataflow(faucet=faucet, data_model=dm, default_transformations=default_transformations)
+            self._create_dataflow(
+                faucet=faucet,
+                data_model=dm,
+                default_transformations=default_transformations,
+            )
             for dm in data_models
         ]
         self._dataflows[request] = dataflows
         return dataflows
 
-    def _run_batch_dataflows(self, use_prefect: bool, prefect_kwargs: dict[str, Any]) -> list[DataFlow[RequestT, DataModelT]]:
+    def _run_batch_dataflows(
+        self, use_prefect: bool, prefect_kwargs: dict[str, Any]
+    ) -> list[DataFlow[RequestT, DataModelT]]:
         from importlib.util import find_spec
 
         from pfund_kit.utils.progress_bar import ProgressBar, track
@@ -349,7 +405,9 @@ class BaseFeed[
         from pfeed.config import get_config
 
         if use_prefect and find_spec("prefect") is None:
-            raise ImportError('use_prefect=True but `prefect` is not installed. Install it with `pip install "pfeed[prefect]"`.')
+            raise ImportError(
+                'use_prefect=True but `prefect` is not installed. Install it with `pip install "pfeed[prefect]"`.'
+            )
         disable_progress_bar = not get_config().show_progress_bar
         self._prepare_before_run()
 
@@ -389,7 +447,10 @@ class BaseFeed[
 
                 @ray.remote
                 def ray_task(
-                    logger_name: str, log_queue: Queue, prefect_context: dict[str, Any] | None, dataflow: DataFlow[RequestT, DataModelT]
+                    logger_name: str,
+                    log_queue: Queue,
+                    prefect_context: dict[str, Any] | None,
+                    dataflow: DataFlow[RequestT, DataModelT],
                 ) -> DataFlow[RequestT, DataModelT]:
                     from contextlib import nullcontext
 
@@ -402,6 +463,9 @@ class BaseFeed[
                         context = nullcontext()
                     with context:
                         _ = _run_dataflow(dataflow)
+                    # NOTE: the worker runs the read and the transformations (e.g. resampling) here,
+                    # instead of sending back a lazy plan for the main process to run
+                    dataflow.result.collect()
                     return dataflow
 
                 with ray_logging_context(self.logger) as log_queue:
@@ -409,33 +473,51 @@ class BaseFeed[
                     try:
                         assert self._num_workers is not None, "num_workers is not set"
                         # Ray's .remote() only takes positional arguments (for type checkers), dataflow goes last
-                        submit = partial(ray_task.remote, self.logger.name, log_queue, prefect_context)
+                        submit = partial(
+                            ray_task.remote,
+                            self.logger.name,
+                            log_queue,
+                            prefect_context,
+                        )
                         dataflows = self.dataflows
                         pending = iter(enumerate(dataflows))
                         # dataflows finish in any order, keep the results in submission order so run() is deterministic
                         ref_to_index: dict[ray.ObjectRef, int] = {}
-                        results: list[DataFlow[RequestT, DataModelT] | None] = [None] * len(dataflows)
+                        results: list[DataFlow[RequestT, DataModelT] | None] = [
+                            None
+                        ] * len(dataflows)
 
-                        def submit_next(index: int, dataflow: DataFlow[RequestT, DataModelT]) -> ray.ObjectRef:
+                        def submit_next(
+                            index: int, dataflow: DataFlow[RequestT, DataModelT]
+                        ) -> ray.ObjectRef:
                             ref = submit(dataflow)
                             ref_to_index[ref] = index
                             return ref
 
                         # sliding window: keep num_workers tasks in flight, start the next dataflow
                         # as soon as one finishes, so a slow dataflow doesn't leave the other workers idle
-                        unfinished = [submit_next(*item) for item in islice(pending, self._num_workers)]
+                        unfinished = [
+                            submit_next(*item)
+                            for item in islice(pending, self._num_workers)
+                        ]
                         with ProgressBar(
                             total=len(dataflows),
                             description=f"Running {self.name} dataflows",
                             disable=disable_progress_bar,
                         ) as pbar:
                             while unfinished:
-                                finished, unfinished = ray.wait(unfinished, num_returns=1)
-                                results[ref_to_index[finished[0]]] = ray.get(finished[0])
+                                finished, unfinished = ray.wait(
+                                    unfinished, num_returns=1
+                                )
+                                results[ref_to_index[finished[0]]] = ray.get(
+                                    finished[0]
+                                )
                                 pbar.advance(1)
                                 if (item := next(pending, None)) is not None:
                                     unfinished.append(submit_next(*item))
-                        last_run_dataflows.extend(cast("list[DataFlow[RequestT, DataModelT]]", results))
+                        last_run_dataflows.extend(
+                            cast("list[DataFlow[RequestT, DataModelT]]", results)
+                        )
                     except BaseException:
                         # e.g. KeyboardInterrupt or a crashed worker: cancel the in-flight tasks,
                         # otherwise they keep running (and writing to storage) after run() returns.

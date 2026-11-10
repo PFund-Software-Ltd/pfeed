@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import pandas as pd  # ty: ignore[import-not-found]  # optional, not in the dev env
     from pytest_mock import MockerFixture
 
     from pfeed.base.requests.base_request import BaseRequest
@@ -18,7 +19,6 @@ if TYPE_CHECKING:
 import logging
 from types import SimpleNamespace
 
-import pandas as pd  # ty: ignore[import-not-found]  # optional, not in the dev env
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
@@ -272,6 +272,7 @@ def test_run_batch_loads_any_dataframe_as_polars(
     mocker: MockerFixture, io: ParquetIO, df: pl.DataFrame
 ):
     """User transformations may return e.g. pandas, the handler always gets a polars DataFrame."""
+    pytest.importorskip("pandas")
 
     def to_pandas(data: pl.LazyFrame) -> pd.DataFrame:
         return data.collect().to_pandas()

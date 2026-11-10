@@ -2,6 +2,7 @@
 
 The data engine part (pushing the Ray workers' transformed data to the engine) is not covered here.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
@@ -43,14 +44,20 @@ from pfeed.source import BaseSource
 from pfeed.streaming.latency_tracker import LatencyTracker
 from pfeed.streaming.stream_api import BaseStreamAPI
 
-TICK, MINUTE = '1t', '1m'
+TICK, MINUTE = "1t", "1m"
 
 
 class _StreamAPI(BaseStreamAPI):
     """Sends the given messages to the callback once connected, then disconnects, or stays connected if endless."""
 
-    def __init__(self, messages: list[Message] | None = None, *, endless: bool = False, error: Exception | None = None):
-        super().__init__(env=cast("Any", 'LIVE'))
+    def __init__(
+        self,
+        messages: list[Message] | None = None,
+        *,
+        endless: bool = False,
+        error: Exception | None = None,
+    ):
+        super().__init__(env=cast("Any", "LIVE"))
         self.messages = messages or []
         self.endless = endless
         self.error = error
@@ -65,7 +72,12 @@ class _StreamAPI(BaseStreamAPI):
     def add_channel(self, request: BaseStreamRequest) -> None:
         self.channels.append(request)
 
-    def set_callback(self, callback: Callable[[Message], Awaitable[None] | None], *, skip_parse_message: bool = False) -> None:
+    def set_callback(
+        self,
+        callback: Callable[[Message], Awaitable[None] | None],
+        *,
+        skip_parse_message: bool = False,
+    ) -> None:
         super().set_callback(callback, skip_parse_message=skip_parse_message)
         self.skip_parse_message = skip_parse_message
 
@@ -96,7 +108,7 @@ class _StreamAPI(BaseStreamAPI):
 
 class _Feed(MarketFeed):
     # module-level so cloudpickle pickles _parse_streaming_message by reference into the Ray workers
-    class Requests(MarketFeed.Requests):  # ty: ignore[invalid-attribute-override]
+    class Requests(MarketFeed.Requests):  # ty: ignore[incompatible-attribute-override]
         download = None
         retrieve = None
 
@@ -105,14 +117,14 @@ class _Feed(MarketFeed):
     @staticmethod
     def _parse_streaming_message(msg: Message) -> Message:
         # NOTE: like a real feed, only parses the messages the stream API left unparsed, i.e. with Ray
-        if msg['data'] is not None:
+        if msg["data"] is not None:
             return msg
-        return {**msg, 'data': f"parsed:{msg['message']}"}
+        return {**msg, "data": f"parsed:{msg['message']}"}
 
 
 def _tag_by_user(msg: Message) -> Message:
     # module-level so cloudpickle pickles it by reference into the Ray workers
-    return {**msg, 'data': f"user:{msg['data']}"}
+    return {**msg, "data": f"user:{msg['data']}"}
 
 
 class _Handler:
@@ -121,7 +133,9 @@ class _Handler:
     A file, so that what a Ray worker's copy flushes can be checked from the main process.
     """
 
-    def __init__(self, path: Path, *, fail_write: bool = False, fail_flush: bool = False):
+    def __init__(
+        self, path: Path, *, fail_write: bool = False, fail_flush: bool = False
+    ):
         self.io: Any = SimpleNamespace(CAPABILITIES=ParquetIO.CAPABILITIES)
         self.path = path
         self.fail_write = fail_write
@@ -130,14 +144,14 @@ class _Handler:
 
     def write_stream(self, msg: Message) -> None:
         if self.fail_write:
-            raise RuntimeError('write failed')
-        self.rows.append(msg['data'])
+            raise RuntimeError("write failed")
+        self.rows.append(msg["data"])
 
     def teardown_streaming(self) -> None:
         if not self.rows:
             return
         if self.fail_flush:
-            raise RuntimeError('flush failed')
+            raise RuntimeError("flush failed")
         existing = json.loads(self.path.read_text()) if self.path.exists() else []
         self.path.write_text(json.dumps(existing + self.rows))
         self.rows.clear()
@@ -152,9 +166,11 @@ def stream_api() -> _StreamAPI:
 
 
 @pytest.fixture
-def source(mocker: MockerFixture, product: BaseProduct, stream_api: _StreamAPI) -> MockType:
+def source(
+    mocker: MockerFixture, product: BaseProduct, stream_api: _StreamAPI
+) -> MockType:
     source = mocker.Mock(spec=BaseSource)
-    source.name = 'FAKE'
+    source.name = "FAKE"
     source.Feeds = {DataCategory.MARKET_DATA: _Feed}
     source.create_product.return_value = product
     source.get_stream_api.return_value = stream_api
@@ -173,7 +189,7 @@ def _capture_feed_logs(caplog: pytest.LogCaptureFixture) -> Generator[None]:
     pfeed's logging doesn't propagate to the root logger where caplog listens, so the handler is attached to the feed's logger;
     after stream(), since stream() sets up pfeed's logging again, which removes it.
     """
-    logger = logging.getLogger('pfeed.fake')
+    logger = logging.getLogger("pfeed.fake")
     logger.addHandler(caplog.handler)
     try:
         yield
@@ -181,29 +197,34 @@ def _capture_feed_logs(caplog: pytest.LogCaptureFixture) -> Generator[None]:
         logger.removeHandler(caplog.handler)
 
 
-def _stream_msg(product: BaseProduct, resolution: str, i: int, *, parsed: bool = True) -> Message:
+def _stream_msg(
+    product: BaseProduct, resolution: str, i: int, *, parsed: bool = True
+) -> Message:
     return {
-        'source': 'FAKE',
-        'account': None,
-        'channel': 'trades',
-        'product': product.name,
-        'resolution': repr(Resolution(resolution)),
-        'received_at': i,
-        'message': i,
-        'data': i if parsed else None,
-        'error': None,
-        'extra': {},
+        "source": "FAKE",
+        "account": None,
+        "channel": "trades",
+        "product": product.name,
+        "resolution": repr(Resolution(resolution)),
+        "received_at": i,
+        "message": i,
+        "data": i if parsed else None,
+        "error": None,
+        "extra": {},
     }
 
 
 def _record_into(received: list[Any]) -> Callable[[Message], Message]:
     def record(msg: Message) -> Message:
-        received.append(msg['data'])
+        received.append(msg["data"])
         return msg
+
     return record
 
 
-def _stream(feed: _Feed, product: BaseProduct, resolution: str = TICK, **kwargs: Any) -> DataFlow:
+def _stream(
+    feed: _Feed, product: BaseProduct, resolution: str = TICK, **kwargs: Any
+) -> DataFlow:
     _ = feed.stream(str(product.basis), resolution, **kwargs)
     return feed.dataflows[-1]
 
@@ -214,25 +235,27 @@ def _stream(feed: _Feed, product: BaseProduct, resolution: str = TICK, **kwargs:
 def _error_msg(i: int) -> Message:
     """A message for no dataflow, so only the callback and __aiter__() get it."""
     return {
-        'source': 'FAKE',
-        'account': None,
-        'channel': 'trades',
-        'product': None,
-        'resolution': None,
-        'received_at': i,
-        'message': i,
-        'data': i,
-        'error': 'rejected',
-        'extra': {},
+        "source": "FAKE",
+        "account": None,
+        "channel": "trades",
+        "product": None,
+        "resolution": None,
+        "received_at": i,
+        "message": i,
+        "data": i,
+        "error": "rejected",
+        "extra": {},
     }
 
 
 @pytest.mark.asyncio
-async def test_aiter_yields_every_message_until_the_streams_end(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI):
+async def test_aiter_yields_every_message_until_the_streams_end(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
+):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     received: list[Any] = []
-    _ = _stream(feed, product, callback=lambda msg: received.append(msg['data']))
-    assert [msg['data'] async for msg in feed] == [0, 1, 2]
+    _ = _stream(feed, product, callback=lambda msg: received.append(msg["data"]))
+    assert [msg["data"] async for msg in feed] == [0, 1, 2]
     # the callback still gets every message
     assert received == [0, 1, 2]
     assert stream_api.is_disconnected
@@ -242,43 +265,55 @@ async def test_aiter_yields_every_message_until_the_streams_end(feed: _Feed, pro
 
 @pytest.mark.asyncio
 async def test_aiter_without_streams_raises(feed: _Feed):
-    with pytest.raises(RuntimeError, match='No streaming dataflow to iterate over'):
+    with pytest.raises(RuntimeError, match="No streaming dataflow to iterate over"):
         _ = [msg async for msg in feed]
 
 
 @pytest.mark.asyncio
-async def test_aiter_reraises_the_runs_error(feed: _Feed, product: BaseProduct, tmp_path: Path):
+async def test_aiter_reraises_the_runs_error(
+    feed: _Feed, product: BaseProduct, tmp_path: Path
+):
     feed.set_num_workers(1)
     dataflow = _stream(feed, product)
-    handler = _Handler(tmp_path / 'rows.json')
-    handler.io = SimpleNamespace(CAPABILITIES=IOCapabilities(append=True, concurrent_partition_writes=False))
+    handler = _Handler(tmp_path / "rows.json")
+    handler.io = SimpleNamespace(
+        CAPABILITIES=IOCapabilities(append=True, concurrent_partition_writes=False)
+    )
     dataflow._handler = cast("Any", handler)
-    with pytest.raises(RuntimeError, match='does not support concurrent partition writes'):
+    with pytest.raises(
+        RuntimeError, match="does not support concurrent partition writes"
+    ):
         _ = [msg async for msg in feed]
     assert feed._iter_queue is None
 
 
 @pytest.mark.asyncio
 async def test_aiter_full_queue_drops_the_oldest_message(
-    mocker: MockerFixture, feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, caplog: pytest.LogCaptureFixture
+    mocker: MockerFixture,
+    feed: _Feed,
+    product: BaseProduct,
+    stream_api: _StreamAPI,
+    caplog: pytest.LogCaptureFixture,
 ):
-    mocker.patch.object(_Feed, 'QUEUE_MAXSIZE', 2)
+    mocker.patch.object(_Feed, "QUEUE_MAXSIZE", 2)
     # NOTE: the stream API sends all messages before the consumer gets the first one, since _callback() doesn't yield control for them
     stream_api.messages = [_error_msg(i) for i in range(3)]
     _ = _stream(feed, product)
     with _capture_feed_logs(caplog):
-        assert [msg['data'] async for msg in feed] == [1, 2]
-    assert 'iteration queue is full, dropping the oldest message' in caplog.text
+        assert [msg["data"] async for msg in feed] == [1, 2]
+    assert "iteration queue is full, dropping the oldest message" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_aiter_closing_after_break_ends_the_streams(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI):
+async def test_aiter_closing_after_break_ends_the_streams(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
+):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     stream_api.endless = True
     _ = _stream(feed, product)
     async with contextlib.aclosing(aiter(feed)) as messages:
         async for msg in messages:
-            assert msg['data'] == 0
+            assert msg["data"] == 0
             break
         assert not stream_api.is_disconnected
     assert stream_api.is_disconnected
@@ -312,7 +347,9 @@ async def test_aiter_cancelling_the_consumer_ends_the_streams_and_propagates(
 # --- setting up stream dataflows ---
 
 
-def test_stream_sets_up_the_stream_api(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI):
+def test_stream_sets_up_the_stream_api(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
+):
     _ = _stream(feed, product)
     [request] = feed._requests
     assert stream_api.channels == [request]
@@ -321,7 +358,9 @@ def test_stream_sets_up_the_stream_api(feed: _Feed, product: BaseProduct, stream
     assert list(feed._queues) == [(product.name, repr(Resolution(TICK)))]
 
 
-def test_stream_with_ray_leaves_parsing_to_the_workers(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI):
+def test_stream_with_ray_leaves_parsing_to_the_workers(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
+):
     feed.set_num_workers(1)
     _ = _stream(feed, product)
     assert stream_api.skip_parse_message is True
@@ -334,54 +373,71 @@ def test_streams_share_one_faucet(feed: _Feed, product: BaseProduct):
     assert len(feed._queues) == 2
 
 
-def test_streaming_the_same_product_and_resolution_twice_raises(feed: _Feed, product: BaseProduct):
+def test_streaming_the_same_product_and_resolution_twice_raises(
+    feed: _Feed, product: BaseProduct
+):
     _ = _stream(feed, product)
-    with pytest.raises(ValueError, match='is already being streamed'):
+    with pytest.raises(ValueError, match="is already being streamed"):
         _ = _stream(feed, product)
 
 
 def test_streaming_different_envs_in_one_feed_raises(feed: _Feed, product: BaseProduct):
-    _ = _stream(feed, product, TICK, env='LIVE')
-    with pytest.raises(ValueError, match='cannot stream PAPER and LIVE in the same feed'):
-        _ = _stream(feed, product, MINUTE, env='PAPER')
+    _ = _stream(feed, product, TICK, env="LIVE")
+    with pytest.raises(
+        ValueError, match="cannot stream PAPER and LIVE in the same feed"
+    ):
+        _ = _stream(feed, product, MINUTE, env="PAPER")
 
 
 def test_streaming_backtest_raises(feed: _Feed, product: BaseProduct):
     # stored data is replayed with replay()
-    with pytest.raises(ValueError, match='streaming is only supported in PAPER and LIVE'):
-        _ = _stream(feed, product, env=cast("Any", 'BACKTEST'))
+    with pytest.raises(
+        ValueError, match="streaming is only supported in PAPER and LIVE"
+    ):
+        _ = _stream(feed, product, env=cast("Any", "BACKTEST"))
 
 
-def test_stream_dataflow_is_pickled_without_its_faucet(feed: _Feed, product: BaseProduct, tmp_path: Path):
+def test_stream_dataflow_is_pickled_without_its_faucet(
+    feed: _Feed, product: BaseProduct, tmp_path: Path
+):
     dataflow = _stream(feed, product)
-    dataflow._handler = cast("Any", _Handler(tmp_path / 'rows.json'))
+    dataflow._handler = cast("Any", _Handler(tmp_path / "rows.json"))
     _ = feed.transform(_tag_by_user)
 
     copy = pickle.loads(pickle.dumps(dataflow))
 
     # e.g. what a Ray stream worker gets, it receives the messages from the faucet's ROUTER, not from the faucet itself
     assert copy._faucet is None
-    with pytest.raises(RuntimeError, match='has no faucet'):
+    with pytest.raises(RuntimeError, match="has no faucet"):
         _ = copy.faucet
     assert copy.is_streaming()
     assert str(copy) == str(dataflow)
-    assert copy._process_stream_message(_stream_msg(product, TICK, 1)) == {**_stream_msg(product, TICK, 1), 'data': 'user:1'}
+    assert copy._process_stream_message(_stream_msg(product, TICK, 1)) == {
+        **_stream_msg(product, TICK, 1),
+        "data": "user:1",
+    }
     assert copy.handler.rows == [1]
     assert dataflow._faucet is not None
 
 
-def test_stream_latency_is_logged_every_interval(feed: _Feed, product: BaseProduct, caplog: pytest.LogCaptureFixture):
+def test_stream_latency_is_logged_every_interval(
+    feed: _Feed, product: BaseProduct, caplog: pytest.LogCaptureFixture
+):
     dataflow = _stream(feed, product)
     dataflow._latency_tracker = LatencyTracker(log_interval=60)
-    caplog.set_level(logging.DEBUG, logger='pfeed.fake')
+    caplog.set_level(logging.DEBUG, logger="pfeed.fake")
     with _capture_feed_logs(caplog):
-        _ = dataflow._process_stream_message({**_stream_msg(product, TICK, 0), 'received_at': time.time_ns()})
-        assert 'latency p50=' not in caplog.text
+        _ = dataflow._process_stream_message(
+            {**_stream_msg(product, TICK, 0), "received_at": time.time_ns()}
+        )
+        assert "latency p50=" not in caplog.text
         # the window has lasted a whole interval, so the next message logs it
         dataflow._latency_tracker._window_start -= 60
-        _ = dataflow._process_stream_message({**_stream_msg(product, TICK, 1), 'received_at': time.time_ns()})
+        _ = dataflow._process_stream_message(
+            {**_stream_msg(product, TICK, 1), "received_at": time.time_ns()}
+        )
 
-    assert 'msg/s | latency p50=' in caplog.text
+    assert "msg/s | latency p50=" in caplog.text
     assert dataflow._latency_tracker._latencies_ms == []
 
 
@@ -391,7 +447,7 @@ def test_stream_latency_is_not_tracked_by_default(feed: _Feed, product: BaseProd
 
 def test_load_after_stream_raises(feed: _Feed, product: BaseProduct, tmp_path: Path):
     _ = _stream(feed, product)
-    with pytest.raises(ValueError, match=r'pass io to stream\(\) instead'):
+    with pytest.raises(ValueError, match=r"pass io to stream\(\) instead"):
         _ = feed.load(ParquetIO(base_path=str(tmp_path)))
 
 
@@ -409,15 +465,26 @@ def test_different_callbacks_raise(feed: _Feed, product: BaseProduct):
     def other_callback(msg: Message) -> None: ...
 
     _ = _stream(feed, product, TICK, callback=callback)
-    with pytest.raises(ValueError, match='a feed has one callback for all its streams') as exc_info:
+    with pytest.raises(
+        ValueError, match="a feed has one callback for all its streams"
+    ) as exc_info:
         _ = _stream(feed, product, MINUTE, callback=other_callback)
-    assert 'test_different_callbacks_raise.<locals>.callback (test_mixin.py:' in str(exc_info.value)
-    assert 'test_different_callbacks_raise.<locals>.other_callback (test_mixin.py:' in str(exc_info.value)
-    assert 'instead of a lambda' not in str(exc_info.value)
+    assert "test_different_callbacks_raise.<locals>.callback (test_mixin.py:" in str(
+        exc_info.value
+    )
+    assert (
+        "test_different_callbacks_raise.<locals>.other_callback (test_mixin.py:"
+        in str(exc_info.value)
+    )
+    assert "instead of a lambda" not in str(exc_info.value)
 
 
-def test_lambda_callbacks_created_in_a_loop_raise_with_a_hint(feed: _Feed, product: BaseProduct):
-    with pytest.raises(ValueError, match=r'Use a named function \(def\) instead of a lambda'):
+def test_lambda_callbacks_created_in_a_loop_raise_with_a_hint(
+    feed: _Feed, product: BaseProduct
+):
+    with pytest.raises(
+        ValueError, match=r"Use a named function \(def\) instead of a lambda"
+    ):
         for resolution in (TICK, MINUTE):
             _ = _stream(feed, product, resolution, callback=lambda msg: None)
 
@@ -425,12 +492,16 @@ def test_lambda_callbacks_created_in_a_loop_raise_with_a_hint(feed: _Feed, produ
 # --- running stream dataflows ---
 
 
-def test_stream_runs_until_the_stream_ends(source: MockType, product: BaseProduct, stream_api: _StreamAPI):
+def test_stream_runs_until_the_stream_ends(
+    source: MockType, product: BaseProduct, stream_api: _StreamAPI
+):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     received: list[Any] = []
     feed = _Feed(source)
 
-    result = feed.stream(str(product.basis), TICK, callback=lambda msg: received.append(msg['data']))
+    result = feed.stream(
+        str(product.basis), TICK, callback=lambda msg: received.append(msg["data"])
+    )
 
     assert isinstance(result, RunResult)
     assert result.success
@@ -447,13 +518,15 @@ def test_stream_runs_until_the_stream_ends(source: MockType, product: BaseProduc
 
 
 @pytest.mark.asyncio
-async def test_async_callback_is_awaited(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI):
+async def test_async_callback_is_awaited(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
+):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     received: list[Any] = []
 
     async def callback(msg: Message) -> None:
         await asyncio.sleep(0)
-        received.append(msg['data'])
+        received.append(msg["data"])
 
     _ = _stream(feed, product, callback=callback)
     result = await feed.run_async()
@@ -461,7 +534,9 @@ async def test_async_callback_is_awaited(feed: _Feed, product: BaseProduct, stre
     assert received == [0, 1, 2]
 
 
-def test_messages_go_to_their_own_dataflow(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI):
+def test_messages_go_to_their_own_dataflow(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
+):
     stream_api.messages = [
         _stream_msg(product, TICK, 0),
         _stream_msg(product, MINUTE, 1),
@@ -491,13 +566,13 @@ def test_messages_are_stored_before_the_user_transformations(
 ):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     dataflow = _stream(feed, product)
-    handler = _Handler(tmp_path / 'rows.json')
+    handler = _Handler(tmp_path / "rows.json")
     dataflow._handler = cast("Any", handler)
     stored_when_transformed: list[int] = []
 
     def double(msg: Message) -> Message:
         stored_when_transformed.append(len(handler.rows))
-        return {**msg, 'data': cast("int", msg['data']) * 2}
+        return {**msg, "data": cast("int", msg["data"]) * 2}
 
     _ = feed.transform(double)
     result = feed.run()
@@ -510,17 +585,21 @@ def test_messages_are_stored_before_the_user_transformations(
 
 
 def test_failed_default_transformation_skips_the_message(
-    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    feed: _Feed,
+    product: BaseProduct,
+    stream_api: _StreamAPI,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     dataflow = _stream(feed, product)
-    handler = _Handler(tmp_path / 'rows.json')
+    handler = _Handler(tmp_path / "rows.json")
     dataflow._handler = cast("Any", handler)
     user_received: list[Any] = []
 
     def fail_on_one(msg: Message) -> Message:
-        if msg['data'] == 1:
-            raise ValueError('bad message')
+        if msg["data"] == 1:
+            raise ValueError("bad message")
         return msg
 
     dataflow._default_transformations.append(fail_on_one)
@@ -532,20 +611,24 @@ def test_failed_default_transformation_skips_the_message(
     # neither stored nor passed to the user's transformations
     assert handler.written() == [0, 2]
     assert user_received == [0, 2]
-    assert 'transformation failed, skipping message' in caplog.text
+    assert "transformation failed, skipping message" in caplog.text
 
 
 def test_failed_user_transformation_still_stores_the_message(
-    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    feed: _Feed,
+    product: BaseProduct,
+    stream_api: _StreamAPI,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     dataflow = _stream(feed, product)
-    handler = _Handler(tmp_path / 'rows.json')
+    handler = _Handler(tmp_path / "rows.json")
     dataflow._handler = cast("Any", handler)
 
     def fail_on_one(msg: Message) -> Message:
-        if msg['data'] == 1:
-            raise ValueError('bad message')
+        if msg["data"] == 1:
+            raise ValueError("bad message")
         return msg
 
     _ = feed.transform(fail_on_one)
@@ -554,17 +637,27 @@ def test_failed_user_transformation_still_stores_the_message(
 
     assert result.success
     assert handler.written() == [0, 1, 2]
-    assert 'user transformation failed' in caplog.text
+    assert "user transformation failed" in caplog.text
 
 
 def test_failed_dataflow_doesnt_stop_the_others(
-    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    feed: _Feed,
+    product: BaseProduct,
+    stream_api: _StreamAPI,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ):
-    stream_api.messages = [_stream_msg(product, resolution, i) for i in range(3) for resolution in (TICK, MINUTE)]
+    stream_api.messages = [
+        _stream_msg(product, resolution, i)
+        for i in range(3)
+        for resolution in (TICK, MINUTE)
+    ]
     tick_dataflow = _stream(feed, product, TICK)
-    tick_dataflow._handler = cast("Any", _Handler(tmp_path / 'tick.json', fail_write=True))
+    tick_dataflow._handler = cast(
+        "Any", _Handler(tmp_path / "tick.json", fail_write=True)
+    )
     minute_dataflow = _stream(feed, product, MINUTE)
-    minute_handler = _Handler(tmp_path / 'minute.json')
+    minute_handler = _Handler(tmp_path / "minute.json")
     minute_dataflow._handler = cast("Any", minute_handler)
 
     with _capture_feed_logs(caplog):
@@ -574,12 +667,14 @@ def test_failed_dataflow_doesnt_stop_the_others(
     assert not tick_dataflow.result.success
     assert minute_dataflow.result.success
     assert minute_handler.written() == [0, 1, 2]
-    assert 'FAKE has 1 failed dataflows' in caplog.text
+    assert "FAKE has 1 failed dataflows" in caplog.text
 
 
-def test_stream_api_error_fails_every_dataflow(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI):
+def test_stream_api_error_fails_every_dataflow(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
+):
     stream_api.messages = [_stream_msg(product, TICK, 0)]
-    stream_api.error = ConnectionError('connection lost')
+    stream_api.error = ConnectionError("connection lost")
     tick_dataflow = _stream(feed, product, TICK)
     minute_dataflow = _stream(feed, product, MINUTE)
 
@@ -593,11 +688,13 @@ def test_stream_api_error_fails_every_dataflow(feed: _Feed, product: BaseProduct
 
 
 @pytest.mark.asyncio
-async def test_cancelling_the_run_ends_the_streams(feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path):
+async def test_cancelling_the_run_ends_the_streams(
+    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path
+):
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
     stream_api.endless = True
     dataflow = _stream(feed, product)
-    handler = _Handler(tmp_path / 'rows.json')
+    handler = _Handler(tmp_path / "rows.json")
     dataflow._handler = cast("Any", handler)
 
     task = asyncio.create_task(feed.run_async())
@@ -616,29 +713,37 @@ async def test_cancelling_the_run_ends_the_streams(feed: _Feed, product: BasePro
 @pytest.mark.asyncio
 async def test_run_inside_an_event_loop_raises(feed: _Feed, product: BaseProduct):
     _ = _stream(feed, product)
-    with pytest.raises(RuntimeError, match=r'Cannot call feed.run\(\) from within a running event loop'):
+    with pytest.raises(
+        RuntimeError, match=r"Cannot call feed.run\(\) from within a running event loop"
+    ):
         feed.run()
 
 
 @pytest.mark.asyncio
 async def test_run_async_without_streams_raises(feed: _Feed):
-    with pytest.raises(RuntimeError, match=r'run_async\(\) is only for streaming dataflows'):
+    with pytest.raises(
+        RuntimeError, match=r"run_async\(\) is only for streaming dataflows"
+    ):
         await feed.run_async()
-
 
 
 # --- optimizing table IOs ---
 
 
 def test_lake_optimizer_runs_while_streaming_and_once_at_the_end(
-    mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path
+    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    feed: _Feed,
+    product: BaseProduct,
+    stream_api: _StreamAPI,
+    tmp_path: Path,
 ):
-    monkeypatch.setattr(get_config(), 'stream_optimize_interval', 60)
-    lake_optimizer = mocker.patch('pfeed.streaming.lake_optimizer.LakeOptimizer')
+    monkeypatch.setattr(get_config(), "stream_optimize_interval", 60)
+    lake_optimizer = mocker.patch("pfeed.streaming.lake_optimizer.LakeOptimizer")
     optimizer = lake_optimizer.return_value
     optimizer.run = mocker.AsyncMock()
     stream_api.messages = [_stream_msg(product, TICK, i) for i in range(3)]
-    handler = _Handler(tmp_path / 'rows.json')
+    handler = _Handler(tmp_path / "rows.json")
     _stream(feed, product)._handler = cast("Any", handler)
     # without storage, so no IO
     _ = _stream(feed, product, MINUTE)
@@ -646,7 +751,9 @@ def test_lake_optimizer_runs_while_streaming_and_once_at_the_end(
     result = feed.run()
 
     assert result.success
-    lake_optimizer.assert_called_once_with([handler.io], interval=60, logger=feed.logger)
+    lake_optimizer.assert_called_once_with(
+        [handler.io], interval=60, logger=feed.logger
+    )
     optimizer.run.assert_awaited_once_with()
     # after the handlers have flushed
     optimizer.optimize.assert_called_once_with()
@@ -656,21 +763,29 @@ def test_lake_optimizer_runs_while_streaming_and_once_at_the_end(
 # --- running stream dataflows with Ray ---
 
 
-@pytest.mark.parametrize('num_workers', [1, 2])
+@pytest.mark.parametrize("num_workers", [1, 2])
 def test_ray_workers_transform_and_flush(
-    feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path, num_workers: int
+    feed: _Feed,
+    product: BaseProduct,
+    stream_api: _StreamAPI,
+    tmp_path: Path,
+    num_workers: int,
 ):
-    pytest.importorskip('ray')
+    pytest.importorskip("ray")
     stream_api.messages = [
-        _stream_msg(product, resolution, i, parsed=False) for i in range(3) for resolution in (TICK, MINUTE)
+        _stream_msg(product, resolution, i, parsed=False)
+        for i in range(3)
+        for resolution in (TICK, MINUTE)
     ]
     received: list[Any] = []
     feed.set_num_workers(num_workers)
-    tick_dataflow = _stream(feed, product, TICK, callback=lambda msg: received.append(msg['data']))
-    tick_handler = _Handler(tmp_path / 'tick.json')
+    tick_dataflow = _stream(
+        feed, product, TICK, callback=lambda msg: received.append(msg["data"])
+    )
+    tick_handler = _Handler(tmp_path / "tick.json")
     tick_dataflow._handler = cast("Any", tick_handler)
     minute_dataflow = _stream(feed, product, MINUTE)
-    minute_handler = _Handler(tmp_path / 'minute.json')
+    minute_handler = _Handler(tmp_path / "minute.json")
     minute_dataflow._handler = cast("Any", minute_handler)
     _ = feed.transform(_tag_by_user)
 
@@ -681,43 +796,49 @@ def test_ray_workers_transform_and_flush(
     assert received == [None] * 6
     # the workers' copies of the handlers are flushed when the workers stop,
     # with the messages stored before the user's transformations
-    assert tick_handler.written() == minute_handler.written() == ['parsed:0', 'parsed:1', 'parsed:2']
+    assert (
+        tick_handler.written()
+        == minute_handler.written()
+        == ["parsed:0", "parsed:1", "parsed:2"]
+    )
     assert not feed.is_running()
 
 
 def test_ray_worker_failed_flush_fails_its_dataflows(
     feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path
 ):
-    pytest.importorskip('ray')
-    stream_api.messages = [_stream_msg(product, TICK, i, parsed=False) for i in range(3)]
+    pytest.importorskip("ray")
+    stream_api.messages = [
+        _stream_msg(product, TICK, i, parsed=False) for i in range(3)
+    ]
     feed.set_num_workers(1)
     dataflow = _stream(feed, product)
     # NOTE: the main process's copy never gets any rows with Ray, so only the worker's copy raises
-    dataflow._handler = cast("Any", _Handler(tmp_path / 'rows.json', fail_flush=True))
+    dataflow._handler = cast("Any", _Handler(tmp_path / "rows.json", fail_flush=True))
 
     result = feed.run()
 
     assert not result.success
-    assert 'flush failed' in str(dataflow.result.error)
+    assert "flush failed" in str(dataflow.result.error)
 
 
 def test_ray_worker_not_stopping_in_time_fails_its_dataflows(
     mocker: MockerFixture, feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
 ):
-    pytest.importorskip('ray')
+    pytest.importorskip("ray")
     import ray
 
     stream_api.messages = [_stream_msg(product, TICK, 0, parsed=False)]
     feed.set_num_workers(1)
     dataflow = _stream(feed, product)
     # as if the worker were still flushing when the wait timed out
-    mocker.patch.object(ray, 'wait', return_value=([], []))
+    mocker.patch.object(ray, "wait", return_value=([], []))
 
     result = feed.run()
 
     assert not result.success
     assert isinstance(dataflow.result.error, TimeoutError)
-    assert 'did not stop within' in str(dataflow.result.error)
+    assert "did not stop within" in str(dataflow.result.error)
 
 
 # --- replaying stored data ---
@@ -735,37 +856,50 @@ def _ns(date: datetime.date, minutes: float = 0) -> int:
 def _stored_bars(product: BaseProduct, starts: list[int]) -> pl.DataFrame:
     """Cleaned 1m bars starting at the given ns timestamps, the close tells them apart."""
     n = len(starts)
-    return pl.DataFrame({
-        'date': pl.Series(starts, dtype=pl.Int64).cast(pl.Datetime('ns')),
-        'product': [product.name] * n,
-        'resolution': [str(Resolution(MINUTE))] * n,
-        'open': [float(i) for i in range(n)],
-        'high': [float(i) + 1 for i in range(n)],
-        'low': [float(i) - 1 for i in range(n)],
-        'close': [float(i) for i in range(n)],
-        'volume': [1.0] * n,
-    })
+    return pl.DataFrame(
+        {
+            "date": pl.Series(starts, dtype=pl.Int64).cast(pl.Datetime("ns")),
+            "product": [product.name] * n,
+            "resolution": [str(Resolution(MINUTE))] * n,
+            "open": [float(i) for i in range(n)],
+            "high": [float(i) + 1 for i in range(n)],
+            "low": [float(i) - 1 for i in range(n)],
+            "close": [float(i) for i in range(n)],
+            "volume": [1.0] * n,
+        }
+    )
 
 
 def _stored_ticks(product: BaseProduct, timestamps: list[int]) -> pl.DataFrame:
     """Cleaned ticks at the given ns timestamps, the price tells them apart."""
     n = len(timestamps)
-    return pl.DataFrame({
-        'date': pl.Series(timestamps, dtype=pl.Int64).cast(pl.Datetime('ns')),
-        'product': [product.name] * n,
-        'resolution': [str(Resolution(TICK))] * n,
-        'price': [float(i) for i in range(n)],
-        'volume': [1.0] * n,
-        'side': pl.Series([1] * n, dtype=pl.Int8),
-    })
+    return pl.DataFrame(
+        {
+            "date": pl.Series(timestamps, dtype=pl.Int64).cast(pl.Datetime("ns")),
+            "product": [product.name] * n,
+            "resolution": [str(Resolution(TICK))] * n,
+            "price": [float(i) for i in range(n)],
+            "volume": [1.0] * n,
+            "side": pl.Series([1] * n, dtype=pl.Int8),
+        }
+    )
 
 
-def _replay(feed: _Feed, product: BaseProduct, resolution: str, io: ParquetIO, stored: pl.DataFrame, **kwargs: Any) -> DataFlow:
+def _replay(
+    feed: _Feed,
+    product: BaseProduct,
+    resolution: str,
+    io: ParquetIO,
+    stored: pl.DataFrame,
+    **kwargs: Any,
+) -> DataFlow:
     """Replays from D1 to D2, after storing the given cleaned data where replay() reads it, per date, so a date without rows is missing."""
-    _ = feed.replay(str(product.basis), resolution, start_date=D1, end_date=D2, io=io, **kwargs)
+    _ = feed.replay(
+        str(product.basis), resolution, start_date=D1, end_date=D2, io=io, **kwargs
+    )
     request = cast("MarketFeedReplayRequest", feed._requests[-1])
     for daily_data_model in request.to_data_model().split_by_date():
-        daily = stored.filter(pl.col('date').dt.date() == daily_data_model.date)
+        daily = stored.filter(pl.col("date").dt.date() == daily_data_model.date)
         if not daily.is_empty():
             request.create_data_resolution_handler(daily_data_model).write_batch(daily)
     return feed.dataflows[-1]
@@ -773,11 +907,17 @@ def _replay(feed: _Feed, product: BaseProduct, resolution: str, io: ParquetIO, s
 
 def _replayed(msg: Message) -> tuple[str | None, int, float]:
     """(resolution, received_at, close or price) of a replayed message."""
-    [data] = cast("list[Any]", msg['data'])
-    return msg['resolution'], msg['received_at'], data.close if isinstance(data, Bar) else data.price
+    [data] = cast("list[Any]", msg["data"])
+    return (
+        msg["resolution"],
+        msg["received_at"],
+        data.close if isinstance(data, Bar) else data.price,
+    )
 
 
-def test_replay_merges_every_request_by_received_at(feed: _Feed, product: BaseProduct, tmp_path: Path):
+def test_replay_merges_every_request_by_received_at(
+    feed: _Feed, product: BaseProduct, tmp_path: Path
+):
     io = ParquetIO(base_path=str(tmp_path))
     received: list[tuple[str | None, int, float]] = []
     minute_received: list[Any] = []
@@ -785,7 +925,14 @@ def test_replay_merges_every_request_by_received_at(feed: _Feed, product: BasePr
     # a bar is received at its end, e.g. the bar starting at 00:00 at 00:01
     bars = _stored_bars(product, [_ns(D1, 0), _ns(D1, 1), _ns(D2, 0)])
     ticks = _stored_ticks(product, [_ns(D1, 0.5), _ns(D1, 1), _ns(D1, 1.5)])
-    minute_dataflow = _replay(feed, product, MINUTE, io, bars, callback=lambda msg: received.append(_replayed(msg)))
+    minute_dataflow = _replay(
+        feed,
+        product,
+        MINUTE,
+        io,
+        bars,
+        callback=lambda msg: received.append(_replayed(msg)),
+    )
     _ = feed.transform(_record_into(minute_received))
     tick_dataflow = _replay(feed, product, TICK, io, ticks)
     _ = feed.transform(_record_into(tick_received))
@@ -822,7 +969,11 @@ def test_replay_merges_every_request_by_received_at(feed: _Feed, product: BasePr
         is_closed=True,
     )
     assert len(minute_received) == 3
-    assert [tick.ts for [tick] in tick_received] == [_ns(D1, 0.5), _ns(D1, 1), _ns(D1, 1.5)]
+    assert [tick.ts for [tick] in tick_received] == [
+        _ns(D1, 0.5),
+        _ns(D1, 1),
+        _ns(D1, 1.5),
+    ]
     assert all(tick.side == Side.BUY for [tick] in tick_received)
     assert not feed.is_running()
 
@@ -833,7 +984,11 @@ def test_replay_skips_missing_dates_with_a_warning(
     received: list[Any] = []
     # nothing stored on D1
     _ = _replay(
-        feed, product, MINUTE, ParquetIO(base_path=str(tmp_path)), _stored_bars(product, [_ns(D2, 0)]),
+        feed,
+        product,
+        MINUTE,
+        ParquetIO(base_path=str(tmp_path)),
+        _stored_bars(product, [_ns(D2, 0)]),
         callback=lambda msg: received.append(_replayed(msg)),
     )
 
@@ -842,19 +997,27 @@ def test_replay_skips_missing_dates_with_a_warning(
 
     assert result.success
     assert received == [(repr(Resolution(MINUTE)), _ns(D2, 1), 0.0)]
-    assert 'is missing 1 dates' in caplog.text
+    assert "is missing 1 dates" in caplog.text
 
 
-@pytest.mark.parametrize(('replay_pace', 'delays'), [
-    # ASAP
-    (0, [0, 0, 0]),
-    # fixed cadence
-    (0.5, [0, 0.5, 0.5]),
-    # realistic: the time between the bars, at most one bar period, e.g. the 3-minute gap before the last bar sleeps 60s
-    (None, [0, 60, 60]),
-])
+@pytest.mark.parametrize(
+    ("replay_pace", "delays"),
+    [
+        # ASAP
+        (0, [0, 0, 0]),
+        # fixed cadence
+        (0.5, [0, 0.5, 0.5]),
+        # realistic: the time between the bars, at most one bar period, e.g. the 3-minute gap before the last bar sleeps 60s
+        (None, [0, 60, 60]),
+    ],
+)
 def test_replay_pace(
-    mocker: MockerFixture, feed: _Feed, product: BaseProduct, tmp_path: Path, replay_pace: float | None, delays: list[float]
+    mocker: MockerFixture,
+    feed: _Feed,
+    product: BaseProduct,
+    tmp_path: Path,
+    replay_pace: float | None,
+    delays: list[float],
 ):
     sleep = asyncio.sleep
     slept: list[float] = []
@@ -863,26 +1026,52 @@ def test_replay_pace(
         slept.append(delay)
         await sleep(0)
 
-    _ = mocker.patch('asyncio.sleep', new=record_sleep)
+    _ = mocker.patch("asyncio.sleep", new=record_sleep)
     bars = _stored_bars(product, [_ns(D1, 0), _ns(D1, 1), _ns(D1, 5)])
-    _ = _replay(feed, product, MINUTE, ParquetIO(base_path=str(tmp_path)), bars, replay_pace=replay_pace)
+    _ = _replay(
+        feed,
+        product,
+        MINUTE,
+        ParquetIO(base_path=str(tmp_path)),
+        bars,
+        replay_pace=replay_pace,
+    )
 
     assert feed.run().success
     assert slept == delays
 
 
 @pytest.mark.asyncio
-async def test_aiter_gets_every_replayed_message(mocker: MockerFixture, feed: _Feed, product: BaseProduct, tmp_path: Path):
+async def test_aiter_gets_every_replayed_message(
+    mocker: MockerFixture, feed: _Feed, product: BaseProduct, tmp_path: Path
+):
     # an ASAP replay still yields control between messages, so the iteration queue never fills up and drops them
-    mocker.patch.object(_Feed, 'QUEUE_MAXSIZE', 2)
+    mocker.patch.object(_Feed, "QUEUE_MAXSIZE", 2)
     bars = _stored_bars(product, [_ns(D1, i) for i in range(5)])
-    _ = _replay(feed, product, MINUTE, ParquetIO(base_path=str(tmp_path)), bars, callback=lambda msg: None)
+    _ = _replay(
+        feed,
+        product,
+        MINUTE,
+        ParquetIO(base_path=str(tmp_path)),
+        bars,
+        callback=lambda msg: None,
+    )
 
     assert [_replayed(msg)[2] async for msg in feed] == [0.0, 1.0, 2.0, 3.0, 4.0]
     assert not feed.is_running()
 
 
-def test_replay_and_stream_in_one_feed_raises(feed: _Feed, product: BaseProduct, tmp_path: Path):
-    _ = _replay(feed, product, MINUTE, ParquetIO(base_path=str(tmp_path)), _stored_bars(product, []))
-    with pytest.raises(ValueError, match='cannot stream LIVE and BACKTEST in the same feed'):
+def test_replay_and_stream_in_one_feed_raises(
+    feed: _Feed, product: BaseProduct, tmp_path: Path
+):
+    _ = _replay(
+        feed,
+        product,
+        MINUTE,
+        ParquetIO(base_path=str(tmp_path)),
+        _stored_bars(product, []),
+    )
+    with pytest.raises(
+        ValueError, match="cannot stream LIVE and BACKTEST in the same feed"
+    ):
         _ = _stream(feed, product, TICK)

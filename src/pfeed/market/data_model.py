@@ -28,18 +28,20 @@ class MarketDataMessage(Message):
 
 
 class MarketDataModel(TimeBasedDataModel):
-    DataHandler: ClassVar[type[MarketDataHandler]] = MarketDataHandler  # ty: ignore[invalid-mutable-override]
+    DataHandler: ClassVar[type[MarketDataHandler]] = MarketDataHandler  # ty: ignore[incompatible-mutable-override]
     StreamMessage: ClassVar[type[Any]] = MarketDataMessage
 
     @staticmethod
-    def enc_hook(obj: Any) -> Any:  # ty: ignore[invalid-mutable-override]
+    def enc_hook(obj: Any) -> Any:  # ty: ignore[incompatible-mutable-override]
         # e.g. a Bar's resolution, sent as its repr, e.g. "1m"
         if isinstance(obj, Resolution):
             return repr(obj)
-        raise NotImplementedError(f"Encoding objects of type {type(obj)} is unsupported")
+        raise NotImplementedError(
+            f"Encoding objects of type {type(obj)} is unsupported"
+        )
 
     @staticmethod
-    def dec_hook(type_: type, obj: Any) -> Any:  # ty: ignore[invalid-mutable-override]
+    def dec_hook(type_: type, obj: Any) -> Any:  # ty: ignore[incompatible-mutable-override]
         if type_ is Resolution:
             return Resolution(obj)
         raise NotImplementedError(f"Decoding objects of type {type_} is unsupported")
@@ -60,7 +62,9 @@ class MarketDataModel(TimeBasedDataModel):
         )
 
     @staticmethod
-    def create_zmq_channel(product: BaseProduct, resolution: Resolution) -> ZeroMQChannel:
+    def create_zmq_channel(
+        product: BaseProduct, resolution: Resolution
+    ) -> ZeroMQChannel:
         """The zmq channel of a product's streamed market data, e.g. for a subscriber of the data engine's XPUB."""
         # NOTE: the trailing "." marks the end of the product name. A subscription matches any channel starting with it,
         # without it, subscribing to "BYBIT.1m.BTC" would also receive "BYBIT.1m.BTC_USDT"
@@ -68,7 +72,9 @@ class MarketDataModel(TimeBasedDataModel):
 
     def to_zmq_route(self) -> tuple[ZeroMQChannel, ZeroMQTopic]:
         resolution = Resolution(self.resolution)
-        return self.create_zmq_channel(self.product, resolution), resolution.to_channel()
+        return self.create_zmq_channel(
+            self.product, resolution
+        ), resolution.to_channel()
 
     @field_validator("env", mode="before")
     @classmethod

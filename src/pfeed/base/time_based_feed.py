@@ -26,7 +26,7 @@ class TimeBasedFeed[
     DataModelT: TimeBasedDataModel,
     PipelineT: bool = Literal[False],
 ](BaseFeed[SourceT, RequestT, DataModelT, PipelineT], ABC):
-    DataModel: ClassVar[type[TimeBasedDataModel]]  # ty: ignore[invalid-mutable-override]
+    DataModel: ClassVar[type[TimeBasedDataModel]]  # ty: ignore[incompatible-mutable-override]
     downloaded_data_date_cols: ClassVar[list[str]]
     # How the source's batch API is chunked: True = one dataflow per date (e.g. daily files),
     # False = one dataflow spanning the whole range (e.g. a range query API).

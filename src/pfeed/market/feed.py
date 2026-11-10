@@ -44,23 +44,32 @@ class MarketFeed[
     DataModelT: MarketDataModel = MarketDataModel,
     PipelineT: bool = Literal[False],
 ](StreamingMixin, TimeBasedFeed[SourceT, RequestT, DataModelT, PipelineT], ABC):
-    class Requests:  # ty: ignore[invalid-attribute-override]
+    class Requests:  # ty: ignore[incompatible-attribute-override]
         """Request class per verb, a subclass sets a verb to None if it doesn't support it."""
 
-        download: ClassVar[type[MarketFeedDownloadRequest] | None] = MarketFeedDownloadRequest
-        retrieve: ClassVar[type[MarketFeedRetrieveRequest] | None] = MarketFeedRetrieveRequest
+        download: ClassVar[type[MarketFeedDownloadRequest] | None] = (
+            MarketFeedDownloadRequest
+        )
+        retrieve: ClassVar[type[MarketFeedRetrieveRequest] | None] = (
+            MarketFeedRetrieveRequest
+        )
         stream: ClassVar[type[MarketFeedStreamRequest] | None] = MarketFeedStreamRequest
         replay: ClassVar[type[MarketFeedReplayRequest] | None] = MarketFeedReplayRequest
 
-    DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel  # ty: ignore[invalid-mutable-override]
+    DataModel: ClassVar[type[MarketDataModel]] = MarketDataModel  # ty: ignore[incompatible-mutable-override]
     data_domain: ClassVar[DataCategory] = DataCategory.MARKET_DATA
     _required_methods: ClassVar[dict[str, tuple[str, ...]]] = {
-        MarketFeedDownloadRequest.extract_type: ("_download_impl", "_normalize_downloaded_data"),
+        MarketFeedDownloadRequest.extract_type: (
+            "_download_impl",
+            "_normalize_downloaded_data",
+        ),
         MarketFeedStreamRequest.extract_type: ("_parse_streaming_message",),
     }
 
     @staticmethod
-    def _standardize_columns(df: pl.LazyFrame, product: BaseProduct, resolution: Resolution) -> pl.LazyFrame:
+    def _standardize_columns(
+        df: pl.LazyFrame, product: BaseProduct, resolution: Resolution
+    ) -> pl.LazyFrame:
         """Standardizes the columns of a DataFrame.
         Adds columns 'product', 'resolution'
         """
@@ -203,7 +212,9 @@ class MarketFeed[
         )
         return resampled
 
-    def get_supported_resolutions(self, include_resampled: bool = False) -> list[Resolution]:
+    def get_supported_resolutions(
+        self, include_resampled: bool = False
+    ) -> list[Resolution]:
         """Get all supported resolutions for batch processing for the data source.
 
         Args:
@@ -352,12 +363,19 @@ class MarketFeed[
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
-        start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
-        if not (candidates := [r for r in self.get_supported_resolutions() if r >= resolution]):
+        start_date, end_date = self._standardize_dates(
+            resolution, start_date, end_date, rollback_period
+        )
+        if not (
+            candidates := [
+                r for r in self.get_supported_resolutions() if r >= resolution
+            ]
+        ):
             raise ValueError(f"{resolution} is not supported by {self.name}")
         # find the first resolution that is >= (finer/higher) the target resolution
         data_resolution = min(candidates)
-        request = cast("RequestT",
+        request = cast(
+            "RequestT",
             cast("type[MarketFeedDownloadRequest]", self.Requests.download)(
                 data_source=self.data_source,
                 data_origin=data_origin,
@@ -369,13 +387,15 @@ class MarketFeed[
                 data_resolution=data_resolution,
                 start_date=start_date,
                 end_date=end_date,
-            )
+            ),
         )
         self._append_request(request)
         data_model = cast("DataModelT", request.to_data_model())
         self._create_batch_dataflows(
             extract_func=self._download_impl,
-            data_models=data_model.split_by_date() if self.download_dataflow_per_date else [data_model]
+            data_models=data_model.split_by_date()
+            if self.download_dataflow_per_date
+            else [data_model],
         )
         return self.run() if not self.is_pipeline() else self
 
@@ -384,10 +404,14 @@ class MarketFeed[
         raise NotImplementedError
 
     @staticmethod
-    def _download_impl(request: RequestT, data_model: DataModelT) -> pl.LazyFrame | None:
+    def _download_impl(
+        request: RequestT, data_model: DataModelT
+    ) -> pl.LazyFrame | None:
         raise NotImplementedError
 
-    def _get_default_transformations(self, request: RequestT, /) -> list[Callable[..., Any]]:
+    def _get_default_transformations(
+        self, request: RequestT, /
+    ) -> list[Callable[..., Any]]:
         match request.extract_type:
             case "download":
                 return self._get_default_transformations_for_download(request)
@@ -400,13 +424,19 @@ class MarketFeed[
             case _:
                 raise ValueError(f"Unknown extract type: {request.extract_type}")
 
-    def _get_default_transformations_for_download(self, request: RequestT, /) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_download(
+        self, request: RequestT, /
+    ) -> list[Callable[..., Any]]:
         from pfeed.utils import lambda_with_name
 
         # bind the class and plain values so the lambdas don't capture self (the whole feed) when pickled by Ray
         cls = type(self)
         is_raw_data = not request.should_clean_data()
-        product, data_resolution, target_resolution = request.product, request.data_resolution, request.target_resolution
+        product, data_resolution, target_resolution = (
+            request.product,
+            request.data_resolution,
+            request.target_resolution,
+        )
         default_transformations = [
             lambda_with_name(
                 "standardize_date_column",
@@ -537,19 +567,29 @@ class MarketFeed[
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
-        start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
+        start_date, end_date = self._standardize_dates(
+            resolution, start_date, end_date, rollback_period
+        )
         data_layer = DataLayer.parse(data_layer)
         # search for higher resolutions (closest first), e.g. if resolution is '1m', search '1m' -> '1s' -> '1t'
         # only cleaned data has a known schema to resample, raw and curated data only use the requested resolution
-        search_resolutions = [resolution] if data_layer != DataLayer.CLEANED else [
-            resolution,
-            *sorted([
-                _resolution
-                for _resolution in self.get_supported_resolutions(include_resampled=True)
-                # quote data has no price or OHLC columns to resample into bars
-                if _resolution > resolution and not _resolution.is_quote()
+        search_resolutions = (
+            [resolution]
+            if data_layer != DataLayer.CLEANED
+            else [
+                resolution,
+                *sorted(
+                    [
+                        _resolution
+                        for _resolution in self.get_supported_resolutions(
+                            include_resampled=True
+                        )
+                        # quote data has no price or OHLC columns to resample into bars
+                        if _resolution > resolution and not _resolution.is_quote()
+                    ]
+                ),
             ]
-        )]
+        )
 
         # find the data resolution: the first search resolution stored for every date,
         # falls back to the target resolution if none is fully stored
@@ -569,14 +609,19 @@ class MarketFeed[
         missing_dates: list[datetime.date] = []
         for search_resolution in search_resolutions:
             request = partial_request(data_resolution=search_resolution)
-            if not (_missing_dates := request.create_data_resolution_handler().find_missing_dates_in_storage()):
+            if not (
+                _missing_dates
+                := request.create_data_resolution_handler().find_missing_dates_in_storage()
+            ):
                 break
             # the target resolution is the one fallen back to, report its missing dates
             if search_resolution == resolution:
                 missing_dates = _missing_dates
         else:
             # list at most 10 missing dates, a long range can miss thousands
-            shown_dates = ", ".join(str(date) for date in missing_dates[:10]) + (", ..." if len(missing_dates) > 10 else "")
+            shown_dates = ", ".join(str(date) for date in missing_dates[:10]) + (
+                ", ..." if len(missing_dates) > 10 else ""
+            )
             self.logger.warning(
                 f"{product} data from {start_date} to {end_date} is not fully stored at any of {search_resolutions} in {request.io_for_retrieval!r}, "
                 + f"falling back to {resolution}, missing {len(missing_dates)} dates: {shown_dates}"
@@ -586,12 +631,16 @@ class MarketFeed[
         data_model = cast("DataModelT", request.to_data_model())
         self._create_batch_dataflows(
             extract_func=self._retrieve_impl,
-            data_models=data_model.split_by_date() if dataflow_per_date else [data_model],
+            data_models=data_model.split_by_date()
+            if dataflow_per_date
+            else [data_model],
         )
         return self.run() if not self.is_pipeline() else self
 
     @staticmethod
-    def _retrieve_impl(request: RequestT, data_model: DataModelT) -> pl.LazyFrame | None:
+    def _retrieve_impl(
+        request: RequestT, data_model: DataModelT
+    ) -> pl.LazyFrame | None:
         # data_model is of target resolution and has the dataflow's date range (one date when dataflow_per_date=True),
         # the handler reads that range at data_resolution
         assert isinstance(request, MarketFeedRetrieveRequest)
@@ -624,12 +673,16 @@ class MarketFeed[
                     # streamed data has no resolution column;
                     # sorted like batch data, the table IO doesn't keep the stored order, e.g. DuckLake's inlined rows and files,
                     # received_at orders the updates of the same bar, e.g. incremental bars
-                    lambda df: df.with_columns(
-                        cs.datetime(time_zone="*").dt.replace_time_zone(None),
-                    ).with_columns(
-                        pl.col(date_col).alias(DATE),
-                        pl.lit(str(data_resolution)).alias(RESOLUTION),
-                    ).sort(date_col, RECEIVED_AT),
+                    lambda df: (
+                        df.with_columns(
+                            cs.datetime(time_zone="*").dt.replace_time_zone(None),
+                        )
+                        .with_columns(
+                            pl.col(date_col).alias(DATE),
+                            pl.lit(str(data_resolution)).alias(RESOLUTION),
+                        )
+                        .sort(date_col, RECEIVED_AT)
+                    ),
                 ),
             )
         # only cleaned data has a known schema to resample and organize, raw and curated data are returned as stored
@@ -657,7 +710,9 @@ class MarketFeed[
         *,
         data_origin: str = "",
         io: BaseIO | None = None,
-        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"] = Environment.LIVE,
+        env: Literal[
+            Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"
+        ] = Environment.LIVE,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
@@ -671,7 +726,9 @@ class MarketFeed[
         *,
         data_origin: str = "",
         io: BaseIO | None = None,
-        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"] = Environment.LIVE,
+        env: Literal[
+            Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"
+        ] = Environment.LIVE,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
@@ -685,7 +742,9 @@ class MarketFeed[
         *,
         data_origin: str = "",
         io: BaseIO | None = None,
-        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"] = Environment.LIVE,
+        env: Literal[
+            Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"
+        ] = Environment.LIVE,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
@@ -699,7 +758,9 @@ class MarketFeed[
         *,
         data_origin: str = "",
         io: BaseIO | None = None,
-        env: Literal[Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"] = Environment.LIVE,
+        env: Literal[
+            Environment.PAPER, Environment.LIVE, "PAPER", "LIVE"
+        ] = Environment.LIVE,
         callback: Callable[[Message], Awaitable[None] | None] | None = None,
         store_incremental_bars: bool = False,
         flush_interval: float = 100,
@@ -742,21 +803,26 @@ class MarketFeed[
 
         data_resolution = resolution
         if resolution.is_bar():
-            supported = self.data_source.get_stream_api(env).get_supported_resolutions(product)
+            supported = self.data_source.get_stream_api(env).get_supported_resolutions(
+                product
+            )
             if resolution not in supported:
                 from pfund_blocks.datas.bar_data import BarData
 
                 target = BarData(product, resolution)
                 candidates = [r for r in supported if target.can_resample_from(r)]
                 if not candidates:
-                    raise ValueError(f"{resolution!r} is not supported in streaming by {self.name}")
+                    raise ValueError(
+                        f"{resolution!r} is not supported in streaming by {self.name}"
+                    )
                 # the coarsest one that fits, e.g. 6m with [1m, 3m, 5m, 1t] -> 3m
                 data_resolution = min(candidates)
                 self.logger.warning(
                     f"{product} {resolution} is not supported in streaming, using {data_resolution} instead to resample data",
                 )
 
-        request = cast("RequestT",
+        request = cast(
+            "RequestT",
             cast("type[MarketFeedStreamRequest]", self.Requests.stream)(
                 data_source=self.data_source,
                 data_origin=data_origin,
@@ -770,7 +836,7 @@ class MarketFeed[
                 end_date=end_date,
                 store_incremental_bars=store_incremental_bars,
                 flush_interval=flush_interval,
-            )
+            ),
         )
         self._append_request(request)
         data_model = cast("DataModelT", request.to_data_model())
@@ -791,7 +857,11 @@ class MarketFeed[
 
     def _get_handler_kwargs(self, request: RequestT) -> dict[str, Any]:
         if request.extract_type == "stream":
-            return {"store_incremental_bars": cast("MarketFeedStreamRequest", request).store_incremental_bars}
+            return {
+                "store_incremental_bars": cast(
+                    "MarketFeedStreamRequest", request
+                ).store_incremental_bars
+            }
         return {}
 
     @staticmethod
@@ -800,7 +870,9 @@ class MarketFeed[
 
     async def _stream_impl(self, request: RequestT):
         """Streams from the data source's stream API (env=PAPER/LIVE), replaying (env=BACKTEST) is _replay_impl()."""
-        stream_api = self.data_source.get_stream_api(cast("Literal[Environment.PAPER, Environment.LIVE]", request.env))
+        stream_api = self.data_source.get_stream_api(
+            cast("Literal[Environment.PAPER, Environment.LIVE]", request.env)
+        )
         try:
             await stream_api.connect()
             # NOTE: connect() returns right away, this is what notices that the stream has stopped
@@ -814,13 +886,17 @@ class MarketFeed[
                     queue.shutdown()
 
     # NOTE: ALL transformation functions MUST be static methods so that they can be serialized by Ray
-    def _get_default_transformations_for_stream(self, request: RequestT) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_stream(
+        self, request: RequestT
+    ) -> list[Callable[..., Any]]:
         from pfund_blocks.datas.bar_data import BarData
         from pfund_blocks.datas.tick_data import TickData
 
         from pfeed.utils import lambda_with_name
 
-        default_transformations: list[Callable[..., Any]] = [self._parse_streaming_message]
+        default_transformations: list[Callable[..., Any]] = [
+            self._parse_streaming_message
+        ]
 
         is_resampling = bool(request.target_resolution < request.data_resolution)
         if is_resampling:
@@ -853,7 +929,7 @@ class MarketFeed[
                         resampler=resampler,
                         data_bar=data_bar,
                         target_resolution=target_resolution,
-                    )
+                    ),
                 )
             )
         return default_transformations
@@ -892,7 +968,11 @@ class MarketFeed[
         # case 3: nothing changed, e.g. an unclosed 1m bar, or no 1m bar has closed since the stream started
         else:
             resampled_bars = None
-        return {**message, "resolution": repr(target_resolution), "data": resampled_bars}
+        return {
+            **message,
+            "resolution": repr(target_resolution),
+            "data": resampled_bars,
+        }
 
     # NOTE: the return type follows the pipeline mode, see BaseFeed's PipelineT
     @overload
@@ -996,8 +1076,11 @@ class MarketFeed[
         setup_logging(env=env)
         product: BaseProduct = self.data_source.create_product(product, **product_specs)
         resolution = Resolution(resolution)
-        start_date, end_date = self._standardize_dates(resolution, start_date, end_date, rollback_period)
-        request = cast("RequestT",
+        start_date, end_date = self._standardize_dates(
+            resolution, start_date, end_date, rollback_period
+        )
+        request = cast(
+            "RequestT",
             cast("type[MarketFeedReplayRequest]", self.Requests.replay)(
                 data_source=self.data_source,
                 data_origin=data_origin,
@@ -1011,7 +1094,7 @@ class MarketFeed[
                 start_date=start_date,
                 end_date=end_date,
                 replay_pace=replay_pace,
-            )
+            ),
         )
         self._append_request(request)
         data_model = cast("DataModelT", request.to_data_model())
@@ -1051,7 +1134,9 @@ class MarketFeed[
             clock = ReplayClock(cast("MarketFeedReplayRequest", request).replay_pace)
             clock.join(self)
 
-        def _read_day(handlers: list[tuple[MarketFeedReplayRequest, MarketDataHandler]]) -> list[tuple[int, Message]]:
+        def _read_day(
+            handlers: list[tuple[MarketFeedReplayRequest, MarketDataHandler]],
+        ) -> list[tuple[int, Message]]:
             """Returns the day's messages of every request, each with the time it would have been received live, ordered by it."""
             messages: list[tuple[int, Message]] = []
             for req, handler in handlers:
@@ -1110,18 +1195,26 @@ class MarketFeed[
             return messages
 
         try:
-            handlers_per_date: dict[datetime.date, list[tuple[MarketFeedReplayRequest, MarketDataHandler]]] = defaultdict(list)
+            handlers_per_date: dict[
+                datetime.date, list[tuple[MarketFeedReplayRequest, MarketDataHandler]]
+            ] = defaultdict(list)
             for req in requests:
                 if not (req.data_resolution.is_bar() or req.data_resolution.is_tick()):
-                    raise NotImplementedError(f"replaying {req.data_resolution!r} data is not supported yet")
+                    raise NotImplementedError(
+                        f"replaying {req.data_resolution!r} data is not supported yet"
+                    )
                 replay_data_model = req.to_data_model()
-                if missing_dates := req.create_data_resolution_handler(replay_data_model).find_missing_dates_in_storage():
+                if missing_dates := req.create_data_resolution_handler(
+                    replay_data_model
+                ).find_missing_dates_in_storage():
                     self.logger.warning(
                         f"{req.product} {req.data_resolution!r} data from {replay_data_model.start_date} to {replay_data_model.end_date} "
                         + f"is missing {len(missing_dates)} dates in {req.io_for_replay!r}, they are skipped in the replay"
                     )
                 for daily_data_model in replay_data_model.split_by_date():
-                    handlers_per_date[daily_data_model.date].append((req, req.create_data_resolution_handler(daily_data_model)))
+                    handlers_per_date[daily_data_model.date].append(
+                        (req, req.create_data_resolution_handler(daily_data_model))
+                    )
             # NOTE: one day at a time to bound memory
             for date in sorted(handlers_per_date):
                 # NOTE: reading blocks, so it runs in a thread, the dataflows keep consuming their queues meanwhile
@@ -1132,7 +1225,9 @@ class MarketFeed[
                 for received_at, message in messages:
                     data = cast("list[Bar | Tick]", message["data"])[0]
                     # NOTE: at most one bar period for the realistic pace, so data gaps (e.g. weekends) aren't slept through
-                    max_delay = data.resolution.to_seconds() if isinstance(data, Bar) else None
+                    max_delay = (
+                        data.resolution.to_seconds() if isinstance(data, Bar) else None
+                    )
                     await clock.wait_until(self, received_at, max_delay=max_delay)
                     await self._callback(message)
         finally:
@@ -1141,6 +1236,8 @@ class MarketFeed[
             for queue in self._queues.values():
                 queue.shutdown()
 
-    def _get_default_transformations_for_replay(self, request: RequestT, /) -> list[Callable[..., Any]]:
+    def _get_default_transformations_for_replay(
+        self, request: RequestT, /
+    ) -> list[Callable[..., Any]]:
         # NOTE: the replayed data is already cleaned
         return []

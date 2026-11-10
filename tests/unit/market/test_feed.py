@@ -68,7 +68,13 @@ def source(mocker: MockerFixture, product: BaseProduct) -> MockType:
     """Stand-in for the feed's source: isinstance-compatible with BaseSource, records create_product() calls."""
     source = mocker.Mock(spec=BaseSource)
     source.name = "TEST"
-    source.data_categories = {DataCategory.MARKET_DATA: {DataType.TICK: [], DataType.MINUTE: [], DataType.DAY: []}}
+    source.data_categories = {
+        DataCategory.MARKET_DATA: {
+            DataType.TICK: [],
+            DataType.MINUTE: [],
+            DataType.DAY: [],
+        }
+    }
     source.Feeds = {DataCategory.MARKET_DATA: MarketFeed}
     source.create_product.return_value = product
     return source
@@ -84,7 +90,9 @@ def feed(mocker: MockerFixture, source: MockType) -> MarketFeed:
     return feed
 
 
-def test_download(mocker: MockerFixture, feed: MarketFeed, source: MockType, product: BaseProduct):
+def test_download(
+    mocker: MockerFixture, feed: MarketFeed, source: MockType, product: BaseProduct
+):
     basis = str(product.basis)
     resolution = Resolution("1m")
     start_date, end_date = datetime.date(2025, 1, 1), datetime.date(2025, 1, 3)
@@ -138,14 +146,18 @@ def test_download_rolls_back_from_yesterday(feed: MarketFeed, product: BaseProdu
 def test_download_picks_data_resolution(
     feed: MarketFeed, product: BaseProduct, target_resolution: str, data_resolution: str
 ):
-    feed.download(str(product.basis), target_resolution, start_date=datetime.date(2025, 1, 1))
+    feed.download(
+        str(product.basis), target_resolution, start_date=datetime.date(2025, 1, 1)
+    )
 
     [request] = feed._requests
     assert request.target_resolution == Resolution(target_resolution)
     assert request.data_resolution == Resolution(data_resolution)
 
 
-def test_download_unsupported_resolution(feed: MarketFeed, source: MockType, product: BaseProduct):
+def test_download_unsupported_resolution(
+    feed: MarketFeed, source: MockType, product: BaseProduct
+):
     source.data_categories = {DataCategory.MARKET_DATA: {DataType.DAY: []}}
 
     with pytest.raises(ValueError, match="is not supported by"):
@@ -155,7 +167,9 @@ def test_download_unsupported_resolution(feed: MarketFeed, source: MockType, pro
 
 
 @pytest.mark.parametrize("per_date", [True, False])
-def test_download_dataflow_per_date(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, per_date: bool):
+def test_download_dataflow_per_date(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, per_date: bool
+):
     mocker.patch.object(MarketFeed, "download_dataflow_per_date", per_date)
     start_date, end_date = datetime.date(2025, 1, 1), datetime.date(2025, 1, 3)
 
@@ -172,35 +186,54 @@ def test_download_dataflow_per_date(mocker: MockerFixture, feed: MarketFeed, pro
         assert date_ranges == [(start_date, end_date)]
 
 
-def test_download_returns_run_result(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+def test_download_returns_run_result(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct
+):
     result = object()
     run = mocker.patch.object(feed, "run", return_value=result)
 
-    assert feed.download(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is result
+    assert (
+        feed.download(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1))
+        is result
+    )
     run.assert_called_once_with()
 
 
-def test_download_in_pipeline_mode_returns_feed(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+def test_download_in_pipeline_mode_returns_feed(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct
+):
     mocker.patch.object(feed, "_pipeline_mode", True)
     run = mocker.patch.object(feed, "run")
 
-    assert feed.download(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is feed
+    assert (
+        feed.download(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1))
+        is feed
+    )
     run.assert_not_called()
 
 
-def _patch_storage(mocker: MockerFixture, missing_dates: dict[Resolution, list[datetime.date]]) -> MockType:
+def _patch_storage(
+    mocker: MockerFixture, missing_dates: dict[Resolution, list[datetime.date]]
+) -> MockType:
     """Fakes the storage probe: a resolution misses its dates in missing_dates, any other resolution is fully stored.
 
     Returns the patched create_data_resolution_handler, its calls are the probed requests in order.
     """
 
-    def create_handler(request: MarketFeedRetrieveRequest, data_model: MarketDataModel | None = None) -> MockType:
+    def create_handler(
+        request: MarketFeedRetrieveRequest, data_model: MarketDataModel | None = None
+    ) -> MockType:
         handler = mocker.Mock(spec=MarketDataHandler)
-        handler.find_missing_dates_in_storage.return_value = missing_dates.get(request.data_resolution, [])
+        handler.find_missing_dates_in_storage.return_value = missing_dates.get(
+            request.data_resolution, []
+        )
         return handler
 
     return mocker.patch.object(
-        MarketFeedRetrieveRequest, "create_data_resolution_handler", autospec=True, side_effect=create_handler
+        MarketFeedRetrieveRequest,
+        "create_data_resolution_handler",
+        autospec=True,
+        side_effect=create_handler,
     )
 
 
@@ -208,7 +241,9 @@ def _probed_resolutions(create_handler: MockType) -> list[Resolution]:
     return [call.args[0].data_resolution for call in create_handler.call_args_list]
 
 
-def test_retrieve(mocker: MockerFixture, feed: MarketFeed, source: MockType, product: BaseProduct):
+def test_retrieve(
+    mocker: MockerFixture, feed: MarketFeed, source: MockType, product: BaseProduct
+):
     _patch_storage(mocker, {})
     basis = str(product.basis)
     resolution = Resolution("1m")
@@ -243,7 +278,9 @@ def test_retrieve(mocker: MockerFixture, feed: MarketFeed, source: MockType, pro
     assert request.data_origin == data_origin
 
 
-def test_retrieve_defaults_to_parquet_io(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+def test_retrieve_defaults_to_parquet_io(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct
+):
     _patch_storage(mocker, {})
 
     feed.retrieve(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1))
@@ -253,7 +290,9 @@ def test_retrieve_defaults_to_parquet_io(mocker: MockerFixture, feed: MarketFeed
     assert isinstance(request.io_for_retrieval, ParquetIO)
 
 
-def test_retrieve_rolls_back_from_yesterday(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+def test_retrieve_rolls_back_from_yesterday(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct
+):
     _patch_storage(mocker, {})
 
     feed.retrieve(str(product.basis), "1m", rollback_period="3d")
@@ -268,9 +307,17 @@ def test_retrieve_probes_finer_resolutions_closest_first(
     mocker: MockerFixture, feed: MarketFeed, source: MockType, product: BaseProduct
 ):
     # quote data has no price or OHLC columns to resample into bars, so it is never probed
-    source.data_categories = {DataCategory.MARKET_DATA: {DataType.QUOTE_L1: [], DataType.TICK: [], DataType.MINUTE: []}}
+    source.data_categories = {
+        DataCategory.MARKET_DATA: {
+            DataType.QUOTE_L1: [],
+            DataType.TICK: [],
+            DataType.MINUTE: [],
+        }
+    }
     date = datetime.date(2025, 1, 1)
-    create_handler = _patch_storage(mocker, {Resolution(r): [date] for r in ("1q_L1", "1t", "1s", "1m")})
+    create_handler = _patch_storage(
+        mocker, {Resolution(r): [date] for r in ("1q_L1", "1t", "1s", "1m")}
+    )
 
     feed.retrieve(str(product.basis), "1m", start_date=date, end_date=date)
 
@@ -286,7 +333,11 @@ def test_retrieve_probes_finer_resolutions_closest_first(
     ],
 )
 def test_retrieve_picks_first_fully_stored_resolution(
-    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, unstored: list[str], data_resolution: str
+    mocker: MockerFixture,
+    feed: MarketFeed,
+    product: BaseProduct,
+    unstored: list[str],
+    data_resolution: str,
 ):
     date = datetime.date(2025, 1, 1)
     create_handler = _patch_storage(mocker, {Resolution(r): [date] for r in unstored})
@@ -308,7 +359,9 @@ def test_retrieve_probes_only_target_resolution_outside_cleaned(
     date = datetime.date(2025, 1, 1)
     create_handler = _patch_storage(mocker, {Resolution("1m"): [date]})
 
-    feed.retrieve(str(product.basis), "1m", start_date=date, end_date=date, data_layer=data_layer)
+    feed.retrieve(
+        str(product.basis), "1m", start_date=date, end_date=date, data_layer=data_layer
+    )
 
     assert _probed_resolutions(create_handler) == _resols("1m")
 
@@ -322,31 +375,54 @@ def test_retrieve_probes_only_target_resolution_outside_cleaned(
     ],
 )
 def test_retrieve_falls_back_to_target_resolution(
-    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, num_missing: int, shown_dates_suffix: str
+    mocker: MockerFixture,
+    feed: MarketFeed,
+    product: BaseProduct,
+    num_missing: int,
+    shown_dates_suffix: str,
 ):
     resolution = Resolution("1m")
     start_date = datetime.date(2025, 1, 1)
     dates = [start_date + datetime.timedelta(days=i) for i in range(num_missing)]
     # finer resolutions miss a different date, so only the target resolution's missing dates can be reported
     other_date = datetime.date(2024, 1, 1)
-    _patch_storage(mocker, {resolution: dates, Resolution("1s"): [other_date], Resolution("1t"): [other_date]})
+    _patch_storage(
+        mocker,
+        {
+            resolution: dates,
+            Resolution("1s"): [other_date],
+            Resolution("1t"): [other_date],
+        },
+    )
     logger = mocker.patch.object(feed, "logger")
 
-    feed.retrieve(str(product.basis), resolution, start_date=start_date, end_date=dates[-1])
+    feed.retrieve(
+        str(product.basis), resolution, start_date=start_date, end_date=dates[-1]
+    )
 
     [request] = feed._requests
     assert request.data_resolution == resolution
     [message] = logger.warning.call_args.args
     shown_dates = ", ".join(str(d) for d in dates[:10]) + shown_dates_suffix
-    assert message.endswith(f"falling back to {resolution}, missing {num_missing} dates: {shown_dates}")
+    assert message.endswith(
+        f"falling back to {resolution}, missing {num_missing} dates: {shown_dates}"
+    )
 
 
 @pytest.mark.parametrize("per_date", [True, False])
-def test_retrieve_dataflow_per_date(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, per_date: bool):
+def test_retrieve_dataflow_per_date(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct, per_date: bool
+):
     _patch_storage(mocker, {})
     start_date, end_date = datetime.date(2025, 1, 1), datetime.date(2025, 1, 3)
 
-    feed.retrieve(str(product.basis), "1m", start_date=start_date, end_date=end_date, dataflow_per_date=per_date)
+    feed.retrieve(
+        str(product.basis),
+        "1m",
+        start_date=start_date,
+        end_date=end_date,
+        dataflow_per_date=per_date,
+    )
 
     dataflows = feed.dataflows
     assert len(dataflows) == (3 if per_date else 1)
@@ -359,21 +435,31 @@ def test_retrieve_dataflow_per_date(mocker: MockerFixture, feed: MarketFeed, pro
         assert date_ranges == [(start_date, end_date)]
 
 
-def test_retrieve_returns_run_result(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+def test_retrieve_returns_run_result(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct
+):
     _patch_storage(mocker, {})
     result = object()
     run = mocker.patch.object(feed, "run", return_value=result)
 
-    assert feed.retrieve(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is result
+    assert (
+        feed.retrieve(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1))
+        is result
+    )
     run.assert_called_once_with()
 
 
-def test_retrieve_in_pipeline_mode_returns_feed(mocker: MockerFixture, feed: MarketFeed, product: BaseProduct):
+def test_retrieve_in_pipeline_mode_returns_feed(
+    mocker: MockerFixture, feed: MarketFeed, product: BaseProduct
+):
     _patch_storage(mocker, {})
     mocker.patch.object(feed, "_pipeline_mode", True)
     run = mocker.patch.object(feed, "run")
 
-    assert feed.retrieve(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1)) is feed
+    assert (
+        feed.retrieve(str(product.basis), "1m", start_date=datetime.date(2025, 1, 1))
+        is feed
+    )
     run.assert_not_called()
 
 
@@ -433,10 +519,11 @@ def _fake_feed_with_product(
     )
 
     class FakeMarketFeed(MarketFeed):
-        class Requests(MarketFeed.Requests):  # ty: ignore[invalid-attribute-override]
+        class Requests(MarketFeed.Requests):  # ty: ignore[incompatible-attribute-override]
             download = None
             retrieve = None
             stream = None
+
         DataSource = cast("type[BaseSource]", data_source)
 
     return FakeMarketFeed, create_product
@@ -483,7 +570,7 @@ def test_create_data_model_from_product_instance(
 
 class _TransformationsFeed(MarketFeed):
     # module-level so cloudpickle pickles it by reference, like a real feed class
-    class Requests(MarketFeed.Requests):  # ty: ignore[invalid-attribute-override]
+    class Requests(MarketFeed.Requests):  # ty: ignore[incompatible-attribute-override]
         download = None
         retrieve = None
         stream = None
@@ -508,7 +595,9 @@ def _download_transformations(
         # unpicklable, never read: pickling a transformation fails if it captures the request
         lock=threading.Lock(),
     )
-    transformations = feed._get_default_transformations_for_download(cast("Any", request))
+    transformations = feed._get_default_transformations_for_download(
+        cast("Any", request)
+    )
     # lambdas and staticmethods accessed via the class, all plain functions with a __name__
     return cast("list[FunctionType]", transformations)
 
@@ -533,11 +622,15 @@ def _download_transformations(
 def test_get_default_transformations_for_download(
     should_clean_data: bool, expected: list[str], product: BaseProduct
 ):
-    transformations = _download_transformations(product, should_clean_data=should_clean_data)
+    transformations = _download_transformations(
+        product, should_clean_data=should_clean_data
+    )
     assert [f.__name__ for f in transformations] == expected
 
 
-def test_get_default_transformations_for_download_picklable_without_feed(product: BaseProduct):
+def test_get_default_transformations_for_download_picklable_without_feed(
+    product: BaseProduct,
+):
     # dataflows (and their transformations) are pickled to Ray workers,
     # the transformations must not capture the feed or the request
     cloudpickle = pytest.importorskip("cloudpickle")
@@ -545,7 +638,9 @@ def test_get_default_transformations_for_download_picklable_without_feed(product
         cloudpickle.dumps(transformation)
 
 
-def _retrieve_transformations(product: BaseProduct, *, data_layer: DataLayer) -> list[FunctionType]:
+def _retrieve_transformations(
+    product: BaseProduct, *, data_layer: DataLayer
+) -> list[FunctionType]:
     """Builds the retrieve transformations of batch data without running the feed's __init__, see _download_transformations()."""
     feed = _TransformationsFeed.__new__(_TransformationsFeed)
     feed.__dict__["_lock"] = threading.Lock()
@@ -558,7 +653,9 @@ def _retrieve_transformations(product: BaseProduct, *, data_layer: DataLayer) ->
         lock=threading.Lock(),
         is_streamed_data=lambda: False,
     )
-    transformations = feed._get_default_transformations_for_retrieve(cast("Any", request))
+    transformations = feed._get_default_transformations_for_retrieve(
+        cast("Any", request)
+    )
     return cast("list[FunctionType]", transformations)
 
 
@@ -571,21 +668,29 @@ def _retrieve_transformations(product: BaseProduct, *, data_layer: DataLayer) ->
         (DataLayer.CURATED, []),
     ],
 )
-def test_get_default_transformations_for_retrieve(data_layer: DataLayer, expected: list[str], product: BaseProduct):
+def test_get_default_transformations_for_retrieve(
+    data_layer: DataLayer, expected: list[str], product: BaseProduct
+):
     transformations = _retrieve_transformations(product, data_layer=data_layer)
     assert [f.__name__ for f in transformations] == expected
 
 
-def test_get_default_transformations_for_retrieve_resamples_to_target_resolution(product: BaseProduct):
+def test_get_default_transformations_for_retrieve_resamples_to_target_resolution(
+    product: BaseProduct,
+):
     dates = [datetime.datetime(2025, 1, 1, 0, 0, s) for s in range(4)]
-    lf = pl.LazyFrame({
-        "date": dates,
-        "product": [product.name] * 4,
-        "resolution": [str(Resolution("1t"))] * 4,
-        "price": [1.0, 3.0, 0.5, 2.0],
-        "volume": [1.0] * 4,
-    })
-    for transformation in _retrieve_transformations(product, data_layer=DataLayer.CLEANED):
+    lf = pl.LazyFrame(
+        {
+            "date": dates,
+            "product": [product.name] * 4,
+            "resolution": [str(Resolution("1t"))] * 4,
+            "price": [1.0, 3.0, 0.5, 2.0],
+            "volume": [1.0] * 4,
+        }
+    )
+    for transformation in _retrieve_transformations(
+        product, data_layer=DataLayer.CLEANED
+    ):
         lf = transformation(lf)
     out = lf.collect()
     assert out["resolution"].to_list() == [str(Resolution("1m"))]
@@ -593,16 +698,24 @@ def test_get_default_transformations_for_retrieve_resamples_to_target_resolution
     assert out.columns[:3] == ["date", "product", "resolution"]
 
 
-def test_get_default_transformations_for_retrieve_picklable_without_feed(product: BaseProduct):
+def test_get_default_transformations_for_retrieve_picklable_without_feed(
+    product: BaseProduct,
+):
     cloudpickle = pytest.importorskip("cloudpickle")
-    for transformation in _retrieve_transformations(product, data_layer=DataLayer.CLEANED):
+    for transformation in _retrieve_transformations(
+        product, data_layer=DataLayer.CLEANED
+    ):
         cloudpickle.dumps(transformation)
 
 
 @pytest.mark.parametrize("extract_type", ["download", "retrieve", "stream"])
-def test_get_default_transformations_dispatches_by_extract_type(mocker: MockerFixture, extract_type: str):
+def test_get_default_transformations_dispatches_by_extract_type(
+    mocker: MockerFixture, extract_type: str
+):
     feed = _TransformationsFeed.__new__(_TransformationsFeed)
-    method = mocker.patch.object(feed, f"_get_default_transformations_for_{extract_type}", return_value=["t"])
+    method = mocker.patch.object(
+        feed, f"_get_default_transformations_for_{extract_type}", return_value=["t"]
+    )
     request = cast("Any", SimpleNamespace(extract_type=extract_type))
 
     assert feed._get_default_transformations(request) == ["t"]
@@ -612,7 +725,9 @@ def test_get_default_transformations_dispatches_by_extract_type(mocker: MockerFi
 def test_get_default_transformations_unknown_extract_type():
     feed = _TransformationsFeed.__new__(_TransformationsFeed)
     with pytest.raises(ValueError, match="Unknown extract type: unknown"):
-        feed._get_default_transformations(cast("Any", SimpleNamespace(extract_type="unknown")))
+        feed._get_default_transformations(
+            cast("Any", SimpleNamespace(extract_type="unknown"))
+        )
 
 
 @pytest.mark.parametrize(
@@ -856,13 +971,15 @@ def _key_cols(product: BaseProduct, resolution: str) -> dict[str, list[Any]]:
 
 
 def test_filter_columns_ticks_drops_vendor_columns(product: BaseProduct):
-    lf = pl.LazyFrame({
-        "vendor_col": ["x"],
-        **_key_cols(product, "1t"),
-        "side": pl.Series([1], dtype=pl.Int8),
-        "volume": [2.0],
-        "price": [1.0],
-    })
+    lf = pl.LazyFrame(
+        {
+            "vendor_col": ["x"],
+            **_key_cols(product, "1t"),
+            "side": pl.Series([1], dtype=pl.Int8),
+            "volume": [2.0],
+            "price": [1.0],
+        }
+    )
     out = MarketFeed._filter_columns(lf, product).collect()
     # standard columns only, in the standard order
     assert out.columns == ["date", "product", "resolution", "price", "volume", "side"]
@@ -879,28 +996,55 @@ def test_filter_columns_ticks_adds_missing_side(product: BaseProduct):
 
 
 def test_filter_columns_bars_drops_vendor_columns(product: BaseProduct):
-    lf = pl.LazyFrame({
-        **_key_cols(product, "1m"),
-        "vendor_col": ["x"],
-        "volume": [5.0],
-        "close": [4.0],
-        "low": [3.0],
-        "high": [2.0],
-        "open": [1.0],
-    })
+    lf = pl.LazyFrame(
+        {
+            **_key_cols(product, "1m"),
+            "vendor_col": ["x"],
+            "volume": [5.0],
+            "close": [4.0],
+            "low": [3.0],
+            "high": [2.0],
+            "open": [1.0],
+        }
+    )
     out = MarketFeed._filter_columns(lf, product).collect()
-    assert out.columns == ["date", "product", "resolution", "open", "high", "low", "close", "volume"]
+    assert out.columns == [
+        "date",
+        "product",
+        "resolution",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+    ]
     assert out.row(0)[3:] == (1.0, 2.0, 3.0, 4.0, 5.0)
 
 
 def test_organize_columns_moves_key_columns_left(product: BaseProduct):
-    lf = pl.LazyFrame({"price": [1.0], "resolution": ["1t"], "volume": [2.0], "date": [datetime.datetime(2025, 1, 1)], "product": [product.name]})
+    lf = pl.LazyFrame(
+        {
+            "price": [1.0],
+            "resolution": ["1t"],
+            "volume": [2.0],
+            "date": [datetime.datetime(2025, 1, 1)],
+            "product": [product.name],
+        }
+    )
     out = MarketFeed._organize_columns(lf)
     # the other columns keep their relative order
-    assert out.collect_schema().names() == ["date", "product", "resolution", "price", "volume"]
+    assert out.collect_schema().names() == [
+        "date",
+        "product",
+        "resolution",
+        "price",
+        "volume",
+    ]
 
 
-def test_organize_columns_returns_same_frame_when_already_organized(product: BaseProduct):
+def test_organize_columns_returns_same_frame_when_already_organized(
+    product: BaseProduct,
+):
     lf = pl.LazyFrame({**_key_cols(product, "1t"), "price": [1.0]})
     assert MarketFeed._organize_columns(lf) is lf
 
@@ -923,30 +1067,49 @@ _SECOND = 10**9
 _MINUTE = 60 * _SECOND
 
 
-def _resampling(product: BaseProduct, data_resolution: str, target_resolution: str) -> tuple[Any, Any, Resolution]:
+def _resampling(
+    product: BaseProduct, data_resolution: str, target_resolution: str
+) -> tuple[Any, Any, Resolution]:
     """The resampler and data_bar as the streaming default transformations bind them."""
     from pfund_blocks.datas.bar_data import BarData
     from pfund_blocks.datas.tick_data import TickData
 
-    data_resol, target_resol = Resolution(data_resolution), Resolution(target_resolution)
+    data_resol, target_resol = (
+        Resolution(data_resolution),
+        Resolution(target_resolution),
+    )
     data_bar = BarData(product=product, resolution=target_resol)
-    resampler = TickData(product, data_resol) if data_resol.is_tick() else BarData(product, data_resol)
+    resampler = (
+        TickData(product, data_resol)
+        if data_resol.is_tick()
+        else BarData(product, data_resol)
+    )
     data_bar.bind_resampler(resampler)
     return resampler, data_bar, target_resol
 
 
-def _resample_bars(product: BaseProduct, resampling: tuple[Any, Any, Resolution], data: Any) -> Any:
+def _resample_bars(
+    product: BaseProduct, resampling: tuple[Any, Any, Resolution], data: Any
+) -> Any:
     resampler, data_bar, target_resolution = resampling
-    message = cast("Any", {"product": product.name, "resolution": "1t", "received_at": _T0, "data": data})
+    message = cast(
+        "Any",
+        {"product": product.name, "resolution": "1t", "received_at": _T0, "data": data},
+    )
     out = MarketFeed._resample_streaming_message(
-        message=message, resampler=resampler, data_bar=data_bar, target_resolution=target_resolution,
+        message=message,
+        resampler=resampler,
+        data_bar=data_bar,
+        target_resolution=target_resolution,
     )
     assert out["resolution"] == repr(target_resolution)
     # NOTE: data is the closed bars, or the changed open bar, or None if data_bar didn't change
     return out["data"]
 
 
-def _resample(product: BaseProduct, resampling: tuple[Any, Any, Resolution], data: Any) -> Any:
+def _resample(
+    product: BaseProduct, resampling: tuple[Any, Any, Resolution], data: Any
+) -> Any:
     """For updates expected to resample into a single bar."""
     bars = _resample_bars(product, resampling, data)
     if bars is None:
@@ -963,31 +1126,71 @@ def _tick(ts: int, price: float, volume: float = 1.0) -> Any:
 
 def test_resample_streaming_message_single_tick(product: BaseProduct):
     bar = _resample(product, _resampling(product, "1t", "1s"), [_tick(_T0, 100.0)])
-    assert (bar.start_ts, bar.close, bar.volume, bar.is_closed) == (_T0, 100.0, 1.0, False)
+    assert (bar.start_ts, bar.close, bar.volume, bar.is_closed) == (
+        _T0,
+        100.0,
+        1.0,
+        False,
+    )
 
 
 def test_resample_streaming_message_ticks_in_one_window(product: BaseProduct):
     """e.g. a Bybit trade message, several ticks in a list."""
-    ticks = [_tick(_T0, 100.0, 0.1), _tick(_T0 + 1, 102.0, 0.2), _tick(_T0 + 2, 99.0, 0.3)]
+    ticks = [
+        _tick(_T0, 100.0, 0.1),
+        _tick(_T0 + 1, 102.0, 0.2),
+        _tick(_T0 + 2, 99.0, 0.3),
+    ]
     bar = _resample(product, _resampling(product, "1t", "1s"), ticks)
-    assert (bar.start_ts, bar.open, bar.high, bar.low, bar.close, bar.is_closed) == (_T0, 100.0, 102.0, 99.0, 99.0, False)
+    assert (bar.start_ts, bar.open, bar.high, bar.low, bar.close, bar.is_closed) == (
+        _T0,
+        100.0,
+        102.0,
+        99.0,
+        99.0,
+        False,
+    )
     assert bar.volume == pytest.approx(0.6)
 
 
-def test_resample_streaming_message_ticks_across_windows_close_the_bar(product: BaseProduct):
+def test_resample_streaming_message_ticks_across_windows_close_the_bar(
+    product: BaseProduct,
+):
     """A tick in the next second closes the bar of the previous one, which is sent; the new bar is sent with the next update."""
     resampling = _resampling(product, "1t", "1s")
-    ticks = [_tick(_T0, 100.0), _tick(_T0 + _SECOND // 2, 101.0), _tick(_T0 + _SECOND, 105.0)]
+    ticks = [
+        _tick(_T0, 100.0),
+        _tick(_T0 + _SECOND // 2, 101.0),
+        _tick(_T0 + _SECOND, 105.0),
+    ]
     bar = _resample(product, resampling, ticks)
-    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (_T0, 100.0, 101.0, 2.0, True)
+    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (
+        _T0,
+        100.0,
+        101.0,
+        2.0,
+        True,
+    )
     # the bar opened by the 105.0 tick, updated by the next message
     bar = _resample(product, resampling, [_tick(_T0 + _SECOND + 1, 106.0)])
-    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (_T0 + _SECOND, 105.0, 106.0, 2.0, False)
+    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (
+        _T0 + _SECOND,
+        105.0,
+        106.0,
+        2.0,
+        False,
+    )
 
 
-def test_resample_streaming_message_ticks_closing_two_bars_send_both(product: BaseProduct):
+def test_resample_streaming_message_ticks_closing_two_bars_send_both(
+    product: BaseProduct,
+):
     """e.g. a batch of trades spanning seconds, every bar it closes is sent in time order."""
-    ticks = [_tick(_T0, 100.0), _tick(_T0 + _SECOND, 101.0), _tick(_T0 + 2 * _SECOND, 102.0)]
+    ticks = [
+        _tick(_T0, 100.0),
+        _tick(_T0 + _SECOND, 101.0),
+        _tick(_T0 + 2 * _SECOND, 102.0),
+    ]
     bars = _resample_bars(product, _resampling(product, "1t", "1s"), ticks)
     assert [(bar.start_ts, bar.close, bar.is_closed) for bar in bars] == [
         (_T0, 100.0, True),
@@ -1003,12 +1206,30 @@ def test_resample_streaming_message_bars_in_a_list(product: BaseProduct):
 
     def _bar(start_ts: int, close: float) -> Bar:
         return Bar(
-            resolution=resol, start_ts=start_ts, end_ts=start_ts + _MINUTE, updated_ts=start_ts + _MINUTE,
-            open=close, high=close, low=close, close=close, volume=1.0, is_closed=True,
+            resolution=resol,
+            start_ts=start_ts,
+            end_ts=start_ts + _MINUTE,
+            updated_ts=start_ts + _MINUTE,
+            open=close,
+            high=close,
+            low=close,
+            close=close,
+            volume=1.0,
+            is_closed=True,
         )
 
-    bar = _resample(product, _resampling(product, "1m", "2m"), [_bar(_T0, 100.0), _bar(_T0 + _MINUTE, 101.0)])
-    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (_T0, 100.0, 101.0, 2.0, True)
+    bar = _resample(
+        product,
+        _resampling(product, "1m", "2m"),
+        [_bar(_T0, 100.0), _bar(_T0 + _MINUTE, 101.0)],
+    )
+    assert (bar.start_ts, bar.open, bar.close, bar.volume, bar.is_closed) == (
+        _T0,
+        100.0,
+        101.0,
+        2.0,
+        True,
+    )
 
 
 def test_resample_streaming_message_unchanged_bar_is_none(product: BaseProduct):
@@ -1016,7 +1237,15 @@ def test_resample_streaming_message_unchanged_bar_is_none(product: BaseProduct):
     from pfund_blocks.datas.bar_data import Bar
 
     unclosed = Bar(
-        resolution=Resolution("1m"), start_ts=_T0, end_ts=_T0 + _MINUTE, updated_ts=_T0 + 1,
-        open=100.0, high=100.0, low=100.0, close=100.0, volume=1.0, is_closed=False,
+        resolution=Resolution("1m"),
+        start_ts=_T0,
+        end_ts=_T0 + _MINUTE,
+        updated_ts=_T0 + 1,
+        open=100.0,
+        high=100.0,
+        low=100.0,
+        close=100.0,
+        volume=1.0,
+        is_closed=False,
     )
     assert _resample(product, _resampling(product, "1m", "2m"), [unclosed]) is None

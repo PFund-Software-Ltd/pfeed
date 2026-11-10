@@ -279,9 +279,9 @@ class ParquetIO(BaseIO):
             if partition in data_partitions and key.partition_by:
                 # pyarrow.compute functions are generated at runtime, so ty can't see them
                 mask = reduce(
-                    pc.and_,  # ty: ignore[unresolved-attribute]
+                    pc.and_,  # ty: ignore[missing-attribute]
                     [
-                        pc.equal(array, pa.scalar(value, type=array.type))  # ty: ignore[unresolved-attribute]
+                        pc.equal(array, pa.scalar(value, type=array.type))  # ty: ignore[missing-attribute]
                         for array, value in zip(
                             partition_value_arrays, partition, strict=True
                         )

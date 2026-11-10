@@ -232,7 +232,7 @@ def test_date_partition(tmp_path: Path, date_data: pa.Table):
     assert df.collect()["price"].sort().to_list() == [1.0, 2.0]
     assert metadata == {("BTC", D1): {"version": 1}}
 
-    new_d1 = date_data.filter(pc.equal(date_data["price"], 1.0)).set_column(  # ty: ignore[unresolved-attribute]
+    new_d1 = date_data.filter(pc.equal(date_data["price"], 1.0)).set_column(  # ty: ignore[missing-attribute]
         2, "price", pa.array([10.0])
     )
     io.write(DATE_KEY, new_d1, partitions={("BTC", D1): {"version": 2}})
@@ -251,7 +251,7 @@ def test_date_partition_read_skips_other_days(tmp_path: Path, date_data: pa.Tabl
     io = DuckLakeIO(base_path=str(tmp_path), data_inlining_row_limit=0)
     for date in (D1, D3):
         day_data = date_data.filter(
-            pc.equal(  # ty: ignore[unresolved-attribute]
+            pc.equal(  # ty: ignore[missing-attribute]
                 pc.cast(date_data["date"], pa.date32()), pa.scalar(date, pa.date32())
             )
         )

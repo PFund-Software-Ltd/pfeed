@@ -398,14 +398,15 @@ class IcebergIO(TableIO):
                     entry.data_file.file_path
                     for entry in manifest.fetch_manifest_entry(tbl.io)
                 }
-        used_paths = {path.removeprefix("file://") for path in used}
+        # normpath: Iceberg stores paths with "/", os.walk joins with "\\" on Windows
+        used_paths = {os.path.normpath(path.removeprefix("file://")) for path in used}
 
         unused_paths = []
         for dir_path, _, file_names in os.walk(tbl.location().removeprefix("file://")):
             for file_name in file_names:
                 path = os.path.join(dir_path, file_name)
                 if (
-                    path not in used_paths
+                    os.path.normpath(path) not in used_paths
                     and os.path.getmtime(path) < cutoff.timestamp()
                 ):
                     unused_paths.append(path)

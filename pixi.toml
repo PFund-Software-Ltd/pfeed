@@ -127,5 +127,6 @@ polars = { version = ">=2.1.0", extras = ["rtcompat"] }
 [feature.windows-vm.tasks]
 # pixi run -e py313-windows-vm test-vm
 # DuckLake's extension also crashes under the emulator (illegal instruction), so its tests are skipped here;
-# the windows-latest CI job (real x64) tests it
-test-vm = 'pytest -n auto -k "not DuckLake"'
+# the windows-latest CI job (real x64) tests it.
+# The import time test is skipped too: emulated x64 Python is too slow for its budget, so timings here mean nothing
+test-vm = 'pytest -n auto -k "not DuckLake and not import_time"'

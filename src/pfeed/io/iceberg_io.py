@@ -19,6 +19,7 @@ import os
 import sqlite3
 import warnings
 from functools import reduce
+from pathlib import Path
 
 import polars as pl
 import pyarrow as pa
@@ -117,7 +118,8 @@ class IcebergIO(TableIO):
             self._catalog = SqlCatalog(
                 "pfeed",
                 uri=f"sqlite:///{os.path.join(self._base_path, self.CATALOG_FILE_NAME)}",
-                warehouse=f"file://{os.path.join(self._base_path, self.WAREHOUSE_DIR_NAME)}",
+                # as_posix: "/" throughout, otherwise the URI mixes "\\" and "/" on Windows
+                warehouse=f"file://{Path(self._base_path, self.WAREHOUSE_DIR_NAME).as_posix()}",
             )
             self._catalog_pid = os.getpid()
         return self._catalog

@@ -68,7 +68,8 @@ def test_layout(io: IcebergIO, tmp_path: Path, data: pa.Table):
     table = _load_table(io)
     assert (tmp_path / "pfeed.db").is_file()
     assert (
-        table.location() == f"file://{tmp_path}/warehouse/BACKTEST__BYBIT/PERPETUAL__1t"
+        table.location()
+        == f"file://{tmp_path.as_posix()}/warehouse/BACKTEST__BYBIT/PERPETUAL__1t"
     )
     assert [field.name for field in table.spec().fields] == [
         "product",

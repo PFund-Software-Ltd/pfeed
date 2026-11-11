@@ -2,7 +2,7 @@
 # /// script
 # dependencies = [
 #     "marimo==0.25.2",
-#     "pfeed==0.0.23",
+#     "pfeed==0.0.24",
 #     # pin the transitive deps too: micropip resolves `>=` at every page load, so they'd drift
 #     # your packages: the download/retrieve path itself
 #     "pfeed-bybit==0.0.2",

@@ -21,6 +21,7 @@ def _(mo):
     description: Download Bybit bars with pfeed, then query the stored parquet files directly with polars.
     tags: [polars, parquet, bybit]
     date: 2026-11-11
+    thumbnail: ./static/featured_thumbnail.png
     molab_badge: true
     ---
     """)

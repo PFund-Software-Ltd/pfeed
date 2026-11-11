@@ -425,14 +425,16 @@ class StreamingMixin[RequestT: BaseStreamRequest, DataModelT: TimeBasedDataModel
                                     # NOTE: if the worker function raised, ray.get() re-raises its exception here; returns None if it exited normally
                                     ray.get(future)
                                 else:
+                                    # NOTE: force=True kills the worker, a non-forced cancel doesn't stop a task that's already running;
+                                    # only cancel unfinished tasks: force-cancelling a finished task races with Ray's task completion
+                                    # and crashes the driver ("Tried to complete task that was not pending" in task_manager.cc)
+                                    ray.cancel(future, force=True)
                                     raise TimeoutError(
                                         f"Ray {worker_name} did not stop within {self.WORKER_STOP_TIMEOUT}s, its buffered rows may be lost"
                                     )
                             except Exception as err:
                                 for dataflow in worker_dataflows:
                                     dataflow._result = DataFlowResult.failed(error=err)
-                            # NOTE: force=True kills the worker, a non-forced cancel doesn't stop a task that's already running
-                            ray.cancel(future, force=True)
             else:
                 try:
                     await _run_dataflows()

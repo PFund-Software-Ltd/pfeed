@@ -104,6 +104,11 @@ pytest-timeout = ">=2.4.0"
 [feature.test.tasks]
 test = "pytest -n auto"
 
+[feature.test.activation.env]
+# each Ray test starts its own local cluster, and with -n auto several start at once;
+# on slow machines (e.g. the windows-latest CI runner) a raylet can miss Ray's default startup wait
+RAY_raylet_start_wait_time_s = "60"
+
 [feature.py313.dependencies]
 python = "3.13.*"
 

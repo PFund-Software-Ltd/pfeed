@@ -123,3 +123,9 @@ POLARS_SKIP_CPU_CHECK = "1"
 
 [feature.windows-vm.pypi-dependencies]
 polars = { version = ">=2.1.0", extras = ["rtcompat"] }
+
+[feature.windows-vm.tasks]
+# pixi run -e py313-windows-vm test-vm
+# DuckLake's extension also crashes under the emulator (illegal instruction), so its tests are skipped here;
+# the windows-latest CI job (real x64) tests it
+test-vm = 'pytest -n auto -k "not DuckLake"'

@@ -18,7 +18,7 @@ from pfeed.io.ducklake_io import DuckLakeIO
 from tests.integration.conftest import NUM_STREAMED_TICKS
 
 
-def test_stream_store_and_retrieve(fake_source: FakeSource, tmp_path: Path):
+def test_stream_store_and_retrieve_ducklake(fake_source: FakeSource, tmp_path: Path):
     # NOTE: only DuckLakeIO, ParquetIO can't append, so it can't store streams
     io = DuckLakeIO(base_path=str(tmp_path))
     feed = fake_source.market_feed

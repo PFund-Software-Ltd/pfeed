@@ -44,6 +44,7 @@ default = ["py313", "dev", "test", "optional"]
 py313 = ["py313", "test", "optional"]
 py314 = ["py314", "test", "optional"]
 py315 = ["py315", "test", "optional"]
+py313-windows-vm = ["py313", "test", "optional", "windows-vm"]
 
 # links .venv -> .pixi/envs/default on activation, so that ty and afterpython's hooks
 # (which look for the project environment in .venv/) use pixi's default environment,
@@ -111,3 +112,14 @@ python = "3.14.*"
 
 [feature.py315.dependencies]
 python = "3.15.*"
+
+# Windows ARM VM (x64 under emulation): the default polars build crashes there
+# (illegal instruction), so use polars' compatibility build instead
+[feature.windows-vm]
+platforms = ["win-64"]
+
+[feature.windows-vm.activation.env]
+POLARS_SKIP_CPU_CHECK = "1"
+
+[feature.windows-vm.pypi-dependencies]
+polars = { version = ">=2.1.0", extras = ["rtcompat"] }

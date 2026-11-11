@@ -442,7 +442,8 @@ def prefect_harness():
     from prefect.testing.utilities import prefect_test_harness
 
     # starts a temporary prefect server, shared by the module's tests since it takes a few seconds
-    with prefect_test_harness():
+    # NOTE: the default 30s startup timeout is too short on busy CI runners running pytest-xdist workers in parallel
+    with prefect_test_harness(server_startup_timeout=120):
         yield
 
 

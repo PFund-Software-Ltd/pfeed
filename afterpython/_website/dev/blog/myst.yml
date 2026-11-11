@@ -3,17 +3,6 @@
 version: 1
 extends: ../authors.yml
 project:
-  keywords:
-  - algo-trading
-  - data pipeline
-  - data lake
-  - ducklake
-  - data lakehouse
-  - trading data
-  - financial data
-  - historical data
-  - live data
-  - streaming data
   license: CC-BY-4.0
   subject: Blog
   github: https://github.com/AfterPythonOrg/afterpython

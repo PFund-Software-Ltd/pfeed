@@ -110,6 +110,11 @@ jobs:
       matrix:
         os: ['ubuntu-latest', 'windows-latest']
         environment: ['py313', 'py314', 'py315']
+        exclude:
+          # no Python 3.15 Windows wheels yet for pyiceberg, pyyaml, zstandard; building them fails
+          # (Python.h not found in the env). Re-enable when wheels exist
+          - os: windows-latest
+            environment: py315
       fail-fast: false
 
     steps:

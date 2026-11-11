@@ -91,7 +91,9 @@ class TableIO(BaseIO):
             from pfeed.config import get_config
 
             base_path = str(get_config().data_path / self.DEFAULT_DIR_NAME)
-        if urlparse(base_path).scheme not in ("", "file"):
+        scheme = urlparse(base_path).scheme
+        # a one-letter scheme is a Windows drive letter (C:\...), not a URI scheme
+        if scheme not in ("", "file") and len(scheme) > 1:
             raise NotImplementedError(
                 f"only local paths are supported for now, got {base_path!r}"
             )

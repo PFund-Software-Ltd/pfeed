@@ -2710,7 +2710,7 @@ wheels = [
 
 [[package]]
 name = "pfeed"
-version = "0.0.23"
+version = "0.0.24"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },

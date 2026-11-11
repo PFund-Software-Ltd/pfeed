@@ -16,7 +16,7 @@ project:
     title: 'PFund.ai'
     url: 'https://pfund.ai'
   copyright: © pfeed 2026. All rights reserved.
-  title: Example
+  title: Examples
   description: Data pipeline for algo-trading, getting and storing both real-time and historical data made easy.
   keywords:
   - algo-trading
@@ -30,7 +30,8 @@ project:
   - live data
   - streaming data
   thumbnail: ../static/thumbnail.png
-  toc: []
+  toc:
+  - file: read_with_polars.ipynb
 site:
   template: book-theme
   # options:
@@ -42,8 +43,9 @@ site:
     favicon: ../static/favicon.ico
     logo: ../static/logo.svg
     logo_dark: ../static/logo-dark.svg
-    logo_text: pfeed
+    logo_text: Democratize AI Trading
     logo_url: 'https://pfeed.pfund.ai'
+    style: ../static/custom.css
   title: pfeed's Examples
   nav:
   - title: PFund.ai

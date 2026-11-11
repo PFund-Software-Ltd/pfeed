@@ -130,29 +130,10 @@ jobs:
         # Runs the "test" task of pixi.toml in this matrix run's environment (e.g. py313)
         # Exit code 5 (no tests collected) is success.
         # `|| code=$?` because GitHub runs bash with -e, which would stop at the failure.
-        env:
-          # TEMP diagnostics: a native crash (segfault/abort) prints a stack trace
-          PYTHONFAULTHANDLER: "1"
         run: |
           code=0
           pixi run -e ${{ matrix.environment }} test || code=$?
           if [ $code -eq 5 ]; then exit 0; else exit $code; fi
-
-      # TEMP diagnostics: find out what kills the xdist worker in the Ray tests
-      - name: Diagnose crash
-        if: failure()
-        run: |
-          free -m
-          df -h /dev/shm
-          sudo dmesg -T | grep -i -E "oom|killed|segfault|out of memory" || echo "no OOM/segfault in dmesg"
-
-      - name: Upload Ray logs
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ray-logs-${{ matrix.environment }}
-          path: /tmp/ray/session_*/logs
-          if-no-files-found: warn
 
   # Job 3.3: Test Suite - Complete
   # Unified test status for branch protection

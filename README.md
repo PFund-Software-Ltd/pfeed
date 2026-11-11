@@ -60,6 +60,12 @@ Starting algo-trading requires reliable and clean data, but traders often **work
 pip install "pfeed[bybit,ray]"
 ```
 
+> [!IMPORTANT]
+> **Windows users:** enable long paths first, or storing data fails with `[WinError 206] The filename or extension is too long`. pfeed's data folders are deeper than Windows' default 260-character path limit. Run once in PowerShell **as Administrator**, then open a new terminal:
+> ```powershell
+> New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+> ```
+
 
 ## Quick Start
 > Want to try first? Run `pfeed` in your browser — no install needed — at

@@ -16,6 +16,22 @@ pip install "pfeed[bybit,ray]"
 
 ---
 
+## Windows: enable long paths
+
+:::{important}
+Do this once before using pfeed on Windows, or storing data fails with `[WinError 206] The filename or extension is too long`.
+:::
+
+Windows limits paths to 260 characters by default. pfeed stores data in nested folders (e.g. `env=BACKTEST/data_layer=CLEANED/data_domain=MARKET_DATA/...`), which together with your data folder can go over that limit.
+
+Run this once in PowerShell **as Administrator** (right-click PowerShell → *Run as administrator*):
+```powershell
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+```
+Then open a new terminal (restart Windows if the error persists). Python supports long paths, so nothing else is needed.
+
+---
+
 ## Advanced
 
 Pick only the extras you need:

@@ -102,6 +102,8 @@ markers = [
 strict_markers = true
 addopts = ["--no-header", "--import-mode=importlib"]
 testpaths = ["tests"]
+# pytest-asyncio: set explicitly, otherwise it warns on every run; "function" is its future default
+asyncio_default_fixture_loop_scope = "function"
 # pytest-timeout: last-resort kill for hanging tests (e.g. deadlocked Ray/ZeroMQ), dumps all thread stacks;
 # "thread" because "signal" can't interrupt code blocked in C; it os._exit()s the xdist worker (no teardown)
 timeout = "300"

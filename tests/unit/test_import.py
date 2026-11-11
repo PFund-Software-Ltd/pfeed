@@ -10,7 +10,8 @@ import sys
 import pytest
 
 # `import pfeed` takes ~60ms warm as of 2026-10; most of it is pfund's config
-IMPORT_TIME_BUDGET = 0.3  # seconds
+# Windows starts Python much slower (file system, Defender scanning), so it gets more room
+IMPORT_TIME_BUDGET = 0.8 if sys.platform == "win32" else 0.3  # seconds
 NUM_RUNS = 5
 
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pyarrow.parquet import FileMetaData
 
     from pfeed.io.base_io import (
@@ -17,6 +19,8 @@ import datetime
 import json
 import os
 import posixpath
+import sys
+import time
 import uuid
 from functools import reduce
 from urllib.parse import urlparse
@@ -28,6 +32,28 @@ import pyarrow.fs as pafs
 import pyarrow.parquet as pq
 
 from pfeed.io.base_io import BaseIO, DatePartition, IOCapabilities
+
+
+def _retry_on_windows_lock[**P, T](
+    fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+) -> T:
+    """Retries fn while another process briefly holds the file (Windows only).
+
+    On POSIX, replacing a file (rename) is atomic and never blocks readers. On Windows, opening a file while another
+    process replaces it, or replacing a file another process has open, fails with a sharing violation
+    (PermissionError, WinError 32/5). Concurrent writers hit this, since every write reads all partitions' footers.
+    """
+    if sys.platform != "win32":
+        return fn(*args, **kwargs)
+    delay, deadline = 0.01, time.monotonic() + 5
+    while True:
+        try:
+            return fn(*args, **kwargs)
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.2)
 
 
 class ParquetIO(BaseIO):
@@ -204,7 +230,9 @@ class ParquetIO(BaseIO):
             hive_dirs = file_path.removeprefix(dataset_dir + "/").split("/")[:-1]
             if [d.split("=", 1)[0] for d in hive_dirs] != dir_names:
                 continue  # not a partition of this dataset, e.g. a nested dataset sharing the prefix
-            file_metadata = pq.read_metadata(file_path, filesystem=self._filesystem)
+            file_metadata = _retry_on_windows_lock(
+                pq.read_metadata, file_path, filesystem=self._filesystem
+            )
             if (
                 not file_metadata.metadata
                 or self.METADATA_KEY not in file_metadata.metadata
@@ -311,7 +339,7 @@ class ParquetIO(BaseIO):
                 compression=self._compression,
                 **self._write_options,
             )
-            self._filesystem.move(temp_file_path, file_path)
+            _retry_on_windows_lock(self._filesystem.move, temp_file_path, file_path)
 
     def read(
         self,

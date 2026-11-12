@@ -83,7 +83,7 @@ pfeed-bybit = ">=0.0.2"
 
 [feature.dev.pypi-dependencies]
 pfeed = { path = ".", editable = true }
-afterpython = { version = ">=0.5.2", extras = ["marimo"] }
+afterpython = { version = ">=0.5.3", extras = ["marimo"] }
 # afterpython = { path = "../../afterpython.org/afterpython", editable = true, extras = ["marimo"] }
 # used for testing only (for now) to maintain a unified interface for ducklake, deltalake, and iceberg
 deltalake = ">=1.6.6"

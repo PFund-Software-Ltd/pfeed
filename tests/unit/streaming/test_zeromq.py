@@ -82,8 +82,12 @@ def _make_push_and_pull(make: Callable[..., ZeroMQ]) -> tuple[ZeroMQ, ZeroMQ]:
     while pull.recv() is None:
         assert time.monotonic() < deadline, "PUSH failed to connect to PULL"
         push.send("probe", "probe", "probe")
-    while pull.recv() is not None:
+    # NOTE: probes may still be in flight, so draining until recv() returns None can leave one behind
+    # for the test to receive. PUSH->PULL keeps message order, so once this sync message arrives, every probe has
+    push.send("sync", "sync", "sync")
+    while (msg := _recv(pull)) is not None and msg[0] != "sync":
         pass
+    assert msg is not None, "the sync message never arrived"
     return push, pull
 
 

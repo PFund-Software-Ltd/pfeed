@@ -41,7 +41,7 @@ def _():
 def _(mo):
     mo.md(r"""
     ## Download data with pfeed
-    Download the last day of 1-minute ETH perpetual bars from Bybit, and store them
+    Download one day of 1-minute ETH perpetual bars from Bybit, and store them
     locally with `ParquetIO()`.
     """)
     return
@@ -53,7 +53,8 @@ def _(pe):
     df = feed.download(
         product="ETH_USDT_PERP",
         resolution="1m",
-        rollback_period="1d",
+        start_date="2026-11-10",
+        end_date="2026-11-10",
         io=pe.ParquetIO(),
     ).data.collect()
     df

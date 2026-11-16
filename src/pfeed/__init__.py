@@ -12,13 +12,11 @@ if TYPE_CHECKING:
     #   from pfeed_xxx import XXX
     #   pe.get_feed("xxx", ...)
 
-    # from pfeed_binance import Binance as Binance  # TODO
-    # from pfeed_okx import OKX as OKX  # TODO
-    from alphafund._pfeed_source import (  # ty: ignore[import-not-found]
-        AlphaFund as AlphaFund,
-    )
-    from pfeed_bybit import Bybit as Bybit
-    from pfund._pfeed_source import PFund as PFund  # ty: ignore[import-not-found]
+    # from pfeed_binance import Binance  # TODO
+    # from pfeed_okx import OKX  # TODO
+    from alphafund._pfeed_source import AlphaFund  # ty: ignore[import-not-found]
+    from pfeed_bybit import Bybit
+    from pfund._pfeed_source import PFund  # ty: ignore[import-not-found]
 
     from pfeed.base import get_feed
     from pfeed.engine import DataEngine
@@ -74,10 +72,16 @@ def __getattr__(name: str):
 
 
 def _import_official_source(module: str, source: str):
-    """Imports an official data source class (e.g. pe.Bybit) from its plugin, e.g. module="pfeed_bybit"."""
+    """Imports an official data source class (e.g. pe.Bybit) from its plugin, e.g. module="pfeed_bybit".
+
+    The install hint points to pfeed's extra (e.g. "pfeed[bybit]"), which pins a verified plugin version.
+    """
     from pfund_kit.plugins import import_official_plugin
 
-    return import_official_plugin(module, source, label=f"pe.{source}")
+    extra = module.removeprefix("pfeed_")
+    return import_official_plugin(
+        module, source, label=f"pe.{source}", install=f'"pfeed[{extra}]"'
+    )
 
 
 def _get_official_source(source: str, install: str):
@@ -107,6 +111,10 @@ __all__ = (  # noqa: RUF022
     # IOs
     "DuckLakeIO",
     "ParquetIO",
+    # data sources
+    "AlphaFund",
+    "PFund",
+    "Bybit",
 )
 
 

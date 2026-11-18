@@ -108,7 +108,7 @@ class _StreamAPI(BaseStreamAPI):
 
 class _Feed(MarketFeed):
     # module-level so cloudpickle pickles _parse_streaming_message by reference into the Ray workers
-    class Requests(MarketFeed.Requests):  # ty: ignore[incompatible-attribute-override]
+    class Requests(MarketFeed.Requests):
         download = None
         retrieve = None
 

@@ -204,7 +204,7 @@ def test_requires_rejects_unsupported_verb_before_running_the_body():
     called = []
 
     class Feed(_Feed):
-        class Requests(_Feed.Requests):  # ty: ignore[incompatible-attribute-override]
+        class Requests(_Feed.Requests):
             retrieve = None
             download = None
 
@@ -266,7 +266,7 @@ def test_required_method_inherited_from_concrete_feed_is_enough():
 def test_unsupported_verb_needs_nothing():
     # download is off, so its required _download_impl isn't needed
     class Feed(_FeedBase):
-        class Requests(_FeedBase.Requests):  # ty: ignore[incompatible-attribute-override]
+        class Requests(_FeedBase.Requests):
             download = None
 
     assert Feed.capabilities() == ["retrieve"]
@@ -278,7 +278,7 @@ def test_stream_needs_streaming_feed_mixin():
     ):
 
         class Feed(_Feed):
-            class Requests(_Feed.Requests):  # ty: ignore[incompatible-attribute-override]
+            class Requests(_Feed.Requests):
                 stream = _StreamRequest
 
 
@@ -286,7 +286,7 @@ def test_download_needs_retrieve():
     with pytest.raises(TypeError, match=r"'download' needs Requests\.retrieve"):
 
         class Feed(_Feed):
-            class Requests(_Feed.Requests):  # ty: ignore[incompatible-attribute-override]
+            class Requests(_Feed.Requests):
                 retrieve = None
 
 
@@ -303,7 +303,7 @@ def test_all_errors_are_reported_together():
     with pytest.raises(TypeError) as exc_info:
 
         class Feed(_FeedBase):
-            class Requests(_FeedBase.Requests):  # ty: ignore[incompatible-attribute-override]
+            class Requests(_FeedBase.Requests):
                 stream = _StreamRequest
 
     msg = str(exc_info.value)
@@ -341,7 +341,7 @@ def test_init_rejects_other_source():
 
 def test_capabilities_are_sorted_and_skip_none_and_private():
     class Feed(_Feed):
-        class Requests(_Feed.Requests):  # ty: ignore[incompatible-attribute-override]
+        class Requests(_Feed.Requests):
             _private = _DownloadRequest
             stream = None
 

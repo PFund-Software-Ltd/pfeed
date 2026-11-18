@@ -93,7 +93,7 @@ class DataEngine:
             num_workers: Number of Ray workers for the feed's streams, None to run them without Ray.
                 Feeds with and without Ray can be mixed.
         """
-        from pfeed.base import get_feed
+        from pfeed.registry import get_feed
         from pfeed.streaming.mixin import StreamingMixin
 
         if self.is_running():

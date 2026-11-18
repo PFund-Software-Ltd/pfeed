@@ -519,7 +519,7 @@ def _fake_feed_with_product(
     )
 
     class FakeMarketFeed(MarketFeed):
-        class Requests(MarketFeed.Requests):  # ty: ignore[incompatible-attribute-override]
+        class Requests(MarketFeed.Requests):
             download = None
             retrieve = None
             stream = None
@@ -570,7 +570,7 @@ def test_create_data_model_from_product_instance(
 
 class _TransformationsFeed(MarketFeed):
     # module-level so cloudpickle pickles it by reference, like a real feed class
-    class Requests(MarketFeed.Requests):  # ty: ignore[incompatible-attribute-override]
+    class Requests(MarketFeed.Requests):
         download = None
         retrieve = None
         stream = None

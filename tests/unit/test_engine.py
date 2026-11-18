@@ -84,7 +84,7 @@ class _StreamAPI(BaseStreamAPI):
 
 class _Feed(MarketFeed):
     # module-level so cloudpickle pickles _parse_streaming_message by reference into the Ray workers
-    class Requests(MarketFeed.Requests):  # ty: ignore[incompatible-attribute-override]
+    class Requests(MarketFeed.Requests):
         download = None
         retrieve = None
 
@@ -169,7 +169,7 @@ def _add_streaming_feed(
 ) -> _Feed:
     """Like engine.add_feed(...).stream(...), with a feed of a fake source."""
     _ = mocker.patch(
-        "pfeed.base.get_feed",
+        "pfeed.registry.get_feed",
         return_value=_Feed(
             _source(mocker, name, product, stream_api),
             pipeline_mode=True,
@@ -206,7 +206,7 @@ def test_add_feed_without_stream_or_replay_raises(
     mocker.patch.object(_Feed.Requests, "stream", None)
     mocker.patch.object(_Feed.Requests, "replay", None)
     _ = mocker.patch(
-        "pfeed.base.get_feed",
+        "pfeed.registry.get_feed",
         return_value=_Feed(
             _source(mocker, "FAKE", product, _StreamAPI()), pipeline_mode=True
         ),
@@ -228,7 +228,7 @@ def test_run_with_a_feed_with_nothing_to_run_raises(
 ):
     engine = DataEngine()
     _ = mocker.patch(
-        "pfeed.base.get_feed",
+        "pfeed.registry.get_feed",
         return_value=_Feed(
             _source(mocker, "FAKE", product, _StreamAPI()), pipeline_mode=True
         ),
@@ -569,7 +569,7 @@ def _add_replaying_feed(
 ) -> _Feed:
     """Like engine.add_feed(...).replay(...) from D1 to D2, after storing ticks at the timestamps where replay() reads them."""
     _ = mocker.patch(
-        "pfeed.base.get_feed",
+        "pfeed.registry.get_feed",
         return_value=_Feed(
             _source(mocker, name, product, _StreamAPI()), pipeline_mode=True
         ),

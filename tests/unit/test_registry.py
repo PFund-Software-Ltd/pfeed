@@ -18,12 +18,15 @@ FAKE_MODULE = "fake_pfeed_plugin"
 
 
 class FakeMarketFeed:
-    pass
+    data_domain = DataCategory.MARKET_DATA
 
 
 class FakeSource:
     metadata = SimpleNamespace(name="FAKE")
     Feeds: ClassVar[dict] = {DataCategory.MARKET_DATA: FakeMarketFeed}
+
+    def __init__(self, pipeline_mode: bool = False, num_workers: int | None = None):
+        self.market_feed = FakeMarketFeed()
 
 
 class MismatchedSource:
@@ -106,15 +109,20 @@ def test_get_source_rejects_mismatched_source_name(install_plugins):
 @pytest.mark.parametrize(
     "data_category", [DataCategory.MARKET_DATA, "market_data", "MARKET_DATA"]
 )
-def test_get_feed(install_plugins, data_category):
+def test_get_feed_class(install_plugins, data_category):
     install_plugins(_ep("fake"))
-    assert registry.get_feed("fake", data_category) is FakeMarketFeed
+    assert registry.get_feed_class("fake", data_category) is FakeMarketFeed
 
 
-def test_get_feed_unsupported_category(install_plugins):
+def test_get_feed_class_unsupported_category(install_plugins):
     install_plugins(_ep("fake"))
     with pytest.raises(ValueError, match="FAKE has no feed for"):
-        registry.get_feed("fake", DataCategory.CHAT_DATA)
+        registry.get_feed_class("fake", "chat_data")
+
+
+def test_get_feed(install_plugins):
+    install_plugins(_ep("fake"))
+    assert isinstance(registry.get_feed("fake", "market_data"), FakeMarketFeed)
 
 
 def test_pe_unknown_attribute_raises(install_plugins):

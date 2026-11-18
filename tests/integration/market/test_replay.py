@@ -74,7 +74,7 @@ def test_engine_merges_replays_of_feeds_by_time(
 
     # the engine creates its feeds by source name
     _ = mocker.patch.object(registry, "get_source", return_value=FakeSource)
-    _ = mocker.patch.object(registry, "get_feed", return_value=FakeMarketFeed)
+    _ = mocker.patch.object(registry, "get_feed_class", return_value=FakeMarketFeed)
     messages: list[Message] = []
     engine = DataEngine(callback=messages.append)
     btc_feed, eth_feed = (

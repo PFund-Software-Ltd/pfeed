@@ -18,21 +18,21 @@ if TYPE_CHECKING:
     from pfeed_bybit import Bybit
     from pfund._pfeed_source import PFund  # ty: ignore[import-not-found]
 
-    from pfeed.base import get_feed
     from pfeed.engine import DataEngine
     from pfeed.io.ducklake_io import DuckLakeIO
     from pfeed.io.parquet_io import ParquetIO
     from pfeed.market.feed import MarketFeed
+    from pfeed.registry import get_feed
 
 from pfeed.config import configure, configure_logging, get_config
 
 # pdoc only documents names already in the module, not ones from __getattr__
 if "pdoc" in sys.modules:
-    from pfeed.base import get_feed
     from pfeed.engine import DataEngine
     from pfeed.io.ducklake_io import DuckLakeIO
     from pfeed.io.parquet_io import ParquetIO
     from pfeed.market.feed import MarketFeed
+    from pfeed.registry import get_feed
 
 
 def __getattr__(name: str):
@@ -53,7 +53,7 @@ def __getattr__(name: str):
 
         return MarketFeed
     elif name == "get_feed":
-        from pfeed.base import get_feed
+        from pfeed.registry import get_feed
 
         return get_feed
     elif name == "DataEngine":

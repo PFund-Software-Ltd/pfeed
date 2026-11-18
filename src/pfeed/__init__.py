@@ -26,14 +26,6 @@ if TYPE_CHECKING:
 
 from pfeed.config import configure, configure_logging, get_config
 
-# pdoc only documents names already in the module, not ones from __getattr__
-if "pdoc" in sys.modules:
-    from pfeed.engine import DataEngine
-    from pfeed.io.ducklake_io import DuckLakeIO
-    from pfeed.io.parquet_io import ParquetIO
-    from pfeed.market.feed import MarketFeed
-    from pfeed.registry import get_feed
-
 
 def __getattr__(name: str):
     if name == "__version__":
@@ -116,6 +108,17 @@ __all__ = (  # noqa: RUF022
     "PFund",
     "Bybit",
 )
+
+# pdoc only documents names already in the module, not ones from __getattr__
+if "pdoc" in sys.modules:
+    from pfeed.engine import DataEngine
+    from pfeed.io.ducklake_io import DuckLakeIO
+    from pfeed.io.parquet_io import ParquetIO
+    from pfeed.market.feed import MarketFeed
+    from pfeed.registry import get_feed
+
+    # pdoc getattr()s every name in __all__, sources whose package isn't installed raise ModuleNotFoundError
+    __all__ = tuple(n for n in __all__ if n not in ("AlphaFund", "PFund", "Bybit"))
 
 
 def __dir__():

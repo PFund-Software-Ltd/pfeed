@@ -638,6 +638,7 @@ def test_replays_with_different_paces_raise(
 # --- Ray ---
 
 
+@pytest.mark.xdist_group("ray")
 def test_ray_and_non_ray_feeds_both_reach_the_engine(
     mocker: MockerFixture, product: BaseProduct
 ):
@@ -671,6 +672,7 @@ def test_ray_and_non_ray_feeds_both_reach_the_engine(
     assert engine._worker_thread is None
 
 
+@pytest.mark.xdist_group("ray")
 def test_ray_outputs_data_points_reach_the_engine_as_structs(
     mocker: MockerFixture, product: BaseProduct
 ):

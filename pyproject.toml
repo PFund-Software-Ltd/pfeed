@@ -100,7 +100,10 @@ markers = [
 ]
 # strict = true
 strict_markers = true
-addopts = ["--no-header", "--import-mode=importlib"]
+# "--dist=loadgroup": tests marked xdist_group("ray") run on one xdist worker, one after another;
+# each starts its own Ray cluster, starting several at once overloads slow CI runners (e.g. Windows),
+# and Ray gives up after a hardcoded 30s of waiting for the node to register
+addopts = ["--no-header", "--import-mode=importlib", "--dist=loadgroup"]
 testpaths = ["tests"]
 # pytest-asyncio: set explicitly, otherwise it warns on every run; "function" is its future default
 asyncio_default_fixture_loop_scope = "function"

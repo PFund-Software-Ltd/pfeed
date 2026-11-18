@@ -763,6 +763,7 @@ def test_lake_optimizer_runs_while_streaming_and_once_at_the_end(
 # --- running stream dataflows with Ray ---
 
 
+@pytest.mark.xdist_group("ray")
 @pytest.mark.parametrize("num_workers", [1, 2])
 def test_ray_workers_transform_and_flush(
     feed: _Feed,
@@ -804,6 +805,7 @@ def test_ray_workers_transform_and_flush(
     assert not feed.is_running()
 
 
+@pytest.mark.xdist_group("ray")
 def test_ray_worker_failed_flush_fails_its_dataflows(
     feed: _Feed, product: BaseProduct, stream_api: _StreamAPI, tmp_path: Path
 ):
@@ -822,6 +824,7 @@ def test_ray_worker_failed_flush_fails_its_dataflows(
     assert "flush failed" in str(dataflow.result.error)
 
 
+@pytest.mark.xdist_group("ray")
 def test_ray_worker_not_stopping_in_time_fails_its_dataflows(
     mocker: MockerFixture, feed: _Feed, product: BaseProduct, stream_api: _StreamAPI
 ):

@@ -693,6 +693,7 @@ def test_run_with_prefect_not_installed(feed: _Feed, mocker: MockerFixture):
     assert len(feed._requests) == 1
 
 
+@pytest.mark.xdist_group("ray")
 def test_run_with_ray(feed: _Feed, io: ParquetIO, caplog: pytest.LogCaptureFixture):
     pytest.importorskip("ray")
     # more dataflows than workers, so the sliding window submits new tasks as old ones finish

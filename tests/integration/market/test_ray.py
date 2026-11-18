@@ -17,6 +17,9 @@ from tests.integration.conftest import FakeSource
 
 _ = pytest.importorskip("ray")
 
+# see the "--dist=loadgroup" comment in pyproject.toml
+pytestmark = pytest.mark.xdist_group("ray")
+
 START_DATE = datetime.date(2026, 9, 1)
 END_DATE = datetime.date(2026, 9, 4)
 

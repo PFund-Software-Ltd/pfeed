@@ -221,7 +221,6 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
     # e.g. request.data_source in _download_impl(). If an API can't be pickled (e.g. it holds a session or socket),
     # create it inside the implementation method (e.g. _download_impl) on the worker instead of reusing the source's, or don't use Ray
 
-    # DRAFT: same as BaseVenue.create_product() in pfund-blocks
     @classmethod
     def create_product(
         cls, basis: str | ProductBasis, symbol: str = "", name: str = "", **specs: Any
@@ -235,21 +234,13 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
             name: unique product name, if not provided, derived by the adapter's create_name()
             specs: the product class's specs, e.g. expiration for a future
         """
-        from pfund_blocks.entities.products.product_factory import ProductFactory
+        from pfund_blocks.entities.products.product_factory import create_product
 
-        Product = ProductFactory(basis)
-        # the adapter is passed via the validation context, so that the product derives its symbol and name
-        # with the source's conventions once its specs are validated (e.g. expiration as a date)
-        product = Product.model_validate(
-            {
-                "source": cls.metadata.name,
-                "basis": basis,
-                "symbol": symbol,
-                "name": name,
-                **specs,
-            },
-            context={"adapter": cls.adapter},
+        return create_product(
+            cls.metadata.name,
+            basis,
+            cls.adapter,
+            symbol=symbol,
+            name=name,
+            **specs,
         )
-        if cls.adapter is not None:
-            cls.adapter.add_mapping(product.name, product.symbol, group="product")
-        return product

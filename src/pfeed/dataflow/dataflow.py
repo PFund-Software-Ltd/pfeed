@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.faucet import Faucet
     from pfeed.enums import DataLayer
     from pfeed.io.base_io import BaseIO
+    from pfeed.io.blob_io import BlobIO
 
 import asyncio
 import logging
@@ -149,7 +150,11 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
         return self._handler is not None
 
     def _setup_handler(
-        self, io: BaseIO, data_layer: DataLayer, data_domain: str, **handler_kwargs: Any
+        self,
+        io: BaseIO | BlobIO,
+        data_layer: DataLayer,
+        data_domain: str,
+        **handler_kwargs: Any,
     ):
         """Creates the data handler that loads the data to io, from the dataflow's own data model.
 
@@ -182,10 +187,19 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
             if self.is_streaming():
                 self._handler.write_stream(data)
             else:
-                from pfeed.utils.dataframe import convert_dataframe
+                from pfeed.utils.dataframe import convert_dataframe, is_dataframe
 
-                # user transformations may return any dataframe, the data handler only takes polars
-                df = cast(pl.LazyFrame, convert_dataframe(data)).collect()
+                # user transformations may return any dataframe, the data handler only takes polars;
+                # bytes (e.g. for a BlobIO) are passed as is
+                batch_data: pl.DataFrame | bytes
+                if is_dataframe(data):
+                    batch_data = cast(pl.LazyFrame, convert_dataframe(data)).collect()
+                elif isinstance(data, bytes):
+                    batch_data = data
+                else:
+                    raise TypeError(
+                        f"{self} can only load a dataframe or bytes, got {type(data)}"
+                    )
                 if self._flow_type == FlowType.prefect:
                     from prefect import task
                     from prefect.cache_policies import NO_CACHE
@@ -195,7 +209,7 @@ class DataFlow[RequestT: BaseRequest, DataModelT: BaseDataModel]:
                     )
                 else:
                     write = self._handler.write_batch
-                write(df)
+                write(batch_data)
                 self._logger.debug(f"loaded {self.data_model} data to {self._handler}")
             return True
         except Exception:

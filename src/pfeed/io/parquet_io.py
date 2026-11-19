@@ -3,8 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from pyarrow.parquet import FileMetaData
 
     from pfeed.io.base_io import (
@@ -17,13 +15,9 @@ if TYPE_CHECKING:
 
 import datetime
 import json
-import os
 import posixpath
-import sys
-import time
 import uuid
 from functools import reduce
-from urllib.parse import urlparse
 
 import polars as pl
 import pyarrow as pa
@@ -32,28 +26,11 @@ import pyarrow.fs as pafs
 import pyarrow.parquet as pq
 
 from pfeed.io.base_io import BaseIO, DatePartition, IOCapabilities
-
-
-def _retry_on_windows_lock[**P, T](
-    fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
-) -> T:
-    """Retries fn while another process briefly holds the file (Windows only).
-
-    On POSIX, replacing a file (rename) is atomic and never blocks readers. On Windows, opening a file while another
-    process replaces it, or replacing a file another process has open, fails with a sharing violation
-    (PermissionError, WinError 32/5). Concurrent writers hit this, since every write reads all partitions' footers.
-    """
-    if sys.platform != "win32":
-        return fn(*args, **kwargs)
-    delay, deadline = 0.01, time.monotonic() + 5
-    while True:
-        try:
-            return fn(*args, **kwargs)
-        except PermissionError:
-            if time.monotonic() >= deadline:
-                raise
-            time.sleep(delay)
-            delay = min(delay * 2, 0.2)
+from pfeed.io.file_utils import (
+    resolve_local_base_path,
+    retry_on_windows_lock,
+    to_hive_dir,
+)
 
 
 class ParquetIO(BaseIO):
@@ -109,18 +86,8 @@ class ParquetIO(BaseIO):
             write_options: extra kwargs passed to `pyarrow.parquet.write_table`.
             read_options: extra kwargs passed to `polars.scan_parquet`.
         """
-        if base_path is None:
-            from pfeed.config import get_config
-
-            base_path = str(get_config().data_path / self.DEFAULT_DIR_NAME)
-        scheme = urlparse(base_path).scheme
-        # a one-letter scheme is a Windows drive letter (C:\...), not a URI scheme
-        if scheme not in ("", "file") and len(scheme) > 1:
-            raise NotImplementedError(
-                f"only local paths are supported for now, got {base_path!r}"
-            )
-        self._filesystem, self._base_path = pafs.FileSystem.from_uri(
-            os.path.abspath(base_path.removeprefix("file://"))
+        self._filesystem, self._base_path = resolve_local_base_path(
+            base_path, self.DEFAULT_DIR_NAME
         )
         self._compression = compression
         self._write_options = write_options or {}
@@ -133,17 +100,6 @@ class ParquetIO(BaseIO):
             raise ValueError(
                 f"read_options cannot set {reserved}, they are controlled by ParquetIO"
             )
-
-    @staticmethod
-    def _to_hive_dir(column: str, value: PartitionValue) -> str:
-        if isinstance(value, datetime.datetime) or not isinstance(
-            value, (str, int, datetime.date)
-        ):
-            raise TypeError(f"unsupported partition value {value!r} for {column!r}")
-        value = value.isoformat() if isinstance(value, datetime.date) else str(value)
-        if not value or "/" in value:
-            raise ValueError(f"invalid partition value {value!r} for {column!r}")
-        return f"{column}={value}"
 
     @staticmethod
     def _from_hive_value(value: str, dtype: pa.DataType) -> PartitionValue:
@@ -191,12 +147,11 @@ class ParquetIO(BaseIO):
                 f"month={value.month:02d}",
                 f"day={value.day:02d}",
             ]
-        return [cls._to_hive_dir(level, value)]
+        return [to_hive_dir(level, value)]
 
     def _dataset_dir(self, key: DatasetKey) -> str:
         dataset_dirs = [
-            self._to_hive_dir(col, value)
-            for col, value in (key.namespace | key.name).items()
+            to_hive_dir(col, value) for col, value in (key.namespace | key.name).items()
         ]
         return posixpath.join(self._base_path, *dataset_dirs)
 
@@ -230,7 +185,7 @@ class ParquetIO(BaseIO):
             hive_dirs = file_path.removeprefix(dataset_dir + "/").split("/")[:-1]
             if [d.split("=", 1)[0] for d in hive_dirs] != dir_names:
                 continue  # not a partition of this dataset, e.g. a nested dataset sharing the prefix
-            file_metadata = _retry_on_windows_lock(
+            file_metadata = retry_on_windows_lock(
                 pq.read_metadata, file_path, filesystem=self._filesystem
             )
             if (
@@ -339,7 +294,7 @@ class ParquetIO(BaseIO):
                 compression=self._compression,
                 **self._write_options,
             )
-            _retry_on_windows_lock(self._filesystem.move, temp_file_path, file_path)
+            retry_on_windows_lock(self._filesystem.move, temp_file_path, file_path)
 
     def read(
         self,

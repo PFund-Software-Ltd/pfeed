@@ -225,7 +225,8 @@ class TimeBasedFeed[
         )
         for dataflow in dataflows:
             result: DataFlowResult = dataflow.result
-            _df: IntoFrame | None = result.data
+            # time-based data is always a frame, bytes are only stored by handlers like pfund's component data handler
+            _df = cast("IntoFrame | None", result.data)
             if _df is not None:
                 result_dfs.append(_df)
 

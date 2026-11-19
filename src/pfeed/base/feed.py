@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from pfeed.dataflow.faucet import Faucet
     from pfeed.dataflow.result import DataFlowResult
     from pfeed.io.base_io import BaseIO
+    from pfeed.io.blob_io import BlobIO
     from pfeed.source import BaseSource
 
 import functools
@@ -270,7 +271,9 @@ class BaseFeed[
         return self
 
     def load(
-        self, io: BaseIO | None = None, data_layer: DataLayer | str | None = None
+        self,
+        io: BaseIO | BlobIO | None = None,
+        data_layer: DataLayer | str | None = None,
     ) -> Self:
         """Store the data of the request just created.
 
@@ -297,7 +300,7 @@ class BaseFeed[
     def _load_for_request(
         self,
         request: RequestT,
-        io: BaseIO | None = None,
+        io: BaseIO | BlobIO | None = None,
         data_layer: DataLayer | str | None = None,
     ) -> Self:
         io = io or request.io

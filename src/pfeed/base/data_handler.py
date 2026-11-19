@@ -6,7 +6,8 @@ if TYPE_CHECKING:
     import pyarrow as pa
 
     from pfeed.base.data_model import BaseDataModel
-    from pfeed.io.base_io import BaseIO, DatasetKey, Metadata as IOMetadata, Partition
+    from pfeed.io.base_io import DatasetKey, Metadata as IOMetadata, Partition
+    from pfeed.io.blob_io import BlobIO
     from pfeed.streaming.buffer import StreamBuffer
 
 import logging
@@ -16,6 +17,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict
 
 from pfeed.enums import DataLayer
+from pfeed.io.base_io import BaseIO
 
 
 class BaseDataMetadata(BaseModel):
@@ -43,13 +45,14 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
     def __init__(
         self,
         data_model: DataModelT,
-        io: BaseIO,
+        io: BaseIO | BlobIO,
         data_domain: str,
         data_layer: DataLayer | str = DataLayer.CLEANED,
         is_streaming: bool = False,
     ):
         """
         Args:
+            io: a BaseIO for dataframes; a BlobIO only for handlers storing bytes, see e.g. pfund's component data handler.
             data_domain: the kind of data, e.g. DataCategory.MARKET_DATA, see BaseFeed.data_domain.
             is_streaming: whether the dataset holds streamed data, which is stored with a different schema,
                 e.g. partitioned by start_ts instead of date, see _get_date_col().
@@ -76,7 +79,14 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         )
 
     @property
-    def io(self) -> BaseIO:
+    def io(self) -> BaseIO | BlobIO:
+        return self._io
+
+    @property
+    def _frame_io(self) -> BaseIO:
+        """The io as a BaseIO, raising TypeError if it is a BlobIO, which can't store dataframes."""
+        if not isinstance(self._io, BaseIO):
+            raise TypeError(f"{self._io} stores bytes, not dataframes, use a BaseIO")
         return self._io
 
     @property
@@ -104,12 +114,18 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         return self.Metadata.model_validate(metadata)
 
     @abstractmethod
-    def write_batch(self, df: pl.DataFrame) -> None:
-        pass
+    def write_batch(self, data: pl.DataFrame | bytes) -> None:
+        """Writes a batch of the data model's data: a frame, or bytes for a handler storing bytes in a BlobIO.
+
+        A handler raises TypeError for the kind it doesn't store.
+        """
 
     @abstractmethod
-    def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, MetadataT]]:
-        """Reads the data model's data and its per-partition metadata in one IO read."""
+    def read(self) -> tuple[pl.LazyFrame | bytes | None, dict[Partition, MetadataT]]:
+        """Reads the data model's data and its per-partition metadata in one IO read.
+
+        A handler narrows the data's type to what it stores, e.g. MarketDataHandler returns a LazyFrame.
+        """
 
     def _build_streaming_schema(self) -> pa.Schema:
         """The schema of the sink's buffered rows; override to support streaming."""
@@ -200,7 +216,7 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         mode: Literal["replace", "append"] = "replace",
     ) -> None:
         """Writes df to this handler's dataset, metadata serialized to JSON-safe dicts."""
-        self._io.write(
+        self._frame_io.write(
             self._dataset_key,
             df.to_arrow(),
             partitions={
@@ -215,7 +231,7 @@ class BaseDataHandler[DataModelT: BaseDataModel, MetadataT: BaseDataMetadata](AB
         partitions: list[Partition] | None = None,
     ) -> tuple[pl.LazyFrame | None, dict[Partition, MetadataT]]:
         """Reads this handler's dataset, metadata parsed by _parse_metadata()."""
-        lf, metadata = self._io.read(self._dataset_key, partitions=partitions)
+        lf, metadata = self._frame_io.read(self._dataset_key, partitions=partitions)
         return lf, {
             partition: self._parse_metadata(md) for partition, md in metadata.items()
         }

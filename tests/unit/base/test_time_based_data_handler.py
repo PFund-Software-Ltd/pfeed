@@ -55,10 +55,12 @@ class _Handler(TimeBasedDataHandler[_DataModel, BaseDataMetadata]):
     def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
         return df
 
-    def write_batch(self, df: pl.DataFrame) -> None:
+    def write_batch(self, data: pl.DataFrame | bytes) -> None:
+        assert isinstance(data, pl.DataFrame)
         # like MarketDataHandler, every day in the date range gets a partition, even without rows
         self._write(
-            df, {partition: self._create_metadata() for partition in self._partitions()}
+            data,
+            {partition: self._create_metadata() for partition in self._partitions()},
         )
 
     def read(self) -> tuple[pl.LazyFrame | None, dict[Partition, BaseDataMetadata]]:

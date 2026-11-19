@@ -54,12 +54,13 @@ class _Handler(BaseDataHandler[BaseDataModel, BaseDataMetadata]):
     def _validate_schema(self, df: pl.DataFrame) -> pl.DataFrame:
         return df
 
-    def write_batch(self, df: pl.DataFrame) -> None:
+    def write_batch(self, data: pl.DataFrame | bytes) -> None:
+        assert isinstance(data, pl.DataFrame)
         self._write(
-            df,
+            data,
             {
                 (product,): self._create_metadata()
-                for product in df.get_column("product").unique()
+                for product in data.get_column("product").unique()
             },
         )
 

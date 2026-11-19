@@ -31,16 +31,17 @@ class DataFlowResult:
 
     success: bool = False
     error: BaseException | None = None
-    _data: IntoFrame | None = None
-    _loader: Callable[[], pl.LazyFrame | None] | None = None
+    # bytes for a handler storing bytes, e.g. pfund's model artifacts in a BlobIO
+    _data: IntoFrame | bytes | None = None
+    _loader: Callable[[], pl.LazyFrame | bytes | None] | None = None
 
     @classmethod
-    def materialized(cls, data: IntoFrame | None) -> DataFlowResult:
+    def materialized(cls, data: IntoFrame | bytes | None) -> DataFlowResult:
         # NOTE: an empty dataframe still counts as success — the source returned a valid (empty) answer.
         return cls(success=data is not None, _data=data)
 
     @classmethod
-    def lazy(cls, loader: Callable[[], pl.LazyFrame | None]) -> DataFlowResult:
+    def lazy(cls, loader: Callable[[], pl.LazyFrame | bytes | None]) -> DataFlowResult:
         return cls(success=True, _loader=loader)
 
     @classmethod
@@ -64,7 +65,7 @@ class DataFlowResult:
             self._data = self._data.collect()
 
     @property
-    def data(self) -> IntoFrame | None:
+    def data(self) -> IntoFrame | bytes | None:
         """Lazy-loads data from storage on first access.
 
         Data is only read from disk when this property is accessed, not when the
@@ -77,14 +78,17 @@ class DataFlowResult:
 
 
 @dataclass(frozen=True)
-class RunResult:
+class RunResult[DataT = pl.LazyFrame]:
     """Aggregate result of a `feed.run()` call.
 
-    Wraps the combined frame plus the underlying per-flow `DataFlowResult`s so callers
+    Wraps the combined data plus the underlying per-flow `DataFlowResult`s so callers
     can introspect failures programmatically instead of relying on log output.
+
+    DataT is the type of the data, a frame by default; a feed whose handler also stores bytes
+    sets it, e.g. pfund's component feed returns RunResult[pl.LazyFrame | bytes].
     """
 
-    data: pl.LazyFrame | None
+    data: DataT | None
     dataflows: list[DataFlow]
 
     @property

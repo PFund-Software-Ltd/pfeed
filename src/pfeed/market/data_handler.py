@@ -103,15 +103,18 @@ class MarketDataHandler(TimeBasedDataHandler["MarketDataModel", MarketDataMetada
             )
         return df
 
-    def write_batch(self, df: pl.DataFrame) -> None:
-        """Replaces the data model's partitions with `df`.
+    def write_batch(self, data: pl.DataFrame | bytes) -> None:
+        """Replaces the data model's partitions with `data`.
 
         Every day in the data model's date range gets a partition, so a day without rows
         (e.g. a holiday) is stored as an empty partition and isn't re-downloaded.
-        `df` must not have rows outside the date range, otherwise the IO raises.
+        `data` must not have rows outside the date range, otherwise the IO raises.
         """
         from pfeed.schemas.market_data_schema import PRODUCT
 
+        if not isinstance(data, pl.DataFrame):
+            raise TypeError(f"market data must be a polars DataFrame, got {type(data)}")
+        df = data
         if self._data_layer == DataLayer.RAW:
             if PRODUCT in df.columns:
                 raise ValueError(

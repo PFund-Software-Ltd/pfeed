@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from pfeed.io.base_io import BaseIO
+    from pfeed.io.blob_io import BlobIO
     from pfeed.io.table_io import TableIO
 
 import asyncio
@@ -20,10 +21,12 @@ class LakeOptimizer:
     so Ray workers don't optimize the same catalog at the same time.
     """
 
-    def __init__(self, ios: Iterable[BaseIO], interval: float, logger: logging.Logger):
+    def __init__(
+        self, ios: Iterable[BaseIO | BlobIO], interval: float, logger: logging.Logger
+    ):
         """
         Args:
-            ios: the IOs the streams store to; IOs that aren't table IOs (e.g. ParquetIO) are skipped.
+            ios: the IOs the streams store to; IOs that aren't table IOs (e.g. ParquetIO, BlobIO) are skipped.
             interval: seconds between optimizations while streaming, 0 optimizes only when the streams end.
         """
         from pfeed.io.table_io import TableIO

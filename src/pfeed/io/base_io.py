@@ -74,6 +74,20 @@ class DatasetKey:
         ]
 
 
+def dump_metadata(metadata: Metadata) -> str:
+    """Serializes metadata to JSON, raising TypeError if it wouldn't come back exactly as given.
+
+    json.dumps alone raises on e.g. dates, but silently changes tuples to lists,
+    int keys to str keys and writes NaN, so the round-trip is checked too.
+    """
+    dumped = json.dumps(metadata)
+    if json.loads(dumped) != metadata:
+        raise TypeError(
+            f"metadata is not JSON-safe, it would not round-trip exactly: {metadata!r}"
+        )
+    return dumped
+
+
 @dataclass(frozen=True)
 class IOCapabilities:
     """What an IO supports, so callers can check before writing.
@@ -83,6 +97,8 @@ class IOCapabilities:
         concurrent_partition_writes: multiple processes (e.g. Ray workers) may call write() on the
             same DatasetKey at the same time, as long as they cover disjoint partitions.
             Concurrent writes to the same partition are not covered by any IO; avoid them.
+            Partitions whose values only differ by type (e.g. 1 vs '1') are stored in the same place,
+            so they count as the same partition here.
     """
 
     append: bool = False
@@ -107,19 +123,7 @@ class BaseIO(ABC):
     def __str__(self) -> str:
         return type(self).__name__
 
-    @staticmethod
-    def _dump_metadata(metadata: Metadata) -> str:
-        """Serializes metadata to JSON, raising TypeError if it wouldn't come back exactly as given.
-
-        json.dumps alone raises on e.g. dates, but silently changes tuples to lists,
-        int keys to str keys and writes NaN, so the round-trip is checked too.
-        """
-        dumped = json.dumps(metadata)
-        if json.loads(dumped) != metadata:
-            raise TypeError(
-                f"metadata is not JSON-safe, it would not round-trip exactly: {metadata!r}"
-            )
-        return dumped
+    _dump_metadata = staticmethod(dump_metadata)
 
     @staticmethod
     def _partition_value_arrays(key: DatasetKey, data: pa.Table) -> list[pa.Array]:

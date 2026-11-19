@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pfeed.dataflow.retry_policy import RetryPolicy
 from pfeed.enums import DataLayer
 from pfeed.io.base_io import BaseIO
+from pfeed.io.blob_io import BlobIO
 from pfeed.source import BaseSource
 
 
@@ -23,7 +24,7 @@ class BaseRequest(BaseModel, ABC):
     # the source object of the feed that created this request, so the extraction can reach its APIs, e.g. source.batch_api
     data_source: BaseSource
     data_origin: str = ""
-    io: BaseIO | None = None
+    io: BaseIO | BlobIO | None = None
     data_layer: DataLayer = Field(
         default=DataLayer.CLEANED,
         description="""
@@ -66,7 +67,7 @@ class BaseRequest(BaseModel, ABC):
 
     def finalize_load_config(
         self,
-        io: BaseIO | None,
+        io: BaseIO | BlobIO | None,
         data_layer: DataLayer,
     ) -> None:
         """Finalize the io and the data layer the data is stored in.

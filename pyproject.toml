@@ -34,7 +34,6 @@ dependencies = [
     "duckdb>=2.0.0 ; sys_platform != 'emscripten'",
     "pandera>=0.36.0",
     "narwhals>=2.29.0 ; sys_platform != 'emscripten'",
-    "beautifulsoup4>=4.15.0",
     "pyzmq>=27.3.0 ; sys_platform != 'emscripten'",
 ]
 

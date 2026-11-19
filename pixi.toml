@@ -40,7 +40,6 @@ polars = ">=2.1.0"
 duckdb = ">=2.0.0"
 pandera = ">=0.36.0"
 narwhals = ">=2.29.0"
-beautifulsoup4 = ">=4.15.0"
 pyzmq = ">=27.3.0"
 
 [environments]

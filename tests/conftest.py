@@ -31,6 +31,11 @@ def pytest_configure(config: pytest.Config):
         raise pytest.UsageError(
             "--keep-log-path can't be used with -n (workers would share log files)"
         )
+    # create the config dir and its default files (e.g. logging.yaml) once, before xdist starts the workers.
+    # on a fresh machine (e.g. CI), workers creating them at the same time race: pfund_kit copies a default file
+    # unless it exists, so a worker can find another worker's half-copied (empty) logging.yaml and fail to load it
+    if not hasattr(config, "workerinput"):  # the xdist controller, or a run without -n
+        pe.get_config()
 
 
 # TODO: add more products (e.g. stocks) to params once they are supported

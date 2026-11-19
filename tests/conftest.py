@@ -61,6 +61,34 @@ def configure_test_env(
     setup_logging()
 
 
+@pytest.fixture(autouse=True)
+def start_ray(request: pytest.FixtureRequest):
+    """Starts Ray before a test marked xdist_group("ray"), retrying a startup that timed out.
+
+    Ray waits a hardcoded 30s for its node to register (ray/_private/node.py, not configurable),
+    and on a slow, busy CI runner (e.g. windows-latest, other xdist workers running) it can miss it.
+    pfeed's setup_ray() then finds Ray running and doesn't start it again.
+    """
+    marker = request.node.get_closest_marker("xdist_group")
+    if marker is None or marker.args != ("ray",):
+        return
+    try:
+        import ray
+    except ImportError:
+        return  # the test skips itself with pytest.importorskip("ray")
+    num_attempts = 3
+    for attempt in range(1, num_attempts + 1):
+        try:
+            # same as pfund_kit's setup_ray()
+            ray.init(num_cpus=os.cpu_count())
+            return
+        except Exception as exc:
+            if "timed out during startup" not in str(exc) or attempt == num_attempts:
+                raise
+            # clean up the half-started processes before trying again
+            shutdown_ray(wait_for_processes=True)
+
+
 @pytest.fixture(scope="function", autouse=True)
 def cleanup_ray():
     """Shut down Ray after each test, so no test inherits another test's Ray instance."""

@@ -269,3 +269,39 @@ def test_invalid_file_name_raises(io: BlobIO, file_name: str):
     with pytest.raises(ValueError):
         io.write(KEY, {(): (b"x", {})}, file_name=file_name)
     assert io.read(KEY) == ({}, {})
+
+
+def test_delete_namespace(io: BlobIO, tmp_path: Path):
+    """Deletes every dataset under the namespace, datasets under other namespaces are untouched."""
+    other_key = DatasetKey(namespace=NAMESPACE | {"project_name": "other"}, name=NAME)
+    io.write(STEP_KEY, {(0,): (b"s0", {})})
+    io.write(
+        DatasetKey(namespace=NAMESPACE, name={"component_id": "Model-xyz"}),
+        {(): (b"x", {})},
+    )
+    io.write(other_key, {(): (b"other", {})})
+
+    io.delete_namespace(NAMESPACE)
+
+    assert not (tmp_path / "env=BACKTEST" / "project_name=proj").exists()
+    assert io.read(STEP_KEY) == ({}, {})
+    assert io.read(other_key) == ({(): b"other"}, {(): {}})
+
+
+def test_delete_missing_namespace(io: BlobIO):
+    """Deleting a namespace with nothing stored is a no-op, so it can be called before every run."""
+    io.delete_namespace(NAMESPACE)
+    io.write(KEY, {(): (b"x", {})})
+    io.delete_namespace(NAMESPACE)
+    io.delete_namespace(NAMESPACE)
+    assert io.read(KEY) == ({}, {})
+
+
+def test_delete_namespace_on_a_file_raises(io: BlobIO, tmp_path: Path):
+    """A file where the namespace's dir should be isn't a namespace, so it raises instead of being deleted."""
+    (tmp_path / "env=BACKTEST").mkdir()
+    (tmp_path / "env=BACKTEST" / "project_name=proj").write_bytes(b"not a dir")
+
+    with pytest.raises(RuntimeError, match="is not a directory"):
+        io.delete_namespace(NAMESPACE)
+    assert (tmp_path / "env=BACKTEST" / "project_name=proj").is_file()

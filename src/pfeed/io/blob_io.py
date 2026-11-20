@@ -129,6 +129,19 @@ class BlobIO:
         ]
         return posixpath.join(self._dataset_dir(key), *partition_dirs)
 
+    def delete_namespace(self, namespace: dict[str, str]) -> None:
+        """Deletes every dataset under the namespace, e.g. a whole run. No-op if nothing is stored."""
+        namespace_dir = posixpath.join(
+            self._base_path,
+            *(to_hive_dir(col, value) for col, value in namespace.items()),
+        )
+        file_info = self._filesystem.get_file_info(namespace_dir)
+        if file_info.type == pafs.FileType.NotFound:
+            return
+        if file_info.type != pafs.FileType.Directory:
+            raise RuntimeError(f"{namespace_dir} is not a directory")
+        self._filesystem.delete_dir(namespace_dir)
+
     def _write_file(self, file_path: str, data: bytes) -> None:
         """Writes data to a temp file, then renames it to file_path, so readers never see a half-written file."""
         dir_path = file_path.rsplit("/", 1)[0]

@@ -344,3 +344,51 @@ def test_key_with_different_partition_by_raises(
     assert lf is not None
     assert lf.collect().height == 3
     assert metadata == {("BTC", D1): {"version": 1}, ("BTC", D2): {"version": 1}}
+
+
+def test_delete_namespace(io: DuckLakeIO, data: pa.Table):
+    """Drops every dataset (and its metadata table) under the namespace, i.e. its schema,
+    datasets under other namespaces are untouched.
+    """
+    partitions: dict[Partition, Metadata] = {("BTC", D1): {}, ("BTC", D2): {}}
+    sibling_key = DatasetKey(
+        namespace=KEY.namespace,
+        name=KEY.name | {"resolution": "1m"},
+        partition_by=KEY.partition_by,
+    )
+    other_key = DatasetKey(
+        namespace=KEY.namespace | {"data_source": "BINANCE"},
+        name=KEY.name,
+        partition_by=KEY.partition_by,
+    )
+    for key in (KEY, sibling_key, other_key):
+        io.write(key, data, partitions=partitions)
+
+    io.delete_namespace(KEY.namespace)
+
+    assert io.read(KEY) == (None, {})
+    assert io.read(sibling_key) == (None, {})
+    lf, metadata = io.read(other_key)
+    assert lf is not None
+    assert lf.collect().height == 3
+    assert metadata == partitions
+    # the namespace can be written again after it was deleted
+    io.write(KEY, data, partitions=partitions)
+    assert io.read(KEY)[1] == partitions
+
+
+def test_delete_missing_namespace(io: DuckLakeIO, data: pa.Table):
+    """Deleting a namespace with nothing stored is a no-op, so it can be called before every run."""
+    io.delete_namespace(KEY.namespace)
+    io.write(KEY, data, partitions={("BTC", D1): {}, ("BTC", D2): {}})
+    io.delete_namespace(KEY.namespace)
+    io.delete_namespace(KEY.namespace)
+    assert io.read(KEY) == (None, {})
+
+
+def test_delete_namespace_with_ambiguous_value_raises(io: DuckLakeIO):
+    """The namespace is joined into a schema name like a key's, so an ambiguous value raises instead of
+    dropping another namespace's schema, e.g. {'a': 'X', 'b': 'Y'} and {'a': 'X__Y'} both join to 'X__Y'.
+    """
+    with pytest.raises(ValueError):
+        io.delete_namespace({"env": "BACKTEST__BYBIT"})

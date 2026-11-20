@@ -106,8 +106,18 @@ class TableIO(BaseIO):
         e.g. ('A_', 'B') and ('A', '_B') would both join to 'A___B',
         or can't be a directory name, since some formats store each table in <schema>/<table>/.
         """
+        self._check_name_values([*key.namespace.values(), *key.name.values()])
         sep = self.NAME_SEPARATOR
-        for value in [*key.namespace.values(), *key.name.values()]:
+        return sep.join(key.namespace.values()), sep.join(key.name.values())
+
+    def _schema_name(self, namespace: dict[str, str]) -> str:
+        """Returns the schema of every dataset under the namespace, see _table_names()."""
+        self._check_name_values(list(namespace.values()))
+        return self.NAME_SEPARATOR.join(namespace.values())
+
+    def _check_name_values(self, values: list[str]) -> None:
+        sep = self.NAME_SEPARATOR
+        for value in values:
             if (
                 not value
                 or sep in value
@@ -119,7 +129,12 @@ class TableIO(BaseIO):
                     f'key value {value!r} must be non-empty, not contain {sep!r} or "/", '
                     'not start with "_" or "." and not end with "_"'
                 )
-        return sep.join(key.namespace.values()), sep.join(key.name.values())
+
+    def delete_namespace(self, namespace: dict[str, str]) -> None:
+        """Deletes every dataset under the namespace (its schema), e.g. a whole run. No-op if nothing is stored."""
+        raise NotImplementedError(
+            f"{type(self).__name__} doesn't support delete_namespace()"
+        )
 
     @staticmethod
     def _check_case(name: str, existing_names: list[str]) -> None:

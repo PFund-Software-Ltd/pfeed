@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, override
 
 if TYPE_CHECKING:
     import polars as pl
@@ -401,6 +401,23 @@ class DuckLakeIO(TableIO):
         if not relation.limit(1).fetchall():
             return None, metadata
         return relation.pl(lazy=True), metadata
+
+    @override
+    def delete_namespace(self, namespace: dict[str, str]) -> None:
+        schema = self._schema_name(namespace)
+        cursor = self._connect()
+        try:
+            # through the catalog, deleting the files directly would leave it pointing to missing data.
+            # NOTE: the files stay on disk until a vacuum() older than `retention`,
+            # vacuuming here with retention=0 would expire every other table's snapshots in the catalog too
+            self._with_retries(
+                lambda: cursor.execute(
+                    f"DROP SCHEMA IF EXISTS {self._CATALOG_ALIAS}.{_quote(schema)} CASCADE"
+                ),
+                "drop schema",
+            )
+        finally:
+            cursor.close()
 
     def optimize(self) -> None:
         """See TableIO.optimize().

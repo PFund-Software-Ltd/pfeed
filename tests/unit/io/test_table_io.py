@@ -300,3 +300,12 @@ def test_vacuum(file_io: TableIO, tmp_path: Path, data: pa.Table):
 def test_negative_retention_raises(io: TableIO):
     with pytest.raises(ValueError):
         io.vacuum(retention=datetime.timedelta(hours=-1))
+
+
+@pytest.mark.parametrize(
+    "io_class", [DeltaLakeIO, IcebergIO], ids=["DeltaLakeIO", "IcebergIO"]
+)
+def test_delete_namespace_not_implemented(io_class: type[TableIO], tmp_path: Path):
+    """Only DuckLakeIO deletes a namespace for now, the others raise instead of silently keeping the data."""
+    with pytest.raises(NotImplementedError):
+        io_class(base_path=str(tmp_path)).delete_namespace(KEY.namespace)

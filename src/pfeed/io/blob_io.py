@@ -7,7 +7,6 @@ if TYPE_CHECKING:
 
     from pfeed.io.base_io import DatasetKey, Metadata, Partition
 
-import contextlib
 import json
 import posixpath
 import uuid
@@ -22,12 +21,12 @@ from pfeed.io.file_utils import (
 )
 
 
-class _Committed(NamedTuple):
-    """A partition's metadata file, as written by BlobIO.write()."""
+class _Manifest(NamedTuple):
+    """A partition's metadata file, as written by BlobIO.write(): the committed files of the partition."""
 
     partition: Partition
-    file_name: str
-    metadata: Metadata
+    # file name -> its metadata
+    files: dict[str, Metadata]
 
 
 class BlobIO:
@@ -36,26 +35,30 @@ class BlobIO:
     Not a BaseIO: its data is bytes, not a table, pfeed doesn't own the format, the data handler (e.g. pfund's) does.
     Shares BaseIO's other rules: DatasetKey is the identity, metadata is opaque, JSON-safe and the commit marker.
 
-    Layout: <base_path>/<namespace k=v>/.../<name k=v>/.../<partition_by k=v>/.../<file_name> + _pfeed_metadata.json
+    Layout: <base_path>/<namespace>/.../<name>/.../<partition_by k=v>/.../<file_name>(s) + _pfeed_metadata.json
     e.g. ./data/blob/env=BACKTEST/.../artifact_type=checkpoint/step=3/checkpoint.pth
+    - namespace and name levels are hive dirs (k=v) by default, or plain values (e.g. BACKTEST/) with hive_dataset_dirs=False;
+        partition levels are always hive dirs, since a read finds the partitions of a dataset by their level names
 
-    - the blob's file name is chosen by the caller (e.g. 'model.joblib', so the file can be opened as is),
-        defaults to DEFAULT_FILE_NAME; BlobIO never interprets it, the format stays with the caller
+    - a partition holds one or more blobs, each under a file name chosen by the caller
+        (e.g. 'model.joblib', so the file can be opened as is), DEFAULT_FILE_NAME by default;
+        BlobIO never interprets it, the format stays with the caller
+    - the partition's metadata file (_pfeed_metadata.json) is its manifest and commit marker:
+        it lists the partition's committed files with their metadata, a blob not in it isn't committed (never read);
+        it also stores the partition values, so their types survive the round-trip
+    - a write merges into the manifest: a new file name is added, an existing one is replaced, the other files are untouched
 
     - partition values are given by the caller, there are no columns to compute them from,
         so partition_by can't have a DatePartition level and values must be str or int
-    - the metadata file is the commit marker, it also stores the partition values, so their types survive the round-trip,
-        and the blob's file name, so a read finds the blob without being told its name
     - a partition level keeps the type of its values: partitions only differing by type (e.g. 1 vs '1') share a dir,
-        so they are the same partition; write() rejects one while the other is stored, but two concurrent writes
-        of them aren't covered, same as any concurrent writes to the same partition (see IOCapabilities)
-    - replace is atomic per partition: the metadata file is deleted first (the partition is missing), then the blob
-        and the metadata are each written to a temp file and renamed into place, metadata last;
-        a crash in between leaves the partition missing and the next replace overwrites the leftover blob;
-        a replace with another file name deletes the old blob after the commit, a crash before that leaves it orphaned (never read)
-    - a read is not a snapshot: a replace between finding a partition's metadata and reading its blob
-        can return the new blob with the old metadata, same as ParquetIO,
-        or find the blob gone after a replace with another file name, then the partition is missing
+        so they are the same partition; write() rejects one while the other is stored
+    - concurrent writes to the same partition aren't covered (see IOCapabilities), even with different file names:
+        each rewrites the manifest, so one can drop the other's entry; writes to different partitions are independent
+    - replace is atomic per file: the file's entry is removed from the manifest first (the file is missing),
+        then the blob and the manifest are each written to a temp file and renamed into place, manifest last;
+        a crash in between leaves the file missing and the next replace overwrites the leftover blob
+    - a read is not a snapshot: a replace between reading the manifest and the blob
+        can return the new blob with the old metadata, same as ParquetIO
     - no append: a blob is replaced as a whole
     """
 
@@ -66,18 +69,25 @@ class BlobIO:
     DEFAULT_FILE_NAME: ClassVar[str] = "part-0.blob"
     METADATA_FILE_NAME: ClassVar[str] = "_pfeed_metadata.json"
     PARTITION_KEY: ClassVar[str] = "partition"
-    FILE_NAME_KEY: ClassVar[str] = "file_name"
-    METADATA_KEY: ClassVar[str] = "metadata"
+    FILES_KEY: ClassVar[str] = "files"
 
-    def __init__(self, base_path: str | os.PathLike[str] | None = None):
+    def __init__(
+        self,
+        base_path: str | os.PathLike[str] | None = None,
+        *,
+        hive_dataset_dirs: bool = True,
+    ):
         """
         Args:
             base_path: root directory of all datasets. Local paths only for now.
                 Defaults to <config.data_path>/<DEFAULT_DIR_NAME>.
+            hive_dataset_dirs: whether the namespace and name levels are hive dirs (e.g. env=BACKTEST/),
+                or plain values (e.g. BACKTEST/); partition levels are always hive dirs.
         """
         self._filesystem, self._base_path = resolve_local_base_path(
             base_path, self.DEFAULT_DIR_NAME
         )
+        self._hive_dataset_dirs = hive_dataset_dirs
 
     def __str__(self) -> str:
         return type(self).__name__
@@ -117,9 +127,20 @@ class BlobIO:
                 + f'not start with "." and not be {cls.METADATA_FILE_NAME!r}'
             )
 
+    def _dataset_level_dir(self, column: str, value: str) -> str:
+        """The dir of a namespace/name level: a hive dir (k=v), or its plain value if not hive_dataset_dirs."""
+        # to_hive_dir() validates the value (non-empty, no '/') in both cases
+        hive_dir = to_hive_dir(column, value)
+        if self._hive_dataset_dirs:
+            return hive_dir
+        if value in (".", ".."):
+            raise ValueError(f"invalid value {value!r} for {column!r}, it isn't a dir")
+        return hive_dir.removeprefix(f"{column}=")
+
     def _dataset_dir(self, key: DatasetKey) -> str:
         dataset_dirs = [
-            to_hive_dir(col, value) for col, value in (key.namespace | key.name).items()
+            self._dataset_level_dir(col, value)
+            for col, value in (key.namespace | key.name).items()
         ]
         return posixpath.join(self._base_path, *dataset_dirs)
 
@@ -135,7 +156,7 @@ class BlobIO:
         """Deletes every dataset under the namespace, e.g. a whole run. No-op if nothing is stored."""
         namespace_dir = posixpath.join(
             self._base_path,
-            *(to_hive_dir(col, value) for col, value in namespace.items()),
+            *(self._dataset_level_dir(col, value) for col, value in namespace.items()),
         )
         file_info = self._filesystem.get_file_info(namespace_dir)
         if file_info.type == pafs.FileType.NotFound:
@@ -162,50 +183,68 @@ class BlobIO:
 
         return retry_on_windows_lock(read)
 
-    def _read_committed(self, partition_dir: str) -> _Committed | None:
-        """Reads a partition dir's metadata file, None if it has none, i.e. the partition isn't committed.
+    def _read_manifest(self, partition_dir: str) -> _Manifest | None:
+        """Reads a partition dir's manifest, None if it has none, i.e. the partition has no committed files.
 
-        A replace deletes the metadata file first (see the class docstring), so it can disappear
-        between finding it and reading it; the partition is then missing, as during any replace.
+        A replace of the partition's last file deletes the manifest first (see the class docstring),
+        so it can disappear between finding it and reading it; the partition is then missing, as during any replace.
         """
         try:
-            committed = json.loads(
+            manifest = json.loads(
                 self._read_file(f"{partition_dir}/{self.METADATA_FILE_NAME}")
             )
         except FileNotFoundError:
             return None
-        return _Committed(
-            partition=tuple(committed[self.PARTITION_KEY]),
-            file_name=committed[self.FILE_NAME_KEY],
-            metadata=committed[self.METADATA_KEY],
+        return _Manifest(
+            partition=tuple(manifest[self.PARTITION_KEY]),
+            files=manifest[self.FILES_KEY],
         )
 
-    def _find_partitions(
-        self, key: DatasetKey, partitions: list[Partition] | None = None
-    ) -> dict[Partition, tuple[str, Metadata]]:
-        """Finds the committed partitions of the dataset, with their blobs' file paths and metadata.
+    def _write_manifest(
+        self, partition_dir: str, partition: Partition, files: dict[str, Metadata]
+    ) -> None:
+        """Writes the partition's manifest, or deletes it if no files are left, i.e. the partition is missing."""
+        manifest_path = f"{partition_dir}/{self.METADATA_FILE_NAME}"
+        if files:
+            manifest = {self.PARTITION_KEY: list(partition), self.FILES_KEY: files}
+            self._write_file(manifest_path, dump_metadata(manifest).encode())
+        elif self._filesystem.get_file_info(manifest_path).type == pafs.FileType.File:
+            retry_on_windows_lock(self._filesystem.delete_file, manifest_path)
 
-        A partition is committed if and only if it has a metadata file (see commit marker).
+    def _find_partitions(
+        self,
+        key: DatasetKey,
+        file_name: str,
+        partitions: list[Partition] | None = None,
+    ) -> dict[Partition, tuple[str, Metadata]]:
+        """Finds the partitions of the dataset with file_name committed, with the file's path and metadata.
+
+        A file is committed if and only if the partition's manifest lists it (see commit marker).
 
         Args:
+            file_name: the file to find in each partition, partitions without it are missing.
             partitions: partitions to find, only their dirs are looked at; None finds all of the dataset's.
                 A partition stored with values of other types (e.g. 1 vs '1') is not found.
         """
+        found: dict[Partition, tuple[str, Metadata]] = {}
+
+        def add(partition_dir: str, manifest: _Manifest | None) -> None:
+            if manifest is not None and file_name in manifest.files:
+                found[manifest.partition] = (
+                    f"{partition_dir}/{file_name}",
+                    manifest.files[file_name],
+                )
+
         if partitions is not None:
-            found: dict[Partition, tuple[str, Metadata]] = {}
             for partition in partitions:
                 self._check_partition(key, partition)
                 partition_dir = self._partition_dir(key, partition)
-                committed = self._read_committed(partition_dir)
-                if committed is not None and committed.partition == partition:
-                    found[partition] = (
-                        f"{partition_dir}/{committed.file_name}",
-                        committed.metadata,
-                    )
+                manifest = self._read_manifest(partition_dir)
+                if manifest is not None and manifest.partition == partition:
+                    add(partition_dir, manifest)
             return found
         dataset_dir = self._dataset_dir(key)
         selector = pafs.FileSelector(dataset_dir, allow_not_found=True, recursive=True)
-        found = {}
         for info in self._filesystem.get_file_info(selector):
             if (
                 info.type != pafs.FileType.File
@@ -213,19 +252,18 @@ class BlobIO:
             ):
                 continue
             partition_dir = info.path.rsplit("/", 1)[0]
-            hive_dirs = (
+            partition_dirs = (
                 partition_dir.removeprefix(dataset_dir).removeprefix("/").split("/")
                 if partition_dir != dataset_dir
                 else []
             )
-            if [d.split("=", 1)[0] for d in hive_dirs] != list(key.partition_by):
-                continue  # not a partition of this dataset, e.g. a nested dataset sharing the prefix
-            committed = self._read_committed(partition_dir)
-            if committed is not None:
-                found[committed.partition] = (
-                    f"{partition_dir}/{committed.file_name}",
-                    committed.metadata,
-                )
+            # not a partition of this dataset, e.g. a nested dataset sharing the prefix
+            if len(partition_dirs) != len(key.partition_by) or not all(
+                d.startswith(f"{level}=")
+                for d, level in zip(partition_dirs, key.partition_by, strict=True)
+            ):
+                continue
+            add(partition_dir, self._read_manifest(partition_dir))
         return found
 
     def write(
@@ -235,8 +273,10 @@ class BlobIO:
         *,
         file_name: str = DEFAULT_FILE_NAME,
     ) -> None:
-        """Replaces the partitions in `blobs` with their blobs and metadata, other partitions are untouched.
+        """Writes file_name with its blob and metadata in each partition of `blobs`, merged into the partition's manifest.
 
+        A new file name is added to the partition, an existing one is replaced;
+        the partition's other files and the other partitions are untouched.
         A partition level keeps the type of its values: partitions whose values only differ by type
         (e.g. 1 vs '1') share a dir, so writing one while the other is stored raises TypeError.
 
@@ -248,97 +288,89 @@ class BlobIO:
         """
         self._check_key(key)
         self._check_file_name(file_name)
-        # build all paths and serialize all metadata before writing any file,
+        # check all partitions and metadata before writing any file,
         # so an invalid partition value or metadata writes nothing
-        # partition dir -> (blob, metadata file content, the replaced blob's file name if it differs)
-        writes: dict[str, tuple[bytes, bytes, str | None]] = {}
-        dir_partitions: dict[str, Partition] = {}
+        # partition dir -> (partition, blob, metadata, the stored files)
+        writes: dict[str, tuple[Partition, bytes, Metadata, dict[str, Metadata]]] = {}
         for partition, (blob, metadata) in blobs.items():
             self._check_partition(key, partition)
             if not isinstance(blob, bytes):
                 raise TypeError(f"blob must be bytes, got {type(blob)}")
+            dump_metadata(metadata)
             partition_dir = self._partition_dir(key, partition)
-            if (other := dir_partitions.get(partition_dir)) is not None:
+            if (other := writes.get(partition_dir)) is not None:
                 raise ValueError(
-                    f"partitions {other} and {partition} would be stored in the same dir {partition_dir}"
+                    f"partitions {other[0]} and {partition} would be stored in the same dir {partition_dir}"
                 )
-            dir_partitions[partition_dir] = partition
-            committed = self._read_committed(partition_dir)
-            if committed is not None and committed.partition != partition:
+            manifest = self._read_manifest(partition_dir)
+            if manifest is not None and manifest.partition != partition:
                 raise TypeError(
-                    f"partition {partition} would replace the stored partition {committed.partition}, "
+                    f"partition {partition} would replace the stored partition {manifest.partition}, "
                     "their values differ by type"
                 )
-            writes[partition_dir] = (
-                blob,
-                dump_metadata(
-                    {
-                        self.PARTITION_KEY: list(partition),
-                        self.FILE_NAME_KEY: file_name,
-                        self.METADATA_KEY: metadata,
-                    }
-                ).encode(),
-                committed.file_name
-                if committed is not None and committed.file_name != file_name
-                else None,
-            )
-        for partition_dir, (blob, committed, replaced_file_name) in writes.items():
-            metadata_file_path = f"{partition_dir}/{self.METADATA_FILE_NAME}"
-            # uncommit first, so a crash below never leaves the new blob with the old metadata
-            if (
-                self._filesystem.get_file_info(metadata_file_path).type
-                == pafs.FileType.File
-            ):
-                retry_on_windows_lock(self._filesystem.delete_file, metadata_file_path)
+            files = dict(manifest.files) if manifest is not None else {}
+            writes[partition_dir] = (partition, blob, metadata, files)
+        for partition_dir, (partition, blob, metadata, files) in writes.items():
+            # uncommit a replaced file first, so a crash below never leaves the new blob with the old metadata
+            if files.pop(file_name, None) is not None:
+                self._write_manifest(partition_dir, partition, files)
             self._write_file(f"{partition_dir}/{file_name}", blob)
-            self._write_file(metadata_file_path, committed)
-            if replaced_file_name is not None:
-                with contextlib.suppress(FileNotFoundError):
-                    retry_on_windows_lock(
-                        self._filesystem.delete_file,
-                        f"{partition_dir}/{replaced_file_name}",
-                    )
+            self._write_manifest(
+                partition_dir, partition, files | {file_name: metadata}
+            )
 
     def read_metadata(
-        self, key: DatasetKey, *, partitions: list[Partition] | None = None
+        self,
+        key: DatasetKey,
+        *,
+        partitions: list[Partition] | None = None,
+        file_name: str = DEFAULT_FILE_NAME,
     ) -> dict[Partition, Metadata]:
-        """Reads the metadata of the existing partitions only, without their blobs, e.g. to check what exists.
+        """Reads file_name's metadata in the existing partitions only, without the blobs, e.g. to check what exists.
 
         Args:
             key: dataset to read.
             partitions: partitions to read; None reads the whole dataset.
+            file_name: the file to read in each partition, the one passed to write().
 
         Returns:
-            metadata of the existing partitions; {} if none. Requested partitions not in it are missing.
+            metadata of the existing partitions with file_name; {} if none. Requested partitions not in it are missing.
         """
         self._check_key(key)
-        found = self._find_partitions(key, partitions)
+        self._check_file_name(file_name)
+        found = self._find_partitions(key, file_name, partitions)
         return {partition: metadata for partition, (_, metadata) in found.items()}
 
     def read(
-        self, key: DatasetKey, *, partitions: list[Partition] | None = None
+        self,
+        key: DatasetKey,
+        *,
+        partitions: list[Partition] | None = None,
+        file_name: str = DEFAULT_FILE_NAME,
     ) -> tuple[dict[Partition, bytes], dict[Partition, Metadata]]:
-        """Reads the blobs and metadata of the existing partitions.
+        """Reads file_name's blob and metadata in the existing partitions.
 
         Unlike BaseIO.read(), the blobs are read eagerly, use read_metadata() if only the metadata is needed.
 
         Args:
             key: dataset to read.
             partitions: partitions to read; None reads the whole dataset.
+            file_name: the file to read in each partition, the one passed to write().
 
         Returns:
-            (blobs, metadata), both keyed by the existing partitions; ({}, {}) if none.
+            (blobs, metadata), both keyed by the existing partitions with file_name; ({}, {}) if none.
             Requested partitions not in them are missing.
         """
         self._check_key(key)
+        self._check_file_name(file_name)
         blobs: dict[Partition, bytes] = {}
         metadata: dict[Partition, Metadata] = {}
         for partition, (file_path, md) in self._find_partitions(
-            key, partitions
+            key, file_name, partitions
         ).items():
             try:
                 blobs[partition] = self._read_file(file_path)
             except FileNotFoundError:
-                continue  # deleted by a replace with another file name, see the class docstring
+                continue  # e.g. deleted by hand, the manifest still lists it
             metadata[partition] = md
         return blobs, metadata

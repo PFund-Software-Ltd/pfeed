@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
 import datetime
+import json
 
 import pytest
 
@@ -220,7 +221,7 @@ def test_filtered_read_only_reads_requested_partitions(
 
 
 def test_file_name(io: BlobIO, tmp_path: Path):
-    """The blob is stored under the caller's file name, so it can be opened as is, and read back without passing it."""
+    """The blob is stored under the caller's file name, so it can be opened as is, and read back by it."""
     io.write(STEP_KEY, {(0,): (b"ckpt", {})}, file_name="checkpoint.pth")
 
     step_dir = tmp_path / DATASET_DIR / "step=0"
@@ -229,24 +230,74 @@ def test_file_name(io: BlobIO, tmp_path: Path):
         "checkpoint.pth",
     ]
     assert (step_dir / "checkpoint.pth").read_bytes() == b"ckpt"
-    assert io.read(STEP_KEY) == ({(0,): b"ckpt"}, {(0,): {}})
+    assert io.read(STEP_KEY, file_name="checkpoint.pth") == (
+        {(0,): b"ckpt"},
+        {(0,): {}},
+    )
+    # another file name isn't in the partition
+    assert io.read(STEP_KEY) == ({}, {})
+    assert io.read_metadata(STEP_KEY, file_name="checkpoint.pth") == {(0,): {}}
 
 
-def test_replace_with_another_file_name_deletes_the_old_blob(
-    io: BlobIO, tmp_path: Path
+def test_files_share_one_manifest(io: BlobIO, tmp_path: Path):
+    """Writing another file name into a partition merges it into the partition's one manifest."""
+    io.write(KEY, {(): (b"src", {"v": 1})}, file_name="strategy.py")
+    io.write(KEY, {(): (b"weights", {"v": 2})}, file_name="model.joblib")
+
+    dataset_dir = tmp_path / DATASET_DIR
+    assert sorted(p.name for p in dataset_dir.iterdir()) == [
+        BlobIO.METADATA_FILE_NAME,
+        "model.joblib",
+        "strategy.py",
+    ]
+    manifest = json.loads((dataset_dir / BlobIO.METADATA_FILE_NAME).read_text())
+    assert manifest == {
+        "partition": [],
+        "files": {"strategy.py": {"v": 1}, "model.joblib": {"v": 2}},
+    }
+    assert io.read(KEY, file_name="strategy.py") == ({(): b"src"}, {(): {"v": 1}})
+    assert io.read(KEY, file_name="model.joblib") == ({(): b"weights"}, {(): {"v": 2}})
+
+
+def test_replacing_a_file_leaves_the_others(io: BlobIO):
+    """A replace only replaces its own file, e.g. a retrained model keeps the source next to it."""
+    io.write(KEY, {(): (b"src", {"v": 1})}, file_name="strategy.py")
+    io.write(KEY, {(): (b"old", {"v": 1})}, file_name="model.joblib")
+    io.write(KEY, {(): (b"new", {"v": 2})}, file_name="model.joblib")
+
+    assert io.read(KEY, file_name="model.joblib") == ({(): b"new"}, {(): {"v": 2}})
+    assert io.read(KEY, file_name="strategy.py") == ({(): b"src"}, {(): {"v": 1}})
+
+
+def test_crash_during_replace_keeps_other_files_committed(
+    io: BlobIO, mocker: MockerFixture
 ):
-    """e.g. a model switching from joblib to safetensors leaves no stale model.joblib behind."""
+    """A crash after uncommitting a file leaves only that file missing, the partition's other files stay committed."""
+    io.write(KEY, {(): (b"src", {})}, file_name="strategy.py")
     io.write(KEY, {(): (b"old", {})}, file_name="model.joblib")
-    io.write(KEY, {(): (b"new", {})}, file_name="model.safetensors")
+    write_file = io._write_file
+    manifest_writes = 0
 
-    assert not (tmp_path / DATASET_DIR / "model.joblib").exists()
-    assert io.read(KEY) == ({(): b"new"}, {(): {}})
+    def crash_on_commit(file_path: str, data: bytes) -> None:
+        nonlocal manifest_writes
+        if file_path.endswith(BlobIO.METADATA_FILE_NAME):
+            manifest_writes += 1
+            if (
+                manifest_writes == 2
+            ):  # the 1st uncommits model.joblib, the 2nd commits it
+                raise RuntimeError("crash")
+        write_file(file_path, data)
+
+    mocker.patch.object(io, "_write_file", side_effect=crash_on_commit)
+    with pytest.raises(RuntimeError):
+        io.write(KEY, {(): (b"new", {})}, file_name="model.joblib")
+
+    assert io.read(KEY, file_name="model.joblib") == ({}, {})
+    assert io.read(KEY, file_name="strategy.py") == ({(): b"src"}, {(): {}})
 
 
 def test_blob_deleted_during_read_is_missing(io: BlobIO, mocker: MockerFixture):
-    """A replace with another file name deletes the old blob after its commit,
-    a read that found the old metadata just before is left with a missing partition, not an error.
-    """
+    """A blob listed in the manifest but gone (e.g. deleted by hand) is a missing partition, not an error."""
     io.write(STEP_KEY, {(0,): (b"s0", {}), (1,): (b"s1", {})})
     read_file = io._read_file
 
@@ -305,3 +356,34 @@ def test_delete_namespace_on_a_file_raises(io: BlobIO, tmp_path: Path):
     with pytest.raises(RuntimeError, match="is not a directory"):
         io.delete_namespace(NAMESPACE)
     assert (tmp_path / "env=BACKTEST" / "project_name=proj").is_file()
+
+
+def test_plain_dataset_dirs(tmp_path: Path):
+    """With hive_dataset_dirs=False, namespace and name levels are plain values, partition levels stay hive dirs."""
+    io = BlobIO(base_path=str(tmp_path), hive_dataset_dirs=False)
+    io.write(STEP_KEY, {(0,): (b"s0", {})}, file_name="checkpoint.pth")
+
+    step_dir = tmp_path / "BACKTEST" / "proj" / "Model-abc" / "checkpoint" / "step=0"
+    assert (step_dir / "checkpoint.pth").read_bytes() == b"s0"
+    assert io.read(STEP_KEY, file_name="checkpoint.pth") == ({(0,): b"s0"}, {(0,): {}})
+
+    io.delete_namespace(NAMESPACE)
+    assert not (tmp_path / "BACKTEST" / "proj").exists()
+
+
+def test_plain_dataset_dir_nested_dataset_is_not_a_partition(tmp_path: Path):
+    """A nested dataset's plain dir named like a partition level ('step') isn't mistaken for a partition."""
+    io = BlobIO(base_path=str(tmp_path), hive_dataset_dirs=False)
+    nested = DatasetKey(namespace=NAMESPACE, name={**NAME, "extra": "step"})
+    io.write(nested, {(): (b"nested", {})})
+
+    assert io.read(STEP_KEY) == ({}, {})
+
+
+@pytest.mark.parametrize("value", [".", ".."])
+def test_plain_dataset_dir_dot_value_raises(tmp_path: Path, value: str):
+    """'.' and '..' would point to the parent dirs as plain dirs."""
+    io = BlobIO(base_path=str(tmp_path), hive_dataset_dirs=False)
+    key = DatasetKey(namespace=NAMESPACE, name={"component_id": value})
+    with pytest.raises(ValueError):
+        io.write(key, {(): (b"x", {})})

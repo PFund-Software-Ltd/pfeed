@@ -20,6 +20,7 @@ import datetime
 from abc import ABC
 
 import polars as pl
+from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 
@@ -27,7 +28,6 @@ from pfeed.base.feed import requires
 from pfeed.base.time_based_feed import TimeBasedFeed
 from pfeed.config import setup_logging
 from pfeed.enums import DataLayer, MarketDataType
-from pfund_blocks.enums import DataCategory
 from pfeed.io.base_io import BaseIO
 from pfeed.market.data_model import MarketDataModel
 from pfeed.market.requests import (

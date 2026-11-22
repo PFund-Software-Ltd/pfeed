@@ -16,6 +16,7 @@ from abc import ABC
 from datetime import date
 
 from pfund_blocks.entities.products.product_type import ProductType
+from pfund_blocks.enums import DataCategory
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -27,12 +28,15 @@ from pydantic import (
 
 from pfeed.dataflow.retry_policy import RetryPolicy
 from pfeed.enums import DataAccessType, DataProviderType, DataType
-from pfund_blocks.enums import DataCategory
 
 
 def get_feed_name(data_category: DataCategory | str) -> str:
-    """Returns the name of a data source's feed attribute, e.g. DataCategory.MARKET_DATA -> 'market_feed'."""
-    return DataCategory(data_category).lower().replace("_data", "_feed")
+    """Returns the name of a data source's feed attribute, e.g. DataCategory.MARKET_DATA -> 'market_feed'.
+
+    NOTE: not converted to DataCategory, plugin sources have their own categories,
+    e.g. pfund's PFundDataCategory.COMPONENT_DATA -> 'component_feed'.
+    """
+    return str(data_category).lower().replace("_data", "_feed")
 
 
 class APIAccess(BaseModel):
@@ -181,7 +185,7 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
     @property
     def data_categories(
         self,
-    ) -> dict[DataCategory, dict[DataType, list[ProductType | str]]]:
+    ) -> dict[DataCategory | str, dict[DataType, list[ProductType | str]]]:
         return self.metadata.data_categories
 
     @property
@@ -212,7 +216,7 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
             # dynamically set attributes e.g. self.market_feed
             setattr(self, get_feed_name(data_category), feed)
 
-    def get_data_categories(self) -> list[DataCategory]:
+    def get_data_categories(self) -> list[DataCategory | str]:
         return list(self.metadata.data_categories.keys())
 
     def get_batch_api(self) -> Any:

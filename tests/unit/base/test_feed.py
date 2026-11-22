@@ -20,6 +20,7 @@ from abc import ABC
 
 import polars as pl
 import pytest
+from pfund_blocks.enums import DataCategory
 from pydantic import HttpUrl
 
 from pfeed.base.data_handler import BaseDataHandler, BaseDataMetadata
@@ -33,7 +34,6 @@ from pfeed.enums import (
     DataProviderType,
     FlowType,
 )
-from pfund_blocks.enums import DataCategory
 from pfeed.io.base_io import DatasetKey, IOCapabilities
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.source import BaseSource, SourceMetadata

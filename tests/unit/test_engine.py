@@ -23,10 +23,10 @@ import polars as pl
 import pytest
 from pfund_blocks.datas.bar_data import Bar
 from pfund_blocks.datas.tick_data import Tick
+from pfund_blocks.enums import DataCategory
 from pfund_blocks.resolution import Resolution
 
 from pfeed.engine import DataEngine
-from pfund_blocks.enums import DataCategory
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.market.feed import MarketFeed
 from pfeed.source import BaseSource

@@ -22,13 +22,13 @@ import datetime
 import polars as pl
 import pytest
 from pfund_blocks.datas.tick_data import Tick
+from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.side import Side
 from pfund_blocks.resolution import Resolution
 from pfund_kit.utils.temporal import get_utc_now
 
 import pfeed as pe
 from pfeed.enums import DataAccessType, DataProviderType, DataType
-from pfund_blocks.enums import DataCategory
 from pfeed.io.ducklake_io import DuckLakeIO
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.source import BaseSource, SourceMetadata

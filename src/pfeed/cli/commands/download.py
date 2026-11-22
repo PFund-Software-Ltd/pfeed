@@ -113,8 +113,9 @@ def download(
         pfeed download bybit BTC_USDT_PERP 1m --start 2025-01-01 --end 2025-01-31
         pfeed download bybit BTC_USDT_PERP 1t --rollback 7d --io ducklake
     """
-    import pfeed as pe
     from pfund_blocks.enums import DataCategory
+
+    import pfeed as pe
 
     path = (path or ctx.obj["config"].data_path).expanduser()
     io = _create_io(io_name.lower(), path)

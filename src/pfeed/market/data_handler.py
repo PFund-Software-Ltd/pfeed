@@ -12,11 +12,11 @@ if TYPE_CHECKING:
     from pfeed.market.data_model import MarketDataModel
 
 import polars as pl
+from pfund_blocks.enums import DataCategory
 
 from pfeed.base.data_handler import BaseDataMetadata
 from pfeed.base.time_based_data_handler import TimeBasedDataHandler
 from pfeed.enums import DataLayer
-from pfund_blocks.enums import DataCategory
 
 
 class MarketDataMetadata(BaseDataMetadata):

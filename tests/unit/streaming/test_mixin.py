@@ -31,12 +31,12 @@ from types import SimpleNamespace
 import polars as pl
 import pytest
 from pfund_blocks.datas.bar_data import Bar
+from pfund_blocks.enums import DataCategory
 from pfund_blocks.enums.side import Side
 from pfund_blocks.resolution import Resolution
 
 from pfeed.config import get_config
 from pfeed.dataflow.result import RunResult
-from pfund_blocks.enums import DataCategory
 from pfeed.io.base_io import IOCapabilities
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.market.feed import MarketFeed

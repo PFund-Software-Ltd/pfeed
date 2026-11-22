@@ -14,8 +14,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
-    from pfeed.base.feed import BaseFeed
     from pfund_blocks.enums import DataCategory
+
+    from pfeed.base.feed import BaseFeed
     from pfeed.source import BaseSource
 
 from pfund_kit.plugins import PluginRegistry

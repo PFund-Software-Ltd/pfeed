@@ -476,6 +476,7 @@ class MarketFeed[
         data_layer: DataLayer | str = DataLayer.CLEANED,
         env: Environment | str = Environment.BACKTEST,
         dataflow_per_date: bool = False,
+        raise_on_missing_data: bool = False,
         io: BaseIO | None = None,
         **product_specs: Any,
     ) -> F: ...
@@ -492,6 +493,7 @@ class MarketFeed[
         data_layer: DataLayer | str = DataLayer.CLEANED,
         env: Environment | str = Environment.BACKTEST,
         dataflow_per_date: bool = False,
+        raise_on_missing_data: bool = False,
         io: BaseIO | None = None,
         **product_specs: Any,
     ) -> RunResult: ...
@@ -508,6 +510,7 @@ class MarketFeed[
         data_layer: DataLayer | str = DataLayer.CLEANED,
         env: Environment | str = Environment.BACKTEST,
         dataflow_per_date: bool = False,
+        raise_on_missing_data: bool = False,
         io: BaseIO | None = None,
         **product_specs: Any,
     ) -> F | RunResult: ...
@@ -524,6 +527,7 @@ class MarketFeed[
         data_layer: DataLayer | str = DataLayer.CLEANED,
         env: Environment | str = Environment.BACKTEST,
         dataflow_per_date: bool = False,
+        raise_on_missing_data: bool = False,
         io: BaseIO | None = None,
         **product_specs: Any,
     ) -> Self | RunResult:
@@ -552,6 +556,9 @@ class MarketFeed[
 
                 - all dates don't fit in memory at once, e.g. when downsampling
                 - using Ray, to parallelize per-date tasks across workers
+            raise_on_missing_data: Whether to raise `MissingDatesError` if the data is not fully stored
+                at any of the searched resolutions. If False (default), a warning is logged and
+                the partially stored data is retrieved.
             io: Where and how to retrieve the data from. If None, uses `ParquetIO()`.
                 e.g. `ParquetIO(base_path='./data')`, `DuckLakeIO()`
             product_specs: Extra product attributes, e.g. `expiration='2025-12-26'` for
@@ -623,10 +630,14 @@ class MarketFeed[
             shown_dates = ", ".join(str(date) for date in missing_dates[:10]) + (
                 ", ..." if len(missing_dates) > 10 else ""
             )
-            self.logger.warning(
-                f"{product} data from {start_date} to {end_date} is not fully stored at any of {search_resolutions} in {request.io_for_retrieval!r}, "
-                + f"falling back to {resolution}, missing {len(missing_dates)} dates: {shown_dates}"
-            )
+            msg = f"{product} data from {start_date} to {end_date} is not fully stored at any of {search_resolutions} in {request.io_for_retrieval!r}"
+            missing_msg = f"missing {len(missing_dates)} dates: {shown_dates}"
+            # raised before the request is appended, so nothing is left queued on the feed
+            if raise_on_missing_data:
+                from pfeed.errors import MissingDatesError
+
+                raise MissingDatesError(f"{msg}, {missing_msg}", missing_dates)
+            self.logger.warning(f"{msg}, falling back to {resolution}, {missing_msg}")
             request = partial_request(data_resolution=resolution)
         self._append_request(request)
         data_model = cast("DataModelT", request.to_data_model())

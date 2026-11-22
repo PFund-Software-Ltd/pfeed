@@ -119,9 +119,16 @@ class BaseIO(ABC):
     """
 
     CAPABILITIES: ClassVar[IOCapabilities] = IOCapabilities()
+    # set by subclasses in __init__
+    _base_path: str
 
     def __str__(self) -> str:
         return type(self).__name__
+
+    @property
+    def base_path(self) -> str:
+        """Root directory where the IO stores its data."""
+        return self._base_path
 
     _dump_metadata = staticmethod(dump_metadata)
 

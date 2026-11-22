@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
+    import os
+
     from pyarrow.parquet import FileMetaData
 
     from pfeed.io.base_io import (
@@ -73,7 +75,7 @@ class ParquetIO(BaseIO):
 
     def __init__(
         self,
-        base_path: str | None = None,
+        base_path: str | os.PathLike[str] | None = None,
         compression: str = "zstd",
         write_options: dict[str, Any] | None = None,
         read_options: dict[str, Any] | None = None,

@@ -62,7 +62,9 @@ class DuckLakeIO(TableIO):
     }
 
     def __init__(
-        self, base_path: str | None = None, data_inlining_row_limit: int | None = None
+        self,
+        base_path: str | os.PathLike[str] | None = None,
+        data_inlining_row_limit: int | None = None,
     ):
         """
         Args:

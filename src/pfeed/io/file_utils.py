@@ -41,7 +41,7 @@ def retry_on_windows_lock[**P, T](
 
 
 def resolve_local_base_path(
-    base_path: str | None, default_dir_name: str
+    base_path: str | os.PathLike[str] | None, default_dir_name: str
 ) -> tuple[pafs.FileSystem, str]:
     """Returns (filesystem, base_path) of an IO's root directory.
 
@@ -52,7 +52,9 @@ def resolve_local_base_path(
     if base_path is None:
         from pfeed.config import get_config
 
-        base_path = str(get_config().data_path / default_dir_name)
+        base_path = get_config().data_path / default_dir_name
+    # urlparse only takes str/bytes, so a Path must become a str first
+    base_path = os.fspath(base_path)
     scheme = urlparse(base_path).scheme
     # a one-letter scheme is a Windows drive letter (C:\...), not a URI scheme
     if scheme not in ("", "file") and len(scheme) > 1:

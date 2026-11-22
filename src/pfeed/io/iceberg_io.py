@@ -90,7 +90,7 @@ class IcebergIO(TableIO):
         TableProperties.MANIFEST_MERGE_ENABLED: "true",
     }
 
-    def __init__(self, base_path: str | None = None):
+    def __init__(self, base_path: str | os.PathLike[str] | None = None):
         """
         Args:
             base_path: root directory of the catalog and warehouse. Local paths only for now.

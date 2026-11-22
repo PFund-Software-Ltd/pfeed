@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, NamedTuple
 
 if TYPE_CHECKING:
+    import os
+
     from pfeed.io.base_io import DatasetKey, Metadata, Partition
 
 import contextlib
@@ -67,7 +69,7 @@ class BlobIO:
     FILE_NAME_KEY: ClassVar[str] = "file_name"
     METADATA_KEY: ClassVar[str] = "metadata"
 
-    def __init__(self, base_path: str | None = None):
+    def __init__(self, base_path: str | os.PathLike[str] | None = None):
         """
         Args:
             base_path: root directory of all datasets. Local paths only for now.

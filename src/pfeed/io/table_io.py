@@ -81,7 +81,7 @@ class TableIO(BaseIO):
     # exceptions meaning the transaction conflicted with a concurrent one and can be retried
     _RETRY_ON: ClassVar[tuple[type[Exception], ...]]
 
-    def __init__(self, base_path: str | None = None):
+    def __init__(self, base_path: str | os.PathLike[str] | None = None):
         """
         Args:
             base_path: root directory of the tables. Local paths only for now.
@@ -90,7 +90,9 @@ class TableIO(BaseIO):
         if base_path is None:
             from pfeed.config import get_config
 
-            base_path = str(get_config().data_path / self.DEFAULT_DIR_NAME)
+            base_path = get_config().data_path / self.DEFAULT_DIR_NAME
+        # urlparse only takes str/bytes, so a Path must become a str first
+        base_path = os.fspath(base_path)
         scheme = urlparse(base_path).scheme
         # a one-letter scheme is a Windows drive letter (C:\...), not a URI scheme
         if scheme not in ("", "file") and len(scheme) > 1:

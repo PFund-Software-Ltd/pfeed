@@ -1,3 +1,62 @@
+## [0.0.25](https://github.com/PFund-Software-Ltd/pfeed/compare/v0.0.24...v0.0.25) - 2026-11-22
+
+### 🚀 Features
+
+- *(website)* Add PFund.ai link to the navbar
+- *(io)* Add BlobIO for opaque bytes, let handlers store bytes
+- *(io)* Add delete_namespace to BlobIO and DuckLakeIO
+- *(market)* Add raise_on_missing_data to retrieve()
+
+### 🐛 Bug Fixes
+
+- *(website)* Use absolute paths so post links don't 404 on client-side navigation
+- *(website)* Give logo and icons fallback sizes so they can't flash large before CSS loads
+- *(io)* Retry ParquetIO footer reads and moves on Windows sharing violations
+- *(website)* Format post dates in UTC so they don't show a day early west of UTC
+- *(docs)* Hide plugin sources from __all__ under pdoc
+- *(docs)* Drop plugin sources from __all__
+- Accept str in get_feed_name
+
+### 📚 Documentation
+
+- Add the read_with_polars marimo example
+- Add molab badge and toc entry for the read_with_polars example
+- Pin the read_with_polars example to a fixed date
+
+### 🚜 Refactor
+
+- Point official source install hints to pfeed extras
+- *(registry)* Move get_feed into the registry, drop pfund/alphafund categories
+- *(source)* Create products with pfund_blocks' create_product()
+- *(enums)* Use pfund-blocks' DataCategory, require pfund-blocks 0.0.7
+
+### 🎨 Styling
+
+- *(website)* Add contrast to post cards and pluralize listing titles
+
+### 🧪 Testing
+
+- Give Windows a larger import time budget
+- Give Ray more time to start its local cluster
+- Fix flaky push/pull setup in zeromq tests
+- Run Ray tests on one xdist worker
+- Retry Ray startup that timed out in the Ray tests
+- Create pfeed's config once before xdist starts the workers
+
+### ⚙️ Miscellaneous Tasks
+
+- Shrink the website's logo
+- Skip ruff and ty for everything in afterpython/
+- Add a script to generate website thumbnails
+- Add website thumbnails for examples and bump afterpython to 0.5.1
+
+### 💼 Other
+
+- Bump pfeed to v0.0.24 in README.py
+- Bump afterpython to 0.5.2
+- Bump afterpython to 0.5.3
+- Bump duckdb and prefect
+
 ## [0.0.24](https://github.com/PFund-Software-Ltd/pfeed/compare/v0.0.23...v0.0.24) - 2026-11-11
 
 ### 🚀 Features

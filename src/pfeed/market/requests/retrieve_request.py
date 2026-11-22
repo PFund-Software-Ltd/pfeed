@@ -41,7 +41,7 @@ class MarketFeedRetrieveRequest(MarketFeedBaseRequest):
             data_model: date range to read, e.g. one date of a per-date dataflow.
                 Defaults to the request's full range.
         """
-        from pfeed.enums import DataCategory
+        from pfund_blocks.enums import DataCategory
 
         data_model = (data_model or self.to_data_model()).model_copy(
             update={"resolution": self.data_resolution}

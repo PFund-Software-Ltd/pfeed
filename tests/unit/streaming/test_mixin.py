@@ -36,7 +36,7 @@ from pfund_blocks.resolution import Resolution
 
 from pfeed.config import get_config
 from pfeed.dataflow.result import RunResult
-from pfeed.enums import DataCategory
+from pfund_blocks.enums import DataCategory
 from pfeed.io.base_io import IOCapabilities
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.market.feed import MarketFeed

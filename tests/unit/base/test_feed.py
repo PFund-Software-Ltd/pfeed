@@ -29,11 +29,11 @@ from pfeed.base.requests.base_request import BaseRequest
 from pfeed.dataflow.dataflow import DataFlow
 from pfeed.enums import (
     DataAccessType,
-    DataCategory,
     DataLayer,
     DataProviderType,
     FlowType,
 )
+from pfund_blocks.enums import DataCategory
 from pfeed.io.base_io import DatasetKey, IOCapabilities
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.source import BaseSource, SourceMetadata

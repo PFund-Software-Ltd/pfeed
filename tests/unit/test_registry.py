@@ -12,7 +12,7 @@ from pfund_kit import plugins
 
 import pfeed as pe
 from pfeed import registry
-from pfeed.enums import DataCategory
+from pfund_blocks.enums import DataCategory
 
 FAKE_MODULE = "fake_pfeed_plugin"
 

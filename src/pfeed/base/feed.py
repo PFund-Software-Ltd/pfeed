@@ -21,7 +21,8 @@ import functools
 import logging
 from abc import ABC, abstractmethod
 
-from pfeed.enums import DataCategory, DataLayer, FlowType
+from pfeed.enums import DataLayer, FlowType
+from pfund_blocks.enums import DataCategory
 
 
 def requires[F: Callable[..., Any]](verb: str) -> Callable[[F], F]:

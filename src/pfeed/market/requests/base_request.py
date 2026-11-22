@@ -53,7 +53,7 @@ class MarketFeedBaseRequest(TimeBasedFeedBaseRequest):
         return self
 
     def to_data_model(self) -> MarketDataModel:
-        from pfeed.enums import DataCategory
+        from pfund_blocks.enums import DataCategory
         from pfeed.market.data_model import MarketDataModel
 
         # the source's own feed declares the DataModel (plugins may narrow it, e.g. BybitMarketDataModel)

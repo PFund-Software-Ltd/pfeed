@@ -26,7 +26,13 @@ from pydantic import (
 )
 
 from pfeed.dataflow.retry_policy import RetryPolicy
-from pfeed.enums import DataAccessType, DataCategory, DataProviderType, DataType
+from pfeed.enums import DataAccessType, DataProviderType, DataType
+from pfund_blocks.enums import DataCategory
+
+
+def get_feed_name(data_category: DataCategory | str) -> str:
+    """Returns the name of a data source's feed attribute, e.g. DataCategory.MARKET_DATA -> 'market_feed'."""
+    return DataCategory(data_category).lower().replace("_data", "_feed")
 
 
 class APIAccess(BaseModel):
@@ -58,7 +64,7 @@ class SourceMetadata(BaseModel):
     name: str
     url: HttpUrl
     # str is accepted for convenience, e.g. "PERPETUAL", and converted to ProductType in _convert_asset_types()
-    data_categories: dict[DataCategory, dict[DataType, list[ProductType | str]]]
+    data_categories: dict[DataCategory | str, dict[DataType, list[ProductType | str]]]
     provider_type: DataProviderType
     access_type: DataAccessType
     api_access: APIAccess | None = None
@@ -165,7 +171,7 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
         state = self.__dict__.copy()
         state["_feeds"] = []
         for data_category in self.Feeds:
-            state.pop(data_category.feed_name, None)
+            state.pop(get_feed_name(data_category), None)
         return state
 
     @property
@@ -204,7 +210,7 @@ class BaseSource[PipelineT: bool = Literal[False]](ABC):
             if feed not in self._feeds:
                 self._feeds.append(feed)
             # dynamically set attributes e.g. self.market_feed
-            setattr(self, data_category.feed_name, feed)
+            setattr(self, get_feed_name(data_category), feed)
 
     def get_data_categories(self) -> list[DataCategory]:
         return list(self.metadata.data_categories.keys())

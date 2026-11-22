@@ -20,7 +20,8 @@ from pfund_blocks.enums.env import Environment
 from pfund_blocks.resolution import Resolution
 from polars.testing import assert_frame_equal
 
-from pfeed.enums import DataCategory, DataLayer, MarketDataType as DataType
+from pfeed.enums import DataLayer, MarketDataType as DataType
+from pfund_blocks.enums import DataCategory
 from pfeed.io.base_io import BaseIO
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.market.data_handler import MarketDataHandler

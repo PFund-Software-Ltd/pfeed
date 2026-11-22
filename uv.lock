@@ -2740,7 +2740,7 @@ requires-dist = [
     { name = "narwhals", marker = "sys_platform != 'emscripten'", specifier = ">=2.29.0" },
     { name = "pandera", specifier = ">=0.36.0" },
     { name = "pfeed-bybit", marker = "extra == 'bybit'", specifier = ">=0.0.2" },
-    { name = "pfund-blocks", specifier = ">=0.0.6" },
+    { name = "pfund-blocks", specifier = ">=0.0.7" },
     { name = "pfund-kit", specifier = ">=0.1.25" },
     { name = "polars", marker = "sys_platform != 'emscripten'", specifier = ">=2.1.0" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.9.3" },
@@ -2768,7 +2768,7 @@ wheels = [
 
 [[package]]
 name = "pfund-blocks"
-version = "0.0.6"
+version = "0.0.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx2", extra = ["http2"] },
@@ -2777,9 +2777,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/a5/6f1f5eb314ef913be33bbf6a633eec005d77dacbb94adaba5b8d1dc30c28/pfund_blocks-0.0.6.tar.gz", hash = "sha256:5ca6e2d6e1ce2daa480e0450feb3473f910ac9b74ded30affe94545bc594f223", size = 66822, upload-time = "2026-11-18T20:36:35.307Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/4d/1bc4895ce5f68ca57b2ce772b9eb897914d4f0dc19d4c7343df3eaaf58fc/pfund_blocks-0.0.7.tar.gz", hash = "sha256:f7882b112d3a1242e9827520b144d8809eaac05c03ee1eaed5af3a7fa59b6e97", size = 67877, upload-time = "2026-11-22T02:25:01.941Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/08/08438242705a1d7fe20ddad7426f2e0839e0c8e977bb0996a34a9c9688f8/pfund_blocks-0.0.6-py3-none-any.whl", hash = "sha256:ad97148e4a10f6349687ee3f9f3a93bdb0b3428cd6d3d115ce4a3a4b872e2d59", size = 95315, upload-time = "2026-11-18T20:36:34.333Z" },
+    { url = "https://files.pythonhosted.org/packages/02/b1/694864223ef998a6610d2481ae43dccaa923042baf5863e2454cb2fad77a/pfund_blocks-0.0.7-py3-none-any.whl", hash = "sha256:b6293719d70140b51399836791454c590dbe191ed79674dcb3c2e9ad7349080a", size = 96919, upload-time = "2026-11-22T02:25:00.833Z" },
 ]
 
 [[package]]

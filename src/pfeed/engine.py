@@ -25,7 +25,7 @@ import threading
 
 from pfund_blocks.enums.env import Environment
 
-from pfeed.enums import DataCategory
+from pfund_blocks.enums import DataCategory
 
 
 # TODO: backfilling, e.g. a BackfillCoordinator the engine creates and runs alongside the feeds, see pfeed/batch_api.py

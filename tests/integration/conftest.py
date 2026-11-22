@@ -27,7 +27,8 @@ from pfund_blocks.resolution import Resolution
 from pfund_kit.utils.temporal import get_utc_now
 
 import pfeed as pe
-from pfeed.enums import DataAccessType, DataCategory, DataProviderType, DataType
+from pfeed.enums import DataAccessType, DataProviderType, DataType
+from pfund_blocks.enums import DataCategory
 from pfeed.io.ducklake_io import DuckLakeIO
 from pfeed.io.parquet_io import ParquetIO
 from pfeed.source import BaseSource, SourceMetadata

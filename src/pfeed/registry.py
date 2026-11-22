@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from pfeed.base.feed import BaseFeed
-    from pfeed.enums import DataCategory
+    from pfund_blocks.enums import DataCategory
     from pfeed.source import BaseSource
 
 from pfund_kit.plugins import PluginRegistry
@@ -63,4 +63,6 @@ def get_feed(
     source = get_source(data_source)(
         pipeline_mode=pipeline_mode, num_workers=num_workers
     )
-    return getattr(source, Feed.data_domain.feed_name)
+    from pfeed.source import get_feed_name
+
+    return getattr(source, get_feed_name(Feed.data_domain))

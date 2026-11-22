@@ -103,6 +103,7 @@ def _get_official_source(source: str, install: str):
 
 
 __all__ = (  # noqa: RUF022
+    "__version__",
     "get_config",
     "configure",
     "configure_logging",

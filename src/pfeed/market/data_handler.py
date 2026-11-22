@@ -15,7 +15,8 @@ import polars as pl
 
 from pfeed.base.data_handler import BaseDataMetadata
 from pfeed.base.time_based_data_handler import TimeBasedDataHandler
-from pfeed.enums import DataCategory, DataLayer
+from pfeed.enums import DataLayer
+from pfund_blocks.enums import DataCategory
 
 
 class MarketDataMetadata(BaseDataMetadata):

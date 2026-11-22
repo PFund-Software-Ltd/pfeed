@@ -93,7 +93,7 @@ def stream(
         pfeed stream bybit BTC_USDT_PERP 1m --io parquet --path ~/data --quiet
     """
     import pfeed as pe
-    from pfeed.enums import DataCategory
+    from pfund_blocks.enums import DataCategory
 
     io = None
     if io_name:

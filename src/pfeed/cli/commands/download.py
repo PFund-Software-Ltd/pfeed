@@ -114,7 +114,7 @@ def download(
         pfeed download bybit BTC_USDT_PERP 1t --rollback 7d --io ducklake
     """
     import pfeed as pe
-    from pfeed.enums import DataCategory
+    from pfund_blocks.enums import DataCategory
 
     path = (path or ctx.obj["config"].data_path).expanduser()
     io = _create_io(io_name.lower(), path)

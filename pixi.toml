@@ -33,7 +33,7 @@ just = ">=1.59.0"
 # prerelease-mode = "allow"
 
 [pypi-dependencies]
-pfund-blocks = ">=0.0.6"
+pfund-blocks = ">=0.0.7"
 pfund-kit = ">=0.1.25"
 pyarrow = ">=26.0.1"
 polars = ">=2.1.0"

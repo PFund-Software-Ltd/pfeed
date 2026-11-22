@@ -37,7 +37,7 @@ pfund-blocks = ">=0.0.7"
 pfund-kit = ">=0.1.25"
 pyarrow = ">=26.0.1"
 polars = ">=2.1.0"
-duckdb = ">=2.0.0"
+duckdb = ">=2.0.1"
 pandera = ">=0.36.0"
 narwhals = ">=2.29.0"
 pyzmq = ">=27.3.0"
@@ -68,7 +68,7 @@ libpq = ">=18.4"  # for postgresql
 # TODO: remove the env-markers when ray supports python 3.15
 ray = { version = ">=2.60.0", extras = ["default"], env-markers = "python_full_version < '3.15'" }
 huggingface-hub = ">=2.4.0"
-prefect = ">=3.9.3"
+prefect = ">=3.9.4"
 lancedb = ">=0.41.0"
 # Data Sources:
 # NOTE: data sources are plugins, each one is a separate package named `pfeed-xxx`.
